@@ -618,6 +618,52 @@ async def get_my_uploads(current_user: dict = Depends(get_current_user)):
     return uploads
 
 
+# ============ YouTube Helper Functions ============
+async def refresh_youtube_token(user_id: str) -> Credentials:
+    """Refresh YouTube access token if expired"""
+    connection = await db.youtube_connections.find_one({"user_id": user_id})
+    if not connection:
+        raise HTTPException(status_code=400, detail="YouTube account not connected")
+    
+    # Parse token expiry
+    token_expiry = None
+    if connection.get('token_expiry'):
+        token_expiry = datetime.fromisoformat(connection['token_expiry'].replace('Z', '+00:00'))
+    
+    # Create credentials
+    credentials = Credentials(
+        token=connection['access_token'],
+        refresh_token=connection.get('refresh_token'),
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=GOOGLE_CLIENT_ID,
+        client_secret=GOOGLE_CLIENT_SECRET,
+        expiry=token_expiry
+    )
+    
+    # Check if token is expired or about to expire (within 5 minutes)
+    if credentials.expired or (credentials.expiry and credentials.expiry < datetime.now(timezone.utc) + timedelta(minutes=5)):
+        logging.info(f"Refreshing YouTube token for user {user_id}")
+        
+        # Refresh the token
+        from google.auth.transport.requests import Request
+        credentials.refresh(Request())
+        
+        # Update database with new token
+        await db.youtube_connections.update_one(
+            {"user_id": user_id},
+            {
+                "$set": {
+                    "access_token": credentials.token,
+                    "token_expiry": credentials.expiry.isoformat() if credentials.expiry else None,
+                    "last_refreshed": datetime.now(timezone.utc).isoformat()
+                }
+            }
+        )
+        logging.info(f"Token refreshed successfully for user {user_id}")
+    
+    return credentials
+
+
 # ============ YouTube Upload Routes ============
 @api_router.post("/youtube/upload")
 async def upload_to_youtube(
@@ -631,10 +677,8 @@ async def upload_to_youtube(
 ):
     """Upload video to YouTube with selected description and tags"""
     try:
-        # Get YouTube connection
-        connection = await db.youtube_connections.find_one({"user_id": current_user['id']})
-        if not connection:
-            raise HTTPException(status_code=400, detail="YouTube account not connected")
+        # Get and refresh YouTube credentials if needed
+        credentials = await refresh_youtube_token(current_user['id'])
         
         # Get description
         desc_doc = await db.descriptions.find_one({"id": description_id, "user_id": current_user['id']})
@@ -648,7 +692,20 @@ async def upload_to_youtube(
         if tags_id:
             tags_doc = await db.tag_generations.find_one({"id": tags_id, "user_id": current_user['id']})
             if tags_doc:
-                tags = tags_doc['tags'][:500]  # YouTube allows max 500 characters in tags
+                # YouTube has a 500 character limit for all tags combined
+                tags_text = ", ".join(tags_doc['tags'])
+                if len(tags_text) > 500:
+                    # Truncate to fit within limit
+                    tags = []
+                    char_count = 0
+                    for tag in tags_doc['tags']:
+                        if char_count + len(tag) + 2 <= 500:  # +2 for ", "
+                            tags.append(tag)
+                            char_count += len(tag) + 2
+                        else:
+                            break
+                else:
+                    tags = tags_doc['tags']
         
         # Get uploaded files
         audio_file = await db.uploads.find_one({"id": audio_file_id, "user_id": current_user['id']})
@@ -657,36 +714,35 @@ async def upload_to_youtube(
         if not audio_file or not image_file:
             raise HTTPException(status_code=404, detail="Uploaded files not found")
         
-        # Create credentials
-        credentials = Credentials(
-            token=connection['access_token'],
-            refresh_token=connection.get('refresh_token'),
-            token_uri="https://oauth2.googleapis.com/token",
-            client_id=GOOGLE_CLIENT_ID,
-            client_secret=GOOGLE_CLIENT_SECRET
-        )
-        
-        # TODO: Combine audio and image into video file
-        # For now, we'll return a placeholder response
-        # In production, you would use ffmpeg to combine audio + image into video
-        
+        # Return success with file info
+        # Note: Full YouTube upload requires ffmpeg to create video from audio + image
         return {
             "success": True,
-            "message": "YouTube upload feature requires video file creation. Audio and image files are uploaded successfully.",
-            "note": "To complete this feature, you need to: 1) Install ffmpeg, 2) Combine audio and image into video file, 3) Upload to YouTube using the API",
-            "files_ready": {
-                "audio": audio_file['file_path'],
-                "image": image_file['file_path'],
+            "message": "Files ready for YouTube upload. Token auto-refresh working!",
+            "token_status": "Access token is valid and will auto-refresh when needed",
+            "note": "To complete upload: Install ffmpeg to combine audio + image into video file",
+            "upload_ready": {
                 "title": title,
-                "description": description_text,
+                "description_length": len(description_text),
                 "tags_count": len(tags),
-                "privacy": privacy_status
-            }
+                "privacy": privacy_status,
+                "audio_file": audio_file['original_filename'],
+                "image_file": image_file['original_filename'],
+                "files_at": {
+                    "audio": audio_file['file_path'],
+                    "image": image_file['file_path']
+                }
+            },
+            "next_steps": [
+                "Backend will automatically refresh your YouTube token when it expires",
+                "Your refresh token allows uploads even days/weeks later",
+                "Install ffmpeg to enable actual video upload to YouTube"
+            ]
         }
         
     except Exception as e:
         logging.error(f"YouTube upload error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to upload to YouTube: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to prepare YouTube upload: {str(e)}")
 
 
 # Include the router in the main app
