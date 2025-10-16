@@ -640,29 +640,43 @@ async def refresh_youtube_token(user_id: str) -> Credentials:
     if not connection:
         raise HTTPException(status_code=400, detail="YouTube account not connected")
     
-    # Parse token expiry (make sure it's timezone-aware)
+    # Parse token expiry - handle both string and datetime formats
     token_expiry = None
     if connection.get('token_expiry'):
-        token_expiry_str = connection['token_expiry'].replace('Z', '+00:00')
-        token_expiry = datetime.fromisoformat(token_expiry_str)
-        # Ensure timezone-aware
-        if token_expiry.tzinfo is None:
+        if isinstance(connection['token_expiry'], str):
+            token_expiry_str = connection['token_expiry'].replace('Z', '+00:00')
+            try:
+                token_expiry = datetime.fromisoformat(token_expiry_str)
+            except:
+                # If parsing fails, set to None (will refresh token)
+                token_expiry = None
+        elif isinstance(connection['token_expiry'], datetime):
+            token_expiry = connection['token_expiry']
+        
+        # Ensure timezone-aware (convert naive to UTC)
+        if token_expiry and token_expiry.tzinfo is None:
             token_expiry = token_expiry.replace(tzinfo=timezone.utc)
     
-    # Create credentials
+    # Create credentials WITHOUT expiry to avoid comparison issues
+    # We'll manually check expiry ourselves
     credentials = Credentials(
         token=connection['access_token'],
         refresh_token=connection.get('refresh_token'),
         token_uri="https://oauth2.googleapis.com/token",
         client_id=GOOGLE_CLIENT_ID,
-        client_secret=GOOGLE_CLIENT_SECRET,
-        expiry=token_expiry
+        client_secret=GOOGLE_CLIENT_SECRET
     )
     
-    # Check if token is expired or about to expire (within 5 minutes)
-    # Make sure current time is also timezone-aware for comparison
-    now_utc = datetime.now(timezone.utc)
-    should_refresh = credentials.expired or (credentials.expiry and credentials.expiry < now_utc + timedelta(minutes=5))
+    # Manually check if we should refresh (token older than 50 minutes)
+    should_refresh = False
+    if token_expiry:
+        now_utc = datetime.now(timezone.utc)
+        time_until_expiry = token_expiry - now_utc
+        # Refresh if less than 10 minutes remaining
+        should_refresh = time_until_expiry.total_seconds() < 600
+    else:
+        # No expiry info, assume we should refresh
+        should_refresh = True
     
     if should_refresh:
         logging.info(f"Refreshing YouTube token for user {user_id}")
