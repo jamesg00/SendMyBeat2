@@ -246,22 +246,33 @@ async def get_youtube_auth_url(current_user: dict = Depends(get_current_user)):
 async def connect_youtube(code: str = Form(...), current_user: dict = Depends(get_current_user)):
     """Exchange authorization code for tokens and store them"""
     try:
-        from google_auth_oauthlib.flow import Flow
+        import requests
         
-        flow = Flow.from_client_config(
-            {
-                "web": {
-                    "client_id": GOOGLE_CLIENT_ID,
-                    "client_secret": GOOGLE_CLIENT_SECRET,
-                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                    "token_uri": "https://oauth2.googleapis.com/token",
-                }
-            },
-            scopes=['https://www.googleapis.com/auth/youtube.upload', 'https://www.googleapis.com/auth/userinfo.email'],
-            redirect_uri=f"{os.environ.get('FRONTEND_URL', 'https://musictag-wizard.preview.emergentagent.com')}/youtube-callback"
+        # Exchange code for tokens manually to avoid scope validation issues
+        token_url = "https://oauth2.googleapis.com/token"
+        data = {
+            "code": code,
+            "client_id": GOOGLE_CLIENT_ID,
+            "client_secret": GOOGLE_CLIENT_SECRET,
+            "redirect_uri": f"{os.environ.get('FRONTEND_URL', 'https://musictag-wizard.preview.emergentagent.com')}/youtube-callback",
+            "grant_type": "authorization_code"
+        }
+        
+        token_response = requests.post(token_url, data=data)
+        if token_response.status_code != 200:
+            raise Exception(f"Token exchange failed: {token_response.text}")
+        
+        tokens = token_response.json()
+        
+        # Create credentials from tokens
+        from google.oauth2.credentials import Credentials
+        credentials = Credentials(
+            token=tokens['access_token'],
+            refresh_token=tokens.get('refresh_token'),
+            token_uri="https://oauth2.googleapis.com/token",
+            client_id=GOOGLE_CLIENT_ID,
+            client_secret=GOOGLE_CLIENT_SECRET
         )
-        
-        flow.fetch_token(code=code)
         credentials = flow.credentials
         
         # Get user email from Google
