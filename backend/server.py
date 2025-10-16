@@ -646,8 +646,7 @@ async def refresh_youtube_token(user_id: str) -> Credentials:
         logging.info(f"Refreshing YouTube token for user {user_id}")
         
         # Refresh the token
-        from google.auth.transport.requests import Request
-        credentials.refresh(Request())
+        credentials.refresh(GoogleRequest())
         
         # Update database with new token
         await db.youtube_connections.update_one(
