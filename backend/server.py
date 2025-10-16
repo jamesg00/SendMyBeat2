@@ -273,12 +273,15 @@ async def connect_youtube(code: str = Form(...), current_user: dict = Depends(ge
             client_id=GOOGLE_CLIENT_ID,
             client_secret=GOOGLE_CLIENT_SECRET
         )
-        credentials = flow.credentials
         
         # Get user email from Google
         from googleapiclient.discovery import build as google_build
         oauth2_service = google_build('oauth2', 'v2', credentials=credentials)
         user_info = oauth2_service.userinfo().get().execute()
+        
+        # Calculate token expiry (default 1 hour from now)
+        from datetime import timedelta
+        token_expiry = datetime.now(timezone.utc) + timedelta(hours=1)
         
         # Store credentials in database
         await db.youtube_connections.update_one(
@@ -287,9 +290,9 @@ async def connect_youtube(code: str = Form(...), current_user: dict = Depends(ge
                 "$set": {
                     "user_id": current_user['id'],
                     "google_email": user_info.get('email'),
-                    "access_token": credentials.token,
-                    "refresh_token": credentials.refresh_token,
-                    "token_expiry": credentials.expiry.isoformat() if credentials.expiry else None,
+                    "access_token": tokens['access_token'],
+                    "refresh_token": tokens.get('refresh_token'),
+                    "token_expiry": token_expiry.isoformat(),
                     "connected_at": datetime.now(timezone.utc).isoformat()
                 }
             },
