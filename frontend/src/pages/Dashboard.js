@@ -51,6 +51,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [audioFileId, setAudioFileId] = useState("");
   const [imageFileId, setImageFileId] = useState("");
   const [uploadingToYouTube, setUploadingToYouTube] = useState(false);
+  const [expandedDescriptions, setExpandedDescriptions] = useState(new Set());
 
   useEffect(() => {
     fetchUser();
