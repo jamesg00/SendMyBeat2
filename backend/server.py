@@ -757,30 +757,79 @@ async def upload_to_youtube(
         if not audio_file or not image_file:
             raise HTTPException(status_code=404, detail="Uploaded files not found")
         
-        # Return success with file info
-        # Note: Full YouTube upload requires ffmpeg to create video from audio + image
+        # Create video from audio + image using ffmpeg
+        import subprocess
+        video_filename = f"{uuid.uuid4()}.mp4"
+        video_path = UPLOADS_DIR / video_filename
+        
+        ffmpeg_cmd = [
+            'ffmpeg',
+            '-loop', '1',
+            '-i', image_file['file_path'],
+            '-i', audio_file['file_path'],
+            '-c:v', 'libx264',
+            '-tune', 'stillimage',
+            '-c:a', 'aac',
+            '-b:a', '192k',
+            '-pix_fmt', 'yuv420p',
+            '-shortest',
+            '-y',  # Overwrite output file if exists
+            str(video_path)
+        ]
+        
+        logging.info(f"Creating video with ffmpeg: {' '.join(ffmpeg_cmd)}")
+        result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            logging.error(f"FFmpeg error: {result.stderr}")
+            raise Exception(f"Video creation failed: {result.stderr}")
+        
+        logging.info(f"Video created successfully at {video_path}")
+        
+        # Upload to YouTube
+        youtube = build('youtube', 'v3', credentials=credentials)
+        
+        body = {
+            'snippet': {
+                'title': title,
+                'description': description_text,
+                'tags': tags,
+                'categoryId': '10'  # Music category
+            },
+            'status': {
+                'privacyStatus': privacy_status,
+                'selfDeclaredMadeForKids': False
+            }
+        }
+        
+        media = MediaFileUpload(str(video_path), chunksize=-1, resumable=True)
+        
+        logging.info(f"Uploading video to YouTube: {title}")
+        request = youtube.videos().insert(
+            part=','.join(body.keys()),
+            body=body,
+            media_body=media
+        )
+        
+        response = request.execute()
+        
+        logging.info(f"Video uploaded successfully! Video ID: {response['id']}")
+        
+        # Clean up video file
+        try:
+            video_path.unlink()
+            logging.info("Temporary video file deleted")
+        except:
+            pass
+        
         return {
             "success": True,
-            "message": "Files ready for YouTube upload. Token auto-refresh working!",
-            "token_status": "Access token is valid and will auto-refresh when needed",
-            "note": "To complete upload: Install ffmpeg to combine audio + image into video file",
-            "upload_ready": {
-                "title": title,
-                "description_length": len(description_text),
-                "tags_count": len(tags),
-                "privacy": privacy_status,
-                "audio_file": audio_file['original_filename'],
-                "image_file": image_file['original_filename'],
-                "files_at": {
-                    "audio": audio_file['file_path'],
-                    "image": image_file['file_path']
-                }
-            },
-            "next_steps": [
-                "Backend will automatically refresh your YouTube token when it expires",
-                "Your refresh token allows uploads even days/weeks later",
-                "Install ffmpeg to enable actual video upload to YouTube"
-            ]
+            "message": "Video uploaded to YouTube successfully!",
+            "video_id": response['id'],
+            "video_url": f"https://www.youtube.com/watch?v={response['id']}",
+            "title": title,
+            "privacy_status": privacy_status,
+            "tags_count": len(tags)
         }
         
     except Exception as e:
