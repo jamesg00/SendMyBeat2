@@ -699,69 +699,92 @@ const Dashboard = ({ setIsAuthenticated }) => {
                   <p className="text-center text-slate-500 py-8" data-testid="no-descriptions-msg">No saved descriptions yet. Create one above!</p>
                 ) : (
                   <div className="space-y-3" data-testid="descriptions-list">
-                    {descriptions.map((desc) => (
-                      <div key={desc.id} className="p-4 bg-slate-50 rounded-lg" data-testid={`desc-item-${desc.id}`}>
-                        <div className="flex items-start justify-between mb-2">
-                          <h3 className="font-semibold text-slate-800">{desc.title}</h3>
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => copyDescription(desc.content)}
-                              data-testid={`copy-desc-${desc.id}`}
-                            >
-                              <Copy className="h-4 w-4" />
-                            </Button>
-                            <Dialog>
-                              <DialogTrigger asChild>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => setEditingDesc(desc)}
-                                  data-testid={`edit-desc-${desc.id}`}
-                                >
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                              </DialogTrigger>
-                              <DialogContent>
-                                <DialogHeader>
-                                  <DialogTitle>Edit Description</DialogTitle>
-                                  <DialogDescription>Make changes to your description</DialogDescription>
-                                </DialogHeader>
-                                {editingDesc && (
-                                  <div className="space-y-4">
-                                    <Input
-                                      value={editingDesc.title}
-                                      onChange={(e) => setEditingDesc({ ...editingDesc, title: e.target.value })}
-                                      data-testid="edit-title-input"
-                                    />
-                                    <Textarea
-                                      rows={8}
-                                      value={editingDesc.content}
-                                      onChange={(e) => setEditingDesc({ ...editingDesc, content: e.target.value })}
-                                      data-testid="edit-content-input"
-                                    />
-                                    <Button onClick={handleUpdateDescription} className="w-full" data-testid="update-desc-btn">
-                                      Save Changes
-                                    </Button>
-                                  </div>
+                    {descriptions.map((desc) => {
+                      const isExpanded = expandedDescriptions.has(desc.id);
+                      const preview = desc.content.substring(0, 150);
+                      const showPreview = !isExpanded && desc.content.length > 150;
+                      
+                      return (
+                        <div key={desc.id} className="p-4 bg-slate-50 rounded-lg" data-testid={`desc-item-${desc.id}`}>
+                          <div className="flex items-start justify-between mb-2">
+                            <h3 className="font-semibold text-slate-800">{desc.title}</h3>
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => copyDescription(desc.content)}
+                                data-testid={`copy-desc-${desc.id}`}
+                              >
+                                <Copy className="h-4 w-4" />
+                              </Button>
+                              <Dialog>
+                                <DialogTrigger asChild>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => setEditingDesc(desc)}
+                                    data-testid={`edit-desc-${desc.id}`}
+                                  >
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                </DialogTrigger>
+                                <DialogContent>
+                                  <DialogHeader>
+                                    <DialogTitle>Edit Description</DialogTitle>
+                                    <DialogDescription>Make changes to your description</DialogDescription>
+                                  </DialogHeader>
+                                  {editingDesc && (
+                                    <div className="space-y-4">
+                                      <Input
+                                        value={editingDesc.title}
+                                        onChange={(e) => setEditingDesc({ ...editingDesc, title: e.target.value })}
+                                        data-testid="edit-title-input"
+                                      />
+                                      <Textarea
+                                        rows={8}
+                                        value={editingDesc.content}
+                                        onChange={(e) => setEditingDesc({ ...editingDesc, content: e.target.value })}
+                                        data-testid="edit-content-input"
+                                      />
+                                      <Button onClick={handleUpdateDescription} className="w-full" data-testid="update-desc-btn">
+                                        Save Changes
+                                      </Button>
+                                    </div>
+                                  )}
+                                </DialogContent>
+                              </Dialog>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                onClick={() => handleDeleteDescription(desc.id)}
+                                data-testid={`delete-desc-${desc.id}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                          <div 
+                            className="text-sm text-slate-600 whitespace-pre-wrap cursor-pointer"
+                            onClick={() => toggleDescriptionExpand(desc.id)}
+                          >
+                            {showPreview ? (
+                              <>
+                                {preview}...
+                                <span className="text-blue-600 font-medium ml-2">Click to expand</span>
+                              </>
+                            ) : (
+                              <>
+                                {desc.content}
+                                {desc.content.length > 150 && (
+                                  <span className="text-blue-600 font-medium ml-2 block mt-2">Click to collapse</span>
                                 )}
-                              </DialogContent>
-                            </Dialog>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                              onClick={() => handleDeleteDescription(desc.id)}
-                              data-testid={`delete-desc-${desc.id}`}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                              </>
+                            )}
                           </div>
                         </div>
-                        <p className="text-sm text-slate-600 whitespace-pre-wrap">{desc.content}</p>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>
