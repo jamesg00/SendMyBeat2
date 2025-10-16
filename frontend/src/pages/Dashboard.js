@@ -123,13 +123,61 @@ const Dashboard = ({ setIsAuthenticated }) => {
   };
 
   const copyTags = () => {
-    navigator.clipboard.writeText(generatedTags.join(", "));
-    toast.success("Tags copied to clipboard!");
+    const text = generatedTags.join(", ");
+    
+    // Fallback copy method for when Clipboard API is blocked
+    const fallbackCopy = () => {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        document.execCommand('copy');
+        toast.success("Tags copied to clipboard!");
+      } catch (err) {
+        toast.error("Failed to copy tags");
+      }
+      document.body.removeChild(textarea);
+    };
+    
+    // Try modern API first, fallback if blocked
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text)
+        .then(() => toast.success("Tags copied to clipboard!"))
+        .catch(() => fallbackCopy());
+    } else {
+      fallbackCopy();
+    }
   };
 
   const copyDescription = (content) => {
-    navigator.clipboard.writeText(content);
-    toast.success("Description copied to clipboard!");
+    // Fallback copy method for when Clipboard API is blocked
+    const fallbackCopy = () => {
+      const textarea = document.createElement('textarea');
+      textarea.value = content;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        document.execCommand('copy');
+        toast.success("Description copied to clipboard!");
+      } catch (err) {
+        toast.error("Failed to copy description");
+      }
+      document.body.removeChild(textarea);
+    };
+    
+    // Try modern API first, fallback if blocked
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(content)
+        .then(() => toast.success("Description copied to clipboard!"))
+        .catch(() => fallbackCopy());
+    } else {
+      fallbackCopy();
+    }
   };
 
   const handleSaveDescription = async () => {
