@@ -763,7 +763,7 @@ async def upload_to_youtube(
         video_path = UPLOADS_DIR / video_filename
         
         ffmpeg_cmd = [
-            'ffmpeg',
+            '/usr/bin/ffmpeg',  # Use full path
             '-loop', '1',
             '-i', image_file['file_path'],
             '-i', audio_file['file_path'],
