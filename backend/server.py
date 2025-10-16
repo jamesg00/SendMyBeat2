@@ -735,20 +735,30 @@ async def upload_to_youtube(
         if tags_id:
             tags_doc = await db.tag_generations.find_one({"id": tags_id, "user_id": current_user['id']})
             if tags_doc:
-                # YouTube has a 500 character limit for all tags combined
-                tags_text = ", ".join(tags_doc['tags'])
-                if len(tags_text) > 500:
-                    # Truncate to fit within limit
-                    tags = []
-                    char_count = 0
-                    for tag in tags_doc['tags']:
-                        if char_count + len(tag) + 2 <= 500:  # +2 for ", "
-                            tags.append(tag)
-                            char_count += len(tag) + 2
-                        else:
-                            break
-                else:
-                    tags = tags_doc['tags']
+                # YouTube tag requirements:
+                # - Max 500 characters total for all tags
+                # - Each tag max 30 characters
+                # - Special characters can cause issues
+                raw_tags = tags_doc['tags']
+                
+                total_chars = 0
+                for tag in raw_tags:
+                    # Clean tag - remove problematic characters
+                    cleaned_tag = tag.strip().replace('"', '').replace("'", '')
+                    
+                    # Skip if too long or empty
+                    if not cleaned_tag or len(cleaned_tag) > 30:
+                        continue
+                    
+                    # Check if adding this tag would exceed limit
+                    tag_length = len(cleaned_tag) + 2  # +2 for separator
+                    if total_chars + tag_length > 450:  # Leave some buffer
+                        break
+                    
+                    tags.append(cleaned_tag)
+                    total_chars += tag_length
+                
+                logging.info(f"Using {len(tags)} tags (total {total_chars} chars) out of {len(raw_tags)} generated")
         
         # Get uploaded files
         audio_file = await db.uploads.find_one({"id": audio_file_id, "user_id": current_user['id']})
