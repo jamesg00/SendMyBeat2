@@ -713,8 +713,15 @@ async def upload_to_youtube(
 ):
     """Upload video to YouTube with selected description and tags"""
     try:
+        logging.info(f"Starting YouTube upload for user {current_user['id']}")
+        
         # Get and refresh YouTube credentials if needed
-        credentials = await refresh_youtube_token(current_user['id'])
+        try:
+            credentials = await refresh_youtube_token(current_user['id'])
+            logging.info("YouTube credentials refreshed successfully")
+        except Exception as e:
+            logging.error(f"Error refreshing token: {str(e)}")
+            raise
         
         # Get description
         desc_doc = await db.descriptions.find_one({"id": description_id, "user_id": current_user['id']})
