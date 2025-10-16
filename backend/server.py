@@ -332,21 +332,84 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
         chat = LlmChat(
             api_key=os.environ['EMERGENT_LLM_KEY'],
             session_id=f"tags_{uuid.uuid4()}",
-            system_message="You are an expert YouTube music tag generator for beat producers. Generate diverse, high-performing tags that maximize discoverability."
+            system_message="""You are a YouTube SEO expert specializing in music beat discovery optimization. You understand:
+- Search volume trends and keyword competition
+- Long-tail vs short-tail keyword strategy
+- Related searches and semantic variations
+- Artist name variations and common misspellings
+- Genre-specific search patterns
+- Trending music terminology
+- YouTube algorithm preferences
+
+Generate tags that maximize discoverability by mixing high-volume competitive terms with low-competition long-tail keywords."""
         ).with_model("openai", "gpt-4o")
         
-        # Generate tags
-        prompt = f"""Generate exactly 500 YouTube tags for a beat/music production with the following style: "{request.query}"
+        # Enhanced strategic prompt
+        prompt = f"""Analyze and generate 500 YouTube tags for a beat in the style: "{request.query}"
 
-The tags should include:
-- Artist name/style variations (e.g., "lil uzi vert type beat", "lil uzi style")
-- Genre tags (e.g., "trap beat", "hip hop instrumental")
-- Mood tags (e.g., "dark beat", "energetic instrumental")
-- Production tags (e.g., "type beat", "prod by", "free beat")
-- Popular search terms
-- Trending related terms
+Act like vidIQ - create a strategic tag mix that maximizes discoverability:
 
-Format: Return ONLY the tags separated by commas, no numbering or extra text. Make them diverse and search-optimized for YouTube."""
+**CRITICAL REQUIREMENTS:**
+
+1. **Artist Name Variations (if applicable):**
+   - Exact name: "{request.query}"
+   - Common misspellings
+   - Nickname variations
+   - Alternative spellings
+   - With/without spaces or hyphens
+
+2. **High-Volume Competitive Tags (20%):**
+   - "{request.query} type beat"
+   - Main genre keywords
+   - Popular broad terms
+   Examples: "trap beat", "hip hop instrumental", "rap beat"
+
+3. **Medium Competition Long-Tail (40%):**
+   - Specific mood + genre combinations
+   - Artist + year/era references
+   - Style-specific descriptors
+   Examples: "{request.query} type beat 2025", "dark {request.query} instrumental", "melodic {request.query} type beat"
+
+4. **Low Competition Ultra-Specific (30%):**
+   - Multiple keyword combinations
+   - BPM ranges + style
+   - Mood + tempo + genre
+   Examples: "dark aggressive {request.query} type beat", "hard {request.query} beat with 808", "{request.query} type beat free for profit"
+
+5. **Related Artist/Style Tags (10%):**
+   - Similar artists in same genre
+   - Producer tags
+   - Subgenre variations
+
+6. **Strategic Keywords to Include:**
+   - "type beat", "instrumental", "beat", "prod by", "free beat"
+   - "free for profit", "with hook", "hard", "dark", "melodic", "emotional"
+   - Year tags: "2025", "2024"
+   - Platform tags: "youtube", "soundcloud", "beatstars"
+   - Action tags: "download", "free download", "lease"
+
+7. **Format Requirements:**
+   - Mix of 2-6 word tags
+   - Include singular and plural forms
+   - Add location tags if relevant (e.g., "atlanta trap")
+   - Include common search phrases
+   - Add comparative tags (e.g., "like {request.query}")
+
+**EXAMPLES OF GOOD TAGS:**
+- "{request.query} type beat"
+- "{request.query} type beat 2025"
+- "dark {request.query} beat"
+- "{request.query} instrumental"
+- "hard {request.query} type beat"
+- "free {request.query} type beat"
+- "melodic {request.query} instrumental"
+- "{request.query} type beat with hook"
+- "aggressive {request.query} beat"
+- "trap beat like {request.query}"
+
+**OUTPUT FORMAT:**
+Return ONLY the tags separated by commas. No numbering, explanations, or extra text.
+Generate exactly 500 tags focusing on maximum YouTube search discoverability."""
         
         user_message = UserMessage(text=prompt)
         response = await chat.send_message(user_message)
@@ -355,11 +418,22 @@ Format: Return ONLY the tags separated by commas, no numbering or extra text. Ma
         tags_text = response.strip()
         tags = [tag.strip() for tag in tags_text.split(',') if tag.strip()]
         
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_tags = []
+        for tag in tags:
+            tag_lower = tag.lower()
+            if tag_lower not in seen:
+                seen.add(tag_lower)
+                unique_tags.append(tag)
+        
+        logging.info(f"Generated {len(unique_tags)} unique strategic tags for query: {request.query}")
+        
         # Save to database
         tag_gen = TagGenerationResponse(
             user_id=current_user['id'],
             query=request.query,
-            tags=tags
+            tags=unique_tags
         )
         
         tag_doc = tag_gen.model_dump()
