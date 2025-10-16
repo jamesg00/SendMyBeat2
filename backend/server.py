@@ -815,24 +815,32 @@ async def upload_to_youtube(
         # Upload to YouTube
         youtube = build('youtube', 'v3', credentials=credentials)
         
+        # Prepare video metadata
+        snippet = {
+            'title': title[:100],  # YouTube title max 100 chars
+            'description': description_text[:5000],  # YouTube description max 5000 chars
+            'categoryId': '10'  # Music category
+        }
+        
+        # Only add tags if we have valid ones
+        if tags and len(tags) > 0:
+            snippet['tags'] = tags
+        
         body = {
-            'snippet': {
-                'title': title,
-                'description': description_text,
-                'tags': tags,
-                'categoryId': '10'  # Music category
-            },
+            'snippet': snippet,
             'status': {
                 'privacyStatus': privacy_status,
                 'selfDeclaredMadeForKids': False
             }
         }
         
+        logging.info(f"Uploading to YouTube with title: {title}, tags: {len(tags)}, privacy: {privacy_status}")
+        
         media = MediaFileUpload(str(video_path), chunksize=-1, resumable=True)
         
-        logging.info(f"Uploading video to YouTube: {title}")
+        logging.info(f"Starting YouTube upload...")
         request = youtube.videos().insert(
-            part=','.join(body.keys()),
+            part='snippet,status',
             body=body,
             media_body=media
         )
