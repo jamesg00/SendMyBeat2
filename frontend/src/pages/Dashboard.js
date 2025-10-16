@@ -305,6 +305,12 @@ const Dashboard = ({ setIsAuthenticated }) => {
     }
 
     setUploadingToYouTube(true);
+    
+    // Show progress toast
+    const uploadToast = toast.loading("Creating video from audio and image... This may take 1-2 minutes", {
+      duration: 120000 // 2 minutes
+    });
+    
     try {
       const formData = new FormData();
       formData.append('title', uploadTitle);
@@ -314,14 +320,37 @@ const Dashboard = ({ setIsAuthenticated }) => {
       formData.append('audio_file_id', audioFileId);
       formData.append('image_file_id', imageFileId);
 
-      const response = await axios.post(`${API}/youtube/upload`, formData);
-      toast.success(response.data.message || "Upload process started!");
+      const response = await axios.post(`${API}/youtube/upload`, formData, {
+        timeout: 180000 // 3 minute timeout
+      });
+      
+      toast.dismiss(uploadToast);
+      
+      if (response.data.video_url) {
+        toast.success(
+          <div>
+            <p className="font-semibold">Video uploaded successfully! 🎉</p>
+            <a href={response.data.video_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+              View on YouTube
+            </a>
+          </div>,
+          { duration: 10000 }
+        );
+      } else {
+        toast.success(response.data.message || "Upload process started!");
+      }
       
       if (response.data.note) {
         toast.info(response.data.note, { duration: 8000 });
       }
     } catch (error) {
-      toast.error(error.response?.data?.detail || "Failed to upload to YouTube");
+      toast.dismiss(uploadToast);
+      
+      if (error.code === 'ECONNABORTED') {
+        toast.error("Upload timed out. Your audio file might be too long. Try a shorter file.");
+      } else {
+        toast.error(error.response?.data?.detail || "Failed to upload to YouTube");
+      }
     } finally {
       setUploadingToYouTube(false);
     }
