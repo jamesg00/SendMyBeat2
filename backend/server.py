@@ -1,7 +1,8 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, status
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, UploadFile, File, Form
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
@@ -13,6 +14,14 @@ from datetime import datetime, timezone, timedelta
 import jwt
 from passlib.hash import bcrypt
 from emergentintegrations.llm.chat import LlmChat, UserMessage
+from authlib.integrations.starlette_client import OAuth, OAuthError
+from starlette.requests import Request
+from starlette.responses import RedirectResponse
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
+import json
+import shutil
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -27,14 +36,31 @@ JWT_SECRET = os.environ['JWT_SECRET_KEY']
 JWT_ALGORITHM = os.environ['JWT_ALGORITHM']
 JWT_EXPIRATION = int(os.environ['JWT_EXPIRATION_MINUTES'])
 
+# Google OAuth Configuration
+GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', 'your_google_client_id_here')
+GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', 'your_google_client_secret_here')
+
 # Security
 security = HTTPBearer()
 
 # Create the main app without a prefix
 app = FastAPI()
 
+# Add session middleware for OAuth
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=os.environ.get('SESSION_SECRET_KEY', 'your-session-secret-key')
+)
+
+# OAuth setup
+oauth = OAuth()
+
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
+
+# Create uploads directory
+UPLOADS_DIR = Path("/app/uploads")
+UPLOADS_DIR.mkdir(exist_ok=True)
 
 
 # ============ Models ============
@@ -97,6 +123,16 @@ class TagGenerationResponse(BaseModel):
     query: str
     tags: List[str]
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class YouTubeUploadRequest(BaseModel):
+    title: str
+    description_id: str
+    tags_id: Optional[str] = None
+    privacy_status: str = "public"  # public, unlisted, private
+
+class YouTubeConnectionStatus(BaseModel):
+    connected: bool
+    email: Optional[str] = None
 
 
 # ============ Auth Helper Functions ============
@@ -177,6 +213,100 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         user_doc['created_at'] = datetime.fromisoformat(user_doc['created_at'])
     
     return User(**user_doc)
+
+
+# ============ YouTube OAuth Routes ============
+@api_router.get("/youtube/auth-url")
+async def get_youtube_auth_url(current_user: dict = Depends(get_current_user)):
+    """Get the Google OAuth URL for YouTube access"""
+    if GOOGLE_CLIENT_ID == 'your_google_client_id_here':
+        raise HTTPException(
+            status_code=400,
+            detail="Google OAuth not configured. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in backend/.env"
+        )
+    
+    # Create OAuth URL with YouTube upload scope
+    from urllib.parse import urlencode
+    
+    params = {
+        'client_id': GOOGLE_CLIENT_ID,
+        'redirect_uri': f"{os.environ.get('FRONTEND_URL', 'https://musictag-wizard.preview.emergentagent.com')}/youtube-callback",
+        'response_type': 'code',
+        'scope': 'https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/userinfo.email',
+        'access_type': 'offline',
+        'prompt': 'consent',
+        'state': current_user['id']
+    }
+    
+    auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
+    return {"auth_url": auth_url}
+
+@api_router.post("/youtube/connect")
+async def connect_youtube(code: str = Form(...), current_user: dict = Depends(get_current_user)):
+    """Exchange authorization code for tokens and store them"""
+    try:
+        from google_auth_oauthlib.flow import Flow
+        
+        flow = Flow.from_client_config(
+            {
+                "web": {
+                    "client_id": GOOGLE_CLIENT_ID,
+                    "client_secret": GOOGLE_CLIENT_SECRET,
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                }
+            },
+            scopes=['https://www.googleapis.com/auth/youtube.upload', 'https://www.googleapis.com/auth/userinfo.email'],
+            redirect_uri=f"{os.environ.get('FRONTEND_URL', 'https://musictag-wizard.preview.emergentagent.com')}/youtube-callback"
+        )
+        
+        flow.fetch_token(code=code)
+        credentials = flow.credentials
+        
+        # Get user email from Google
+        from googleapiclient.discovery import build as google_build
+        oauth2_service = google_build('oauth2', 'v2', credentials=credentials)
+        user_info = oauth2_service.userinfo().get().execute()
+        
+        # Store credentials in database
+        await db.youtube_connections.update_one(
+            {"user_id": current_user['id']},
+            {
+                "$set": {
+                    "user_id": current_user['id'],
+                    "google_email": user_info.get('email'),
+                    "access_token": credentials.token,
+                    "refresh_token": credentials.refresh_token,
+                    "token_expiry": credentials.expiry.isoformat() if credentials.expiry else None,
+                    "connected_at": datetime.now(timezone.utc).isoformat()
+                }
+            },
+            upsert=True
+        )
+        
+        return {"success": True, "email": user_info.get('email')}
+        
+    except Exception as e:
+        logging.error(f"YouTube connection error: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Failed to connect YouTube: {str(e)}")
+
+@api_router.get("/youtube/status", response_model=YouTubeConnectionStatus)
+async def get_youtube_status(current_user: dict = Depends(get_current_user)):
+    """Check if user has connected their YouTube account"""
+    connection = await db.youtube_connections.find_one({"user_id": current_user['id']})
+    
+    if connection:
+        return YouTubeConnectionStatus(
+            connected=True,
+            email=connection.get('google_email')
+        )
+    return YouTubeConnectionStatus(connected=False)
+
+@api_router.delete("/youtube/disconnect")
+async def disconnect_youtube(current_user: dict = Depends(get_current_user)):
+    """Disconnect YouTube account"""
+    await db.youtube_connections.delete_one({"user_id": current_user['id']})
+    return {"success": True, "message": "YouTube account disconnected"}
 
 
 # ============ Tag Generation Routes ============
@@ -396,6 +526,167 @@ Return only the complete description."""
     except Exception as e:
         logging.error(f"Error generating description: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to generate description: {str(e)}")
+
+
+# ============ File Upload Routes ============
+@api_router.post("/upload/audio")
+async def upload_audio(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
+    """Upload audio file (MP3, WAV, etc.)"""
+    try:
+        # Validate file type
+        allowed_extensions = ['.mp3', '.wav', '.m4a', '.flac', '.ogg']
+        file_ext = Path(file.filename).suffix.lower()
+        
+        if file_ext not in allowed_extensions:
+            raise HTTPException(status_code=400, detail="Invalid audio file format")
+        
+        # Create unique filename
+        file_id = str(uuid.uuid4())
+        filename = f"{file_id}{file_ext}"
+        file_path = UPLOADS_DIR / filename
+        
+        # Save file
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        # Save metadata to database
+        upload_doc = {
+            "id": file_id,
+            "user_id": current_user['id'],
+            "original_filename": file.filename,
+            "stored_filename": filename,
+            "file_type": "audio",
+            "file_path": str(file_path),
+            "uploaded_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+        await db.uploads.insert_one(upload_doc)
+        
+        return {"file_id": file_id, "filename": file.filename}
+        
+    except Exception as e:
+        logging.error(f"Audio upload error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to upload audio: {str(e)}")
+
+@api_router.post("/upload/image")
+async def upload_image(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
+    """Upload image file (JPG, PNG, etc.)"""
+    try:
+        # Validate file type
+        allowed_extensions = ['.jpg', '.jpeg', '.png', '.webp']
+        file_ext = Path(file.filename).suffix.lower()
+        
+        if file_ext not in allowed_extensions:
+            raise HTTPException(status_code=400, detail="Invalid image file format")
+        
+        # Create unique filename
+        file_id = str(uuid.uuid4())
+        filename = f"{file_id}{file_ext}"
+        file_path = UPLOADS_DIR / filename
+        
+        # Save file
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        # Save metadata to database
+        upload_doc = {
+            "id": file_id,
+            "user_id": current_user['id'],
+            "original_filename": file.filename,
+            "stored_filename": filename,
+            "file_type": "image",
+            "file_path": str(file_path),
+            "uploaded_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+        await db.uploads.insert_one(upload_doc)
+        
+        return {"file_id": file_id, "filename": file.filename}
+        
+    except Exception as e:
+        logging.error(f"Image upload error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to upload image: {str(e)}")
+
+@api_router.get("/uploads/my-files")
+async def get_my_uploads(current_user: dict = Depends(get_current_user)):
+    """Get user's uploaded files"""
+    uploads = await db.uploads.find(
+        {"user_id": current_user['id']},
+        {"_id": 0}
+    ).sort("uploaded_at", -1).to_list(100)
+    
+    return uploads
+
+
+# ============ YouTube Upload Routes ============
+@api_router.post("/youtube/upload")
+async def upload_to_youtube(
+    title: str = Form(...),
+    description_id: str = Form(...),
+    tags_id: str = Form(None),
+    privacy_status: str = Form("public"),
+    audio_file_id: str = Form(...),
+    image_file_id: str = Form(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """Upload video to YouTube with selected description and tags"""
+    try:
+        # Get YouTube connection
+        connection = await db.youtube_connections.find_one({"user_id": current_user['id']})
+        if not connection:
+            raise HTTPException(status_code=400, detail="YouTube account not connected")
+        
+        # Get description
+        desc_doc = await db.descriptions.find_one({"id": description_id, "user_id": current_user['id']})
+        if not desc_doc:
+            raise HTTPException(status_code=404, detail="Description not found")
+        
+        description_text = desc_doc['content']
+        
+        # Get tags if provided
+        tags = []
+        if tags_id:
+            tags_doc = await db.tag_generations.find_one({"id": tags_id, "user_id": current_user['id']})
+            if tags_doc:
+                tags = tags_doc['tags'][:500]  # YouTube allows max 500 characters in tags
+        
+        # Get uploaded files
+        audio_file = await db.uploads.find_one({"id": audio_file_id, "user_id": current_user['id']})
+        image_file = await db.uploads.find_one({"id": image_file_id, "user_id": current_user['id']})
+        
+        if not audio_file or not image_file:
+            raise HTTPException(status_code=404, detail="Uploaded files not found")
+        
+        # Create credentials
+        credentials = Credentials(
+            token=connection['access_token'],
+            refresh_token=connection.get('refresh_token'),
+            token_uri="https://oauth2.googleapis.com/token",
+            client_id=GOOGLE_CLIENT_ID,
+            client_secret=GOOGLE_CLIENT_SECRET
+        )
+        
+        # TODO: Combine audio and image into video file
+        # For now, we'll return a placeholder response
+        # In production, you would use ffmpeg to combine audio + image into video
+        
+        return {
+            "success": True,
+            "message": "YouTube upload feature requires video file creation. Audio and image files are uploaded successfully.",
+            "note": "To complete this feature, you need to: 1) Install ffmpeg, 2) Combine audio and image into video file, 3) Upload to YouTube using the API",
+            "files_ready": {
+                "audio": audio_file['file_path'],
+                "image": image_file['file_path'],
+                "title": title,
+                "description": description_text,
+                "tags_count": len(tags),
+                "privacy": privacy_status
+            }
+        }
+        
+    except Exception as e:
+        logging.error(f"YouTube upload error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to upload to YouTube: {str(e)}")
 
 
 # Include the router in the main app

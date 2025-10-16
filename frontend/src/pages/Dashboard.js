@@ -6,10 +6,12 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import axios from "axios";
 import { API } from "@/App";
 import { toast } from "sonner";
-import { Music, Sparkles, Save, LogOut, Copy, Trash2, Edit, Plus } from "lucide-react";
+import { Music, Sparkles, Save, LogOut, Copy, Trash2, Edit, Plus, Upload, Youtube, Link, CheckCircle2, AlertCircle } from "lucide-react";
 
 const Dashboard = ({ setIsAuthenticated }) => {
   const [user, setUser] = useState(null);
@@ -32,11 +34,29 @@ const Dashboard = ({ setIsAuthenticated }) => {
   });
   const [loadingGenerate, setLoadingGenerate] = useState(false);
   const [editingDesc, setEditingDesc] = useState(null);
+  const [showSaveRefinedDialog, setShowSaveRefinedDialog] = useState(false);
+  const [refinedTextToSave, setRefinedTextToSave] = useState("");
+  
+  // YouTube upload states
+  const [youtubeConnected, setYoutubeConnected] = useState(false);
+  const [youtubeEmail, setYoutubeEmail] = useState("");
+  const [audioFile, setAudioFile] = useState(null);
+  const [imageFile, setImageFile] = useState(null);
+  const [uploadTitle, setUploadTitle] = useState("");
+  const [selectedDescriptionId, setSelectedDescriptionId] = useState("");
+  const [selectedTagsId, setSelectedTagsId] = useState("");
+  const [privacyStatus, setPrivacyStatus] = useState("public");
+  const [uploadingAudio, setUploadingAudio] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [audioFileId, setAudioFileId] = useState("");
+  const [imageFileId, setImageFileId] = useState("");
+  const [uploadingToYouTube, setUploadingToYouTube] = useState(false);
 
   useEffect(() => {
     fetchUser();
     fetchDescriptions();
     fetchTagHistory();
+    checkYouTubeConnection();
   }, []);
 
   const fetchUser = async () => {
@@ -63,6 +83,16 @@ const Dashboard = ({ setIsAuthenticated }) => {
       setTagHistory(response.data);
     } catch (error) {
       console.error("Failed to fetch tag history", error);
+    }
+  };
+
+  const checkYouTubeConnection = async () => {
+    try {
+      const response = await axios.get(`${API}/youtube/status`);
+      setYoutubeConnected(response.data.connected);
+      setYoutubeEmail(response.data.email || "");
+    } catch (error) {
+      console.error("Failed to check YouTube connection", error);
     }
   };
 
@@ -157,11 +187,30 @@ const Dashboard = ({ setIsAuthenticated }) => {
     try {
       const response = await axios.post(`${API}/descriptions/refine`, { description: refineText });
       setRefineText(response.data.refined_description);
+      setRefinedTextToSave(response.data.refined_description);
+      setShowSaveRefinedDialog(true);
       toast.success("Description refined!");
     } catch (error) {
       toast.error("Failed to refine description");
     } finally {
       setLoadingRefine(false);
+    }
+  };
+
+  const handleSaveRefinedAsTemplate = async () => {
+    if (!refinedTextToSave.trim()) return;
+    
+    try {
+      await axios.post(`${API}/descriptions`, {
+        title: `Refined - ${new Date().toLocaleDateString()}`,
+        content: refinedTextToSave,
+        is_ai_generated: true
+      });
+      toast.success("Refined text saved as template!");
+      setShowSaveRefinedDialog(false);
+      fetchDescriptions();
+    } catch (error) {
+      toast.error("Failed to save template");
     }
   };
 
@@ -178,6 +227,103 @@ const Dashboard = ({ setIsAuthenticated }) => {
       toast.error("Failed to generate description");
     } finally {
       setLoadingGenerate(false);
+    }
+  };
+
+  const connectYouTube = async () => {
+    try {
+      const response = await axios.get(`${API}/youtube/auth-url`);
+      window.location.href = response.data.auth_url;
+    } catch (error) {
+      if (error.response?.status === 400) {
+        toast.error("Google OAuth not configured. Please add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to backend/.env");
+      } else {
+        toast.error("Failed to connect YouTube");
+      }
+    }
+  };
+
+  const disconnectYouTube = async () => {
+    try {
+      await axios.delete(`${API}/youtube/disconnect`);
+      setYoutubeConnected(false);
+      setYoutubeEmail("");
+      toast.success("YouTube disconnected");
+    } catch (error) {
+      toast.error("Failed to disconnect YouTube");
+    }
+  };
+
+  const handleAudioUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingAudio(true);
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const response = await axios.post(`${API}/upload/audio`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      setAudioFile(file);
+      setAudioFileId(response.data.file_id);
+      toast.success("Audio uploaded!");
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to upload audio");
+    } finally {
+      setUploadingAudio(false);
+    }
+  };
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingImage(true);
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const response = await axios.post(`${API}/upload/image`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      setImageFile(file);
+      setImageFileId(response.data.file_id);
+      toast.success("Image uploaded!");
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to upload image");
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const handleYouTubeUpload = async () => {
+    if (!uploadTitle || !selectedDescriptionId || !audioFileId || !imageFileId) {
+      toast.error("Please fill all required fields and upload files");
+      return;
+    }
+
+    setUploadingToYouTube(true);
+    try {
+      const formData = new FormData();
+      formData.append('title', uploadTitle);
+      formData.append('description_id', selectedDescriptionId);
+      formData.append('tags_id', selectedTagsId || '');
+      formData.append('privacy_status', privacyStatus);
+      formData.append('audio_file_id', audioFileId);
+      formData.append('image_file_id', imageFileId);
+
+      const response = await axios.post(`${API}/youtube/upload`, formData);
+      toast.success(response.data.message || "Upload process started!");
+      
+      if (response.data.note) {
+        toast.info(response.data.note, { duration: 8000 });
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to upload to YouTube");
+    } finally {
+      setUploadingToYouTube(false);
     }
   };
 
@@ -212,9 +358,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
       {/* Main Content */}
       <div className="container mx-auto px-4 py-8">
         <Tabs defaultValue="tags" className="space-y-6">
-          <TabsList className="grid w-full max-w-md mx-auto grid-cols-2">
+          <TabsList className="grid w-full max-w-2xl mx-auto grid-cols-3">
             <TabsTrigger value="tags" data-testid="tags-tab">Tag Generator</TabsTrigger>
             <TabsTrigger value="descriptions" data-testid="descriptions-tab">Descriptions</TabsTrigger>
+            <TabsTrigger value="upload" data-testid="upload-tab">Upload to YouTube</TabsTrigger>
           </TabsList>
 
           {/* Tag Generator Tab */}
@@ -362,7 +509,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                   <CardContent className="space-y-4">
                     <Textarea
                       placeholder="Paste your description to refine..."
-                      rows={5}
+                      className="resize-y min-h-[120px] max-h-[400px]"
                       value={refineText}
                       onChange={(e) => setRefineText(e.target.value)}
                       data-testid="refine-text-input"
@@ -518,8 +665,228 @@ const Dashboard = ({ setIsAuthenticated }) => {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* YouTube Upload Tab */}
+          <TabsContent value="upload" className="space-y-6">
+            <Card className="shadow-lg border-0">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Youtube className="h-5 w-5 text-red-600" />
+                  Upload Beat to YouTube
+                </CardTitle>
+                <CardDescription>Connect your YouTube account and upload beats automatically</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* YouTube Connection Status */}
+                <div className="p-4 bg-slate-50 rounded-lg">
+                  {youtubeConnected ? (
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <CheckCircle2 className="h-5 w-5 text-green-600" />
+                        <div>
+                          <p className="font-medium text-slate-800">YouTube Connected</p>
+                          <p className="text-sm text-slate-500">{youtubeEmail}</p>
+                        </div>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={disconnectYouTube}
+                        data-testid="disconnect-youtube-btn"
+                      >
+                        Disconnect
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-3">
+                        <AlertCircle className="h-5 w-5 text-amber-600" />
+                        <p className="font-medium text-slate-800">YouTube Not Connected</p>
+                      </div>
+                      <Alert>
+                        <AlertDescription>
+                          To use YouTube upload, you need to configure Google OAuth credentials in backend/.env:
+                          <br />• GOOGLE_CLIENT_ID
+                          <br />• GOOGLE_CLIENT_SECRET
+                        </AlertDescription>
+                      </Alert>
+                      <Button
+                        onClick={connectYouTube}
+                        className="w-full bg-red-600 hover:bg-red-700 text-white"
+                        data-testid="connect-youtube-btn"
+                      >
+                        <Link className="h-4 w-4 mr-2" />
+                        Connect YouTube Account
+                      </Button>
+                    </div>
+                  )}
+                </div>
+
+                {youtubeConnected && (
+                  <div className="space-y-6">
+                    {/* File Uploads */}
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="audio-upload">Audio File (MP3, WAV, etc.)</Label>
+                        <div className="border-2 border-dashed border-slate-300 rounded-lg p-4 text-center">
+                          <Input
+                            id="audio-upload"
+                            type="file"
+                            accept=".mp3,.wav,.m4a,.flac,.ogg"
+                            onChange={handleAudioUpload}
+                            className="hidden"
+                            data-testid="audio-upload-input"
+                          />
+                          <label htmlFor="audio-upload" className="cursor-pointer">
+                            <Upload className="h-8 w-8 mx-auto mb-2 text-slate-400" />
+                            {uploadingAudio ? (
+                              <p className="text-sm text-slate-600">Uploading...</p>
+                            ) : audioFile ? (
+                              <p className="text-sm text-green-600 font-medium">{audioFile.name}</p>
+                            ) : (
+                              <p className="text-sm text-slate-600">Click to upload audio</p>
+                            )}
+                          </label>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="image-upload">Thumbnail Image (JPG, PNG)</Label>
+                        <div className="border-2 border-dashed border-slate-300 rounded-lg p-4 text-center">
+                          <Input
+                            id="image-upload"
+                            type="file"
+                            accept=".jpg,.jpeg,.png,.webp"
+                            onChange={handleImageUpload}
+                            className="hidden"
+                            data-testid="image-upload-input"
+                          />
+                          <label htmlFor="image-upload" className="cursor-pointer">
+                            <Upload className="h-8 w-8 mx-auto mb-2 text-slate-400" />
+                            {uploadingImage ? (
+                              <p className="text-sm text-slate-600">Uploading...</p>
+                            ) : imageFile ? (
+                              <p className="text-sm text-green-600 font-medium">{imageFile.name}</p>
+                            ) : (
+                              <p className="text-sm text-slate-600">Click to upload image</p>
+                            )}
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Upload Details */}
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="upload-title">Video Title</Label>
+                        <Input
+                          id="upload-title"
+                          placeholder="Your Beat Title"
+                          value={uploadTitle}
+                          onChange={(e) => setUploadTitle(e.target.value)}
+                          data-testid="upload-title-input"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="select-description">Select Description Template</Label>
+                        <Select value={selectedDescriptionId} onValueChange={setSelectedDescriptionId}>
+                          <SelectTrigger id="select-description" data-testid="select-description">
+                            <SelectValue placeholder="Choose a description" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {descriptions.map((desc) => (
+                              <SelectItem key={desc.id} value={desc.id}>
+                                {desc.title}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="select-tags">Select Tags (Optional)</Label>
+                        <Select value={selectedTagsId} onValueChange={setSelectedTagsId}>
+                          <SelectTrigger id="select-tags" data-testid="select-tags">
+                            <SelectValue placeholder="Choose tags" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {tagHistory.map((tag) => (
+                              <SelectItem key={tag.id} value={tag.id}>
+                                {tag.query} ({tag.tags.length} tags)
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="privacy-status">Privacy Status</Label>
+                        <Select value={privacyStatus} onValueChange={setPrivacyStatus}>
+                          <SelectTrigger id="privacy-status" data-testid="privacy-status">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="public">Public</SelectItem>
+                            <SelectItem value="unlisted">Unlisted</SelectItem>
+                            <SelectItem value="private">Private</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <Button
+                        onClick={handleYouTubeUpload}
+                        className="w-full bg-red-600 hover:bg-red-700 text-white"
+                        disabled={uploadingToYouTube || !audioFileId || !imageFileId}
+                        data-testid="youtube-upload-btn"
+                      >
+                        {uploadingToYouTube ? "Uploading to YouTube..." : "Upload to YouTube"}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
       </div>
+
+      {/* Save Refined Text Dialog */}
+      <Dialog open={showSaveRefinedDialog} onOpenChange={setShowSaveRefinedDialog}>
+        <DialogContent data-testid="save-refined-dialog">
+          <DialogHeader>
+            <DialogTitle>Save Refined Description?</DialogTitle>
+            <DialogDescription>
+              Would you like to save this AI-refined description as a template?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Textarea
+              value={refinedTextToSave}
+              readOnly
+              rows={6}
+              className="resize-none"
+            />
+            <div className="flex gap-2">
+              <Button
+                onClick={handleSaveRefinedAsTemplate}
+                className="flex-1"
+                data-testid="save-refined-yes-btn"
+              >
+                Yes, Save as Template
+              </Button>
+              <Button
+                onClick={() => setShowSaveRefinedDialog(false)}
+                variant="outline"
+                className="flex-1"
+                data-testid="save-refined-no-btn"
+              >
+                No, Thanks
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

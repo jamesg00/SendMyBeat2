@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import axios from "axios";
 import LandingPage from "@/pages/LandingPage";
 import Dashboard from "@/pages/Dashboard";
+import YouTubeCallback from "@/pages/YouTubeCallback";
 import { Toaster } from "@/components/ui/sonner";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -72,6 +73,16 @@ function App() {
             element={
               isAuthenticated ? (
                 <Dashboard setIsAuthenticated={setIsAuthenticated} />
+              ) : (
+                <Navigate to="/" replace />
+              )
+            }
+          />
+          <Route
+            path="/youtube-callback"
+            element={
+              isAuthenticated ? (
+                <YouTubeCallback />
               ) : (
                 <Navigate to="/" replace />
               )
