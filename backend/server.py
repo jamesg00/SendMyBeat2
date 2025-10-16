@@ -757,23 +757,27 @@ async def upload_to_youtube(
         if not audio_file or not image_file:
             raise HTTPException(status_code=404, detail="Uploaded files not found")
         
-        # Create video from audio + image using ffmpeg
+        # Create video from audio + image using ffmpeg (optimized settings)
         import subprocess
         video_filename = f"{uuid.uuid4()}.mp4"
         video_path = UPLOADS_DIR / video_filename
         
+        # Optimized ffmpeg command for faster processing
         ffmpeg_cmd = [
-            '/usr/bin/ffmpeg',  # Use full path
+            '/usr/bin/ffmpeg',
             '-loop', '1',
+            '-framerate', '1',  # Only 1 frame per second since image is static
             '-i', image_file['file_path'],
             '-i', audio_file['file_path'],
             '-c:v', 'libx264',
+            '-preset', 'ultrafast',  # Much faster encoding
             '-tune', 'stillimage',
             '-c:a', 'aac',
-            '-b:a', '192k',
+            '-b:a', '128k',  # Lower audio bitrate for faster processing
             '-pix_fmt', 'yuv420p',
             '-shortest',
-            '-y',  # Overwrite output file if exists
+            '-movflags', '+faststart',  # Optimize for web streaming
+            '-y',
             str(video_path)
         ]
         
