@@ -111,16 +111,40 @@ const Dashboard = ({ setIsAuthenticated }) => {
     }
     
     setLoadingTags(true);
+    
+    // Show progress toast
+    const progressToast = toast.loading(
+      <div className="flex items-center gap-3">
+        <div className="spinner"></div>
+        <span>Generating 500 tags with AI... This may take 20-30 seconds</span>
+      </div>,
+      { duration: 60000 }
+    );
+    
     try {
       const response = await axios.post(`${API}/tags/generate`, { query: tagQuery });
+      toast.dismiss(progressToast);
       setGeneratedTags(response.data.tags);
       toast.success(`Generated ${response.data.tags.length} tags!`);
       fetchTagHistory();
     } catch (error) {
+      toast.dismiss(progressToast);
       toast.error(error.response?.data?.detail || "Failed to generate tags");
     } finally {
       setLoadingTags(false);
     }
+  };
+
+  const toggleDescriptionExpand = (descId) => {
+    setExpandedDescriptions(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(descId)) {
+        newSet.delete(descId);
+      } else {
+        newSet.add(descId);
+      }
+      return newSet;
+    });
   };
 
   const copyTags = () => {
