@@ -640,10 +640,14 @@ async def refresh_youtube_token(user_id: str) -> Credentials:
     if not connection:
         raise HTTPException(status_code=400, detail="YouTube account not connected")
     
-    # Parse token expiry
+    # Parse token expiry (make sure it's timezone-aware)
     token_expiry = None
     if connection.get('token_expiry'):
-        token_expiry = datetime.fromisoformat(connection['token_expiry'].replace('Z', '+00:00'))
+        token_expiry_str = connection['token_expiry'].replace('Z', '+00:00')
+        token_expiry = datetime.fromisoformat(token_expiry_str)
+        # Ensure timezone-aware
+        if token_expiry.tzinfo is None:
+            token_expiry = token_expiry.replace(tzinfo=timezone.utc)
     
     # Create credentials
     credentials = Credentials(
@@ -656,7 +660,11 @@ async def refresh_youtube_token(user_id: str) -> Credentials:
     )
     
     # Check if token is expired or about to expire (within 5 minutes)
-    if credentials.expired or (credentials.expiry and credentials.expiry < datetime.now(timezone.utc) + timedelta(minutes=5)):
+    # Make sure current time is also timezone-aware for comparison
+    now_utc = datetime.now(timezone.utc)
+    should_refresh = credentials.expired or (credentials.expiry and credentials.expiry < now_utc + timedelta(minutes=5))
+    
+    if should_refresh:
         logging.info(f"Refreshing YouTube token for user {user_id}")
         
         # Refresh the token
