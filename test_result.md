@@ -171,9 +171,15 @@ backend:
     priority: "high"
     needs_retesting: true
     status_history:
+      - working: false
+        agent: "main"
+        comment: "Bug found: /descriptions/generate endpoint was NOT calling check_and_use_credit(). AI credits not being consumed for description generation."
       - working: true
-        agent: "testing"
-        comment: "COMPREHENSIVE TESTING COMPLETED: ✅ AI credits properly decrement from 2 to 1 after tag generation. ✅ Credit exhaustion properly handled with 402 error and informative message. ✅ Daily reset functionality configured correctly. ✅ check_and_use_credit function working as designed. ✅ Both tag generation and description refine properly consume credits."
+        agent: "main"
+        comment: "FIXED: Added check_and_use_credit() call to /descriptions/generate endpoint. Now all AI endpoints (tag generation, description generation, description refine) properly consume credits. Backend restarted."
+      - working: "user_reported_issue"
+        agent: "user"
+        comment: "User reported: After generating tags, AI credits still show 2/2 remaining. Credits not decreasing."
 
   - task: "Daily reset functionality"
     implemented: true
