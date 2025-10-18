@@ -467,6 +467,8 @@ async def get_subscription_status(current_user: dict = Depends(get_current_user)
         plan=status['plan'],
         daily_credits_remaining=status['credits_remaining'],
         daily_credits_total=status['credits_total'],
+        upload_credits_remaining=status['upload_credits_remaining'],
+        upload_credits_total=status['upload_credits_total'],
         resets_at=status.get('resets_at')
     )
 
