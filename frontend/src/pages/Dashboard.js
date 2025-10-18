@@ -106,6 +106,31 @@ const Dashboard = ({ setIsAuthenticated }) => {
     }
   };
 
+  const fetchSubscriptionStatus = async () => {
+    try {
+      const response = await axios.get(`${API}/subscription/status`);
+      setSubscriptionStatus(response.data);
+    } catch (error) {
+      console.error("Failed to fetch subscription status", error);
+    }
+  };
+
+  const handleUpgrade = async () => {
+    setUpgradingSubscription(true);
+    try {
+      const response = await axios.post(`${API}/subscription/create-checkout`, {
+        success_url: `${window.location.origin}/dashboard?upgraded=true`,
+        cancel_url: `${window.location.origin}/dashboard`
+      });
+      
+      // Redirect to Stripe checkout
+      window.location.href = response.data.checkout_url;
+    } catch (error) {
+      toast.error("Failed to start checkout");
+      setUpgradingSubscription(false);
+    }
+  };
+
   const handleLogout = () => {
     localStorage.removeItem("token");
     setIsAuthenticated(false);
