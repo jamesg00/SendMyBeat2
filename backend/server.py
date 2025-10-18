@@ -1056,6 +1056,18 @@ async def upload_to_youtube(
     try:
         logging.info(f"Starting YouTube upload for user {current_user['id']}")
         
+        # Check if user has upload credits
+        has_credit = await check_and_use_upload_credit(current_user['id'])
+        if not has_credit:
+            status = await get_user_subscription_status(current_user['id'])
+            raise HTTPException(
+                status_code=402,
+                detail={
+                    "message": "Daily upload limit reached. Upgrade to Pro for unlimited uploads!",
+                    "resets_at": status.get('resets_at')
+                }
+            )
+        
         # Get and refresh YouTube credentials if needed
         try:
             credentials = await refresh_youtube_token(current_user['id'])
