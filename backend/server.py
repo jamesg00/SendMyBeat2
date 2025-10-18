@@ -25,11 +25,11 @@ import json
 import shutil
 import stripe
 
-# Configure Stripe
-stripe.api_key = os.environ.get('STRIPE_SECRET_KEY')
-
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
+
+# Configure Stripe (must be after load_dotenv)
+stripe.api_key = os.environ.get('STRIPE_SECRET_KEY')
 
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
