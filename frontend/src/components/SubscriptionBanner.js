@@ -15,7 +15,7 @@ const SubscriptionBanner = ({ creditsRemaining, uploadCreditsRemaining, isSubscr
               </div>
               <div>
                 <p className="font-semibold gradient-text">SendMyBeat Pro</p>
-                <p className="text-sm" style={{color: 'var(--text-secondary)'}}>Unlimited AI generations</p>
+                <p className="text-sm" style={{color: 'var(--text-secondary)'}}>Unlimited AI generations & uploads</p>
               </div>
             </div>
             <div className="text-right">
