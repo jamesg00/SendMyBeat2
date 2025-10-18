@@ -12,6 +12,7 @@ import axios from "axios";
 import { API } from "@/App";
 import { toast } from "sonner";
 import { Music, Sparkles, Save, LogOut, Copy, Trash2, Edit, Plus, Upload, Youtube, Link, CheckCircle2, AlertCircle } from "lucide-react";
+import DarkModeToggle from "@/components/DarkModeToggle";
 
 const Dashboard = ({ setIsAuthenticated }) => {
   const [user, setUser] = useState(null);
