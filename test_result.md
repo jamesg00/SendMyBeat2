@@ -145,17 +145,20 @@ backend:
   - task: "Stripe checkout integration"
     implemented: true
     working: true
-    file: "/app/backend/server.py"
+    file: "/app/backend/server.py and /app/backend/.env"
     stuck_count: 0
     priority: "high"
-    needs_retesting: false
+    needs_retesting: true
     status_history:
       - working: false
         agent: "main"
-        comment: "Bug found: stripe.api_key was being set BEFORE load_dotenv(), causing Stripe key to be None."
+        comment: "Bug 1: stripe.api_key was being set BEFORE load_dotenv(), causing Stripe key to be None."
+      - working: false
+        agent: "main"
+        comment: "Bug 2: Price ID mismatch - using live mode keys (sk_live_, pk_live_) with test mode price ID (price_1SJebJ...). Error: 'No such price; a similar object exists in test mode, but a live mode key was used'."
       - working: true
         agent: "main"
-        comment: "Fixed: Moved stripe.api_key initialization to AFTER load_dotenv(). Backend restarted. Stripe API connection verified successful."
+        comment: "Fixed both issues: 1) Moved stripe.api_key initialization to AFTER load_dotenv(). 2) Updated STRIPE_PRICE_ID to live mode: price_1SJgobHgBX6cuR4W1Mhj5Gty. Backend restarted. Configuration now consistent (all live mode)."
 
   - task: "AI credit usage system"
     implemented: true
