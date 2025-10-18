@@ -66,6 +66,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
     fetchDescriptions();
     fetchTagHistory();
     checkYouTubeConnection();
+    fetchSubscriptionStatus();
   }, []);
 
   const fetchUser = async () => {
