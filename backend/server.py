@@ -419,6 +419,118 @@ async def disconnect_youtube(current_user: dict = Depends(get_current_user)):
     return {"success": True, "message": "YouTube account disconnected"}
 
 
+
+
+# ============ Subscription Routes ============
+@api_router.get("/subscription/status", response_model=SubscriptionStatus)
+async def get_subscription_status(current_user: dict = Depends(get_current_user)):
+    """Get user's subscription and credit status"""
+    status = await get_user_subscription_status(current_user['id'])
+    return SubscriptionStatus(
+        is_subscribed=status['is_subscribed'],
+        plan=status['plan'],
+        daily_credits_remaining=status['credits_remaining'],
+        daily_credits_total=status['credits_total'],
+        resets_at=status.get('resets_at')
+    )
+
+@api_router.post("/subscription/create-checkout")
+async def create_checkout_session(request: CheckoutSessionRequest, current_user: dict = Depends(get_current_user)):
+    """Create Stripe checkout session"""
+    try:
+        checkout_session = stripe.checkout.Session.create(
+            customer_email=current_user.get('email'),
+            client_reference_id=current_user['id'],
+            line_items=[{
+                'price': os.environ['STRIPE_PRICE_ID'],
+                'quantity': 1,
+            }],
+            mode='subscription',
+            success_url=request.success_url,
+            cancel_url=request.cancel_url,
+            metadata={
+                'user_id': current_user['id']
+            }
+        )
+        
+        return {"checkout_url": checkout_session.url}
+        
+    except Exception as e:
+        logging.error(f"Stripe checkout error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to create checkout: {str(e)}")
+
+@api_router.post("/subscription/webhook")
+async def stripe_webhook(request: Request):
+    """Handle Stripe webhooks"""
+    payload = await request.body()
+    sig_header = request.headers.get('stripe-signature')
+    
+    try:
+        event = stripe.Webhook.construct_event(
+            payload, sig_header, os.environ.get('STRIPE_WEBHOOK_SECRET', '')
+        )
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid payload")
+    except stripe.error.SignatureVerificationError:
+        raise HTTPException(status_code=400, detail="Invalid signature")
+    
+    # Handle the event
+    if event['type'] == 'checkout.session.completed':
+        session = event['data']['object']
+        user_id = session.get('client_reference_id') or session.get('metadata', {}).get('user_id')
+        
+        if user_id:
+            # Activate subscription
+            subscription_id = session.get('subscription')
+            await db.users.update_one(
+                {"id": user_id},
+                {"$set": {
+                    "stripe_customer_id": session.get('customer'),
+                    "stripe_subscription_id": subscription_id,
+                    "subscription_status": "active",
+                    "subscribed_at": datetime.now(timezone.utc).isoformat()
+                }}
+            )
+            logging.info(f"Subscription activated for user {user_id}")
+    
+    elif event['type'] == 'customer.subscription.updated':
+        subscription = event['data']['object']
+        customer_id = subscription['customer']
+        
+        # Find user by customer ID
+        user_doc = await db.users.find_one({"stripe_customer_id": customer_id})
+        if user_doc:
+            await db.users.update_one(
+                {"id": user_doc['id']},
+                {"$set": {"subscription_status": subscription['status']}}
+            )
+    
+    elif event['type'] == 'customer.subscription.deleted':
+        subscription = event['data']['object']
+        customer_id = subscription['customer']
+        
+        # Find user by customer ID
+        user_doc = await db.users.find_one({"stripe_customer_id": customer_id})
+        if user_doc:
+            await db.users.update_one(
+                {"id": user_doc['id']},
+                {"$set": {
+                    "subscription_status": "cancelled",
+                    "stripe_subscription_id": None
+                }}
+            )
+    
+    return {"status": "success"}
+
+@api_router.get("/subscription/config")
+async def get_subscription_config():
+    """Get Stripe configuration for frontend"""
+    return {
+        "publishable_key": os.environ.get('STRIPE_PUBLISHABLE_KEY'),
+        "price_id": os.environ['STRIPE_PRICE_ID']
+    }
+
+
 # ============ Tag Generation Routes ============
 @api_router.post("/tags/generate", response_model=TagGenerationResponse)
 async def generate_tags(request: TagGenerationRequest, current_user: dict = Depends(get_current_user)):
