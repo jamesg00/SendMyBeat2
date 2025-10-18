@@ -304,8 +304,15 @@ const Dashboard = ({ setIsAuthenticated }) => {
       setRefinedTextToSave(response.data.refined_description);
       setShowSaveRefinedDialog(true);
       toast.success("Description refined!");
+      fetchSubscriptionStatus(); // Update credits
     } catch (error) {
-      toast.error("Failed to refine description");
+      // Handle credit limit
+      if (error.response?.status === 402) {
+        setShowUpgradeModal(true);
+        toast.error("Daily limit reached! Upgrade to continue.");
+      } else {
+        toast.error("Failed to refine description");
+      }
     } finally {
       setLoadingRefine(false);
     }
