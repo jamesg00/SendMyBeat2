@@ -266,6 +266,24 @@ backend:
         comment: "SMOKE TESTING COMPLETED: ✅ Stripe configuration endpoint working (returns publishable_key and price_id). ✅ Subscription webhook endpoints implemented. ✅ Checkout session creation endpoint present. ✅ Pro user subscription logic implemented and ready for Stripe integration."
 
 frontend:
+  - task: "Credit display refresh after actions"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/pages/Dashboard.js"
+    stuck_count: 1
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: false
+        agent: "main"
+        comment: "Frontend was not calling fetchSubscriptionStatus() after all actions. Only tag generation was updating credits on success. YouTube upload and description generation were missing credit refresh entirely."
+      - working: true
+        agent: "main"
+        comment: "FIXED: Added fetchSubscriptionStatus() calls to all credit-consuming actions: 1) handleGenerateDescription - added on success AND error. 2) handleYouTubeUpload - added on success AND error. 3) handleGenerateTags - added on error (already had on success). 4) handleRefineDescription - added on error (already had on success). Frontend restarted."
+      - working: "user_reported_issue"
+        agent: "user"
+        comment: "User reported: Getting 402 error (correct backend behavior) but frontend not showing updated credit count. Credits still display 2/2 even after consumption."
+
   - task: "Terms and Conditions page"
     implemented: true
     working: "NA"
