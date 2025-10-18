@@ -535,6 +535,17 @@ async def get_subscription_config():
 @api_router.post("/tags/generate", response_model=TagGenerationResponse)
 async def generate_tags(request: TagGenerationRequest, current_user: dict = Depends(get_current_user)):
     try:
+        # Check if user has credits
+        has_credit = await check_and_use_credit(current_user['id'])
+        if not has_credit:
+            status = await get_user_subscription_status(current_user['id'])
+            raise HTTPException(
+                status_code=402,
+                detail={
+                    "message": "Daily limit reached. Upgrade to Pro for unlimited generations!",
+                    "resets_at": status.get('resets_at')
+                }
+            )
         # Initialize AI chat
         chat = LlmChat(
             api_key=os.environ['EMERGENT_LLM_KEY'],
