@@ -171,6 +171,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
       } else {
         toast.error(error.response?.data?.detail?.message || error.response?.data?.detail || "Failed to generate tags");
       }
+      
+      fetchSubscriptionStatus(); // Update credits even on error
     } finally {
       setLoadingTags(false);
     }
