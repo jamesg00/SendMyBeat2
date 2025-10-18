@@ -1069,6 +1069,14 @@ const Dashboard = ({ setIsAuthenticated }) => {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Upgrade Modal */}
+      <UpgradeModal
+        open={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        onUpgrade={handleUpgrade}
+        loading={upgradingSubscription}
+      />
     </div>
   );
 };
