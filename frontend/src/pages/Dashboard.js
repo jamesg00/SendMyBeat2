@@ -315,6 +315,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
       } else {
         toast.error("Failed to refine description");
       }
+      
+      fetchSubscriptionStatus(); // Update credits even on error
     } finally {
       setLoadingRefine(false);
     }
