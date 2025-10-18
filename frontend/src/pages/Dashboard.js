@@ -55,6 +55,11 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [imageFileId, setImageFileId] = useState("");
   const [uploadingToYouTube, setUploadingToYouTube] = useState(false);
   const [expandedDescriptions, setExpandedDescriptions] = useState(new Set());
+  
+  // Subscription states
+  const [subscriptionStatus, setSubscriptionStatus] = useState(null);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [upgradingSubscription, setUpgradingSubscription] = useState(false);
 
   useEffect(() => {
     fetchUser();
