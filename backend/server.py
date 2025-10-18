@@ -139,6 +139,97 @@ class YouTubeConnectionStatus(BaseModel):
     connected: bool
     email: Optional[str] = None
 
+class SubscriptionStatus(BaseModel):
+    is_subscribed: bool
+    plan: str  # "free" or "pro"
+    daily_credits_remaining: int
+    daily_credits_total: int
+    resets_at: Optional[str] = None
+
+class CheckoutSessionRequest(BaseModel):
+    success_url: str
+    cancel_url: str
+
+
+# ============ Subscription Helper Functions ============
+async def get_user_subscription_status(user_id: str) -> dict:
+    """Get user's subscription and credit status"""
+    user_doc = await db.users.find_one({"id": user_id})
+    
+    if not user_doc:
+        return {"is_subscribed": False, "credits_remaining": 0, "credits_total": 2}
+    
+    # Check if user has active subscription
+    is_subscribed = user_doc.get('stripe_subscription_id') and user_doc.get('subscription_status') == 'active'
+    
+    # Pro users get unlimited (represented as -1)
+    if is_subscribed:
+        return {
+            "is_subscribed": True,
+            "plan": "pro",
+            "credits_remaining": -1,  # Unlimited
+            "credits_total": -1,
+            "resets_at": None
+        }
+    
+    # Free users get 2 per day
+    today = datetime.now(timezone.utc).date()
+    usage_date = user_doc.get('daily_usage_date')
+    
+    # Parse usage date
+    if usage_date:
+        if isinstance(usage_date, str):
+            usage_date = datetime.fromisoformat(usage_date).date()
+        elif isinstance(usage_date, datetime):
+            usage_date = usage_date.date()
+    
+    # Reset credits if it's a new day
+    if not usage_date or usage_date < today:
+        await db.users.update_one(
+            {"id": user_id},
+            {"$set": {
+                "daily_usage_count": 0,
+                "daily_usage_date": today.isoformat()
+            }}
+        )
+        credits_used = 0
+    else:
+        credits_used = user_doc.get('daily_usage_count', 0)
+    
+    credits_remaining = max(0, 2 - credits_used)
+    
+    # Calculate reset time (midnight UTC)
+    tomorrow = today + timedelta(days=1)
+    resets_at = datetime.combine(tomorrow, datetime.min.time(), tzinfo=timezone.utc).isoformat()
+    
+    return {
+        "is_subscribed": False,
+        "plan": "free",
+        "credits_remaining": credits_remaining,
+        "credits_total": 2,
+        "resets_at": resets_at
+    }
+
+async def check_and_use_credit(user_id: str) -> bool:
+    """Check if user has credits and use one. Returns True if successful."""
+    status = await get_user_subscription_status(user_id)
+    
+    # Pro users always have access
+    if status['is_subscribed']:
+        return True
+    
+    # Free users need credits
+    if status['credits_remaining'] <= 0:
+        return False
+    
+    # Use one credit
+    await db.users.update_one(
+        {"id": user_id},
+        {"$inc": {"daily_usage_count": 1}}
+    )
+    
+    return True
+
 
 # ============ Auth Helper Functions ============
 def create_access_token(user_id: str, username: str) -> str:
