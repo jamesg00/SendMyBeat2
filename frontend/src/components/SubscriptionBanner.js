@@ -28,43 +28,84 @@ const SubscriptionBanner = ({ creditsRemaining, uploadCreditsRemaining, isSubscr
     );
   }
 
-  const percentage = (creditsRemaining / 2) * 100;
-  const isLow = creditsRemaining === 0;
+  const aiPercentage = (creditsRemaining / 2) * 100;
+  const uploadPercentage = (uploadCreditsRemaining / 2) * 100;
+  const isAiLow = creditsRemaining === 0;
+  const isUploadLow = uploadCreditsRemaining === 0;
+  const isAnyLow = isAiLow || isUploadLow;
 
   return (
-    <Card className={`mb-6 producer-card border-0 ${isLow ? 'neon-glow' : ''}`}>
+    <Card className={`mb-6 producer-card border-0 ${isAnyLow ? 'neon-glow' : ''}`}>
       <CardContent className="p-4">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-3">
-            <div className={`h-10 w-10 rounded-full flex items-center justify-center ${isLow ? 'bg-red-500' : 'bg-gradient-to-br from-[var(--accent-primary)] to-[var(--accent-secondary)]'}`}>
-              <Zap className="h-5 w-5 text-white" />
-            </div>
-            <div>
-              <p className="font-semibold" style={{color: 'var(--text-primary)'}}>Free Tier - Daily Limit</p>
-              <p className="text-sm" style={{color: 'var(--text-secondary)'}}>
-                {creditsRemaining} of 2 AI generations left today
-              </p>
-            </div>
-          </div>
-          <div className="text-right">
-            <p className={`text-2xl font-bold ${isLow ? 'text-red-500' : 'gradient-text'}`}>
-              {creditsRemaining}
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <p className="font-semibold text-lg" style={{color: 'var(--text-primary)'}}>Free Tier - Daily Limits</p>
+            <p className="text-xs" style={{color: 'var(--text-secondary)'}}>
+              Resets daily at midnight UTC
             </p>
-            <p className="text-xs" style={{color: 'var(--text-secondary)'}}>Credits</p>
           </div>
-        </div>
-        
-        <div className="w-full h-2 bg-[var(--bg-tertiary)] rounded-full overflow-hidden mb-3">
-          <div 
-            className={`h-full transition-all ${isLow ? 'bg-red-500' : 'bg-gradient-to-r from-[var(--accent-primary)] to-[var(--accent-secondary)]'}`}
-            style={{ width: `${percentage}%` }}
-          />
         </div>
 
-        {isLow ? (
+        {/* AI Credits */}
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <div className={`h-8 w-8 rounded-full flex items-center justify-center ${isAiLow ? 'bg-red-500' : 'bg-gradient-to-br from-[var(--accent-primary)] to-[var(--accent-secondary)]'}`}>
+                <Zap className="h-4 w-4 text-white" />
+              </div>
+              <div>
+                <p className="text-sm font-medium" style={{color: 'var(--text-primary)'}}>AI Generations</p>
+                <p className="text-xs" style={{color: 'var(--text-secondary)'}}>
+                  {creditsRemaining} of 2 left
+                </p>
+              </div>
+            </div>
+            <p className={`text-lg font-bold ${isAiLow ? 'text-red-500' : 'gradient-text'}`}>
+              {creditsRemaining}
+            </p>
+          </div>
+          <div className="w-full h-2 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
+            <div 
+              className={`h-full transition-all ${isAiLow ? 'bg-red-500' : 'bg-gradient-to-r from-[var(--accent-primary)] to-[var(--accent-secondary)]'}`}
+              style={{ width: `${aiPercentage}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Upload Credits */}
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <div className={`h-8 w-8 rounded-full flex items-center justify-center ${isUploadLow ? 'bg-red-500' : 'bg-gradient-to-br from-green-500 to-emerald-600'}`}>
+                <Upload className="h-4 w-4 text-white" />
+              </div>
+              <div>
+                <p className="text-sm font-medium" style={{color: 'var(--text-primary)'}}>YouTube Uploads</p>
+                <p className="text-xs" style={{color: 'var(--text-secondary)'}}>
+                  {uploadCreditsRemaining} of 2 left
+                </p>
+              </div>
+            </div>
+            <p className={`text-lg font-bold ${isUploadLow ? 'text-red-500' : 'gradient-text'}`}>
+              {uploadCreditsRemaining}
+            </p>
+          </div>
+          <div className="w-full h-2 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
+            <div 
+              className={`h-full transition-all ${isUploadLow ? 'bg-red-500' : 'bg-gradient-to-r from-green-500 to-emerald-600'}`}
+              style={{ width: `${uploadPercentage}%` }}
+            />
+          </div>
+        </div>
+
+        {isAnyLow ? (
           <>
             <p className="text-sm mb-3 text-center" style={{color: 'var(--text-secondary)'}}>
-              You've used all your free generations for today 😢
+              {isAiLow && isUploadLow 
+                ? "You've used all your free credits for today 😢" 
+                : isAiLow 
+                ? "No AI generations left for today 😢"
+                : "No uploads left for today 😢"}
             </p>
             <Button 
               onClick={onUpgrade}
@@ -76,21 +117,16 @@ const SubscriptionBanner = ({ creditsRemaining, uploadCreditsRemaining, isSubscr
             </Button>
           </>
         ) : (
-          <div className="flex items-center justify-between">
-            <p className="text-xs" style={{color: 'var(--text-secondary)'}}>
-              Resets daily at midnight UTC
-            </p>
-            <Button 
-              onClick={onUpgrade}
-              variant="ghost"
-              size="sm"
-              className="text-xs"
-              style={{color: 'var(--accent-primary)'}}
-            >
-              <Sparkles className="mr-1 h-3 w-3" />
-              Go Pro for Unlimited
-            </Button>
-          </div>
+          <Button 
+            onClick={onUpgrade}
+            variant="ghost"
+            size="sm"
+            className="w-full text-sm"
+            style={{color: 'var(--accent-primary)'}}
+          >
+            <Sparkles className="mr-2 h-4 w-4" />
+            Go Pro for Unlimited
+          </Button>
         )}
       </CardContent>
     </Card>
