@@ -431,24 +431,24 @@ const Dashboard = ({ setIsAuthenticated }) => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50" data-testid="dashboard">
+    <div className="min-h-screen mesh-gradient" data-testid="dashboard">
+      <DarkModeToggle />
+      
       {/* Header */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="container mx-auto px-4 py-4">
+      <div className="glass-card mx-4 mt-4 rounded-2xl border-0">
+        <div className="container mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
-                <Music className="h-5 w-5 text-white" />
-              </div>
+            <div className="flex items-center gap-4">
+              <img src="/logo.png" alt="SendMyBeat" className="h-12 w-12 object-contain" />
               <div>
-                <h1 className="text-xl font-bold text-slate-800">SendMyBeat</h1>
-                {user && <p className="text-sm text-slate-500">Welcome, {user.username}</p>}
+                <h1 className="text-2xl font-bold gradient-text">SendMyBeat</h1>
+                {user && <p className="text-sm" style={{color: 'var(--text-secondary)'}}>Welcome back, {user.username}</p>}
               </div>
             </div>
             <Button
               variant="outline"
               onClick={handleLogout}
-              className="gap-2"
+              className="gap-2 border-[var(--border-color)]"
               data-testid="logout-btn"
             >
               <LogOut className="h-4 w-4" />
