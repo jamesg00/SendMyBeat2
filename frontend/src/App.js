@@ -58,42 +58,47 @@ function App() {
   }
 
   return (
-    <div className="App">
+    <div className="App flex flex-col min-h-screen">
       <Toaster position="top-right" richColors />
       <BrowserRouter>
-        <Routes>
-          <Route
-            path="/"
-            element={
-              isAuthenticated ? (
-                <Navigate to="/dashboard" replace />
-              ) : (
-                <LandingPage setIsAuthenticated={setIsAuthenticated} />
-              )
-            }
-          />
-          <Route
-            path="/dashboard"
-            element={
-              isAuthenticated ? (
-                <Dashboard setIsAuthenticated={setIsAuthenticated} />
-              ) : (
-                <Navigate to="/" replace />
-              )
-            }
-          />
-          <Route
-            path="/youtube-callback"
-            element={
-              isAuthenticated ? (
-                <YouTubeCallback />
-              ) : (
-                <Navigate to="/" replace />
-              )
-            }
-          />
-          <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-        </Routes>
+        <div className="flex-grow">
+          <Routes>
+            <Route
+              path="/"
+              element={
+                isAuthenticated ? (
+                  <Navigate to="/dashboard" replace />
+                ) : (
+                  <LandingPage setIsAuthenticated={setIsAuthenticated} />
+                )
+              }
+            />
+            <Route
+              path="/dashboard"
+              element={
+                isAuthenticated ? (
+                  <Dashboard setIsAuthenticated={setIsAuthenticated} />
+                ) : (
+                  <Navigate to="/" replace />
+                )
+              }
+            />
+            <Route
+              path="/youtube-callback"
+              element={
+                isAuthenticated ? (
+                  <YouTubeCallback />
+                ) : (
+                  <Navigate to="/" replace />
+                )
+              }
+            />
+            <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+            <Route path="/terms" element={<TermsAndConditions />} />
+            <Route path="/about" element={<About />} />
+          </Routes>
+        </div>
+        <Footer />
       </BrowserRouter>
     </div>
   );
