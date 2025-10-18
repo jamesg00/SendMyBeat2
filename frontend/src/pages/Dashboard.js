@@ -472,14 +472,22 @@ const Dashboard = ({ setIsAuthenticated }) => {
       if (response.data.note) {
         toast.info(response.data.note, { duration: 8000 });
       }
+      
+      fetchSubscriptionStatus(); // Update credits after upload
     } catch (error) {
       toast.dismiss(uploadToast);
       
-      if (error.code === 'ECONNABORTED') {
+      // Handle credit limit
+      if (error.response?.status === 402) {
+        setShowUpgradeModal(true);
+        toast.error("Daily upload limit reached! Upgrade to continue.");
+      } else if (error.code === 'ECONNABORTED') {
         toast.error("Upload timed out. Your audio file might be too long. Try a shorter file.");
       } else {
-        toast.error(error.response?.data?.detail || "Failed to upload to YouTube");
+        toast.error(error.response?.data?.detail?.message || error.response?.data?.detail || "Failed to upload to YouTube");
       }
+      
+      fetchSubscriptionStatus(); // Update credits even on error
     } finally {
       setUploadingToYouTube(false);
     }
