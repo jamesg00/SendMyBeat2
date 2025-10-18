@@ -507,6 +507,15 @@ const Dashboard = ({ setIsAuthenticated }) => {
 
       {/* Main Content */}
       <div className="container mx-auto px-4 py-8">
+        {/* Subscription Banner */}
+        {subscriptionStatus && (
+          <SubscriptionBanner
+            creditsRemaining={subscriptionStatus.daily_credits_remaining}
+            isSubscribed={subscriptionStatus.is_subscribed}
+            onUpgrade={() => setShowUpgradeModal(true)}
+          />
+        )}
+
         <Tabs defaultValue="tags" className="space-y-6">
           <TabsList className="grid w-full max-w-2xl mx-auto grid-cols-3">
             <TabsTrigger value="tags" data-testid="tags-tab">Tag Generator</TabsTrigger>
