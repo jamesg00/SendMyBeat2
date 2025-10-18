@@ -23,6 +23,10 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 import json
 import shutil
+import stripe
+
+# Configure Stripe
+stripe.api_key = os.environ.get('STRIPE_SECRET_KEY')
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
