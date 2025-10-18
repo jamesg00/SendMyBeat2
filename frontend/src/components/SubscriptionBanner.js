@@ -40,7 +40,7 @@ const SubscriptionBanner = ({ creditsRemaining, isSubscribed, onUpgrade }) => {
               <Zap className="h-5 w-5 text-white" />
             </div>
             <div>
-              <p className="font-semibold" style={{color: 'var(--text-primary)'}}>Free Tier</p>
+              <p className="font-semibold" style={{color: 'var(--text-primary)'}}>Free Tier - Daily Limit</p>
               <p className="text-sm" style={{color: 'var(--text-secondary)'}}>
                 {creditsRemaining} of 2 AI generations left today
               </p>
@@ -62,18 +62,35 @@ const SubscriptionBanner = ({ creditsRemaining, isSubscribed, onUpgrade }) => {
         </div>
 
         {isLow ? (
-          <Button 
-            onClick={onUpgrade}
-            className="w-full btn-modern"
-            data-testid="upgrade-banner-btn"
-          >
-            <Sparkles className="mr-2 h-4 w-4" />
-            Upgrade to Pro - $5/month
-          </Button>
+          <>
+            <p className="text-sm mb-3 text-center" style={{color: 'var(--text-secondary)'}}>
+              You've used all your free generations for today 😢
+            </p>
+            <Button 
+              onClick={onUpgrade}
+              className="w-full btn-modern"
+              data-testid="upgrade-banner-btn"
+            >
+              <Sparkles className="mr-2 h-4 w-4" />
+              Upgrade to Pro - Unlimited Access
+            </Button>
+          </>
         ) : (
-          <p className="text-xs text-center" style={{color: 'var(--text-secondary)'}}>
-            Resets daily at midnight UTC
-          </p>
+          <div className="flex items-center justify-between">
+            <p className="text-xs" style={{color: 'var(--text-secondary)'}}>
+              Resets daily at midnight UTC
+            </p>
+            <Button 
+              onClick={onUpgrade}
+              variant="ghost"
+              size="sm"
+              className="text-xs"
+              style={{color: 'var(--accent-primary)'}}
+            >
+              <Sparkles className="mr-1 h-3 w-3" />
+              Go Pro for Unlimited
+            </Button>
+          </div>
         )}
       </CardContent>
     </Card>
