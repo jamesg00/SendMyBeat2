@@ -28,7 +28,7 @@ After signing up, Stripe will ask:
 Business type: Individual or Company
 Business name: SendMyBeat (or your name)
 Industry: Software/SaaS
-Website: https://musictag-wizard.preview.emergentagent.com
+Website: https://tag-genius-4.preview.emergentagent.com
 ```
 
 ### C. Bank Account (To Receive Money)

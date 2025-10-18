@@ -20,7 +20,7 @@ Your app is in **"Testing" mode** on Google Cloud Console. Apps in testing mode 
 
 ### Step 3: Try Connecting Again
 
-1. Go back to your app: https://musictag-wizard.preview.emergentagent.com
+1. Go back to your app: https://tag-genius-4.preview.emergentagent.com
 2. Go to "Upload to YouTube" tab
 3. Click **"Connect YouTube Account"** again
 4. This time it should work! ✅
