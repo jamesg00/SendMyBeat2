@@ -142,6 +142,21 @@ backend:
         agent: "testing"
         comment: "COMPREHENSIVE TESTING COMPLETED: ✅ All required fields present (is_subscribed, plan, daily_credits_remaining, daily_credits_total, upload_credits_remaining, upload_credits_total, resets_at). ✅ Free users show correct values: is_subscribed=false, plan='free', 2/2 AI credits, 2/2 upload credits. ✅ Reset time properly configured for next day at midnight UTC. ✅ Field types and validation working correctly. ✅ Pro user endpoint structure verified."
 
+  - task: "Stripe checkout integration"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: false
+        agent: "main"
+        comment: "Bug found: stripe.api_key was being set BEFORE load_dotenv(), causing Stripe key to be None."
+      - working: true
+        agent: "main"
+        comment: "Fixed: Moved stripe.api_key initialization to AFTER load_dotenv(). Backend restarted. Stripe API connection verified successful."
+
   - task: "AI credit usage system"
     implemented: true
     working: true
