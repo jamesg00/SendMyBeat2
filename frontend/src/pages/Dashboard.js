@@ -492,15 +492,36 @@ const Dashboard = ({ setIsAuthenticated }) => {
                 {user && <p className="text-sm" style={{color: 'var(--text-secondary)'}}>Welcome back, {user.username}</p>}
               </div>
             </div>
-            <Button
-              variant="outline"
-              onClick={handleLogout}
-              className="gap-2 border-[var(--border-color)]"
-              data-testid="logout-btn"
-            >
-              <LogOut className="h-4 w-4" />
-              Logout
-            </Button>
+            <div className="flex items-center gap-3">
+              {/* Show Upgrade button for free users */}
+              {subscriptionStatus && !subscriptionStatus.is_subscribed && (
+                <Button
+                  onClick={() => setShowUpgradeModal(true)}
+                  className="btn-modern"
+                  data-testid="header-upgrade-btn"
+                >
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Upgrade to Pro
+                </Button>
+              )}
+              
+              {/* Show Pro badge for subscribed users */}
+              {subscriptionStatus && subscriptionStatus.is_subscribed && (
+                <div className="px-4 py-2 rounded-full bg-gradient-to-r from-[var(--accent-primary)] to-[var(--accent-secondary)] text-white font-semibold text-sm">
+                  ✨ Pro Member
+                </div>
+              )}
+              
+              <Button
+                variant="outline"
+                onClick={handleLogout}
+                className="gap-2 border-[var(--border-color)]"
+                data-testid="logout-btn"
+              >
+                <LogOut className="h-4 w-4" />
+                Logout
+              </Button>
+            </div>
           </div>
         </div>
       </div>
