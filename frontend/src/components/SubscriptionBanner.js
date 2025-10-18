@@ -1,9 +1,9 @@
 import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Zap, Sparkles } from 'lucide-react';
+import { Zap, Sparkles, Upload } from 'lucide-react';
 
-const SubscriptionBanner = ({ creditsRemaining, isSubscribed, onUpgrade }) => {
+const SubscriptionBanner = ({ creditsRemaining, uploadCreditsRemaining, isSubscribed, onUpgrade }) => {
   if (isSubscribed) {
     return (
       <Card className="mb-6 glass-card border-0">
