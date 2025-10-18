@@ -159,7 +159,13 @@ async def get_user_subscription_status(user_id: str) -> dict:
     user_doc = await db.users.find_one({"id": user_id})
     
     if not user_doc:
-        return {"is_subscribed": False, "credits_remaining": 0, "credits_total": 2}
+        return {
+            "is_subscribed": False, 
+            "credits_remaining": 0, 
+            "credits_total": 2,
+            "upload_credits_remaining": 0,
+            "upload_credits_total": 2
+        }
     
     # Check if user has active subscription
     is_subscribed = user_doc.get('stripe_subscription_id') and user_doc.get('subscription_status') == 'active'
@@ -171,10 +177,12 @@ async def get_user_subscription_status(user_id: str) -> dict:
             "plan": "pro",
             "credits_remaining": -1,  # Unlimited
             "credits_total": -1,
+            "upload_credits_remaining": -1,  # Unlimited uploads
+            "upload_credits_total": -1,
             "resets_at": None
         }
     
-    # Free users get 2 per day
+    # Free users get 2 AI generations + 2 uploads per day
     today = datetime.now(timezone.utc).date()
     usage_date = user_doc.get('daily_usage_date')
     
@@ -191,14 +199,18 @@ async def get_user_subscription_status(user_id: str) -> dict:
             {"id": user_id},
             {"$set": {
                 "daily_usage_count": 0,
+                "daily_upload_count": 0,
                 "daily_usage_date": today.isoformat()
             }}
         )
         credits_used = 0
+        uploads_used = 0
     else:
         credits_used = user_doc.get('daily_usage_count', 0)
+        uploads_used = user_doc.get('daily_upload_count', 0)
     
     credits_remaining = max(0, 2 - credits_used)
+    upload_credits_remaining = max(0, 2 - uploads_used)
     
     # Calculate reset time (midnight UTC)
     tomorrow = today + timedelta(days=1)
@@ -209,6 +221,8 @@ async def get_user_subscription_status(user_id: str) -> dict:
         "plan": "free",
         "credits_remaining": credits_remaining,
         "credits_total": 2,
+        "upload_credits_remaining": upload_credits_remaining,
+        "upload_credits_total": 2,
         "resets_at": resets_at
     }
 
@@ -228,6 +242,26 @@ async def check_and_use_credit(user_id: str) -> bool:
     await db.users.update_one(
         {"id": user_id},
         {"$inc": {"daily_usage_count": 1}}
+    )
+    
+    return True
+
+async def check_and_use_upload_credit(user_id: str) -> bool:
+    """Check if user has upload credits and use one. Returns True if successful."""
+    status = await get_user_subscription_status(user_id)
+    
+    # Pro users always have access
+    if status['is_subscribed']:
+        return True
+    
+    # Free users need upload credits
+    if status['upload_credits_remaining'] <= 0:
+        return False
+    
+    # Use one upload credit
+    await db.users.update_one(
+        {"id": user_id},
+        {"$inc": {"daily_upload_count": 1}}
     )
     
     return True
