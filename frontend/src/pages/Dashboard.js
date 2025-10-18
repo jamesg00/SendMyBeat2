@@ -146,7 +146,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
     
     setLoadingTags(true);
     
-    // Show progress toast
     const progressToast = toast.loading(
       <div className="flex items-center gap-3">
         <div className="spinner"></div>
@@ -161,9 +160,17 @@ const Dashboard = ({ setIsAuthenticated }) => {
       setGeneratedTags(response.data.tags);
       toast.success(`Generated ${response.data.tags.length} tags!`);
       fetchTagHistory();
+      fetchSubscriptionStatus(); // Update credits
     } catch (error) {
       toast.dismiss(progressToast);
-      toast.error(error.response?.data?.detail || "Failed to generate tags");
+      
+      // Handle credit limit
+      if (error.response?.status === 402) {
+        setShowUpgradeModal(true);
+        toast.error("Daily limit reached! Upgrade to continue.");
+      } else {
+        toast.error(error.response?.data?.detail?.message || error.response?.data?.detail || "Failed to generate tags");
+      }
     } finally {
       setLoadingTags(false);
     }
