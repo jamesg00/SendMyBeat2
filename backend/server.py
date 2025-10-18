@@ -144,6 +144,8 @@ class SubscriptionStatus(BaseModel):
     plan: str  # "free" or "pro"
     daily_credits_remaining: int
     daily_credits_total: int
+    upload_credits_remaining: int
+    upload_credits_total: int
     resets_at: Optional[str] = None
 
 class CheckoutSessionRequest(BaseModel):
