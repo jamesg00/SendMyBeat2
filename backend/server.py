@@ -765,6 +765,17 @@ async def delete_description(description_id: str, current_user: dict = Depends(g
 @api_router.post("/descriptions/refine")
 async def refine_description(request: RefineDescriptionRequest, current_user: dict = Depends(get_current_user)):
     try:
+        # Check if user has credits
+        has_credit = await check_and_use_credit(current_user['id'])
+        if not has_credit:
+            status = await get_user_subscription_status(current_user['id'])
+            raise HTTPException(
+                status_code=402,
+                detail={
+                    "message": "Daily limit reached. Upgrade to Pro for unlimited generations!",
+                    "resets_at": status.get('resets_at')
+                }
+            )
         chat = LlmChat(
             api_key=os.environ['EMERGENT_LLM_KEY'],
             session_id=f"refine_{uuid.uuid4()}",
