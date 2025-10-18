@@ -344,8 +344,16 @@ const Dashboard = ({ setIsAuthenticated }) => {
         content: response.data.generated_description 
       });
       toast.success("Description generated! You can edit and save it.");
+      fetchSubscriptionStatus(); // Update credits
     } catch (error) {
-      toast.error("Failed to generate description");
+      // Handle credit limit
+      if (error.response?.status === 402) {
+        setShowUpgradeModal(true);
+        toast.error("Daily limit reached! Upgrade to continue.");
+      } else {
+        toast.error("Failed to generate description");
+      }
+      fetchSubscriptionStatus(); // Update credits even on error
     } finally {
       setLoadingGenerate(false);
     }
