@@ -156,13 +156,21 @@ const Dashboard = ({ setIsAuthenticated }) => {
       return;
     }
     
+    // Create abort controller for cancellation
+    const controller = new AbortController();
+    setTagGenerationController(controller);
+    
     setLoadingTags(true);
     setProgressActive(true);
     setProgressMessage("🎵 Generating optimized YouTube tags...");
     setProgressDuration(45000); // 45 seconds for tag generation
     
     try {
-      const response = await axios.post(`${API}/tags/generate`, { query: tagQuery });
+      const response = await axios.post(
+        `${API}/tags/generate`, 
+        { query: tagQuery },
+        { signal: controller.signal }
+      );
       setGeneratedTags(response.data.tags);
       toast.success(`Generated ${response.data.tags.length} tags!`);
       fetchTagHistory();
@@ -172,6 +180,12 @@ const Dashboard = ({ setIsAuthenticated }) => {
         fetchSubscriptionStatus();
       }, 500);
     } catch (error) {
+      // Check if cancelled
+      if (axios.isCancel(error)) {
+        toast.info("Tag generation cancelled. No credits used.");
+        return;
+      }
+      
       // Handle credit limit
       if (error.response?.status === 402) {
         setShowUpgradeModal(true);
@@ -187,6 +201,16 @@ const Dashboard = ({ setIsAuthenticated }) => {
     } finally {
       setLoadingTags(false);
       setProgressActive(false);
+      setTagGenerationController(null);
+    }
+  };
+
+  const handleCancelTagGeneration = () => {
+    if (tagGenerationController) {
+      tagGenerationController.abort();
+      setLoadingTags(false);
+      setProgressActive(false);
+      setTagGenerationController(null);
     }
   };
 
