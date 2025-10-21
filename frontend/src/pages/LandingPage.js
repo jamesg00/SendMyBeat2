@@ -275,6 +275,64 @@ const LandingPage = ({ setIsAuthenticated }) => {
           </div>
         </div>
       </div>
+
+      {/* Google API Integration Explanation */}
+      <div className="container mx-auto px-4 py-16 border-t" style={{borderColor: 'var(--border-color)'}}>
+        <div className="max-w-4xl mx-auto">
+          <div className="glass-card p-8">
+            <h2 className="text-3xl font-bold gradient-text mb-6 text-center">
+              About SendMyBeat & Google Integration
+            </h2>
+            
+            <div className="space-y-6" style={{color: 'var(--text-secondary)'}}>
+              <p className="text-lg leading-relaxed">
+                <strong className="gradient-text">SendMyBeat</strong> helps artists, producers, and music creators upload, manage, and share their beats directly to YouTube with ease. Using Google's YouTube Data API, SendMyBeat allows users to securely connect their YouTube accounts and upload beats or videos directly from our platform — saving time and simplifying content management.
+              </p>
+
+              <div className="grid md:grid-cols-2 gap-6 my-8">
+                <div className="producer-card p-6">
+                  <h3 className="text-xl font-semibold mb-3 gradient-text">Key Features</h3>
+                  <ul className="space-y-2 text-sm">
+                    <li className="flex items-start gap-2">
+                      <span className="text-green-500 mt-1">✓</span>
+                      <span>Upload beats and videos directly to your YouTube channel</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-green-500 mt-1">✓</span>
+                      <span>Manage video titles, descriptions, and visibility settings</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-green-500 mt-1">✓</span>
+                      <span>AI-powered tag generation for maximum discoverability</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-green-500 mt-1">✓</span>
+                      <span>Stay in full control of your YouTube account and data</span>
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="producer-card p-6">
+                  <h3 className="text-xl font-semibold mb-3 gradient-text">Google API Usage</h3>
+                  <p className="text-sm mb-3">
+                    SendMyBeat uses the YouTube Data API to publish videos to your YouTube channel <strong>only with your explicit permission</strong>.
+                  </p>
+                  <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 text-sm">
+                    <p className="font-semibold text-blue-400 mb-2">Privacy Guarantee:</p>
+                    <p>We never store or share your Google data with third parties. Your credentials are encrypted and used solely for uploading content to YOUR channel.</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="text-center pt-4">
+                <p className="text-sm italic" style={{color: 'var(--text-secondary)'}}>
+                  By connecting your YouTube account, you authorize SendMyBeat to upload videos on your behalf using the YouTube Data API v3.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
