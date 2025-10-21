@@ -633,7 +633,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
         {/* Subscription Banner */}
         {subscriptionStatus && (
           <SubscriptionBanner
-            creditsRemaining={subscriptionStatus.credits_remaining}
+            creditsRemaining={subscriptionStatus.daily_credits_remaining}
             uploadCreditsRemaining={subscriptionStatus.upload_credits_remaining}
             isSubscribed={subscriptionStatus.is_subscribed}
             onUpgrade={() => setShowUpgradeModal(true)}
