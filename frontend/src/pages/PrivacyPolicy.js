@@ -46,11 +46,11 @@ const PrivacyPolicy = () => {
           <DarkModeToggle />
         </div>
 
-        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl p-8 md:p-12">
+        <div className={`rounded-xl shadow-xl p-8 md:p-12 ${isDark ? 'bg-slate-800' : 'bg-white'}`}>
           <h1 className="text-4xl font-bold mb-6 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
             Privacy Policy
           </h1>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mb-8">
+          <p className={`text-sm mb-8 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
             Last Updated: October 16, 2025
           </p>
 
