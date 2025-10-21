@@ -497,6 +497,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
       return;
     }
 
+    // Create abort controller for cancellation
+    const controller = new AbortController();
+    setUploadController(controller);
+
     setUploadingToYouTube(true);
     setProgressActive(true);
     setProgressMessage("🎬 Creating video and uploading to YouTube...");
@@ -512,7 +516,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
       formData.append('image_file_id', imageFileId);
 
       const response = await axios.post(`${API}/youtube/upload`, formData, {
-        timeout: 180000 // 3 minute timeout
+        timeout: 180000, // 3 minute timeout
+        signal: controller.signal
       });
       
       if (response.data.video_url) {
@@ -538,6 +543,12 @@ const Dashboard = ({ setIsAuthenticated }) => {
         fetchSubscriptionStatus();
       }, 500);
     } catch (error) {
+      // Check if cancelled
+      if (axios.isCancel(error)) {
+        toast.info("Upload cancelled. No credits used.");
+        return;
+      }
+      
       // Handle credit limit
       if (error.response?.status === 402) {
         setShowUpgradeModal(true);
@@ -555,6 +566,16 @@ const Dashboard = ({ setIsAuthenticated }) => {
     } finally {
       setUploadingToYouTube(false);
       setProgressActive(false);
+      setUploadController(null);
+    }
+  };
+
+  const handleCancelUpload = () => {
+    if (uploadController) {
+      uploadController.abort();
+      setUploadingToYouTube(false);
+      setProgressActive(false);
+      setUploadController(null);
     }
   };
 
