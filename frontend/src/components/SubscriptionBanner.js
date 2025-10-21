@@ -82,7 +82,7 @@ const SubscriptionBanner = ({ creditsRemaining, uploadCreditsRemaining, isSubscr
               <div>
                 <p className="text-sm font-medium" style={{color: 'var(--text-primary)'}}>YouTube Uploads</p>
                 <p className="text-xs" style={{color: 'var(--text-secondary)'}}>
-                  {uploadCreditsRemaining} of 2 left
+                  {uploadCreditsRemaining} of 3 left
                 </p>
               </div>
             </div>
