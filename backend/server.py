@@ -182,7 +182,7 @@ async def get_user_subscription_status(user_id: str) -> dict:
             "resets_at": None
         }
     
-    # Free users get 2 AI generations + 2 uploads per day
+    # Free users get 3 AI generations + 3 uploads per day
     today = datetime.now(timezone.utc).date()
     usage_date = user_doc.get('daily_usage_date')
     
@@ -209,8 +209,8 @@ async def get_user_subscription_status(user_id: str) -> dict:
         credits_used = user_doc.get('daily_usage_count', 0)
         uploads_used = user_doc.get('daily_upload_count', 0)
     
-    credits_remaining = max(0, 2 - credits_used)
-    upload_credits_remaining = max(0, 2 - uploads_used)
+    credits_remaining = max(0, 3 - credits_used)
+    upload_credits_remaining = max(0, 3 - uploads_used)
     
     # Calculate reset time (midnight UTC)
     tomorrow = today + timedelta(days=1)
