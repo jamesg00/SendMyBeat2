@@ -28,8 +28,8 @@ const SubscriptionBanner = ({ creditsRemaining, uploadCreditsRemaining, isSubscr
     );
   }
 
-  const aiPercentage = (creditsRemaining / 2) * 100;
-  const uploadPercentage = (uploadCreditsRemaining / 2) * 100;
+  const aiPercentage = (creditsRemaining / 3) * 100;
+  const uploadPercentage = (uploadCreditsRemaining / 3) * 100;
   const isAiLow = creditsRemaining === 0;
   const isUploadLow = uploadCreditsRemaining === 0;
   const isAnyLow = isAiLow || isUploadLow;
