@@ -11,9 +11,18 @@ const SubscriptionBanner = ({ creditsRemaining, uploadCreditsRemaining, isSubscr
     uploadType: typeof uploadCreditsRemaining 
   });
   
-  // If credits are undefined, show error state
+  // Handle missing data
   if (creditsRemaining === undefined || uploadCreditsRemaining === undefined) {
     console.error('❌ Credits are undefined!', { creditsRemaining, uploadCreditsRemaining });
+    return (
+      <Card className="mb-6 producer-card border-2 border-red-500">
+        <CardContent className="p-6">
+          <p className="text-center text-red-500 font-semibold">
+            ⚠️ Unable to load credit information. Please refresh the page.
+          </p>
+        </CardContent>
+      </Card>
+    );
   }
   
   // Pro Subscription Display
