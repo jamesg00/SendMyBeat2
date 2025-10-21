@@ -42,6 +42,11 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [showSaveRefinedDialog, setShowSaveRefinedDialog] = useState(false);
   const [refinedTextToSave, setRefinedTextToSave] = useState("");
   
+  // Progress bar states
+  const [progressActive, setProgressActive] = useState(false);
+  const [progressMessage, setProgressMessage] = useState("");
+  const [progressDuration, setProgressDuration] = useState(30000);
+  
   // YouTube upload states
   const [youtubeConnected, setYoutubeConnected] = useState(false);
   const [youtubeEmail, setYoutubeEmail] = useState("");
