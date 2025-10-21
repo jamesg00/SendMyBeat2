@@ -501,7 +501,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
         toast.info(response.data.note, { duration: 8000 });
       }
       
-      fetchSubscriptionStatus(); // Update credits after upload
+      // Refresh credits after upload
+      setTimeout(() => {
+        fetchSubscriptionStatus();
+      }, 500);
     } catch (error) {
       toast.dismiss(uploadToast);
       
@@ -515,7 +518,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
         toast.error(error.response?.data?.detail?.message || error.response?.data?.detail || "Failed to upload to YouTube");
       }
       
-      fetchSubscriptionStatus(); // Update credits even on error
+      // Refresh credits even on error
+      setTimeout(() => {
+        fetchSubscriptionStatus();
+      }, 500);
     } finally {
       setUploadingToYouTube(false);
     }
