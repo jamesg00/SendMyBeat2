@@ -276,6 +276,15 @@ const Dashboard = ({ setIsAuthenticated }) => {
   };
 
   const handleDeleteDescription = async (id) => {
+    // Confirmation dialog
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this description?\n\nThis action cannot be undone. This is your last chance to save it!"
+    );
+    
+    if (!confirmed) {
+      return; // User cancelled, don't delete
+    }
+    
     try {
       await axios.delete(`${API}/descriptions/${id}`);
       toast.success("Description deleted");
