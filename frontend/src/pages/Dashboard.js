@@ -364,7 +364,11 @@ const Dashboard = ({ setIsAuthenticated }) => {
         content: response.data.generated_description 
       });
       toast.success("Description generated! You can edit and save it.");
-      fetchSubscriptionStatus(); // Update credits
+      
+      // Refresh credits
+      setTimeout(() => {
+        fetchSubscriptionStatus();
+      }, 500);
     } catch (error) {
       // Handle credit limit
       if (error.response?.status === 402) {
@@ -373,7 +377,11 @@ const Dashboard = ({ setIsAuthenticated }) => {
       } else {
         toast.error("Failed to generate description");
       }
-      fetchSubscriptionStatus(); // Update credits even on error
+      
+      // Refresh credits even on error
+      setTimeout(() => {
+        fetchSubscriptionStatus();
+      }, 500);
     } finally {
       setLoadingGenerate(false);
     }
