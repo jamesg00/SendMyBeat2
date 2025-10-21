@@ -461,11 +461,9 @@ const Dashboard = ({ setIsAuthenticated }) => {
     }
 
     setUploadingToYouTube(true);
-    
-    // Show progress toast
-    const uploadToast = toast.loading("Creating video from audio and image... This may take 1-2 minutes", {
-      duration: 120000 // 2 minutes
-    });
+    setProgressActive(true);
+    setProgressMessage("🎬 Creating video and uploading to YouTube...");
+    setProgressDuration(120000); // 2 minutes for upload
     
     try {
       const formData = new FormData();
@@ -479,8 +477,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
       const response = await axios.post(`${API}/youtube/upload`, formData, {
         timeout: 180000 // 3 minute timeout
       });
-      
-      toast.dismiss(uploadToast);
       
       if (response.data.video_url) {
         toast.success(
@@ -505,8 +501,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
         fetchSubscriptionStatus();
       }, 500);
     } catch (error) {
-      toast.dismiss(uploadToast);
-      
       // Handle credit limit
       if (error.response?.status === 402) {
         setShowUpgradeModal(true);
@@ -523,6 +517,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
       }, 500);
     } finally {
       setUploadingToYouTube(false);
+      setProgressActive(false);
     }
   };
 
