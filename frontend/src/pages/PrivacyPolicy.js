@@ -134,13 +134,13 @@ const PrivacyPolicy = () => {
               <ul className="list-disc ml-6 mb-4 space-y-1">
                 <li><strong>Google OAuth 2.0:</strong> For secure authentication with your Google account</li>
                 <li><strong>YouTube Data API v3:</strong> For uploading videos to your YouTube channel</li>
-                <li>Privacy Policy: <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">https://policies.google.com/privacy</a></li>
+                <li>Privacy Policy: <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="${isDark ? 'text-blue-400' : 'text-blue-600'} hover:underline">https://policies.google.com/privacy</a></li>
               </ul>
 
               <h3 className="text-xl font-semibold mb-2 ${isDark ? 'text-gray-200' : 'text-gray-800'}">OpenAI:</h3>
               <ul className="list-disc ml-6 space-y-1">
                 <li><strong>GPT-4o:</strong> For AI-powered tag generation and description creation</li>
-                <li>Privacy Policy: <a href="https://openai.com/privacy" target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">https://openai.com/privacy</a></li>
+                <li>Privacy Policy: <a href="https://openai.com/privacy" target="_blank" rel="noopener noreferrer" className="${isDark ? 'text-blue-400' : 'text-blue-600'} hover:underline">https://openai.com/privacy</a></li>
               </ul>
             </section>
 
@@ -160,7 +160,7 @@ const PrivacyPolicy = () => {
               <ul className="list-disc ml-6 space-y-2">
                 <li><strong>Access:</strong> Request a copy of your data</li>
                 <li><strong>Delete:</strong> Delete your account and associated data at any time</li>
-                <li><strong>Revoke Access:</strong> Disconnect YouTube access at <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">https://myaccount.google.com/permissions</a></li>
+                <li><strong>Revoke Access:</strong> Disconnect YouTube access at <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer" className="${isDark ? 'text-blue-400' : 'text-blue-600'} hover:underline">https://myaccount.google.com/permissions</a></li>
                 <li><strong>Export:</strong> Download your saved descriptions and templates</li>
                 <li><strong>Opt-Out:</strong> Stop using our service at any time</li>
               </ul>
@@ -208,7 +208,7 @@ const PrivacyPolicy = () => {
                 If you have any questions about this privacy policy or our data practices, please contact us:
               </p>
               <ul className="space-y-2">
-                <li><strong>Website:</strong> <a href="https://tag-genius-4.preview.emergentagent.com" className="text-blue-600 dark:text-blue-400 hover:underline">SendMyBeat.com</a></li>
+                <li><strong>Website:</strong> <a href="https://tag-genius-4.preview.emergentagent.com" className="${isDark ? 'text-blue-400' : 'text-blue-600'} hover:underline">SendMyBeat.com</a></li>
                 <li><strong>For Data Requests:</strong> Use the contact form on our website</li>
               </ul>
             </section>
@@ -220,19 +220,19 @@ const PrivacyPolicy = () => {
               </p>
               <ul className="list-disc ml-6 space-y-2">
                 <li>
-                  <a href="https://www.youtube.com/t/terms" target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">
+                  <a href="https://www.youtube.com/t/terms" target="_blank" rel="noopener noreferrer" className="${isDark ? 'text-blue-400' : 'text-blue-600'} hover:underline">
                     YouTube Terms of Service
                   </a>
                 </li>
                 <li>
-                  <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">
+                  <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="${isDark ? 'text-blue-400' : 'text-blue-600'} hover:underline">
                     Google Privacy Policy
                   </a>
                 </li>
               </ul>
               <p className="mt-3">
                 You can revoke SendMyBeat's access to your YouTube data via the{' '}
-                <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">
+                <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer" className="${isDark ? 'text-blue-400' : 'text-blue-600'} hover:underline">
                   Google security settings page
                 </a>.
               </p>
