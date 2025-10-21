@@ -15,6 +15,7 @@ import { Music, Sparkles, Save, LogOut, Copy, Trash2, Edit, Plus, Upload, Youtub
 import DarkModeToggle from "@/components/DarkModeToggle";
 import SubscriptionBanner from "@/components/SubscriptionBanner";
 import UpgradeModal from "@/components/UpgradeModal";
+import AdBanner from "@/components/AdBanner";
 
 const Dashboard = ({ setIsAuthenticated }) => {
   const [user, setUser] = useState(null);
