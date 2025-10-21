@@ -56,7 +56,7 @@ const SubscriptionBanner = ({ creditsRemaining, uploadCreditsRemaining, isSubscr
               <div>
                 <p className="text-sm font-medium" style={{color: 'var(--text-primary)'}}>AI Generations</p>
                 <p className="text-xs" style={{color: 'var(--text-secondary)'}}>
-                  {creditsRemaining} of 2 left
+                  {creditsRemaining} of 3 left
                 </p>
               </div>
             </div>
