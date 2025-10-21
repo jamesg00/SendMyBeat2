@@ -162,7 +162,11 @@ const Dashboard = ({ setIsAuthenticated }) => {
       setGeneratedTags(response.data.tags);
       toast.success(`Generated ${response.data.tags.length} tags!`);
       fetchTagHistory();
-      fetchSubscriptionStatus(); // Update credits
+      
+      // Refresh credits after a short delay to ensure backend has updated
+      setTimeout(() => {
+        fetchSubscriptionStatus();
+      }, 500);
     } catch (error) {
       toast.dismiss(progressToast);
       
@@ -174,7 +178,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
         toast.error(error.response?.data?.detail?.message || error.response?.data?.detail || "Failed to generate tags");
       }
       
-      fetchSubscriptionStatus(); // Update credits even on error
+      // Refresh credits even on error
+      setTimeout(() => {
+        fetchSubscriptionStatus();
+      }, 500);
     } finally {
       setLoadingTags(false);
     }
