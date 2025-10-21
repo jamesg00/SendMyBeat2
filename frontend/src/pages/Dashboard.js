@@ -110,6 +110,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const fetchSubscriptionStatus = async () => {
     try {
       const response = await axios.get(`${API}/subscription/status`);
+      console.log("📊 Subscription Status Updated:", response.data);
       setSubscriptionStatus(response.data);
     } catch (error) {
       console.error("Failed to fetch subscription status", error);
