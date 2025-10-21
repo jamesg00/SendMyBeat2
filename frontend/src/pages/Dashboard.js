@@ -16,6 +16,7 @@ import DarkModeToggle from "@/components/DarkModeToggle";
 import SubscriptionBanner from "@/components/SubscriptionBanner";
 import UpgradeModal from "@/components/UpgradeModal";
 import AdBanner from "@/components/AdBanner";
+import ProgressBar from "@/components/ProgressBar";
 
 const Dashboard = ({ setIsAuthenticated }) => {
   const [user, setUser] = useState(null);
