@@ -941,11 +941,11 @@ async def upload_image(file: UploadFile = File(...), current_user: dict = Depend
     """Upload image file (JPG, PNG, etc.)"""
     try:
         # Validate file type
-        allowed_extensions = ['.jpg', '.jpeg', '.png', '.webp']
+        allowed_extensions = ['.jpg', '.jpeg', '.png', '.webp', '.webm']
         file_ext = Path(file.filename).suffix.lower()
         
         if file_ext not in allowed_extensions:
-            raise HTTPException(status_code=400, detail="Invalid image file format")
+            raise HTTPException(status_code=400, detail="Invalid image file format. Allowed: JPG, PNG, WEBP, WEBM")
         
         # Create unique filename
         file_id = str(uuid.uuid4())
