@@ -56,7 +56,7 @@ const PrivacyPolicy = () => {
 
           <div className={`space-y-8 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
             <section>
-              <h2 className="text-2xl font-semibold mb-4 text-gray-900 dark:text-white">1. Introduction</h2>
+              <h2 className={`text-2xl font-semibold mb-4 ${isDark ? 'text-white' : 'text-gray-900'}`}>1. Introduction</h2>
               <p>
                 Welcome to SendMyBeat.com ("we," "our," or "us"). We respect your privacy and are committed 
                 to protecting your personal data. This privacy policy explains how we collect, use, and 
