@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
+import { X } from 'lucide-react';
 
-const ProgressBar = ({ isActive, message = "Processing...", duration = 30000 }) => {
+const ProgressBar = ({ isActive, message = "Processing...", duration = 30000, onCancel }) => {
   const [progress, setProgress] = useState(0);
 
   useEffect(() => {
@@ -35,6 +36,17 @@ const ProgressBar = ({ isActive, message = "Processing...", duration = 30000 }) 
 
   if (progress === 0) return null;
 
+  const handleCancel = () => {
+    if (onCancel) {
+      const confirmed = window.confirm(
+        "Are you sure you want to cancel this operation?\n\nYour progress will be lost, but no credits will be used."
+      );
+      if (confirmed) {
+        onCancel();
+      }
+    }
+  };
+
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 bg-white dark:bg-slate-800 shadow-lg border-t border-gray-200 dark:border-gray-700">
       <div className="container mx-auto px-4 py-3">
@@ -42,9 +54,20 @@ const ProgressBar = ({ isActive, message = "Processing...", duration = 30000 }) 
           <p className="text-sm font-medium" style={{color: 'var(--text-primary)'}}>
             {message}
           </p>
-          <p className="text-sm font-semibold" style={{color: 'var(--accent-primary)'}}>
-            {Math.round(progress)}%
-          </p>
+          <div className="flex items-center gap-3">
+            <p className="text-sm font-semibold" style={{color: 'var(--accent-primary)'}}>
+              {Math.round(progress)}%
+            </p>
+            {onCancel && (
+              <button
+                onClick={handleCancel}
+                className="p-1.5 rounded-full hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+                title="Cancel operation"
+              >
+                <X className="w-5 h-5 text-red-500" />
+              </button>
+            )}
+          </div>
         </div>
         <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
           <div 
