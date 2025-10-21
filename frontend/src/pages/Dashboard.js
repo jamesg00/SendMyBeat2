@@ -597,7 +597,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
 
         {/* Progress Bar */}
         <ProgressBar
-          active={progressActive}
+          isActive={progressActive}
           message={progressMessage}
           duration={progressDuration}
         />
