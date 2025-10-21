@@ -54,7 +54,7 @@ const PrivacyPolicy = () => {
             Last Updated: October 16, 2025
           </p>
 
-          <div className="space-y-8 text-gray-700 dark:text-gray-300">
+          <div className={`space-y-8 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
             <section>
               <h2 className="text-2xl font-semibold mb-4 text-gray-900 dark:text-white">1. Introduction</h2>
               <p>
