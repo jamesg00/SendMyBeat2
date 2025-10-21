@@ -3,7 +3,9 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Zap, Sparkles, Upload } from 'lucide-react';
 
-const SubscriptionBanner = ({ creditsRemaining, uploadCreditsRemaining, isSubscribed, onUpgrade }) => {
+const SubscriptionBanner = ({ creditsRemaining = 3, uploadCreditsRemaining = 3, isSubscribed, onUpgrade }) => {
+  console.log('📊 Banner Credits:', { creditsRemaining, uploadCreditsRemaining });
+  
   // Pro Subscription Display
   if (isSubscribed) {
     return (
