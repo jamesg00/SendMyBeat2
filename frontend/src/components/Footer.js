@@ -53,7 +53,7 @@ const Footer = () => {
             <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Connect With Us</h3>
             <div className="flex gap-4">
               <a
-                href="https://instagram.com/@dead.at.18"
+                href="https://instagram.com/dead.at.18"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center hover:scale-110 transition-transform"
