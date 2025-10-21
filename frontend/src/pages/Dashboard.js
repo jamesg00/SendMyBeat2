@@ -153,18 +153,12 @@ const Dashboard = ({ setIsAuthenticated }) => {
     }
     
     setLoadingTags(true);
-    
-    const progressToast = toast.loading(
-      <div className="flex items-center gap-3">
-        <div className="spinner"></div>
-        <span>Generating 500 tags with AI... This may take 20-30 seconds</span>
-      </div>,
-      { duration: 60000 }
-    );
+    setProgressActive(true);
+    setProgressMessage("🎵 Generating optimized YouTube tags...");
+    setProgressDuration(45000); // 45 seconds for tag generation
     
     try {
       const response = await axios.post(`${API}/tags/generate`, { query: tagQuery });
-      toast.dismiss(progressToast);
       setGeneratedTags(response.data.tags);
       toast.success(`Generated ${response.data.tags.length} tags!`);
       fetchTagHistory();
@@ -174,8 +168,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
         fetchSubscriptionStatus();
       }, 500);
     } catch (error) {
-      toast.dismiss(progressToast);
-      
       // Handle credit limit
       if (error.response?.status === 402) {
         setShowUpgradeModal(true);
@@ -190,6 +182,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
       }, 500);
     } finally {
       setLoadingTags(false);
+      setProgressActive(false);
     }
   };
 
