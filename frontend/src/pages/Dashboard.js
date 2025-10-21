@@ -47,6 +47,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [progressMessage, setProgressMessage] = useState("");
   const [progressDuration, setProgressDuration] = useState(30000);
   
+  // Cancel operation states
+  const [tagGenerationController, setTagGenerationController] = useState(null);
+  const [uploadController, setUploadController] = useState(null);
+  
   // YouTube upload states
   const [youtubeConnected, setYoutubeConnected] = useState(false);
   const [youtubeEmail, setYoutubeEmail] = useState("");
