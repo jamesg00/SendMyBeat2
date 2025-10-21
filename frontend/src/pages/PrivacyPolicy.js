@@ -6,16 +6,21 @@ import DarkModeToggle from '@/components/DarkModeToggle';
 
 const PrivacyPolicy = () => {
   const navigate = useNavigate();
-  const [, setThemeUpdate] = useState(0);
+  const [isDark, setIsDark] = useState(false);
 
-  // Listen for theme changes
+  // Check initial theme and listen for changes
   useEffect(() => {
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (mutation.attributeName === 'class') {
-          setThemeUpdate(prev => prev + 1);
-        }
-      });
+    // Check initial state
+    const checkDarkMode = () => {
+      const hasDarkClass = document.documentElement.classList.contains('dark');
+      setIsDark(hasDarkClass);
+    };
+    
+    checkDarkMode();
+
+    // Listen for theme changes
+    const observer = new MutationObserver(() => {
+      checkDarkMode();
     });
 
     observer.observe(document.documentElement, {
@@ -27,7 +32,7 @@ const PrivacyPolicy = () => {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800">
+    <div className={`min-h-screen ${isDark ? 'bg-gradient-to-br from-slate-900 to-slate-800' : 'bg-gradient-to-br from-slate-50 to-blue-50'}`}>
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         <div className="flex justify-between items-center mb-8">
           <Button
