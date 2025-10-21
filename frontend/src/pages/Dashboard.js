@@ -653,6 +653,11 @@ const Dashboard = ({ setIsAuthenticated }) => {
           isActive={progressActive}
           message={progressMessage}
           duration={progressDuration}
+          onCancel={
+            loadingTags ? handleCancelTagGeneration : 
+            uploadingToYouTube ? handleCancelUpload : 
+            null
+          }
         />
 
         <Tabs defaultValue="tags" className="space-y-6">
