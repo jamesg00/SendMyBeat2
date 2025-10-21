@@ -559,6 +559,14 @@ const Dashboard = ({ setIsAuthenticated }) => {
           />
         )}
 
+        {/* Advertisement Banner - Only for free users */}
+        {subscriptionStatus && !subscriptionStatus.is_subscribed && (
+          <AdBanner 
+            isSubscribed={subscriptionStatus.is_subscribed}
+            style={{ marginBottom: '24px' }}
+          />
+        )}
+
         <Tabs defaultValue="tags" className="space-y-6">
           <TabsList className="grid w-full max-w-2xl mx-auto grid-cols-3">
             <TabsTrigger value="tags" data-testid="tags-tab">Tag Generator</TabsTrigger>
