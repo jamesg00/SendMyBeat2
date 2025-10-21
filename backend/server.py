@@ -601,71 +601,64 @@ Generate tags that maximize discoverability by mixing high-volume competitive te
         ).with_model("openai", "gpt-4o")
         
         # Enhanced strategic prompt
-        prompt = f"""Analyze and generate 500 YouTube tags for a beat in the style: "{request.query}"
+        prompt = f"""Please use this search query "{request.query}" and relate it to YouTube search tags that are needed for getting the MOST SEARCHED and HIGHEST CLICKED tags so the beat will have maximum discovery on YouTube. This will allow producers' beats to stand out and be on the top of the YouTube page rankings.
 
-Act like vidIQ - create a strategic tag mix that maximizes discoverability:
+Your mission: Generate 500 highly strategic YouTube tags that will make this beat appear in top search results and recommended videos. Focus on what real users are actively searching for RIGHT NOW.
 
-**CRITICAL REQUIREMENTS:**
+**CRITICAL DISCOVERY STRATEGY:**
 
-1. **Artist Name Variations (if applicable):**
-   - Exact name: "{request.query}"
-   - Common misspellings
-   - Nickname variations
-   - Alternative spellings
-   - With/without spaces or hyphens
-
-2. **High-Volume Competitive Tags (20%):**
+1. **Most Searched Terms (30%)** - Tags people are actively searching:
    - "{request.query} type beat"
-   - Main genre keywords
-   - Popular broad terms
-   Examples: "trap beat", "hip hop instrumental", "rap beat"
+   - "{request.query} type beat 2025"
+   - Main genre + "type beat" combinations
+   - Popular artist comparisons
+   - Trending search phrases
 
-3. **Medium Competition Long-Tail (40%):**
-   - Specific mood + genre combinations
-   - Artist + year/era references
-   - Style-specific descriptors
-   Examples: "{request.query} type beat 2025", "dark {request.query} instrumental", "melodic {request.query} type beat"
+2. **High Click-Through Rate Tags (30%)** - Tags that get clicks:
+   - "{request.query} instrumental"
+   - "hard {request.query} type beat"
+   - "free {request.query} type beat"
+   - "dark {request.query} beat"
+   - "melodic {request.query} instrumental"
+   - Emotional descriptors + style
 
-4. **Low Competition Ultra-Specific (30%):**
-   - Multiple keyword combinations
-   - BPM ranges + style
-   - Mood + tempo + genre
-   Examples: "dark aggressive {request.query} type beat", "hard {request.query} beat with 808", "{request.query} type beat free for profit"
+3. **Long-Tail Discovery Tags (25%)** - Specific searches with less competition:
+   - "{request.query} type beat with hook"
+   - "aggressive {request.query} type beat free for profit"
+   - BPM + mood + artist combinations
+   - Year + season + style tags
+   - Location + genre combinations
 
-5. **Related Artist/Style Tags (10%):**
-   - Similar artists in same genre
-   - Producer tags
-   - Subgenre variations
+4. **YouTube Algorithm Favorites (15%)** - Tags YouTube promotes:
+   - "type beat 2025"
+   - "free for profit"
+   - "rap instrumental"
+   - "hip hop beat"
+   - "trap beat"
+   - Genre-specific trending terms
 
-6. **Strategic Keywords to Include:**
-   - "type beat", "instrumental", "beat", "prod by", "free beat"
-   - "free for profit", "with hook", "hard", "dark", "melodic", "emotional"
-   - Year tags: "2025", "2024"
-   - Platform tags: "youtube", "soundcloud", "beatstars"
-   - Action tags: "download", "free download", "lease"
+**MUST INCLUDE POWER KEYWORDS:**
+- "type beat", "instrumental", "beat", "free", "hard", "dark", "melodic"
+- "free for profit", "with hook", "aggressive", "emotional", "vibes"
+- "2025", "2024", "new", "hot", "fire"
+- "prod by", "lease", "download", "purchase"
+- Artist name variations and misspellings
 
-7. **Format Requirements:**
-   - Mix of 2-6 word tags
-   - Include singular and plural forms
-   - Add location tags if relevant (e.g., "atlanta trap")
-   - Include common search phrases
-   - Add comparative tags (e.g., "like {request.query}")
+**TAG STRUCTURE:**
+- Short tags (1-2 words): High search volume
+- Medium tags (3-4 words): Balanced competition
+- Long tags (5+ words): Low competition, specific searches
 
-**EXAMPLES OF GOOD TAGS:**
-- "{request.query} type beat"
-- "{request.query} type beat 2025"
-- "dark {request.query} beat"
-- "{request.query} instrumental"
-- "hard {request.query} type beat"
-- "free {request.query} type beat"
-- "melodic {request.query} instrumental"
-- "{request.query} type beat with hook"
-- "aggressive {request.query} beat"
-- "trap beat like {request.query}"
+**GOAL:** Make this beat appear when someone searches for "{request.query}" OR similar styles. Tags should cover:
+- Exact artist searches
+- Genre + mood searches
+- Free beat searches
+- Comparison searches ("beats like {request.query}")
+- Year/trending searches
 
 **OUTPUT FORMAT:**
-Return ONLY the tags separated by commas. No numbering, explanations, or extra text.
-Generate exactly 500 tags focusing on maximum YouTube search discoverability."""
+Return ONLY 500 tags separated by commas. No explanations, numbering, or extra text. Just the tags.
+Focus on MAXIMUM DISCOVERY and TOP PAGE RANKINGS."""
         
         user_message = UserMessage(text=prompt)
         response = await chat.send_message(user_message)
