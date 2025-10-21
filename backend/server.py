@@ -220,9 +220,9 @@ async def get_user_subscription_status(user_id: str) -> dict:
         "is_subscribed": False,
         "plan": "free",
         "credits_remaining": credits_remaining,
-        "credits_total": 2,
+        "credits_total": 3,
         "upload_credits_remaining": upload_credits_remaining,
-        "upload_credits_total": 2,
+        "upload_credits_total": 3,
         "resets_at": resets_at
     }
 
