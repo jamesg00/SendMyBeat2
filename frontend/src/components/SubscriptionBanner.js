@@ -1,9 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Zap, Sparkles, Upload } from 'lucide-react';
+import { Zap, Sparkles, Upload, Settings } from 'lucide-react';
+import axios from 'axios';
+import { toast } from 'sonner';
 
-const SubscriptionBanner = ({ creditsRemaining, uploadCreditsRemaining, isSubscribed, onUpgrade }) => {
+const SubscriptionBanner = ({ creditsRemaining, uploadCreditsRemaining, isSubscribed, onUpgrade, API }) => {
+  const [loadingPortal, setLoadingPortal] = useState(false);
+  
   console.log('📊 Banner Credits:', { 
     creditsRemaining, 
     uploadCreditsRemaining,
@@ -25,12 +29,25 @@ const SubscriptionBanner = ({ creditsRemaining, uploadCreditsRemaining, isSubscr
     );
   }
   
+  const handleManageSubscription = async () => {
+    setLoadingPortal(true);
+    try {
+      const response = await axios.post(`${API}/subscription/portal`);
+      // Redirect to Stripe Customer Portal
+      window.location.href = response.data.url;
+    } catch (error) {
+      console.error('Failed to open customer portal:', error);
+      toast.error('Failed to open subscription management');
+      setLoadingPortal(false);
+    }
+  };
+  
   // Pro Subscription Display
   if (isSubscribed) {
     return (
       <Card className="mb-6 glass-card border-0">
         <CardContent className="p-6">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-4">
               <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-[var(--accent-primary)] to-[var(--accent-secondary)] flex items-center justify-center shadow-lg">
                 <Sparkles className="h-7 w-7 text-white" />
@@ -47,6 +64,16 @@ const SubscriptionBanner = ({ creditsRemaining, uploadCreditsRemaining, isSubscr
               <p className="text-xs font-semibold" style={{color: 'var(--text-secondary)'}}>UNLIMITED</p>
             </div>
           </div>
+          <Button
+            onClick={handleManageSubscription}
+            disabled={loadingPortal}
+            variant="outline"
+            className="w-full"
+            style={{borderColor: 'var(--accent-primary)', color: 'var(--accent-primary)'}}
+          >
+            <Settings className="mr-2 h-4 w-4" />
+            {loadingPortal ? 'Loading...' : 'Manage Subscription'}
+          </Button>
         </CardContent>
       </Card>
     );
