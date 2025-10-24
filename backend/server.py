@@ -593,15 +593,6 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
             api_key=os.environ['EMERGENT_LLM_KEY'],
             session_id=f"tags_{uuid.uuid4()}",
             system_message="You are a YouTube SEO expert."
-- Search volume trends and keyword competition
-- Long-tail vs short-tail keyword strategy
-- Related searches and semantic variations
-- Artist name variations and common misspellings
-- Genre-specific search patterns
-- Trending music terminology
-- YouTube algorithm preferences
-
-Generate tags that maximize discoverability by mixing high-volume competitive terms with low-competition long-tail keywords."""
         ).with_model("openai", "gpt-4o")
         
         # Enhanced strategic prompt
