@@ -256,11 +256,20 @@ backend:
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "medium"
-    needs_retesting: false
+    needs_retesting: true
     status_history:
       - working: true
         agent: "testing"
         comment: "SMOKE TESTING COMPLETED: ✅ Tag generation working correctly (generated 234-348 tags per request). ✅ Tag history endpoint functioning. ✅ Credit consumption working properly. ✅ AI integration with LiteLLM/GPT-4o working (takes 25-35 seconds per generation). ✅ Strategic tag generation producing quality results."
+      - working: true
+        agent: "main"
+        comment: "Updated tag generation system with sophisticated YouTube SEO pipeline (ai_tags_pipeline.py) including autocomplete API, MMR diversity selection, and 500-char budget optimization. Generated 25-40 strategic tags."
+      - working: true
+        agent: "user"
+        comment: "User requested: Revert to old tag generation system that generates more tags (500 tags). New SEO practice not working for their use case."
+      - working: true
+        agent: "main"
+        comment: "REVERTED: Removed ai_tags_pipeline.py and restored original simple tag generation that asks GPT-4o for 500 tags directly. System now generates large quantity of tags like before. Backend restarted."
 
   - task: "YouTube integration endpoints"
     implemented: true
