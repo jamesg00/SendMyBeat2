@@ -585,9 +585,6 @@ async def create_customer_portal_session(current_user: dict = Depends(get_curren
         
         return {"url": portal_session.url}
         
-    except stripe.error.StripeError as e:
-        logging.error(f"Stripe portal error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to create portal session: {str(e)}")
     except Exception as e:
         logging.error(f"Portal session error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
