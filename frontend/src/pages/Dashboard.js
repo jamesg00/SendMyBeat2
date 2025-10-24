@@ -1038,23 +1038,16 @@ const Dashboard = ({ setIsAuthenticated }) => {
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 mb-4">
                         <AlertCircle className="h-5 w-5 text-amber-600" />
-                        <p className="font-medium text-slate-800">YouTube Not Connected</p>
+                        <p className="font-medium" style={{color: 'var(--text-primary)'}}>YouTube Not Connected</p>
                       </div>
-                      <Alert>
-                        <AlertDescription>
-                          To use YouTube upload, you need to configure Google OAuth credentials in backend/.env:
-                          <br />• GOOGLE_CLIENT_ID
-                          <br />• GOOGLE_CLIENT_SECRET
-                        </AlertDescription>
-                      </Alert>
                       <Button
                         onClick={connectYouTube}
-                        className="w-full bg-red-600 hover:bg-red-700 text-white"
+                        className="w-full bg-red-600 hover:bg-red-700 text-white py-6 text-lg"
                         data-testid="connect-youtube-btn"
                       >
-                        <Link className="h-4 w-4 mr-2" />
+                        <Link className="h-5 w-5 mr-2" />
                         Login to Connect Your YouTube Account!
                       </Button>
                     </div>
