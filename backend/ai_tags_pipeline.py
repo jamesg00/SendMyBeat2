@@ -127,6 +127,7 @@ async def llm_candidates(chat, query: str) -> List[TagCandidate]:
     """Get structured tag candidates from LLM"""
     system_msg = build_llm_system_message()
     prompt = build_llm_user_prompt(query)
+    text = ""  # Initialize to avoid UnboundLocalError
     
     try:
         # Update system message
@@ -151,10 +152,15 @@ async def llm_candidates(chat, query: str) -> List[TagCandidate]:
         return out
     except Exception as e:
         logging.warning(f"LLM JSON parsing failed, using fallback: {e}")
-        # Permissive fallback: split commas/newlines
-        fallback = [TagCandidate(text=_normalize_tag(t), source="llm")
-                    for t in re.split(r"[,\n]", text)]
-        return [c for c in fallback if c.text][:100]
+        # Permissive fallback: split commas/newlines if we have text
+        if text:
+            fallback = [TagCandidate(text=_normalize_tag(t), source="llm")
+                        for t in re.split(r"[,\n]", text)]
+            return [c for c in fallback if c.text][:100]
+        else:
+            # Return empty list if no text available
+            logging.error("No text available from LLM, returning empty list")
+            return []
 
 # ---------------------- Template expansion (cheap signal) ------------------- #
 
