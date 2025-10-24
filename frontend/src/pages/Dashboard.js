@@ -702,17 +702,30 @@ const Dashboard = ({ setIsAuthenticated }) => {
                 {generatedTags.length > 0 && (
                   <div className="mt-6 space-y-4" data-testid="generated-tags-section">
                     <div className="flex items-center justify-between">
-                      <h3 className="font-semibold text-slate-800">Generated Tags ({generatedTags.length})</h3>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={copyTags}
-                        className="gap-2"
-                        data-testid="copy-tags-btn"
-                      >
-                        <Copy className="h-4 w-4" />
-                        Copy All
-                      </Button>
+                      <h3 className="font-semibold" style={{color: 'var(--text-primary)'}}>Generated Tags ({generatedTags.length})</h3>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={handleGenerateTags}
+                          className="gap-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:from-purple-700 hover:to-blue-700 border-0"
+                          disabled={loadingTags}
+                          data-testid="refine-tags-btn"
+                        >
+                          <Sparkles className="h-4 w-4" />
+                          Refine Tags
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={copyTags}
+                          className="gap-2"
+                          data-testid="copy-tags-btn"
+                        >
+                          <Copy className="h-4 w-4" />
+                          Copy All
+                        </Button>
+                      </div>
                     </div>
                     <div className="tag-cloud" data-testid="tags-list">
                       {generatedTags.map((tag, index) => (
