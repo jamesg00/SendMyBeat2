@@ -891,13 +891,13 @@ const Dashboard = ({ setIsAuthenticated }) => {
             </div>
 
             {/* Saved Descriptions */}
-            <Card className="shadow-lg border-0">
+            <Card className="shadow-lg border-0 producer-card bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm">
               <CardHeader>
                 <CardTitle>Saved Descriptions ({descriptions.length})</CardTitle>
               </CardHeader>
               <CardContent>
                 {descriptions.length === 0 ? (
-                  <p className="text-center text-slate-500 py-8" data-testid="no-descriptions-msg">No saved descriptions yet. Create one above!</p>
+                  <p className="text-center py-8" style={{color: 'var(--text-secondary)'}} data-testid="no-descriptions-msg">No saved descriptions yet. Create one above!</p>
                 ) : (
                   <div className="space-y-3" data-testid="descriptions-list">
                     {descriptions.map((desc) => {
@@ -906,9 +906,9 @@ const Dashboard = ({ setIsAuthenticated }) => {
                       const showPreview = !isExpanded && desc.content.length > 150;
                       
                       return (
-                        <div key={desc.id} className="p-4 bg-slate-50 rounded-lg" data-testid={`desc-item-${desc.id}`}>
+                        <div key={desc.id} className="p-4 rounded-lg bg-black/20 dark:bg-black/40 backdrop-blur-sm" data-testid={`desc-item-${desc.id}`}>
                           <div className="flex items-start justify-between mb-2">
-                            <h3 className="font-semibold text-slate-800">{desc.title}</h3>
+                            <h3 className="font-semibold" style={{color: 'var(--text-primary)'}}>{desc.title}</h3>
                             <div className="flex gap-2">
                               <Button
                                 size="sm"
