@@ -568,6 +568,30 @@ async def get_subscription_config():
         "price_id": os.environ['STRIPE_PRICE_ID']
     }
 
+@api_router.post("/subscription/portal")
+async def create_customer_portal_session(current_user: dict = Depends(get_current_user)):
+    """Create Stripe Customer Portal session for subscription management"""
+    try:
+        user_doc = await db.users.find_one({"id": current_user['id']})
+        
+        if not user_doc or not user_doc.get('stripe_customer_id'):
+            raise HTTPException(status_code=400, detail="No active subscription found")
+        
+        # Create portal session
+        portal_session = stripe.billing_portal.Session.create(
+            customer=user_doc['stripe_customer_id'],
+            return_url=f"{os.environ.get('FRONTEND_URL', 'http://localhost:3000')}/dashboard"
+        )
+        
+        return {"url": portal_session.url}
+        
+    except stripe.error.StripeError as e:
+        logging.error(f"Stripe portal error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to create portal session: {str(e)}")
+    except Exception as e:
+        logging.error(f"Portal session error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 # ============ Tag Generation Routes ============
 @api_router.post("/tags/generate", response_model=TagGenerationResponse)
