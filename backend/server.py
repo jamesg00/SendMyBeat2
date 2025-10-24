@@ -584,11 +584,15 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
                     "resets_at": status.get('resets_at')
                 }
             )
+        
+        # Import the new smart tag generation pipeline
+        from ai_tags_pipeline import generate_smart_tags
+        
         # Initialize AI chat
         chat = LlmChat(
             api_key=os.environ['EMERGENT_LLM_KEY'],
             session_id=f"tags_{uuid.uuid4()}",
-            system_message="""You are a YouTube SEO expert specializing in music beat discovery optimization. You understand:
+            system_message="You are a YouTube SEO expert."
 - Search volume trends and keyword competition
 - Long-tail vs short-tail keyword strategy
 - Related searches and semantic variations
