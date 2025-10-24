@@ -1042,7 +1042,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         data-testid="connect-youtube-btn"
                       >
                         <Link className="h-4 w-4 mr-2" />
-                        Connect YouTube Account
+                        Login to Connect Your YouTube Account!
                       </Button>
                     </div>
                   )}
