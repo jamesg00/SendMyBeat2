@@ -585,31 +585,38 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
                 }
             )
         
-        # Import the new smart tag generation pipeline
-        from ai_tags_pipeline import generate_smart_tags
-        
         # Initialize AI chat
         chat = LlmChat(
             api_key=os.environ['EMERGENT_LLM_KEY'],
             session_id=f"tags_{uuid.uuid4()}",
-            system_message="You are a YouTube SEO expert."
+            system_message="You are an expert YouTube music tag generator for beat producers. Generate diverse, high-performing tags that maximize discoverability."
         ).with_model("openai", "gpt-4o")
         
-        # Use the new smart tag generation pipeline
-        final_tags = await generate_smart_tags(request.query, chat)
+        # Generate tags
+        prompt = f"""Generate exactly 500 YouTube tags for a beat/music production with the following style: "{request.query}"
+
+The tags should include:
+- Artist name/style variations (e.g., "lil uzi vert type beat", "lil uzi style")
+- Genre tags (e.g., "trap beat", "hip hop instrumental")
+- Mood tags (e.g., "dark beat", "energetic instrumental")
+- Production tags (e.g., "type beat", "prod by", "free beat")
+- Popular search terms
+- Trending related terms
+
+Format: Return ONLY the tags separated by commas, no numbering or extra text. Make them diverse and search-optimized for YouTube."""
         
-        # Safety: in the rare case of empty results, fall back to a tiny baseline
-        if not final_tags:
-            fallback = [f"{request.query} type beat", f"{request.query} instrumental", f"free {request.query} type beat"]
-            final_tags = [t for t in fallback if t]
+        user_message = UserMessage(text=prompt)
+        response = await chat.send_message(user_message)
         
-        logging.info(f"Selected {len(final_tags)} smart tags within 500-char budget for query: {request.query}")
+        # Parse tags
+        tags_text = response.strip()
+        tags = [tag.strip() for tag in tags_text.split(',') if tag.strip()]
         
         # Save to database
         tag_gen = TagGenerationResponse(
             user_id=current_user['id'],
             query=request.query,
-            tags=final_tags
+            tags=tags
         )
         
         tag_doc = tag_gen.model_dump()
