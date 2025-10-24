@@ -595,83 +595,15 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
             system_message="You are a YouTube SEO expert."
         ).with_model("openai", "gpt-4o")
         
-        # Enhanced strategic prompt
-        prompt = f"""Please use this search query "{request.query}" and relate it to YouTube search tags that are needed for getting the MOST SEARCHED and HIGHEST CLICKED tags so the beat will have maximum discovery on YouTube. This will allow producers' beats to stand out and be on the top of the YouTube page rankings.
-
-Your mission: Generate 500 highly strategic YouTube tags that will make this beat appear in top search results and recommended videos. Focus on what real users are actively searching for RIGHT NOW.
-
-**CRITICAL DISCOVERY STRATEGY:**
-
-1. **Most Searched Terms (30%)** - Tags people are actively searching:
-   - "{request.query} type beat"
-   - "{request.query} type beat 2025"
-   - Main genre + "type beat" combinations
-   - Popular artist comparisons
-   - Trending search phrases
-
-2. **High Click-Through Rate Tags (30%)** - Tags that get clicks:
-   - "{request.query} instrumental"
-   - "hard {request.query} type beat"
-   - "free {request.query} type beat"
-   - "dark {request.query} beat"
-   - "melodic {request.query} instrumental"
-   - Emotional descriptors + style
-
-3. **Long-Tail Discovery Tags (25%)** - Specific searches with less competition:
-   - "{request.query} type beat with hook"
-   - "aggressive {request.query} type beat free for profit"
-   - BPM + mood + artist combinations
-   - Year + season + style tags
-   - Location + genre combinations
-
-4. **YouTube Algorithm Favorites (15%)** - Tags YouTube promotes:
-   - "type beat 2025"
-   - "free for profit"
-   - "rap instrumental"
-   - "hip hop beat"
-   - "trap beat"
-   - Genre-specific trending terms
-
-**MUST INCLUDE POWER KEYWORDS:**
-- "type beat", "instrumental", "beat", "free", "hard", "dark", "melodic"
-- "free for profit", "with hook", "aggressive", "emotional", "vibes"
-- "2025", "2024", "new", "hot", "fire"
-- "prod by", "lease", "download", "purchase"
-- Artist name variations and misspellings
-
-**TAG STRUCTURE:**
-- Short tags (1-2 words): High search volume
-- Medium tags (3-4 words): Balanced competition
-- Long tags (5+ words): Low competition, specific searches
-
-**GOAL:** Make this beat appear when someone searches for "{request.query}" OR similar styles. Tags should cover:
-- Exact artist searches
-- Genre + mood searches
-- Free beat searches
-- Comparison searches ("beats like {request.query}")
-- Year/trending searches
-
-**OUTPUT FORMAT:**
-Return ONLY 500 tags separated by commas. No explanations, numbering, or extra text. Just the tags.
-Focus on MAXIMUM DISCOVERY and TOP PAGE RANKINGS."""
+        # Use the new smart tag generation pipeline
+        final_tags = await generate_smart_tags(request.query, chat)
         
-        user_message = UserMessage(text=prompt)
-        response = await chat.send_message(user_message)
+        # Safety: in the rare case of empty results, fall back to a tiny baseline
+        if not final_tags:
+            fallback = [f"{request.query} type beat", f"{request.query} instrumental", f"free {request.query} type beat"]
+            final_tags = [t for t in fallback if t]
         
-        # Parse tags
-        tags_text = response.strip()
-        tags = [tag.strip() for tag in tags_text.split(',') if tag.strip()]
-        
-        # Remove duplicates while preserving order
-        seen = set()
-        unique_tags = []
-        for tag in tags:
-            tag_lower = tag.lower()
-            if tag_lower not in seen:
-                seen.add(tag_lower)
-                unique_tags.append(tag)
-        
-        logging.info(f"Generated {len(unique_tags)} unique strategic tags for query: {request.query}")
+        logging.info(f"Selected {len(final_tags)} smart tags within 500-char budget for query: {request.query}")
         
         # Save to database
         tag_gen = TagGenerationResponse(
