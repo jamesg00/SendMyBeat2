@@ -201,13 +201,13 @@ def score_candidate(c: TagCandidate,
     power_hits = sum(1 for w in POWER_TERMS if w in t)
     year_hits = sum(1 for y in CURRENT_YEARS if y in t)
 
-    # Length penalty
+    # Length penalty - Less aggressive
     word_count = len(t.split())
     long_pen = 0.0
-    if word_count >= 7:
-        long_pen = 0.15
-    elif word_count >= 10:
-        long_pen = 0.30
+    if word_count >= 10:
+        long_pen = 0.10
+    elif word_count >= 12:
+        long_pen = 0.20
 
     # Spammy penalty
     spam_pen = 0.25 if _looks_spammy(c.text) else 0.0
