@@ -637,6 +637,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
             uploadCreditsRemaining={subscriptionStatus.upload_credits_remaining}
             isSubscribed={subscriptionStatus.is_subscribed}
             onUpgrade={() => setShowUpgradeModal(true)}
+            API={API}
           />
         )}
 
