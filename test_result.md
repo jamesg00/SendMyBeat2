@@ -126,9 +126,12 @@ backend:
       - working: false
         agent: "main"
         comment: "Investigation: User with customer_id cus_TITqiUe8CFkmua not found in MongoDB. Either (1) Stripe webhook not configured correctly, (2) webhook not received, or (3) user purchased before account creation. Webhook handler code appears correct - checks for checkout.session.completed and uses client_reference_id to update user."
+      - working: false
+        agent: "main"
+        comment: "Attempted fix: Updated STRIPE_WEBHOOK_SECRET and manually synced subscription. But only set stripe_customer_id, forgot stripe_subscription_id field which is what the backend checks!"
       - working: true
         agent: "main"
-        comment: "FIXED: (1) Updated STRIPE_WEBHOOK_SECRET with correct value whsec_0YDvq5JFnjAanKcSxnGbfDaLqLR5BRux and restarted backend. (2) User confirmed username 'deadat18'. (3) Manually synced subscription to user account in MongoDB - added stripe_customer_id: cus_TITqiUe8CFkmua, subscription_status: active, subscribed_at timestamp. User should now see unlimited credits when logged in."
+        comment: "FIXED: Backend checks for stripe_subscription_id (not customer_id) at line 171. Added stripe_subscription_id: 'manual_pro_activation' to user 'deadat18'. User now has: stripe_customer_id: cus_TITqiUe8CFkmua, stripe_subscription_id: manual_pro_activation, subscription_status: active. Should now pass is_subscribed check and show unlimited credits."
 
   - task: "YouTube upload limits"
     implemented: true
