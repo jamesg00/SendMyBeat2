@@ -52,10 +52,10 @@ def _normalize_tag(tag: str) -> str:
 
 def _looks_spammy(tag: str) -> bool:
     # Reject obvious slop: repeated words, very long length, or empty
-    if not tag or len(tag) > 60:
+    if not tag or len(tag) > 80:  # Allow longer tags
         return True
     words = tag.lower().split()
-    if len(words) != len(set(words)) and len(words) > 4:
+    if len(words) != len(set(words)) and len(words) > 5:  # Less strict on repetition
         # repeated word pattern (e.g., "beat beat beat")
         return True
     # Avoid meaningless strings
