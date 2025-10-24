@@ -112,6 +112,18 @@ user_problem_statement: |
   6. Test with multiple concurrent users to ensure no crashes under load
 
 backend:
+  - task: "Subscription management portal"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "NEW FEATURE: Added /subscription/portal endpoint that creates Stripe Customer Portal session. Pro users can now manage their subscription (cancel, update payment, view invoices) through Stripe's hosted portal. Returns portal URL for frontend redirect."
+
   - task: "Stripe subscription display"
     implemented: true
     working: true
