@@ -112,6 +112,21 @@ user_problem_statement: |
   6. Test with multiple concurrent users to ensure no crashes under load
 
 backend:
+  - task: "Stripe subscription display"
+    implemented: true
+    working: false
+    file: "/app/backend/server.py"
+    stuck_count: 1
+    priority: "critical"
+    needs_retesting: true
+    status_history:
+      - working: false
+        agent: "user"
+        comment: "User purchased Stripe subscription (email: jamesbeatsmanagement1234@gmail.com, customer_id: cus_TITqiUe8CFkmua) but frontend still shows 0 remaining credits instead of unlimited."
+      - working: false
+        agent: "main"
+        comment: "Investigation: User with customer_id cus_TITqiUe8CFkmua not found in MongoDB. Either (1) Stripe webhook not configured correctly, (2) webhook not received, or (3) user purchased before account creation. Webhook handler code appears correct - checks for checkout.session.completed and uses client_reference_id to update user."
+
   - task: "YouTube upload limits"
     implemented: true
     working: true
