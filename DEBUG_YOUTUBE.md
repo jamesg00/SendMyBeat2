@@ -16,7 +16,7 @@ Go to: https://console.cloud.google.com/apis/credentials
 
 Make sure you have added **EXACTLY** these redirect URIs:
 ```
-https://tag-genius-4.preview.emergentagent.com/youtube-callback
+https://musicai-11.preview.emergentagent.com/youtube-callback
 ```
 
 **Common mistakes:**
@@ -28,7 +28,7 @@ https://tag-genius-4.preview.emergentagent.com/youtube-callback
 ### Step 3: Test YouTube Connection Flow
 
 1. **Login to your app:**
-   - Go to: https://tag-genius-4.preview.emergentagent.com
+   - Go to: https://musicai-11.preview.emergentagent.com
    - Login with username/password
 
 2. **Go to Upload to YouTube tab**
@@ -97,7 +97,7 @@ Once YouTube is connected:
 2. Click on your OAuth 2.0 Client ID
 3. Under "Authorized redirect URIs", add:
    ```
-   https://tag-genius-4.preview.emergentagent.com/youtube-callback
+   https://musicai-11.preview.emergentagent.com/youtube-callback
    ```
 4. Click "Save"
 5. Wait 1-2 minutes for changes to propagate
@@ -137,14 +137,14 @@ Test if backend can generate OAuth URL:
 
 ```bash
 # Login first
-TOKEN=$(curl -s -X POST https://tag-genius-4.preview.emergentagent.com/api/auth/login \
+TOKEN=$(curl -s -X POST https://musicai-11.preview.emergentagent.com/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"testuser123","password":"password123"}' | \
   python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
 
 # Get YouTube auth URL
 curl -s -H "Authorization: Bearer $TOKEN" \
-  https://tag-genius-4.preview.emergentagent.com/api/youtube/auth-url | python3 -m json.tool
+  https://musicai-11.preview.emergentagent.com/api/youtube/auth-url | python3 -m json.tool
 ```
 
 Should output:

@@ -362,7 +362,7 @@ async def get_youtube_auth_url(current_user: dict = Depends(get_current_user)):
     
     params = {
         'client_id': GOOGLE_CLIENT_ID,
-        'redirect_uri': f"{os.environ.get('FRONTEND_URL', 'https://tag-genius-4.preview.emergentagent.com')}/youtube-callback",
+        'redirect_uri': f"{os.environ.get('FRONTEND_URL', 'https://musicai-11.preview.emergentagent.com')}/youtube-callback",
         'response_type': 'code',
         'scope': 'https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/userinfo.email',
         'access_type': 'offline',
@@ -385,7 +385,7 @@ async def connect_youtube(code: str = Form(...), current_user: dict = Depends(ge
             "code": code,
             "client_id": GOOGLE_CLIENT_ID,
             "client_secret": GOOGLE_CLIENT_SECRET,
-            "redirect_uri": f"{os.environ.get('FRONTEND_URL', 'https://tag-genius-4.preview.emergentagent.com')}/youtube-callback",
+            "redirect_uri": f"{os.environ.get('FRONTEND_URL', 'https://musicai-11.preview.emergentagent.com')}/youtube-callback",
             "grant_type": "authorization_code"
         }
         

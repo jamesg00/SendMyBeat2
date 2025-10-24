@@ -38,12 +38,12 @@ To enable YouTube uploads, you need to configure Google OAuth credentials:
    
 5. **Add Authorized JavaScript origins:**
    ```
-   https://tag-genius-4.preview.emergentagent.com
+   https://musicai-11.preview.emergentagent.com
    ```
    
 6. **Add Authorized redirect URIs:**
    ```
-   https://tag-genius-4.preview.emergentagent.com/youtube-callback
+   https://musicai-11.preview.emergentagent.com/youtube-callback
    ```
 
 7. Click "Create"
@@ -56,7 +56,7 @@ Add the following to `/app/backend/.env`:
 ```env
 GOOGLE_CLIENT_ID=your_actual_client_id_here
 GOOGLE_CLIENT_SECRET=your_actual_client_secret_here
-FRONTEND_URL=https://tag-genius-4.preview.emergentagent.com
+FRONTEND_URL=https://musicai-11.preview.emergentagent.com
 ```
 
 ### Step 5: Restart Backend

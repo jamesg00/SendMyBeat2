@@ -79,13 +79,13 @@ SESSION_SECRET_KEY=3c8rKlfO580P3drHSup79a3xGT...
 5. **Authorized JavaScript origins:**
    Click "+ ADD URI" and enter:
    ```
-   https://tag-genius-4.preview.emergentagent.com
+   https://musicai-11.preview.emergentagent.com
    ```
 
 6. **Authorized redirect URIs:**
    Click "+ ADD URI" and enter:
    ```
-   https://tag-genius-4.preview.emergentagent.com/youtube-callback
+   https://musicai-11.preview.emergentagent.com/youtube-callback
    ```
 
 7. Click **"CREATE"**
@@ -129,7 +129,7 @@ SESSION_SECRET_KEY=3c8rKlfO580P3drHSup79a3xGTtQtYiNzjCyUA98kp3F-Kpfuinp2g4TX6Au-
 GOOGLE_CLIENT_ID=123456789-abcdefghijk.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=GOCSPX-abc123xyz789def
 
-FRONTEND_URL=https://tag-genius-4.preview.emergentagent.com
+FRONTEND_URL=https://musicai-11.preview.emergentagent.com
 ```
 
 ---
@@ -157,7 +157,7 @@ Press `Ctrl+C` to exit the log viewer.
 ## ✅ Step 5: Test It! (1 minute)
 
 1. **Go to your app:**
-   https://tag-genius-4.preview.emergentagent.com
+   https://musicai-11.preview.emergentagent.com
 
 2. **Register/Login** to your account
 
@@ -196,7 +196,7 @@ Your app now has:
 **Fix:** Go to Google Cloud Console → Credentials → Edit your OAuth client
 Make sure it has EXACTLY:
 ```
-https://tag-genius-4.preview.emergentagent.com/youtube-callback
+https://musicai-11.preview.emergentagent.com/youtube-callback
 ```
 
 ### Error: "invalid_client"
