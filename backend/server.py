@@ -609,7 +609,7 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
         tag_gen = TagGenerationResponse(
             user_id=current_user['id'],
             query=request.query,
-            tags=unique_tags
+            tags=final_tags
         )
         
         tag_doc = tag_gen.model_dump()
