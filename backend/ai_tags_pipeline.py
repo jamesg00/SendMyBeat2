@@ -18,7 +18,8 @@ POWER_TERMS = {
 }
 CURRENT_YEARS = {"2025", "2024"}
 
-TAG_CHAR_BUDGET = 480  # keep <500 to leave a little buffer
+TAG_CHAR_BUDGET = 495  # Use almost full 500-char limit
+MIN_TAG_COUNT = 25  # Minimum number of tags to generate
 
 # ---------------------------- Utility functions --------------------------- #
 
