@@ -22,11 +22,18 @@ const AdBanner = ({
     }
   }, []);
 
-  // Show placeholder in development or when AdSense not configured
+  // Check if AdSense is configured
   const isAdSenseConfigured = process.env.REACT_APP_ADSENSE_CLIENT_ID && 
                                process.env.REACT_APP_ADSENSE_CLIENT_ID !== 'YOUR_ADSENSE_CLIENT_ID';
 
-  if (!isAdSenseConfigured || process.env.NODE_ENV !== 'production') {
+  console.log('AdSense Config:', { 
+    isConfigured: isAdSenseConfigured, 
+    clientId: process.env.REACT_APP_ADSENSE_CLIENT_ID,
+    env: process.env.NODE_ENV 
+  });
+
+  // Show placeholder if not configured
+  if (!isAdSenseConfigured) {
     return (
       <div 
         className="bg-gray-100 dark:bg-gray-800 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg flex items-center justify-center p-4"
@@ -37,14 +44,14 @@ const AdBanner = ({
             Advertisement Space
           </p>
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-            (AdSense will appear here for free users)
+            (Configure AdSense to show ads)
           </p>
         </div>
       </div>
     );
   }
 
-  // Real AdSense code
+  // Real AdSense code - Will show in both dev and production
   return (
     <div className="ad-container" style={style}>
       <ins
