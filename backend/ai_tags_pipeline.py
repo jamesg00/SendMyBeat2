@@ -169,11 +169,27 @@ def template_candidates(query: str) -> List[TagCandidate]:
     """Generate template-based candidates"""
     q_norm = _normalize_tag(query)
     bases = {
-        f"{q_norm} type beat", f"{q_norm} instrumental", f"hard {q_norm} type beat",
-        f"dark {q_norm} type beat", f"melodic {q_norm} instrumental",
-        f"free {q_norm} type beat", f"{q_norm} type beat 2025",
-        f"{q_norm} beat", f"{q_norm} sample", f"{q_norm} freestyle beat",
-        f"{q_norm} type beat with hook", f"{q_norm} free for profit"
+        # Core templates
+        f"{q_norm} type beat", f"{q_norm} instrumental", f"{q_norm} beat",
+        # With descriptors
+        f"hard {q_norm} type beat", f"dark {q_norm} type beat", 
+        f"melodic {q_norm} instrumental", f"aggressive {q_norm} type beat",
+        f"emotional {q_norm} beat", f"vibes {q_norm} type beat",
+        # Free variants
+        f"free {q_norm} type beat", f"{q_norm} free for profit",
+        f"free {q_norm} instrumental", f"{q_norm} beat free",
+        # Year variants
+        f"{q_norm} type beat 2025", f"{q_norm} type beat 2024",
+        f"{q_norm} instrumental 2025",
+        # With hook/extras
+        f"{q_norm} type beat with hook", f"{q_norm} beat with vocals",
+        # Other formats
+        f"{q_norm} sample", f"{q_norm} freestyle beat", f"{q_norm} style beat",
+        f"rap {q_norm} type beat", f"trap {q_norm} type beat",
+        # Download variants
+        f"{q_norm} type beat download", f"download {q_norm} type beat",
+        # Prod variants
+        f"prod {q_norm} type beat", f"{q_norm} prod type beat"
     }
     out = []
     for b in bases:
