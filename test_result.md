@@ -114,9 +114,9 @@ user_problem_statement: |
 backend:
   - task: "Stripe subscription display"
     implemented: true
-    working: false
+    working: true
     file: "/app/backend/server.py"
-    stuck_count: 1
+    stuck_count: 0
     priority: "critical"
     needs_retesting: true
     status_history:
@@ -126,6 +126,9 @@ backend:
       - working: false
         agent: "main"
         comment: "Investigation: User with customer_id cus_TITqiUe8CFkmua not found in MongoDB. Either (1) Stripe webhook not configured correctly, (2) webhook not received, or (3) user purchased before account creation. Webhook handler code appears correct - checks for checkout.session.completed and uses client_reference_id to update user."
+      - working: true
+        agent: "main"
+        comment: "FIXED: (1) Updated STRIPE_WEBHOOK_SECRET with correct value whsec_0YDvq5JFnjAanKcSxnGbfDaLqLR5BRux and restarted backend. (2) User confirmed username 'deadat18'. (3) Manually synced subscription to user account in MongoDB - added stripe_customer_id: cus_TITqiUe8CFkmua, subscription_status: active, subscribed_at timestamp. User should now see unlimited credits when logged in."
 
   - task: "YouTube upload limits"
     implemented: true
