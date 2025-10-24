@@ -347,10 +347,16 @@ async def generate_smart_tags(query: str, chat) -> List[str]:
     for c in merged.values():
         c.score = score_candidate(c, query_tokens, yt_suggest_set)
 
-    # Select diversely under 500-char budget
+    # Select diversely under 500-char budget, ensuring minimum count
     ranked = list(merged.values())
-    final_tags = mmr_diverse_select(ranked, lambda_div=0.78, char_budget=TAG_CHAR_BUDGET)
-
-    logging.info(f"Selected {len(final_tags)} tags, total chars: {sum(len(t) for t in final_tags) + len(final_tags) - 1}")
+    final_tags = mmr_diverse_select(
+        ranked, 
+        lambda_div=0.65,  # Balance between relevance and diversity
+        char_budget=TAG_CHAR_BUDGET, 
+        min_tags=MIN_TAG_COUNT
+    )
+    
+    total_chars = sum(len(t) for t in final_tags) + len(final_tags) - 1
+    logging.info(f"Selected {len(final_tags)} tags, total chars: {total_chars}, avg per tag: {total_chars / len(final_tags) if final_tags else 0:.1f}")
 
     return final_tags
