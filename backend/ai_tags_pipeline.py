@@ -230,11 +230,13 @@ def score_candidate(c: TagCandidate,
     return max(score, 0.0)
 
 def mmr_diverse_select(cands: List[TagCandidate],
-                       lambda_div: float = 0.75,
-                       char_budget: int = TAG_CHAR_BUDGET) -> List[str]:
+                       lambda_div: float = 0.65,  # Lower = more diversity
+                       char_budget: int = TAG_CHAR_BUDGET,
+                       min_tags: int = MIN_TAG_COUNT) -> List[str]:
     """
     Greedy MMR: balance top score with dissimilarity to selected.
     Stop when we hit char_budget (sum of tag lengths + commas).
+    Ensure we get at least min_tags if possible.
     """
     # Sort by score desc
     pool = sorted(cands, key=lambda c: c.score, reverse=True)
@@ -251,27 +253,39 @@ def mmr_diverse_select(cands: List[TagCandidate],
 
     # Char accounting includes commas
     total_chars = 0
+    passes = 0
+    max_passes = 3  # Allow multiple passes to get min_tags
 
-    while pool and total_chars < char_budget:
+    while pool and (total_chars < char_budget or len(selected) < min_tags) and passes < max_passes:
         # Compute MMR for top subset for speed
-        topk = pool[:120]
+        topk = pool[:150]  # Look at more candidates
         mmr_vals: List[Tuple[float, int]] = []
         for idx, c in enumerate(topk):
             if c.text.lower() in used:
                 continue
             r = redundancy(c)
-            mmr = lambda_div * c.score - (1.0 - lambda_div) * r
+            # If we haven't reached min_tags, prioritize score over redundancy
+            if len(selected) < min_tags:
+                mmr = 0.85 * c.score - 0.15 * r  # More aggressive selection
+            else:
+                mmr = lambda_div * c.score - (1.0 - lambda_div) * r
             mmr_vals.append((mmr, idx))
+        
         if not mmr_vals:
-            break
+            passes += 1
+            if passes >= max_passes:
+                break
+            continue
+            
         mmr_vals.sort(reverse=True, key=lambda x: x[0])
         _, pick_idx = mmr_vals[0]
         c = topk[pick_idx]
 
         # Check char budget (include comma if not first)
         add_len = len(c.text) + (1 if selected else 0)
-        if total_chars + add_len > char_budget:
-            # try next best
+        
+        # Be more flexible with char budget if we need more tags
+        if len(selected) >= min_tags and total_chars + add_len > char_budget:
             pool.pop(pick_idx)
             continue
 
@@ -283,6 +297,10 @@ def mmr_diverse_select(cands: List[TagCandidate],
 
         # remove from pool
         pool.pop(pick_idx)
+        
+        # If we're running out of pool, increase the search space
+        if len(pool) < 20 and passes < max_passes:
+            passes += 1
 
     return [s.text for s in selected]
 
