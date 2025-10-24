@@ -308,6 +308,18 @@ backend:
         comment: "SMOKE TESTING COMPLETED: ✅ Stripe configuration endpoint working (returns publishable_key and price_id). ✅ Subscription webhook endpoints implemented. ✅ Checkout session creation endpoint present. ✅ Pro user subscription logic implemented and ready for Stripe integration."
 
 frontend:
+  - task: "Subscription management button"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/components/SubscriptionBanner.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "NEW FEATURE: Added 'Manage Subscription' button to Pro user banner. When clicked, calls /subscription/portal endpoint and redirects to Stripe Customer Portal where users can cancel subscription, update payment methods, view invoices, etc. Includes loading state and error handling."
+
   - task: "Credit display refresh after actions"
     implemented: true
     working: true
