@@ -139,6 +139,14 @@ class YouTubeConnectionStatus(BaseModel):
     connected: bool
     email: Optional[str] = None
 
+class YouTubeAnalyticsResponse(BaseModel):
+    channel_name: str
+    subscriber_count: int
+    total_views: int
+    total_videos: int
+    recent_videos: List[dict]
+    insights: dict  # Contains what_works, needs_improvement, recommendations, growth_strategy
+
 class SubscriptionStatus(BaseModel):
     is_subscribed: bool
     plan: str  # "free" or "pro"
