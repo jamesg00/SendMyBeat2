@@ -83,6 +83,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [loadingGrowth, setLoadingGrowth] = useState(false);
   const [calendarData, setCalendarData] = useState(null);
 
+  // Beat Analyzer states
+  const [beatAnalysis, setBeatAnalysis] = useState(null);
+  const [analyzingBeat, setAnalyzingBeat] = useState(false);
+
   useEffect(() => {
     fetchUser();
     fetchDescriptions();
