@@ -549,38 +549,103 @@ async def get_youtube_analytics(current_user: dict = Depends(get_current_user)):
                     'published_at': video['snippet']['publishedAt']
                 })
         
-        # Prepare data for AI analysis
-        analysis_prompt = f"""Analyze this YouTube channel's performance and provide actionable insights:
+        # Calculate engagement metrics
+        total_views = sum(v['views'] for v in recent_videos)
+        total_likes = sum(v['likes'] for v in recent_videos)
+        total_comments = sum(v['comments'] for v in recent_videos)
+        avg_views = total_views / len(recent_videos) if recent_videos else 0
+        engagement_rate = (total_likes / total_views * 100) if total_views > 0 else 0
+        
+        # Prepare comprehensive data for AI analysis
+        analysis_prompt = f"""You are a YouTube SEO expert and growth strategist specializing in helping beat producers blow up their channels like Internet Money did. Analyze this channel deeply and provide COMPREHENSIVE, ACTIONABLE advice.
 
-Channel Stats:
-- Subscribers: {channel_stats.get('subscriberCount', 'N/A')}
-- Total Views: {channel_stats.get('viewCount', 'N/A')}
-- Total Videos: {channel_stats.get('videoCount', 'N/A')}
+CHANNEL DATA:
+- Subscribers: {channel_stats.get('subscriberCount', '0')}
+- Total Views: {channel_stats.get('viewCount', '0')}
+- Total Videos: {channel_stats.get('videoCount', '0')}
+- Average Views per Video (last 10): {avg_views:.0f}
+- Engagement Rate: {engagement_rate:.2f}%
 
-Recent Videos Performance:
+RECENT VIDEOS PERFORMANCE:
 {json.dumps(recent_videos, indent=2)}
 
-Provide analysis in the following JSON format:
+YOUR MISSION: Help this producer grow their channel from where they are now to 100K+ subscribers. They're a BEGINNER who needs specific, step-by-step guidance.
+
+Provide your analysis in this EXACT JSON format (be DETAILED and SPECIFIC):
 {{
-  "what_works": ["Point 1", "Point 2", "Point 3"],
-  "needs_improvement": ["Point 1", "Point 2", "Point 3"],
-  "recommended_actions": ["Action 1", "Action 2", "Action 3", "Action 4", "Action 5"],
-  "growth_strategy": "2-3 sentence paragraph with specific growth strategy"
+  "channel_health_score": "X/100 - Brief explanation of why",
+  
+  "what_works": [
+    "Specific strength 1 with data/evidence",
+    "Specific strength 2 with data/evidence", 
+    "Specific strength 3 with data/evidence",
+    "Specific strength 4 with data/evidence"
+  ],
+  
+  "critical_issues": [
+    "Critical problem 1 - Why it's hurting growth",
+    "Critical problem 2 - Why it's hurting growth",
+    "Critical problem 3 - Why it's hurting growth",
+    "Critical problem 4 - Why it's hurting growth"
+  ],
+  
+  "seo_optimization": [
+    "Title strategy: Specific formula/template to use",
+    "Description strategy: What to include in first 150 characters",
+    "Tag strategy: Types of tags to prioritize (high-volume vs long-tail)",
+    "Thumbnail strategy: Specific visual elements that work for beats",
+    "Upload timing: Best days/times for music content"
+  ],
+  
+  "content_strategy": [
+    "Video format recommendation: What type of videos to make",
+    "Upload frequency: How often to post and why",
+    "Niche positioning: Specific sub-genre or style to focus on",
+    "Collaboration strategy: Who to work with and how",
+    "Series ideas: 2-3 specific series concepts to start"
+  ],
+  
+  "immediate_actions": [
+    "Action 1: Do THIS specific thing in next 24 hours",
+    "Action 2: Do THIS specific thing this week",
+    "Action 3: Do THIS specific thing this month",
+    "Action 4: Start THIS habit from today",
+    "Action 5: Stop doing THIS immediately"
+  ],
+  
+  "discoverability_tactics": [
+    "Tactic 1: Specific method to appear in more searches",
+    "Tactic 2: How to leverage trending sounds/artists",
+    "Tactic 3: Cross-platform promotion strategy",
+    "Tactic 4: Community engagement approach",
+    "Tactic 5: Algorithm hack specific to beat producers"
+  ],
+  
+  "growth_roadmap": "A detailed 3-4 paragraph roadmap explaining: (1) Where they are now and why, (2) The exact path to 10K subs with timeline, (3) The path from 10K to 100K, (4) Specific metrics to track weekly. Be like a mentor giving a pep talk with concrete steps.",
+  
+  "internet_money_lessons": [
+    "Lesson 1: Specific tactic Internet Money used that this producer should copy",
+    "Lesson 2: Another Internet Money growth strategy to implement",
+    "Lesson 3: How Internet Money handled [specific challenge] and how to apply it"
+  ]
 }}
 
-Focus on:
-- Video performance patterns
-- Engagement rates (likes/views, comments/views)
-- Content consistency
-- Upload frequency
-- Specific actionable recommendations for a music producer/beat maker
+CRITICAL RULES:
+- Be BRUTALLY HONEST but ENCOURAGING
+- Give SPECIFIC numbers, formulas, and templates
+- Include EXAMPLES of good titles, descriptions, tags
+- Reference real artists/producers when relevant
+- Explain the "WHY" behind every recommendation
+- Assume they know NOTHING about YouTube SEO
+- Make it feel like a 1-on-1 coaching session
+- Focus on DISCOVERABILITY and GROWTH, not just quality content
 """
         
-        # Get AI insights
+        # Get AI insights with enhanced system message
         chat = LlmChat(
             api_key=os.environ['EMERGENT_LLM_KEY'],
             session_id=f"analytics_{uuid.uuid4()}",
-            system_message="You are a YouTube growth expert specializing in music producer channels. Provide specific, actionable advice."
+            system_message="You are a top YouTube growth consultant who has helped music producers grow from 0 to 1M+ subscribers. You specialize in beat producer channels and understand YouTube's algorithm deeply. You give specific, tactical advice like a mentor. You reference successful producers like Internet Money, Nick Mira, Kyle Beats as examples. You're encouraging but brutally honest about what needs to change."
         ).with_model("openai", "gpt-4o")
         
         user_message = UserMessage(text=analysis_prompt)
@@ -589,13 +654,19 @@ Focus on:
         # Parse AI response
         try:
             insights = json.loads(response.strip())
-        except:
+        except Exception as e:
+            logging.error(f"Failed to parse analytics response: {str(e)}")
             # Fallback if JSON parsing fails
             insights = {
-                "what_works": ["Analysis in progress"],
-                "needs_improvement": ["Detailed analysis coming soon"],
-                "recommended_actions": ["Continue creating content"],
-                "growth_strategy": "Keep producing and uploading consistently."
+                "channel_health_score": "Analysis in progress...",
+                "what_works": ["Detailed analysis loading..."],
+                "critical_issues": ["Analysis in progress..."],
+                "seo_optimization": ["Loading recommendations..."],
+                "content_strategy": ["Loading recommendations..."],
+                "immediate_actions": ["Loading action items..."],
+                "discoverability_tactics": ["Loading tactics..."],
+                "growth_roadmap": "Comprehensive roadmap being generated...",
+                "internet_money_lessons": ["Loading lessons..."]
             }
         
         return YouTubeAnalyticsResponse(
