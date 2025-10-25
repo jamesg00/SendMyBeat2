@@ -1536,7 +1536,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                   Grow in 120 - Build Your Producer Momentum
                 </CardTitle>
                 <CardDescription>
-                  Commit to 120 days of consistency. Upload every day, build your streak, unlock badges!
+                  Work every day for 120 days. Generate tags, upload beats, or create descriptions to maintain your streak!
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
