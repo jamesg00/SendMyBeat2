@@ -708,6 +708,20 @@ const Dashboard = ({ setIsAuthenticated }) => {
                 </div>
               )}
               
+              {/* YouTube Profile Picture */}
+              {youtubeConnected && youtubeProfilePicture && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-full" style={{backgroundColor: 'var(--bg-secondary)'}}>
+                  <img 
+                    src={youtubeProfilePicture} 
+                    alt={youtubeName || youtubeEmail}
+                    className="h-8 w-8 rounded-full border-2 border-[var(--accent-primary)]"
+                  />
+                  <span className="text-sm font-medium" style={{color: 'var(--text-primary)'}}>
+                    {youtubeName || youtubeEmail}
+                  </span>
+                </div>
+              )}
+              
               <Button
                 variant="outline"
                 onClick={handleLogout}
