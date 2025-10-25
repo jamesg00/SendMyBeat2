@@ -76,12 +76,18 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [loadingAnalytics, setLoadingAnalytics] = useState(false);
   const [analyticsData, setAnalyticsData] = useState(null);
 
+  // Grow in 120 states
+  const [growthData, setGrowthData] = useState(null);
+  const [loadingGrowth, setLoadingGrowth] = useState(false);
+  const [calendarData, setCalendarData] = useState(null);
+
   useEffect(() => {
     fetchUser();
     fetchDescriptions();
     fetchTagHistory();
     checkYouTubeConnection();
     fetchSubscriptionStatus();
+    fetchGrowthStatus();
   }, []);
 
   const fetchUser = async () => {
