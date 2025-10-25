@@ -1618,6 +1618,100 @@ async def refresh_youtube_token(user_id: str) -> Credentials:
     return credentials
 
 
+# ============ Beat Analyzer Route ============
+@api_router.post("/beat/analyze", response_model=BeatAnalysisResponse)
+async def analyze_beat(request: BeatAnalysisRequest, current_user: dict = Depends(get_current_user)):
+    """Analyze beat title, tags, and description to predict performance"""
+    try:
+        # Prepare analysis prompt
+        tags_str = ", ".join(request.tags[:50])  # First 50 tags
+        
+        analysis_prompt = f"""You are a YouTube SEO expert analyzing a beat upload. Evaluate this beat's potential performance:
+
+TITLE: {request.title}
+
+TAGS ({len(request.tags)} total): {tags_str}
+
+DESCRIPTION: {request.description if request.description else "No description provided"}
+
+Analyze and provide ONLY valid JSON in this format:
+{{
+  "overall_score": 85,
+  "title_score": 90,
+  "tags_score": 80,
+  "seo_score": 85,
+  "strengths": [
+    "Strength 1",
+    "Strength 2",
+    "Strength 3"
+  ],
+  "weaknesses": [
+    "Weakness 1",
+    "Weakness 2"
+  ],
+  "suggestions": [
+    "Specific actionable suggestion 1",
+    "Specific actionable suggestion 2",
+    "Specific actionable suggestion 3"
+  ],
+  "predicted_performance": "Good"
+}}
+
+SCORING CRITERIA:
+- Title Score (0-100): Is it searchable? Does it include artist name? Type beat format?
+- Tags Score (0-100): Quantity, diversity, relevance, trending terms included?
+- SEO Score (0-100): Overall searchability and discoverability
+- Overall Score: Average of all scores
+
+PREDICTED PERFORMANCE: "Poor" (0-40), "Average" (41-65), "Good" (66-85), "Excellent" (86-100)
+
+Be honest but encouraging. Focus on actionable improvements."""
+
+        # Get AI analysis
+        chat = LlmChat(
+            api_key=os.environ['EMERGENT_LLM_KEY'],
+            session_id=f"beat_analysis_{uuid.uuid4()}",
+            system_message="You are a YouTube SEO expert who helps beat producers optimize their uploads for maximum discoverability. You provide specific, actionable feedback."
+        ).with_model("openai", "gpt-4o")
+        
+        user_message = UserMessage(text=analysis_prompt)
+        response = await chat.send_message(user_message)
+        
+        # Parse response
+        try:
+            response_text = response.strip()
+            if '```json' in response_text:
+                start = response_text.find('```json') + 7
+                end = response_text.find('```', start)
+                response_text = response_text[start:end].strip()
+            elif '```' in response_text:
+                start = response_text.find('```') + 3
+                end = response_text.find('```', start)
+                response_text = response_text[start:end].strip()
+            
+            analysis = json.loads(response_text)
+            
+            return BeatAnalysisResponse(**analysis)
+            
+        except Exception as e:
+            logging.error(f"Failed to parse beat analysis: {str(e)}")
+            # Return fallback analysis
+            return BeatAnalysisResponse(
+                overall_score=70,
+                title_score=70,
+                tags_score=70,
+                seo_score=70,
+                strengths=["Title looks good", "Tags are present"],
+                weaknesses=["Analysis formatting issue"],
+                suggestions=["Try analyzing again", "Ensure title includes artist name", "Add more specific tags"],
+                predicted_performance="Average"
+            )
+        
+    except Exception as e:
+        logging.error(f"Beat analysis error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ============ YouTube Upload Routes ============
 @api_router.post("/youtube/upload")
 async def upload_to_youtube(
