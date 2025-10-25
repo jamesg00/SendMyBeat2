@@ -483,31 +483,27 @@ async def get_youtube_analytics(current_user: dict = Depends(get_current_user)):
         if not connection:
             raise HTTPException(status_code=400, detail="YouTube account not connected")
         
-        # Build YouTube API client
-        creds_data = connection['credentials']
+        # Build YouTube API client using stored tokens
         creds = Credentials(
-            token=creds_data['token'],
-            refresh_token=creds_data.get('refresh_token'),
-            token_uri=creds_data['token_uri'],
-            client_id=creds_data['client_id'],
-            client_secret=creds_data['client_secret'],
-            scopes=creds_data['scopes']
+            token=connection.get('access_token'),
+            refresh_token=connection.get('refresh_token'),
+            token_uri='https://oauth2.googleapis.com/token',
+            client_id=GOOGLE_CLIENT_ID,
+            client_secret=GOOGLE_CLIENT_SECRET,
+            scopes=['https://www.googleapis.com/auth/youtube.upload', 
+                    'https://www.googleapis.com/auth/youtube.readonly']
         )
         
         # Refresh token if needed
         if creds.expired and creds.refresh_token:
             creds.refresh(GoogleRequest())
-            # Update stored credentials
+            # Update stored token
             await db.youtube_connections.update_one(
                 {"user_id": current_user['id']},
-                {"$set": {"credentials": {
-                    "token": creds.token,
-                    "refresh_token": creds.refresh_token,
-                    "token_uri": creds.token_uri,
-                    "client_id": creds.client_id,
-                    "client_secret": creds.client_secret,
-                    "scopes": creds.scopes
-                }}}
+                {"$set": {
+                    "access_token": creds.token,
+                    "token_expiry": datetime.now(timezone.utc) + timedelta(hours=1)
+                }}
             )
         
         youtube = build('youtube', 'v3', credentials=creds)
