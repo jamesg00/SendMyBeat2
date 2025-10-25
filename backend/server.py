@@ -149,6 +149,21 @@ class YouTubeAnalyticsResponse(BaseModel):
     recent_videos: List[dict]
     insights: dict  # Contains what_works, needs_improvement, recommendations, growth_strategy
 
+class BeatAnalysisRequest(BaseModel):
+    title: str
+    tags: List[str]
+    description: str = ""
+
+class BeatAnalysisResponse(BaseModel):
+    overall_score: int  # 0-100
+    title_score: int
+    tags_score: int
+    seo_score: int
+    strengths: List[str]
+    weaknesses: List[str]
+    suggestions: List[str]
+    predicted_performance: str  # "Poor", "Average", "Good", "Excellent"
+
 class GrowthStreak(BaseModel):
     user_id: str
     current_streak: int = 0
