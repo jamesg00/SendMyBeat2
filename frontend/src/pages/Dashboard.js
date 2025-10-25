@@ -759,9 +759,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
             <TabsTrigger value="analytics" data-testid="analytics-tab">Analytics</TabsTrigger>
             <TabsTrigger value="grow" data-testid="grow-tab">Grow in 120</TabsTrigger>
           </TabsList>
-            <TabsTrigger value="upload" data-testid="upload-tab">Upload</TabsTrigger>
-            <TabsTrigger value="analytics" data-testid="analytics-tab">Analytics</TabsTrigger>
-          </TabsList>
 
           {/* Tag Generator Tab */}
           <TabsContent value="tags" className="space-y-6">
