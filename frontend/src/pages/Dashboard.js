@@ -1249,7 +1249,18 @@ const Dashboard = ({ setIsAuthenticated }) => {
 
                 {analyticsData && (
                   <div className="space-y-6 mt-6">
-                    {/* Channel Overview */}
+                    {/* Channel Health Score */}
+                    <Card className="producer-card glass-card border-2 border-purple-500">
+                      <CardContent className="p-6">
+                        <div className="text-center">
+                          <p className="text-sm font-semibold text-purple-500 mb-2">CHANNEL HEALTH SCORE</p>
+                          <p className="text-4xl font-bold gradient-text mb-3">{analyticsData.insights.channel_health_score?.split('-')[0] || 'N/A'}</p>
+                          <p className="text-sm" style={{color: 'var(--text-secondary)'}}>{analyticsData.insights.channel_health_score?.split('-').slice(1).join('-') || ''}</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Channel Overview Stats */}
                     <Card className="producer-card">
                       <CardHeader>
                         <CardTitle className="text-lg">{analyticsData.channel_name}</CardTitle>
@@ -1272,6 +1283,20 @@ const Dashboard = ({ setIsAuthenticated }) => {
                       </CardContent>
                     </Card>
 
+                    {/* Growth Roadmap - Featured Section */}
+                    <Card className="producer-card border-l-4 border-purple-500">
+                      <CardHeader>
+                        <CardTitle className="text-xl flex items-center gap-2">
+                          <Music className="h-6 w-6 text-purple-500" />
+                          Your Growth Roadmap
+                        </CardTitle>
+                        <CardDescription>Your personalized path to YouTube success</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="leading-relaxed whitespace-pre-wrap">{analyticsData.insights.growth_roadmap}</p>
+                      </CardContent>
+                    </Card>
+
                     {/* What's Working Well */}
                     <Card className="producer-card border-l-4 border-green-500">
                       <CardHeader>
@@ -1281,67 +1306,137 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         </CardTitle>
                       </CardHeader>
                       <CardContent>
-                        <ul className="space-y-2">
+                        <ul className="space-y-3">
                           {analyticsData.insights.what_works?.map((point, idx) => (
-                            <li key={idx} className="flex items-start gap-2">
-                              <span className="text-green-500">✓</span>
-                              <span>{point}</span>
+                            <li key={idx} className="flex items-start gap-3 p-3 rounded-lg" style={{backgroundColor: 'var(--bg-secondary)'}}>
+                              <span className="text-green-500 text-xl">✓</span>
+                              <span className="flex-1">{point}</span>
                             </li>
                           ))}
                         </ul>
                       </CardContent>
                     </Card>
 
-                    {/* Needs Improvement */}
-                    <Card className="producer-card border-l-4 border-orange-500">
+                    {/* Critical Issues */}
+                    <Card className="producer-card border-l-4 border-red-500">
                       <CardHeader>
                         <CardTitle className="text-lg flex items-center gap-2">
-                          <AlertCircle className="h-5 w-5 text-orange-500" />
-                          Areas to Improve
+                          <AlertCircle className="h-5 w-5 text-red-500" />
+                          Critical Issues Holding You Back
                         </CardTitle>
                       </CardHeader>
                       <CardContent>
-                        <ul className="space-y-2">
-                          {analyticsData.insights.needs_improvement?.map((point, idx) => (
-                            <li key={idx} className="flex items-start gap-2">
-                              <span className="text-orange-500">!</span>
-                              <span>{point}</span>
+                        <ul className="space-y-3">
+                          {analyticsData.insights.critical_issues?.map((issue, idx) => (
+                            <li key={idx} className="flex items-start gap-3 p-3 rounded-lg" style={{backgroundColor: 'var(--bg-secondary)'}}>
+                              <span className="text-red-500 text-xl">⚠</span>
+                              <span className="flex-1">{issue}</span>
                             </li>
                           ))}
                         </ul>
                       </CardContent>
                     </Card>
 
-                    {/* Recommended Actions */}
+                    {/* Immediate Actions */}
                     <Card className="producer-card border-l-4 border-blue-500">
                       <CardHeader>
                         <CardTitle className="text-lg flex items-center gap-2">
                           <Sparkles className="h-5 w-5 text-blue-500" />
-                          Recommended Actions
+                          Immediate Action Steps
                         </CardTitle>
+                        <CardDescription>Do these TODAY to start growing</CardDescription>
                       </CardHeader>
                       <CardContent>
-                        <ul className="space-y-2">
-                          {analyticsData.insights.recommended_actions?.map((action, idx) => (
-                            <li key={idx} className="flex items-start gap-2">
-                              <span className="text-blue-500">→</span>
-                              <span>{action}</span>
+                        <ul className="space-y-3">
+                          {analyticsData.insights.immediate_actions?.map((action, idx) => (
+                            <li key={idx} className="flex items-start gap-3 p-3 rounded-lg border-2 border-blue-500/20" style={{backgroundColor: 'var(--bg-secondary)'}}>
+                              <span className="text-blue-500 font-bold text-lg">{idx + 1}</span>
+                              <span className="flex-1 font-medium">{action}</span>
                             </li>
                           ))}
                         </ul>
                       </CardContent>
                     </Card>
 
-                    {/* Growth Strategy */}
-                    <Card className="producer-card border-l-4 border-purple-500">
+                    {/* SEO Optimization */}
+                    <Card className="producer-card border-l-4 border-yellow-500">
                       <CardHeader>
                         <CardTitle className="text-lg flex items-center gap-2">
-                          <Music className="h-5 w-5 text-purple-500" />
-                          Growth Strategy
+                          <Sparkles className="h-5 w-5 text-yellow-500" />
+                          SEO & Discoverability Strategy
                         </CardTitle>
                       </CardHeader>
                       <CardContent>
-                        <p className="leading-relaxed">{analyticsData.insights.growth_strategy}</p>
+                        <ul className="space-y-3">
+                          {analyticsData.insights.seo_optimization?.map((tip, idx) => (
+                            <li key={idx} className="flex items-start gap-3 p-3 rounded-lg" style={{backgroundColor: 'var(--bg-secondary)'}}>
+                              <span className="text-yellow-500">🔍</span>
+                              <span className="flex-1">{tip}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </CardContent>
+                    </Card>
+
+                    {/* Content Strategy */}
+                    <Card className="producer-card border-l-4 border-indigo-500">
+                      <CardHeader>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          <Youtube className="h-5 w-5 text-indigo-500" />
+                          Content Strategy
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <ul className="space-y-3">
+                          {analyticsData.insights.content_strategy?.map((strategy, idx) => (
+                            <li key={idx} className="flex items-start gap-3 p-3 rounded-lg" style={{backgroundColor: 'var(--bg-secondary)'}}>
+                              <span className="text-indigo-500">📹</span>
+                              <span className="flex-1">{strategy}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </CardContent>
+                    </Card>
+
+                    {/* Discoverability Tactics */}
+                    <Card className="producer-card border-l-4 border-cyan-500">
+                      <CardHeader>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          <Link className="h-5 w-5 text-cyan-500" />
+                          Discoverability Tactics
+                        </CardTitle>
+                        <CardDescription>Get more eyeballs on your beats</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <ul className="space-y-3">
+                          {analyticsData.insights.discoverability_tactics?.map((tactic, idx) => (
+                            <li key={idx} className="flex items-start gap-3 p-3 rounded-lg" style={{backgroundColor: 'var(--bg-secondary)'}}>
+                              <span className="text-cyan-500">🚀</span>
+                              <span className="flex-1">{tactic}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </CardContent>
+                    </Card>
+
+                    {/* Internet Money Lessons */}
+                    <Card className="producer-card border-l-4 border-pink-500">
+                      <CardHeader>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          <Music className="h-5 w-5 text-pink-500" />
+                          Learn From Internet Money
+                        </CardTitle>
+                        <CardDescription>Proven tactics from successful producers</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <ul className="space-y-3">
+                          {analyticsData.insights.internet_money_lessons?.map((lesson, idx) => (
+                            <li key={idx} className="flex items-start gap-3 p-3 rounded-lg" style={{backgroundColor: 'var(--bg-secondary)'}}>
+                              <span className="text-pink-500">💎</span>
+                              <span className="flex-1">{lesson}</span>
+                            </li>
+                          ))}
+                        </ul>
                       </CardContent>
                     </Card>
 
@@ -1349,13 +1444,13 @@ const Dashboard = ({ setIsAuthenticated }) => {
                     {analyticsData.recent_videos?.length > 0 && (
                       <Card className="producer-card">
                         <CardHeader>
-                          <CardTitle className="text-lg">Recent Videos</CardTitle>
+                          <CardTitle className="text-lg">Recent Videos Performance</CardTitle>
                         </CardHeader>
                         <CardContent>
                           <div className="space-y-3">
                             {analyticsData.recent_videos.slice(0, 5).map((video, idx) => (
                               <div key={idx} className="flex justify-between items-center p-3 rounded-lg" style={{backgroundColor: 'var(--bg-secondary)'}}>
-                                <div className="flex-1">
+                                <div className="flex-1 pr-4">
                                   <p className="font-medium text-sm">{video.title}</p>
                                 </div>
                                 <div className="flex gap-4 text-sm">
