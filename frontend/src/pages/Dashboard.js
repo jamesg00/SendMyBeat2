@@ -187,6 +187,57 @@ const Dashboard = ({ setIsAuthenticated }) => {
     }
   };
 
+  const fetchGrowthStatus = async () => {
+    try {
+      const response = await axios.get(`${API}/growth/status`);
+      setGrowthData(response.data);
+    } catch (error) {
+      console.error("Failed to fetch growth status:", error);
+    }
+  };
+
+  const fetchCalendar = async () => {
+    try {
+      const response = await axios.get(`${API}/growth/calendar`);
+      setCalendarData(response.data);
+    } catch (error) {
+      console.error("Failed to fetch calendar:", error);
+    }
+  };
+
+  const handleStartChallenge = async () => {
+    setLoadingGrowth(true);
+    try {
+      const response = await axios.post(`${API}/growth/start`);
+      toast.success(response.data.message);
+      await fetchGrowthStatus();
+      await fetchCalendar();
+    } catch (error) {
+      console.error("Failed to start challenge:", error);
+      toast.error("Failed to start challenge");
+    } finally {
+      setLoadingGrowth(false);
+    }
+  };
+
+  const handleCheckin = async () => {
+    setLoadingGrowth(true);
+    try {
+      const response = await axios.post(`${API}/growth/checkin`);
+      toast.success(response.data.message);
+      if (response.data.badge_unlocked) {
+        toast.success(`🎉 ${response.data.badge_unlocked}`);
+      }
+      await fetchGrowthStatus();
+      await fetchCalendar();
+    } catch (error) {
+      console.error("Failed to checkin:", error);
+      toast.error(error.response?.data?.detail || "Failed to check in");
+    } finally {
+      setLoadingGrowth(false);
+    }
+  };
+
 
   const handleGenerateTags = async (e) => {
     e.preventDefault();
