@@ -147,6 +147,23 @@ class YouTubeAnalyticsResponse(BaseModel):
     recent_videos: List[dict]
     insights: dict  # Contains what_works, needs_improvement, recommendations, growth_strategy
 
+class GrowthStreak(BaseModel):
+    user_id: str
+    current_streak: int = 0
+    longest_streak: int = 0
+    total_days_completed: int = 0
+    challenge_start_date: Optional[str] = None
+    last_checkin_date: Optional[str] = None
+    badges_earned: List[str] = []
+    calendar: dict = {}  # date: status (completed/missed/scheduled)
+
+class CheckinResponse(BaseModel):
+    success: bool
+    message: str
+    current_streak: int
+    total_days: int
+    badge_unlocked: Optional[str] = None
+
 class SubscriptionStatus(BaseModel):
     is_subscribed: bool
     plan: str  # "free" or "pro"
