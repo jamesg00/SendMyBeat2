@@ -1128,7 +1128,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
               </CardHeader>
               <CardContent className="space-y-6">
                 {/* YouTube Connection Status */}
-                <div className="p-4 bg-slate-50 rounded-lg">
+                <div className="p-4 rounded-lg" style={{backgroundColor: 'var(--bg-secondary)'}}>
                   {youtubeConnected ? (
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -1143,10 +1143,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
                           <CheckCircle2 className="h-5 w-5 text-green-600" />
                         )}
                         <div>
-                          <p className="font-medium text-slate-800">
+                          <p className="font-medium" style={{color: 'var(--text-primary)'}}>
                             {youtubeName || "YouTube Connected"}
                           </p>
-                          <p className="text-sm text-slate-500">{youtubeEmail}</p>
+                          <p className="text-sm" style={{color: 'var(--text-secondary)'}}>{youtubeEmail}</p>
                         </div>
                       </div>
                       <Button
