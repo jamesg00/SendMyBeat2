@@ -309,7 +309,7 @@ const LandingPage = ({ setIsAuthenticated }) => {
               Ready to Level Up?
             </h2>
             <p className="text-xl mb-10 max-w-2xl mx-auto" style={{color: 'var(--text-secondary)'}}>
-              Join producers getting 10x more views with AI-powered YouTube optimization.
+              Join 1000+ producers growing their channels with AI-powered YouTube optimization. Start free today!
             </p>
             <Button
               size="lg"
