@@ -153,6 +153,35 @@ const Dashboard = ({ setIsAuthenticated }) => {
     toast.success("Logged out successfully");
   };
 
+  const handleAnalyzeChannel = async () => {
+    setLoadingAnalytics(true);
+    try {
+      const response = await axios.post(`${API}/youtube/analytics`);
+      setAnalyticsData(response.data);
+      toast.success("Channel analysis complete!");
+      
+      // Refresh credits after analysis
+      await fetchSubscriptionStatus();
+    } catch (error) {
+      if (error.response?.status === 402) {
+        const detail = error.response.data.detail;
+        toast.error(detail.message || "Daily limit reached");
+        setShowUpgradeModal(true);
+      } else if (error.response?.status === 400) {
+        toast.error("Please connect your YouTube account first");
+      } else {
+        console.error("Analytics error:", error);
+        toast.error("Failed to analyze channel");
+      }
+      
+      // Still refresh credits on error to show updated count
+      await fetchSubscriptionStatus();
+    } finally {
+      setLoadingAnalytics(false);
+    }
+  };
+
+
   const handleGenerateTags = async (e) => {
     e.preventDefault();
     if (!tagQuery.trim()) {
