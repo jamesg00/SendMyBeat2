@@ -219,10 +219,10 @@ const LandingPage = ({ setIsAuthenticated }) => {
                 </div>
               </div>
               <h3 className="text-2xl font-bold mb-4" style={{color: 'var(--text-primary)'}}>
-                Strategic AI Tags
+                AI Tag Generator
               </h3>
               <p className="text-lg leading-relaxed" style={{color: 'var(--text-secondary)'}}>
-                Generate 500 vidIQ-style tags with long-tail keywords, competition analysis, and trending terms. Dominate search results.
+                Generate 500 YouTube tags instantly with GPT-4o. Includes type beat variations, trending keywords, and SEO-optimized long-tail phrases. Beats TubeBuddy and vidIQ combined.
               </p>
             </div>
 
