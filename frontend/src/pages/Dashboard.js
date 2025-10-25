@@ -72,6 +72,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [upgradingSubscription, setUpgradingSubscription] = useState(false);
 
+  // Analytics states
+  const [loadingAnalytics, setLoadingAnalytics] = useState(false);
+  const [analyticsData, setAnalyticsData] = useState(null);
+
   useEffect(() => {
     fetchUser();
     fetchDescriptions();
