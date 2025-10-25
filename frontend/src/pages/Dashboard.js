@@ -840,8 +840,23 @@ const Dashboard = ({ setIsAuthenticated }) => {
                     </div>
                     <div className="tag-cloud" data-testid="tags-list">
                       {generatedTags.map((tag, index) => (
-                        <span key={index} className="tag-item" data-testid={`tag-${index}`}>
+                        <span 
+                          key={index} 
+                          className="tag-item group relative" 
+                          data-testid={`tag-${index}`}
+                        >
                           {tag}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setGeneratedTags(generatedTags.filter((_, i) => i !== index));
+                              toast.success("Tag removed");
+                            }}
+                            className="ml-2 text-red-500 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-700"
+                            title="Delete tag"
+                          >
+                            ×
+                          </button>
                         </span>
                       ))}
                     </div>
