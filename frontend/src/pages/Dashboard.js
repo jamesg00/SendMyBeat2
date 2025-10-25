@@ -124,6 +124,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
       const response = await axios.get(`${API}/youtube/status`);
       setYoutubeConnected(response.data.connected);
       setYoutubeEmail(response.data.email || "");
+      setYoutubeProfilePicture(response.data.profile_picture || "");
+      setYoutubeName(response.data.name || "");
     } catch (error) {
       console.error("Failed to check YouTube connection", error);
     }
