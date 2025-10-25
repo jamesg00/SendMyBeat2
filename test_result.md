@@ -320,6 +320,18 @@ backend:
         comment: "SMOKE TESTING COMPLETED: ✅ Stripe configuration endpoint working (returns publishable_key and price_id). ✅ Subscription webhook endpoints implemented. ✅ Checkout session creation endpoint present. ✅ Pro user subscription logic implemented and ready for Stripe integration."
 
 frontend:
+  - task: "YouTube Analytics dashboard"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/pages/Dashboard.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "NEW FEATURE: Added Analytics tab to dashboard. Shows channel overview (subscribers, views, videos), AI-powered insights (what works, needs improvement, recommendations, growth strategy), and recent video performance. Uses 1 AI credit. Clean UI with color-coded cards for different insight types."
+
   - task: "Subscription management button"
     implemented: true
     working: true
