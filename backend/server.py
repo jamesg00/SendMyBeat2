@@ -1196,6 +1196,46 @@ Format: Return ONLY the tags separated by commas, no numbering or extra text. Ma
         
         await db.tag_generations.insert_one(tag_doc)
         
+        # Auto check-in for Grow in 120 (same logic as upload)
+        try:
+            today = datetime.now(timezone.utc).date().isoformat()
+            growth = await db.growth_streaks.find_one({"user_id": current_user['id']})
+            
+            if growth and growth.get('last_checkin_date') != today:
+                last_checkin = growth.get('last_checkin_date')
+                current_streak = growth.get('current_streak', 0)
+                
+                if last_checkin:
+                    last_date = datetime.fromisoformat(last_checkin).date()
+                    today_date = datetime.fromisoformat(today).date()
+                    days_diff = (today_date - last_date).days
+                    
+                    if days_diff == 1:
+                        current_streak += 1
+                    elif days_diff > 1:
+                        current_streak = 1
+                else:
+                    current_streak = 1
+                
+                total_days = growth.get('total_days_completed', 0) + 1
+                longest_streak = max(growth.get('longest_streak', 0), current_streak)
+                calendar = growth.get('calendar', {})
+                calendar[today] = 'completed'
+                
+                await db.growth_streaks.update_one(
+                    {"user_id": current_user['id']},
+                    {"$set": {
+                        "current_streak": current_streak,
+                        "longest_streak": longest_streak,
+                        "total_days_completed": total_days,
+                        "last_checkin_date": today,
+                        "calendar": calendar
+                    }}
+                )
+                logging.info(f"Auto check-in on tag generation for user {current_user['id']}")
+        except Exception as e:
+            logging.error(f"Auto checkin on tags failed: {str(e)}")
+        
         return tag_gen
         
     except Exception as e:
