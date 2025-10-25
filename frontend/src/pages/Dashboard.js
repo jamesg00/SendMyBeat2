@@ -1604,14 +1604,29 @@ const Dashboard = ({ setIsAuthenticated }) => {
                     </Card>
 
                     {/* Check-in Button */}
-                    <Button
-                      onClick={handleCheckin}
-                      disabled={loadingGrowth}
-                      className="w-full btn-modern py-6"
-                    >
-                      <CheckCircle2 className="mr-2 h-5 w-5" />
-                      {loadingGrowth ? "Checking in..." : "Check In Today"}
-                    </Button>
+                    <Card className="producer-card border-l-4 border-blue-500">
+                      <CardContent className="p-6">
+                        <div className="mb-4">
+                          <p className="font-semibold mb-2">📋 Daily Requirements:</p>
+                          <ul className="text-sm space-y-1" style={{color: 'var(--text-secondary)'}}>
+                            <li>✓ Generate tags for a beat</li>
+                            <li>✓ Upload a beat to YouTube</li>
+                            <li>✓ OR create/edit a description</li>
+                          </ul>
+                          <p className="text-xs mt-3 font-medium" style={{color: 'var(--text-primary)'}}>
+                            Complete any task above, then check in to maintain your streak!
+                          </p>
+                        </div>
+                        <Button
+                          onClick={handleCheckin}
+                          disabled={loadingGrowth}
+                          className="w-full btn-modern py-4"
+                        >
+                          <CheckCircle2 className="mr-2 h-5 w-5" />
+                          {loadingGrowth ? "Checking in..." : "Check In Today"}
+                        </Button>
+                      </CardContent>
+                    </Card>
 
                     {/* Badges */}
                     {growthData.badges_earned?.length > 0 && (
