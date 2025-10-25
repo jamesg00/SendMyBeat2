@@ -478,7 +478,9 @@ async def get_youtube_status(current_user: dict = Depends(get_current_user)):
     if connection:
         return YouTubeConnectionStatus(
             connected=True,
-            email=connection.get('google_email')
+            email=connection.get('google_email'),
+            profile_picture=connection.get('profile_picture'),
+            name=connection.get('name')
         )
     return YouTubeConnectionStatus(connected=False)
 
