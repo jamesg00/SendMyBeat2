@@ -756,6 +756,229 @@ CRITICAL RULES:
 
 
 
+# ============ Grow in 120 Routes ============
+@api_router.post("/growth/start")
+async def start_growth_challenge(current_user: dict = Depends(get_current_user)):
+    """Start the 120-day growth challenge"""
+    try:
+        # Check if user already has an active challenge
+        existing = await db.growth_streaks.find_one({"user_id": current_user['id']})
+        
+        if existing:
+            return {
+                "success": False,
+                "message": "You're already in the challenge!",
+                "current_streak": existing.get('current_streak', 0)
+            }
+        
+        # Create new challenge
+        today = datetime.now(timezone.utc).date().isoformat()
+        growth_data = {
+            "user_id": current_user['id'],
+            "current_streak": 0,
+            "longest_streak": 0,
+            "total_days_completed": 0,
+            "challenge_start_date": today,
+            "last_checkin_date": None,
+            "badges_earned": [],
+            "calendar": {},
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+        await db.growth_streaks.insert_one(growth_data)
+        
+        return {
+            "success": True,
+            "message": "Welcome to Grow in 120! Your journey starts today 🔥",
+            "current_streak": 0
+        }
+        
+    except Exception as e:
+        logging.error(f"Error starting growth challenge: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/growth/checkin", response_model=CheckinResponse)
+async def daily_checkin(current_user: dict = Depends(get_current_user)):
+    """Manual daily check-in"""
+    try:
+        today = datetime.now(timezone.utc).date().isoformat()
+        
+        # Get or create growth streak
+        growth = await db.growth_streaks.find_one({"user_id": current_user['id']})
+        
+        if not growth:
+            # Auto-start challenge on first checkin
+            growth = {
+                "user_id": current_user['id'],
+                "current_streak": 0,
+                "longest_streak": 0,
+                "total_days_completed": 0,
+                "challenge_start_date": today,
+                "last_checkin_date": None,
+                "badges_earned": [],
+                "calendar": {}
+            }
+            await db.growth_streaks.insert_one(growth)
+        
+        # Check if already checked in today
+        if growth.get('last_checkin_date') == today:
+            return CheckinResponse(
+                success=False,
+                message="You've already checked in today! Come back tomorrow 🔥",
+                current_streak=growth.get('current_streak', 0),
+                total_days=growth.get('total_days_completed', 0)
+            )
+        
+        # Calculate streak
+        last_checkin = growth.get('last_checkin_date')
+        current_streak = growth.get('current_streak', 0)
+        
+        if last_checkin:
+            last_date = datetime.fromisoformat(last_checkin).date()
+            today_date = datetime.fromisoformat(today).date()
+            days_diff = (today_date - last_date).days
+            
+            if days_diff == 1:
+                # Consecutive day - increment streak
+                current_streak += 1
+            elif days_diff > 1:
+                # Missed days - reset streak
+                current_streak = 1
+        else:
+            # First checkin
+            current_streak = 1
+        
+        # Update totals
+        total_days = growth.get('total_days_completed', 0) + 1
+        longest_streak = max(growth.get('longest_streak', 0), current_streak)
+        
+        # Update calendar
+        calendar = growth.get('calendar', {})
+        calendar[today] = 'completed'
+        
+        # Check for badge unlocks
+        badge_unlocked = None
+        badges = growth.get('badges_earned', [])
+        
+        milestone_badges = {
+            7: "🔥 Week Warrior",
+            30: "💪 30-Day Champion",
+            60: "⭐ Halfway Hero",
+            90: "🚀 90-Day Legend",
+            120: "👑 Elite Producer"
+        }
+        
+        for days, badge in milestone_badges.items():
+            if total_days >= days and badge not in badges:
+                badges.append(badge)
+                badge_unlocked = badge
+                break
+        
+        # Update database
+        await db.growth_streaks.update_one(
+            {"user_id": current_user['id']},
+            {"$set": {
+                "current_streak": current_streak,
+                "longest_streak": longest_streak,
+                "total_days_completed": total_days,
+                "last_checkin_date": today,
+                "badges_earned": badges,
+                "calendar": calendar
+            }}
+        )
+        
+        message = f"Day {total_days} complete! 🔥 {current_streak}-day streak!"
+        if badge_unlocked:
+            message += f" Badge unlocked: {badge_unlocked}"
+        
+        return CheckinResponse(
+            success=True,
+            message=message,
+            current_streak=current_streak,
+            total_days=total_days,
+            badge_unlocked=badge_unlocked
+        )
+        
+    except Exception as e:
+        logging.error(f"Error with daily checkin: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/growth/status", response_model=GrowthStreak)
+async def get_growth_status(current_user: dict = Depends(get_current_user)):
+    """Get user's growth challenge status"""
+    try:
+        growth = await db.growth_streaks.find_one(
+            {"user_id": current_user['id']},
+            {"_id": 0}
+        )
+        
+        if not growth:
+            # Return default/empty state
+            return GrowthStreak(
+                user_id=current_user['id'],
+                current_streak=0,
+                longest_streak=0,
+                total_days_completed=0,
+                challenge_start_date=None,
+                last_checkin_date=None,
+                badges_earned=[],
+                calendar={}
+            )
+        
+        return GrowthStreak(**growth)
+        
+    except Exception as e:
+        logging.error(f"Error fetching growth status: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/growth/calendar")
+async def get_growth_calendar(current_user: dict = Depends(get_current_user)):
+    """Get 120-day calendar view"""
+    try:
+        growth = await db.growth_streaks.find_one({"user_id": current_user['id']})
+        
+        if not growth or not growth.get('challenge_start_date'):
+            return {
+                "calendar": {},
+                "days_remaining": 120,
+                "progress_percentage": 0
+            }
+        
+        start_date = datetime.fromisoformat(growth['challenge_start_date']).date()
+        today = datetime.now(timezone.utc).date()
+        calendar = growth.get('calendar', {})
+        
+        # Generate full 120-day calendar
+        full_calendar = {}
+        for i in range(120):
+            date = (start_date + timedelta(days=i)).isoformat()
+            date_obj = datetime.fromisoformat(date).date()
+            
+            if date in calendar:
+                full_calendar[date] = calendar[date]
+            elif date_obj < today:
+                full_calendar[date] = 'missed'
+            elif date_obj == today:
+                full_calendar[date] = 'today'
+            else:
+                full_calendar[date] = 'future'
+        
+        total_days = growth.get('total_days_completed', 0)
+        days_remaining = max(0, 120 - total_days)
+        progress_percentage = min(100, (total_days / 120) * 100)
+        
+        return {
+            "calendar": full_calendar,
+            "days_remaining": days_remaining,
+            "progress_percentage": progress_percentage,
+            "start_date": start_date.isoformat()
+        }
+        
+    except Exception as e:
+        logging.error(f"Error fetching calendar: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ============ Subscription Routes ============
 @api_router.get("/subscription/status", response_model=SubscriptionStatus)
 async def get_subscription_status(current_user: dict = Depends(get_current_user)):
