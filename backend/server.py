@@ -462,6 +462,161 @@ async def disconnect_youtube(current_user: dict = Depends(get_current_user)):
     await db.youtube_connections.delete_one({"user_id": current_user['id']})
     return {"success": True, "message": "YouTube account disconnected"}
 
+@api_router.post("/youtube/analytics", response_model=YouTubeAnalyticsResponse)
+async def get_youtube_analytics(current_user: dict = Depends(get_current_user)):
+    """Analyze YouTube channel performance and provide AI insights"""
+    try:
+        # Check if user has credits
+        has_credit = await check_and_use_credit(current_user['id'])
+        if not has_credit:
+            status = await get_user_subscription_status(current_user['id'])
+            raise HTTPException(
+                status_code=402,
+                detail={
+                    "message": "Daily limit reached. Upgrade to Pro for unlimited analytics!",
+                    "resets_at": status.get('resets_at')
+                }
+            )
+        
+        # Check if YouTube is connected
+        connection = await db.youtube_connections.find_one({"user_id": current_user['id']})
+        if not connection:
+            raise HTTPException(status_code=400, detail="YouTube account not connected")
+        
+        # Build YouTube API client
+        creds_data = connection['credentials']
+        creds = Credentials(
+            token=creds_data['token'],
+            refresh_token=creds_data.get('refresh_token'),
+            token_uri=creds_data['token_uri'],
+            client_id=creds_data['client_id'],
+            client_secret=creds_data['client_secret'],
+            scopes=creds_data['scopes']
+        )
+        
+        # Refresh token if needed
+        if creds.expired and creds.refresh_token:
+            creds.refresh(GoogleRequest())
+            # Update stored credentials
+            await db.youtube_connections.update_one(
+                {"user_id": current_user['id']},
+                {"$set": {"credentials": {
+                    "token": creds.token,
+                    "refresh_token": creds.refresh_token,
+                    "token_uri": creds.token_uri,
+                    "client_id": creds.client_id,
+                    "client_secret": creds.client_secret,
+                    "scopes": creds.scopes
+                }}}
+            )
+        
+        youtube = build('youtube', 'v3', credentials=creds)
+        
+        # Get channel statistics
+        channels_response = youtube.channels().list(
+            part='statistics,snippet',
+            mine=True
+        ).execute()
+        
+        if not channels_response.get('items'):
+            raise HTTPException(status_code=404, detail="No channel found")
+        
+        channel = channels_response['items'][0]
+        channel_stats = channel['statistics']
+        channel_snippet = channel['snippet']
+        
+        # Get recent videos (last 10)
+        search_response = youtube.search().list(
+            part='id',
+            forMine=True,
+            type='video',
+            order='date',
+            maxResults=10
+        ).execute()
+        
+        video_ids = [item['id']['videoId'] for item in search_response.get('items', [])]
+        
+        recent_videos = []
+        if video_ids:
+            videos_response = youtube.videos().list(
+                part='snippet,statistics',
+                id=','.join(video_ids)
+            ).execute()
+            
+            for video in videos_response.get('items', []):
+                video_stats = video['statistics']
+                recent_videos.append({
+                    'title': video['snippet']['title'],
+                    'views': int(video_stats.get('viewCount', 0)),
+                    'likes': int(video_stats.get('likeCount', 0)),
+                    'comments': int(video_stats.get('commentCount', 0)),
+                    'published_at': video['snippet']['publishedAt']
+                })
+        
+        # Prepare data for AI analysis
+        analysis_prompt = f"""Analyze this YouTube channel's performance and provide actionable insights:
+
+Channel Stats:
+- Subscribers: {channel_stats.get('subscriberCount', 'N/A')}
+- Total Views: {channel_stats.get('viewCount', 'N/A')}
+- Total Videos: {channel_stats.get('videoCount', 'N/A')}
+
+Recent Videos Performance:
+{json.dumps(recent_videos, indent=2)}
+
+Provide analysis in the following JSON format:
+{{
+  "what_works": ["Point 1", "Point 2", "Point 3"],
+  "needs_improvement": ["Point 1", "Point 2", "Point 3"],
+  "recommended_actions": ["Action 1", "Action 2", "Action 3", "Action 4", "Action 5"],
+  "growth_strategy": "2-3 sentence paragraph with specific growth strategy"
+}}
+
+Focus on:
+- Video performance patterns
+- Engagement rates (likes/views, comments/views)
+- Content consistency
+- Upload frequency
+- Specific actionable recommendations for a music producer/beat maker
+"""
+        
+        # Get AI insights
+        chat = LlmChat(
+            api_key=os.environ['EMERGENT_LLM_KEY'],
+            session_id=f"analytics_{uuid.uuid4()}",
+            system_message="You are a YouTube growth expert specializing in music producer channels. Provide specific, actionable advice."
+        ).with_model("openai", "gpt-4o")
+        
+        user_message = UserMessage(text=analysis_prompt)
+        response = await chat.send_message(user_message)
+        
+        # Parse AI response
+        try:
+            insights = json.loads(response.strip())
+        except:
+            # Fallback if JSON parsing fails
+            insights = {
+                "what_works": ["Analysis in progress"],
+                "needs_improvement": ["Detailed analysis coming soon"],
+                "recommended_actions": ["Continue creating content"],
+                "growth_strategy": "Keep producing and uploading consistently."
+            }
+        
+        return YouTubeAnalyticsResponse(
+            channel_name=channel_snippet['title'],
+            subscriber_count=int(channel_stats.get('subscriberCount', 0)),
+            total_views=int(channel_stats.get('viewCount', 0)),
+            total_videos=int(channel_stats.get('videoCount', 0)),
+            recent_videos=recent_videos,
+            insights=insights
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"YouTube analytics error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to analyze channel: {str(e)}")
+
 
 
 
