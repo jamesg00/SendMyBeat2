@@ -571,6 +571,8 @@ RECENT VIDEOS PERFORMANCE:
 
 YOUR MISSION: Help this producer grow their channel from where they are now to 100K+ subscribers. They're a BEGINNER who needs specific, step-by-step guidance.
 
+CRITICAL: You MUST respond with ONLY valid JSON. No markdown, no code blocks, no explanation before or after. Just pure JSON.
+
 Provide your analysis in this EXACT JSON format (be DETAILED and SPECIFIC):
 {{
   "channel_health_score": "X/100 - Brief explanation of why",
