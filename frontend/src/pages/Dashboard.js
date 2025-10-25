@@ -54,6 +54,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
   // YouTube upload states
   const [youtubeConnected, setYoutubeConnected] = useState(false);
   const [youtubeEmail, setYoutubeEmail] = useState("");
+  const [youtubeProfilePicture, setYoutubeProfilePicture] = useState("");
+  const [youtubeName, setYoutubeName] = useState("");
   const [audioFile, setAudioFile] = useState(null);
   const [imageFile, setImageFile] = useState(null);
   const [uploadTitle, setUploadTitle] = useState("");
