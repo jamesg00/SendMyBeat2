@@ -1529,6 +1529,177 @@ const Dashboard = ({ setIsAuthenticated }) => {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* Grow in 120 Tab */}
+          <TabsContent value="grow" className="space-y-6">
+            <Card className="shadow-lg border-0">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <span className="text-2xl">🔥</span>
+                  Grow in 120 - Build Your Producer Momentum
+                </CardTitle>
+                <CardDescription>
+                  Commit to 120 days of consistency. Upload every day, build your streak, unlock badges!
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {!growthData?.challenge_start_date ? (
+                  // Not started
+                  <div className="text-center py-12">
+                    <div className="mb-6">
+                      <p className="text-5xl mb-4">🚀</p>
+                      <h3 className="text-2xl font-bold mb-2">Ready to Commit?</h3>
+                      <p className="text-lg mb-6" style={{color: 'var(--text-secondary)'}}>
+                        Join the 120-day challenge and build unstoppable momentum
+                      </p>
+                    </div>
+                    <Button
+                      onClick={handleStartChallenge}
+                      disabled={loadingGrowth}
+                      className="btn-modern text-lg py-6 px-12"
+                    >
+                      {loadingGrowth ? "Starting..." : "Start My 120-Day Journey"}
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    {/* Stats Overview */}
+                    <div className="grid grid-cols-3 gap-4">
+                      <Card className="producer-card">
+                        <CardContent className="p-6 text-center">
+                          <p className="text-4xl font-bold mb-2">{growthData.current_streak} 🔥</p>
+                          <p className="text-sm" style={{color: 'var(--text-secondary)'}}>Current Streak</p>
+                        </CardContent>
+                      </Card>
+                      <Card className="producer-card">
+                        <CardContent className="p-6 text-center">
+                          <p className="text-4xl font-bold mb-2">{growthData.total_days_completed}/120</p>
+                          <p className="text-sm" style={{color: 'var(--text-secondary)'}}>Days Complete</p>
+                        </CardContent>
+                      </Card>
+                      <Card className="producer-card">
+                        <CardContent className="p-6 text-center">
+                          <p className="text-4xl font-bold mb-2">{growthData.longest_streak} 🏆</p>
+                          <p className="text-sm" style={{color: 'var(--text-secondary)'}}>Longest Streak</p>
+                        </CardContent>
+                      </Card>
+                    </div>
+
+                    {/* Progress Bar */}
+                    <Card className="producer-card">
+                      <CardContent className="p-6">
+                        <div className="flex justify-between mb-2">
+                          <p className="font-semibold">Challenge Progress</p>
+                          <p className="font-bold gradient-text">
+                            {Math.round((growthData.total_days_completed / 120) * 100)}%
+                          </p>
+                        </div>
+                        <div className="h-4 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-500"
+                            style={{ width: `${(growthData.total_days_completed / 120) * 100}%` }}
+                          />
+                        </div>
+                        <p className="text-sm mt-2 text-center" style={{color: 'var(--text-secondary)'}}>
+                          {120 - growthData.total_days_completed} days remaining
+                        </p>
+                      </CardContent>
+                    </Card>
+
+                    {/* Check-in Button */}
+                    <Button
+                      onClick={handleCheckin}
+                      disabled={loadingGrowth}
+                      className="w-full btn-modern py-6"
+                    >
+                      <CheckCircle2 className="mr-2 h-5 w-5" />
+                      {loadingGrowth ? "Checking in..." : "Check In Today"}
+                    </Button>
+
+                    {/* Badges */}
+                    {growthData.badges_earned?.length > 0 && (
+                      <Card className="producer-card border-l-4 border-yellow-500">
+                        <CardHeader>
+                          <CardTitle className="text-lg">🏆 Badges Earned</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="flex flex-wrap gap-3">
+                            {growthData.badges_earned.map((badge, idx) => (
+                              <div
+                                key={idx}
+                                className="px-4 py-2 rounded-full font-semibold"
+                                style={{backgroundColor: 'var(--bg-secondary)'}}
+                              >
+                                {badge}
+                              </div>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+
+                    {/* Calendar View */}
+                    {calendarData && (
+                      <Card className="producer-card">
+                        <CardHeader>
+                          <div className="flex justify-between items-center">
+                            <CardTitle className="text-lg">📅 Your 120-Day Calendar</CardTitle>
+                            <Button
+                              onClick={fetchCalendar}
+                              variant="outline"
+                              size="sm"
+                            >
+                              Refresh
+                            </Button>
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="grid grid-cols-10 gap-2">
+                            {Object.entries(calendarData.calendar || {}).slice(0, 120).map(([date, status]) => {
+                              const bgColor = 
+                                status === 'completed' ? 'bg-green-500' :
+                                status === 'missed' ? 'bg-red-500' :
+                                status === 'today' ? 'bg-purple-500' :
+                                'bg-gray-500';
+                              
+                              return (
+                                <div
+                                  key={date}
+                                  className={`h-8 w-8 rounded ${bgColor} opacity-80 hover:opacity-100 transition-opacity`}
+                                  title={`${date} - ${status}`}
+                                />
+                              );
+                            })}
+                          </div>
+                          <div className="flex gap-4 mt-4 text-sm">
+                            <div className="flex items-center gap-2">
+                              <div className="h-4 w-4 rounded bg-green-500" />
+                              <span>Complete</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="h-4 w-4 rounded bg-red-500" />
+                              <span>Missed</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="h-4 w-4 rounded bg-purple-500" />
+                              <span>Today</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="h-4 w-4 rounded bg-gray-500" />
+                              <span>Future</span>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+
+                    {/* Load calendar on tab view */}
+                    {!calendarData && fetchCalendar()}
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
       </div>
 
