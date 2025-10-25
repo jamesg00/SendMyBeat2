@@ -662,10 +662,11 @@ const Dashboard = ({ setIsAuthenticated }) => {
         />
 
         <Tabs defaultValue="tags" className="space-y-6">
-          <TabsList className="grid w-full max-w-2xl mx-auto grid-cols-3">
+          <TabsList className="grid w-full max-w-2xl mx-auto grid-cols-4">
             <TabsTrigger value="tags" data-testid="tags-tab">Tag Generator</TabsTrigger>
             <TabsTrigger value="descriptions" data-testid="descriptions-tab">Descriptions</TabsTrigger>
-            <TabsTrigger value="upload" data-testid="upload-tab">Upload to YouTube</TabsTrigger>
+            <TabsTrigger value="upload" data-testid="upload-tab">Upload</TabsTrigger>
+            <TabsTrigger value="analytics" data-testid="analytics-tab">Analytics</TabsTrigger>
           </TabsList>
 
           {/* Tag Generator Tab */}
