@@ -178,21 +178,25 @@ const LandingPage = ({ setIsAuthenticated }) => {
               <img src="/logo.png" alt="SendMyBeat" className="h-32 w-32 mx-auto object-contain neon-glow" />
             </div>
             <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold mb-6 gradient-text leading-tight">
-              SendMyBeat
+              Grow Your Beat Channel Fast
             </h1>
             <p className="text-xl sm:text-2xl mb-12 max-w-3xl mx-auto leading-relaxed" style={{color: 'var(--text-secondary)'}}>
-              The ultimate AI-powered YouTube tag generator for producers. <br/>
-              <span className="gradient-text font-semibold">500 strategic tags</span> that actually get your beats discovered.
+              AI-powered YouTube tag generator built for beat producers. Generate <span className="gradient-text font-semibold">500 SEO-optimized tags</span>, analyze your channel, and build momentum with our 120-day growth challenge.
             </p>
-            <Button
-              size="lg"
-              className="btn-modern text-lg px-10 py-7"
-              onClick={() => setShowAuth(true)}
-              data-testid="get-started-btn"
-            >
-              <Rocket className="mr-2 h-6 w-6" />
-              Start Creating Free
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-8">
+              <Button
+                size="lg"
+                className="btn-modern text-lg px-10 py-7"
+                onClick={() => setShowAuth(true)}
+                data-testid="get-started-btn"
+              >
+                <Rocket className="mr-2 h-6 w-6" />
+                Start Free Today
+              </Button>
+              <p className="text-sm" style={{color: 'var(--text-secondary)'}}>
+                ✅ 3 free daily uses • No credit card required
+              </p>
+            </div>
           </div>
         </div>
       </div>
