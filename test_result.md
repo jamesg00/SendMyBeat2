@@ -112,6 +112,18 @@ user_problem_statement: |
   6. Test with multiple concurrent users to ensure no crashes under load
 
 backend:
+  - task: "YouTube Analytics with AI insights"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "NEW FEATURE: Added /youtube/analytics endpoint that fetches channel stats, recent video performance, and uses GPT-4o to provide AI insights. Returns what's working, areas to improve, recommended actions, and growth strategy. Uses 1 AI credit per analysis. Integrates with existing credit system."
+
   - task: "Subscription management portal"
     implemented: true
     working: true
