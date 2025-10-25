@@ -365,14 +365,14 @@ async def get_youtube_auth_url(current_user: dict = Depends(get_current_user)):
             detail="Google OAuth not configured. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in backend/.env"
         )
     
-    # Create OAuth URL with YouTube upload scope
+    # Create OAuth URL with YouTube upload and readonly scopes
     from urllib.parse import urlencode
     
     params = {
         'client_id': GOOGLE_CLIENT_ID,
         'redirect_uri': f"{os.environ.get('FRONTEND_URL', 'https://musicai-11.preview.emergentagent.com')}/youtube-callback",
         'response_type': 'code',
-        'scope': 'https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/userinfo.email',
+        'scope': 'https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/userinfo.email',
         'access_type': 'offline',
         'prompt': 'consent',
         'state': current_user['id']
