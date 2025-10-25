@@ -1132,9 +1132,20 @@ const Dashboard = ({ setIsAuthenticated }) => {
                   {youtubeConnected ? (
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <CheckCircle2 className="h-5 w-5 text-green-600" />
+                        {youtubeProfilePicture && (
+                          <img 
+                            src={youtubeProfilePicture} 
+                            alt={youtubeName || youtubeEmail}
+                            className="h-10 w-10 rounded-full border-2 border-green-500"
+                          />
+                        )}
+                        {!youtubeProfilePicture && (
+                          <CheckCircle2 className="h-5 w-5 text-green-600" />
+                        )}
                         <div>
-                          <p className="font-medium text-slate-800">YouTube Connected</p>
+                          <p className="font-medium text-slate-800">
+                            {youtubeName || "YouTube Connected"}
+                          </p>
                           <p className="text-sm text-slate-500">{youtubeEmail}</p>
                         </div>
                       </div>
