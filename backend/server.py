@@ -138,6 +138,8 @@ class YouTubeUploadRequest(BaseModel):
 class YouTubeConnectionStatus(BaseModel):
     connected: bool
     email: Optional[str] = None
+    profile_picture: Optional[str] = None
+    name: Optional[str] = None
 
 class YouTubeAnalyticsResponse(BaseModel):
     channel_name: str
