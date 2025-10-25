@@ -439,13 +439,15 @@ async def connect_youtube(code: str = Form(...), current_user: dict = Depends(ge
         from datetime import timedelta
         token_expiry = datetime.now(timezone.utc) + timedelta(hours=1)
         
-        # Store credentials in database
+        # Store credentials in database with profile picture
         await db.youtube_connections.update_one(
             {"user_id": current_user['id']},
             {
                 "$set": {
                     "user_id": current_user['id'],
                     "google_email": user_info.get('email'),
+                    "profile_picture": user_info.get('picture'),  # Add profile picture
+                    "name": user_info.get('name'),  # Add name
                     "access_token": tokens['access_token'],
                     "refresh_token": tokens.get('refresh_token'),
                     "token_expiry": token_expiry.isoformat(),
@@ -455,7 +457,12 @@ async def connect_youtube(code: str = Form(...), current_user: dict = Depends(ge
             upsert=True
         )
         
-        return {"success": True, "email": user_info.get('email')}
+        return {
+            "success": True, 
+            "email": user_info.get('email'),
+            "profile_picture": user_info.get('picture'),
+            "name": user_info.get('name')
+        }
         
     except Exception as e:
         logging.error(f"YouTube connection error: {str(e)}")
