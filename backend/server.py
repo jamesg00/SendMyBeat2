@@ -799,9 +799,38 @@ async def start_growth_challenge(current_user: dict = Depends(get_current_user))
 
 @api_router.post("/growth/checkin", response_model=CheckinResponse)
 async def daily_checkin(current_user: dict = Depends(get_current_user)):
-    """Manual daily check-in"""
+    """Manual daily check-in - requires user to have completed work today"""
     try:
         today = datetime.now(timezone.utc).date().isoformat()
+        
+        # Check if user did any work today
+        work_done = False
+        
+        # Check for tag generation today
+        tag_today = await db.tag_generations.find_one({
+            "user_id": current_user['id'],
+            "created_at": {"$gte": today}
+        })
+        
+        # Check for description activity today
+        desc_today = await db.descriptions.find_one({
+            "user_id": current_user['id'],
+            "$or": [
+                {"created_at": {"$gte": today}},
+                {"updated_at": {"$gte": today}}
+            ]
+        })
+        
+        # If no work done, reject check-in
+        if not tag_today and not desc_today:
+            return CheckinResponse(
+                success=False,
+                message="⚠️ You must generate tags, create a description, or upload to YouTube before checking in!",
+                current_streak=0,
+                total_days=0
+            )
+        
+        work_done = True
         
         # Get or create growth streak
         growth = await db.growth_streaks.find_one({"user_id": current_user['id']})
