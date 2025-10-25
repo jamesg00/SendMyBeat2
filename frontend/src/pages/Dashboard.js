@@ -534,6 +534,32 @@ const Dashboard = ({ setIsAuthenticated }) => {
     }
   };
 
+  const handleAnalyzeBeat = async () => {
+    if (!uploadTitle || generatedTags.length === 0) {
+      toast.error("Please add a title and generate tags first");
+      return;
+    }
+
+    setAnalyzingBeat(true);
+    try {
+      const selectedDesc = descriptions.find(d => d.id === selectedDescriptionId);
+      
+      const response = await axios.post(`${API}/beat/analyze`, {
+        title: uploadTitle,
+        tags: generatedTags,
+        description: selectedDesc?.content || ""
+      });
+      
+      setBeatAnalysis(response.data);
+      toast.success(`Analysis complete! Score: ${response.data.overall_score}/100`);
+    } catch (error) {
+      console.error("Beat analysis failed:", error);
+      toast.error("Failed to analyze beat");
+    } finally {
+      setAnalyzingBeat(false);
+    }
+  };
+
   const disconnectYouTube = async () => {
     try {
       await axios.delete(`${API}/youtube/disconnect`);
