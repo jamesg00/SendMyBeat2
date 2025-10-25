@@ -1182,6 +1182,164 @@ const Dashboard = ({ setIsAuthenticated }) => {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* YouTube Analytics Tab */}
+          <TabsContent value="analytics" className="space-y-6">
+            <Card className="shadow-lg border-0">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Sparkles className="h-6 w-6 text-purple-500" />
+                  YouTube Channel Analytics
+                </CardTitle>
+                <CardDescription>
+                  Get AI-powered insights on your channel performance (uses 1 AI credit)
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {!youtubeConnected ? (
+                  <Alert>
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      Connect your YouTube account first to analyze your channel.
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <Button
+                    onClick={handleAnalyzeChannel}
+                    disabled={loadingAnalytics}
+                    className="w-full btn-modern"
+                  >
+                    <Sparkles className="mr-2 h-5 w-5" />
+                    {loadingAnalytics ? "Analyzing..." : "Analyze My Channel"}
+                  </Button>
+                )}
+
+                {analyticsData && (
+                  <div className="space-y-6 mt-6">
+                    {/* Channel Overview */}
+                    <Card className="producer-card">
+                      <CardHeader>
+                        <CardTitle className="text-lg">{analyticsData.channel_name}</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid grid-cols-3 gap-4">
+                          <div className="text-center">
+                            <p className="text-2xl font-bold gradient-text">{analyticsData.subscriber_count.toLocaleString()}</p>
+                            <p className="text-sm" style={{color: 'var(--text-secondary)'}}>Subscribers</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-2xl font-bold gradient-text">{analyticsData.total_views.toLocaleString()}</p>
+                            <p className="text-sm" style={{color: 'var(--text-secondary)'}}>Total Views</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-2xl font-bold gradient-text">{analyticsData.total_videos}</p>
+                            <p className="text-sm" style={{color: 'var(--text-secondary)'}}>Videos</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* What's Working Well */}
+                    <Card className="producer-card border-l-4 border-green-500">
+                      <CardHeader>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          <CheckCircle2 className="h-5 w-5 text-green-500" />
+                          What's Working Well
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <ul className="space-y-2">
+                          {analyticsData.insights.what_works?.map((point, idx) => (
+                            <li key={idx} className="flex items-start gap-2">
+                              <span className="text-green-500">✓</span>
+                              <span>{point}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </CardContent>
+                    </Card>
+
+                    {/* Needs Improvement */}
+                    <Card className="producer-card border-l-4 border-orange-500">
+                      <CardHeader>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          <AlertCircle className="h-5 w-5 text-orange-500" />
+                          Areas to Improve
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <ul className="space-y-2">
+                          {analyticsData.insights.needs_improvement?.map((point, idx) => (
+                            <li key={idx} className="flex items-start gap-2">
+                              <span className="text-orange-500">!</span>
+                              <span>{point}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </CardContent>
+                    </Card>
+
+                    {/* Recommended Actions */}
+                    <Card className="producer-card border-l-4 border-blue-500">
+                      <CardHeader>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          <Sparkles className="h-5 w-5 text-blue-500" />
+                          Recommended Actions
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <ul className="space-y-2">
+                          {analyticsData.insights.recommended_actions?.map((action, idx) => (
+                            <li key={idx} className="flex items-start gap-2">
+                              <span className="text-blue-500">→</span>
+                              <span>{action}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </CardContent>
+                    </Card>
+
+                    {/* Growth Strategy */}
+                    <Card className="producer-card border-l-4 border-purple-500">
+                      <CardHeader>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          <Music className="h-5 w-5 text-purple-500" />
+                          Growth Strategy
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="leading-relaxed">{analyticsData.insights.growth_strategy}</p>
+                      </CardContent>
+                    </Card>
+
+                    {/* Recent Videos Performance */}
+                    {analyticsData.recent_videos?.length > 0 && (
+                      <Card className="producer-card">
+                        <CardHeader>
+                          <CardTitle className="text-lg">Recent Videos</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-3">
+                            {analyticsData.recent_videos.slice(0, 5).map((video, idx) => (
+                              <div key={idx} className="flex justify-between items-center p-3 rounded-lg" style={{backgroundColor: 'var(--bg-secondary)'}}>
+                                <div className="flex-1">
+                                  <p className="font-medium text-sm">{video.title}</p>
+                                </div>
+                                <div className="flex gap-4 text-sm">
+                                  <span>{video.views.toLocaleString()} views</span>
+                                  <span>{video.likes.toLocaleString()} likes</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
       </div>
 
