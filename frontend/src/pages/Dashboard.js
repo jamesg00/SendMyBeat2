@@ -695,9 +695,13 @@ const Dashboard = ({ setIsAuthenticated }) => {
         />
 
         <Tabs defaultValue="tags" className="space-y-6">
-          <TabsList className="grid w-full max-w-2xl mx-auto grid-cols-4">
-            <TabsTrigger value="tags" data-testid="tags-tab">Tag Generator</TabsTrigger>
+          <TabsList className="grid w-full max-w-3xl mx-auto grid-cols-5">
+            <TabsTrigger value="tags" data-testid="tags-tab">Tags</TabsTrigger>
             <TabsTrigger value="descriptions" data-testid="descriptions-tab">Descriptions</TabsTrigger>
+            <TabsTrigger value="upload" data-testid="upload-tab">Upload</TabsTrigger>
+            <TabsTrigger value="analytics" data-testid="analytics-tab">Analytics</TabsTrigger>
+            <TabsTrigger value="grow" data-testid="grow-tab">Grow in 120</TabsTrigger>
+          </TabsList>
             <TabsTrigger value="upload" data-testid="upload-tab">Upload</TabsTrigger>
             <TabsTrigger value="analytics" data-testid="analytics-tab">Analytics</TabsTrigger>
           </TabsList>
