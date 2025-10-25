@@ -205,10 +205,10 @@ const LandingPage = ({ setIsAuthenticated }) => {
       <div className="container mx-auto px-4 py-24 relative z-10">
         <div className="max-w-6xl mx-auto">
           <h2 className="text-4xl sm:text-5xl font-bold text-center mb-4 gradient-text">
-            Built For Producers
+            Everything You Need to Grow
           </h2>
           <p className="text-center text-xl mb-20" style={{color: 'var(--text-secondary)'}}>
-            Everything you need to dominate YouTube search
+            Beat producer tools designed to increase discoverability and build consistency
           </p>
           
           <div className="grid md:grid-cols-3 gap-8">
