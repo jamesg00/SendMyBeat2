@@ -1855,8 +1855,9 @@ const Dashboard = ({ setIsAuthenticated }) => {
                           </div>
                         </CardHeader>
                         <CardContent>
-                          <div className="grid grid-cols-10 gap-2">
-                            {Object.entries(calendarData.calendar || {}).slice(0, 120).map(([date, status]) => {
+                          <div className="grid grid-cols-10 gap-2 mb-4">
+                            {Object.entries(calendarData.calendar || {}).slice(0, 120).map(([date, status], index) => {
+                              const dayNumber = index + 1;
                               const bgColor = 
                                 status === 'completed' ? 'bg-green-500' :
                                 status === 'missed' ? 'bg-red-500' :
@@ -1866,13 +1867,91 @@ const Dashboard = ({ setIsAuthenticated }) => {
                               return (
                                 <div
                                   key={date}
-                                  className={`h-8 w-8 rounded ${bgColor} opacity-80 hover:opacity-100 transition-opacity`}
-                                  title={`${date} - ${status}`}
-                                />
+                                  className={`h-12 w-12 rounded ${bgColor} opacity-80 hover:opacity-100 transition-all cursor-pointer flex flex-col items-center justify-center text-white font-bold text-xs hover:scale-110`}
+                                  onClick={() => setSelectedDay({ date, status, dayNumber })}
+                                  title={`Day ${dayNumber} - ${date}`}
+                                >
+                                  <span className="text-[10px]">D{dayNumber}</span>
+                                  {status === 'completed' && <span className="text-lg">✓</span>}
+                                  {status === 'missed' && <span className="text-lg">✗</span>}
+                                  {status === 'today' && <span className="text-lg">•</span>}
+                                </div>
                               );
                             })}
                           </div>
-                          <div className="flex gap-4 mt-4 text-sm">
+
+                          {/* Selected Day Details */}
+                          {selectedDay && (
+                            <Card className="mb-4 border-l-4 border-purple-500" style={{backgroundColor: 'var(--bg-tertiary)'}}>
+                              <CardContent className="p-4">
+                                <div className="flex justify-between items-start mb-2">
+                                  <div>
+                                    <p className="font-bold text-lg gradient-text">Day {selectedDay.dayNumber}</p>
+                                    <p className="text-sm" style={{color: 'var(--text-secondary)'}}>{selectedDay.date}</p>
+                                  </div>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setSelectedDay(null)}
+                                  >
+                                    ×
+                                  </Button>
+                                </div>
+                                <div className="mt-3">
+                                  {selectedDay.status === 'completed' && (
+                                    <div className="space-y-2">
+                                      <p className="font-semibold text-green-600 flex items-center gap-2">
+                                        <CheckCircle2 className="h-4 w-4" />
+                                        Completed!
+                                      </p>
+                                      <p className="text-sm" style={{color: 'var(--text-primary)'}}>
+                                        You crushed it this day! You completed one of these tasks:
+                                      </p>
+                                      <ul className="text-sm space-y-1" style={{color: 'var(--text-secondary)'}}>
+                                        <li>• Generated YouTube tags</li>
+                                        <li>• Uploaded a beat to YouTube</li>
+                                        <li>• Created/edited a description</li>
+                                      </ul>
+                                    </div>
+                                  )}
+                                  {selectedDay.status === 'missed' && (
+                                    <div>
+                                      <p className="font-semibold text-red-600 flex items-center gap-2">
+                                        <AlertCircle className="h-4 w-4" />
+                                        Missed Day
+                                      </p>
+                                      <p className="text-sm mt-2" style={{color: 'var(--text-primary)'}}>
+                                        No activity recorded. Your streak reset. Keep pushing forward!
+                                      </p>
+                                    </div>
+                                  )}
+                                  {selectedDay.status === 'today' && (
+                                    <div>
+                                      <p className="font-semibold text-purple-600 flex items-center gap-2">
+                                        <Sparkles className="h-4 w-4" />
+                                        Today's the Day!
+                                      </p>
+                                      <p className="text-sm mt-2" style={{color: 'var(--text-primary)'}}>
+                                        Complete a task and check in to keep your streak alive!
+                                      </p>
+                                    </div>
+                                  )}
+                                  {selectedDay.status === 'future' && (
+                                    <div>
+                                      <p className="font-semibold" style={{color: 'var(--text-secondary)'}}>
+                                        Future Day
+                                      </p>
+                                      <p className="text-sm mt-2" style={{color: 'var(--text-secondary)'}}>
+                                        This day is coming up. Stay consistent!
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
+                              </CardContent>
+                            </Card>
+                          )}
+
+                          <div className="flex gap-4 text-sm">
                             <div className="flex items-center gap-2">
                               <div className="h-4 w-4 rounded bg-green-500" />
                               <span>Complete</span>
