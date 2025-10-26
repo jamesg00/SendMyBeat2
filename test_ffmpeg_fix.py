@@ -115,10 +115,9 @@ class FFmpegFixTester:
         
         response = requests.post(
             f"{self.base_url}/api/youtube/upload",
-            json=upload_data,
+            data=upload_data,  # Use form data, not JSON
             headers={
-                'Authorization': f'Bearer {self.token}',
-                'Content-Type': 'application/json'
+                'Authorization': f'Bearer {self.token}'
             },
             timeout=60
         )
