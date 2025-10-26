@@ -902,19 +902,46 @@ const Dashboard = ({ setIsAuthenticated }) => {
                   <CardTitle>Recent Generations</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {tagHistory.slice(0, 5).map((item) => (
                       <div
                         key={item.id}
-                        className="p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+                        className="p-4 rounded-lg border-2 transition-all hover:border-purple-500 cursor-pointer relative group"
+                        style={{
+                          backgroundColor: 'var(--bg-secondary)',
+                          borderColor: 'var(--border-color)'
+                        }}
                         onClick={() => {
                           setGeneratedTags(item.tags);
                           setTagQuery(item.query);
+                          toast.success("Tags loaded!");
                         }}
                         data-testid="tag-history-item"
                       >
-                        <p className="font-medium text-slate-800">{item.query}</p>
-                        <p className="text-sm text-slate-500">{item.tags.length} tags generated</p>
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <p className="font-medium mb-1" style={{color: 'var(--text-primary)'}}>{item.query}</p>
+                            <p className="text-sm" style={{color: 'var(--text-secondary)'}}>{item.tags.length} tags generated</p>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="opacity-0 group-hover:opacity-100 transition-opacity text-red-500 hover:text-red-700 hover:bg-red-50"
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              try {
+                                // Delete from tag history
+                                const updatedHistory = tagHistory.filter(t => t.id !== item.id);
+                                setTagHistory(updatedHistory);
+                                toast.success("Generation deleted");
+                              } catch (error) {
+                                toast.error("Failed to delete");
+                              }
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
                     ))}
                   </div>
