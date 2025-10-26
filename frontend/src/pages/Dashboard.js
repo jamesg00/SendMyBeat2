@@ -1292,6 +1292,93 @@ const Dashboard = ({ setIsAuthenticated }) => {
                   )}
                 </div>
 
+                {/* Beat Analyzer Section - Available for all users */}
+                <Card className="producer-card border-l-4 border-yellow-500">
+                  <CardContent className="p-4">
+                    <div className="flex justify-between items-center mb-3">
+                      <p className="font-semibold flex items-center gap-2">
+                        <Target className="h-5 w-5 text-yellow-500" />
+                        Check Your Beat's Potential
+                      </p>
+                      <Button
+                        onClick={handleAnalyzeBeat}
+                        disabled={analyzingBeat || !uploadTitle || generatedTags.length === 0}
+                        variant="outline"
+                        size="sm"
+                        className="border-yellow-500 text-yellow-600 hover:bg-yellow-50 dark:text-yellow-400 dark:hover:bg-yellow-950"
+                      >
+                        {analyzingBeat ? "Analyzing..." : "Analyze Beat"}
+                      </Button>
+                    </div>
+                    
+                    {beatAnalysis && (
+                      <div className="space-y-3 mt-4">
+                        {/* Overall Score */}
+                        <div className="text-center p-4 rounded-lg" style={{backgroundColor: 'var(--bg-tertiary)'}}>
+                          <p className="text-3xl font-bold gradient-text mb-1">{beatAnalysis.overall_score}/100</p>
+                          <p className="text-sm font-semibold" style={{color: 'var(--text-secondary)'}}>
+                            Predicted: {beatAnalysis.predicted_performance}
+                          </p>
+                        </div>
+
+                        {/* Scores Grid */}
+                        <div className="grid grid-cols-3 gap-2">
+                          <div className="text-center p-2 rounded" style={{backgroundColor: 'var(--bg-tertiary)'}}>
+                            <p className="text-xl font-bold">{beatAnalysis.title_score}</p>
+                            <p className="text-xs" style={{color: 'var(--text-secondary)'}}>Title</p>
+                          </div>
+                          <div className="text-center p-2 rounded" style={{backgroundColor: 'var(--bg-tertiary)'}}>
+                            <p className="text-xl font-bold">{beatAnalysis.tags_score}</p>
+                            <p className="text-xs" style={{color: 'var(--text-secondary)'}}>Tags</p>
+                          </div>
+                          <div className="text-center p-2 rounded" style={{backgroundColor: 'var(--bg-tertiary)'}}>
+                            <p className="text-xl font-bold">{beatAnalysis.seo_score}</p>
+                            <p className="text-xs" style={{color: 'var(--text-secondary)'}}>SEO</p>
+                          </div>
+                        </div>
+
+                        {/* Strengths */}
+                        <div>
+                          <p className="font-semibold text-green-600 mb-2 text-sm">✓ Strengths:</p>
+                          <ul className="text-sm space-y-1">
+                            {beatAnalysis.strengths.map((s, i) => (
+                              <li key={i} className="text-green-600">• {s}</li>
+                            ))}
+                          </ul>
+                        </div>
+
+                        {/* Weaknesses */}
+                        {beatAnalysis.weaknesses.length > 0 && (
+                          <div>
+                            <p className="font-semibold text-orange-600 mb-2 text-sm">⚠ Needs Work:</p>
+                            <ul className="text-sm space-y-1">
+                              {beatAnalysis.weaknesses.map((w, i) => (
+                                <li key={i} className="text-orange-600">• {w}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {/* Suggestions */}
+                        <div>
+                          <p className="font-semibold text-blue-600 mb-2 text-sm">💡 Suggestions:</p>
+                          <ul className="text-sm space-y-1">
+                            {beatAnalysis.suggestions.map((s, i) => (
+                              <li key={i} style={{color: 'var(--text-primary)'}}>• {s}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    )}
+
+                    {!beatAnalysis && !analyzingBeat && (
+                      <p className="text-sm text-center" style={{color: 'var(--text-secondary)'}}>
+                        Fill in title & tags, then analyze to see how well your beat will perform!
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+
                 {youtubeConnected && (
                   <div className="space-y-6">
                     {/* File Uploads */}
