@@ -594,6 +594,17 @@ const Dashboard = ({ setIsAuthenticated }) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // Warn for very large files
+    const fileSizeMB = file.size / (1024 * 1024);
+    if (fileSizeMB > 200) {
+      toast.error("File too large! Please use files under 200MB for best results.");
+      return;
+    }
+    
+    if (fileSizeMB > 100) {
+      toast.warning(`${fileSizeMB.toFixed(0)}MB file detected. Upload may take 3-5 minutes...`, {duration: 5000});
+    }
+
     setUploadingAudio(true);
     setUploadProgress(0);
     
@@ -603,6 +614,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
     try {
       const response = await axios.post(`${API}/upload/audio`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 600000, // 10 minute timeout for large files
         onUploadProgress: (progressEvent) => {
           const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
           setUploadProgress(percentCompleted);
