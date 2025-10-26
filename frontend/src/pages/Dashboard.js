@@ -290,6 +290,11 @@ const Dashboard = ({ setIsAuthenticated }) => {
       setTimeout(() => {
         fetchSubscriptionStatus();
       }, 500);
+      
+      // Prompt check-in after successful generation
+      setTimeout(() => {
+        promptCheckin();
+      }, 1000);
     } catch (error) {
       // Check if cancelled
       if (axios.isCancel(error)) {
