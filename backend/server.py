@@ -1923,12 +1923,10 @@ async def upload_to_youtube(
         
         logging.info(f"Video uploaded successfully! Video ID: {response['id']}")
         
-        # Clean up video file (only if we created it with ffmpeg)
+        # Clean up temporary video file
         try:
-            if audio_file['file_type'] != 'video':
-                # We created a temporary video from audio+image, delete it
-                video_path.unlink()
-                logging.info("Temporary video file deleted")
+            video_path.unlink()
+            logging.info("Temporary video file deleted")
         except:
             pass
         
