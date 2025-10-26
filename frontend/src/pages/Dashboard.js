@@ -680,6 +680,11 @@ const Dashboard = ({ setIsAuthenticated }) => {
         toast.info(response.data.note, { duration: 8000 });
       }
       
+      // Prompt check-in after successful upload
+      setTimeout(() => {
+        promptCheckin();
+      }, 1500);
+      
       // Refresh credits after upload
       setTimeout(() => {
         fetchSubscriptionStatus();
