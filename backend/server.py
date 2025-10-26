@@ -172,7 +172,7 @@ class GrowthStreak(BaseModel):
     challenge_start_date: Optional[str] = None
     last_checkin_date: Optional[str] = None
     badges_earned: List[str] = []
-    calendar: dict = {}  # date: status (completed/missed/scheduled)
+    calendar: dict = {}  # date: {status: str, activity: str}
 
 class CheckinResponse(BaseModel):
     success: bool
