@@ -1480,14 +1480,18 @@ Return only the complete description."""
 # ============ File Upload Routes ============
 @api_router.post("/upload/audio")
 async def upload_audio(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
-    """Upload audio file (MP3, WAV, etc.)"""
+    """Upload audio or video file (MP3, WAV, MP4, etc.)"""
     try:
-        # Validate file type
-        allowed_extensions = ['.mp3', '.wav', '.m4a', '.flac', '.ogg']
+        # Validate file type - now includes video
+        allowed_extensions = ['.mp3', '.wav', '.m4a', '.flac', '.ogg', '.mp4', '.mov', '.avi']
         file_ext = Path(file.filename).suffix.lower()
         
         if file_ext not in allowed_extensions:
-            raise HTTPException(status_code=400, detail="Invalid audio file format")
+            raise HTTPException(status_code=400, detail="Invalid audio/video file format")
+        
+        # Determine file type
+        video_extensions = ['.mp4', '.mov', '.avi']
+        file_type = "video" if file_ext in video_extensions else "audio"
         
         # Create unique filename
         file_id = str(uuid.uuid4())
@@ -1504,18 +1508,18 @@ async def upload_audio(file: UploadFile = File(...), current_user: dict = Depend
             "user_id": current_user['id'],
             "original_filename": file.filename,
             "stored_filename": filename,
-            "file_type": "audio",
+            "file_type": file_type,
             "file_path": str(file_path),
             "uploaded_at": datetime.now(timezone.utc).isoformat()
         }
         
         await db.uploads.insert_one(upload_doc)
         
-        return {"file_id": file_id, "filename": file.filename}
+        return {"file_id": file_id, "filename": file.filename, "file_type": file_type}
         
     except Exception as e:
-        logging.error(f"Audio upload error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to upload audio: {str(e)}")
+        logging.error(f"File upload error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to upload file: {str(e)}")
 
 @api_router.post("/upload/image")
 async def upload_image(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
