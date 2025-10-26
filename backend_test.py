@@ -578,6 +578,144 @@ class SendMyBeatAPITester:
         
         return False
 
+    def test_beat_analyzer_endpoint(self):
+        """Test Beat Analyzer endpoint - USER REPORTED ISSUE"""
+        print("\n🔍 Testing Beat Analyzer Endpoint (USER REPORTED ISSUE)...")
+        
+        # Get initial credits to ensure we have credits for testing
+        success, initial_status = self.run_test(
+            "Beat Analyzer - Check Credits",
+            "GET",
+            "subscription/status",
+            200
+        )
+        
+        if not success:
+            return False
+        
+        initial_credits = initial_status.get('daily_credits_remaining', 0)
+        print(f"   Initial AI credits: {initial_credits}")
+        
+        # Test data as specified in the review request
+        beat_data = {
+            "title": "Hard Trap Beat 2024",
+            "tags": ["trap", "beat", "instrumental", "hard", "type beat"],
+            "description": "Hard trap instrumental"
+        }
+        
+        if initial_credits > 0:
+            # Test with valid data
+            success, response = self.run_test(
+                "Beat Analyzer - Valid Request",
+                "POST",
+                "beat/analyze",
+                200,
+                data=beat_data
+            )
+            
+            if success:
+                # Verify response structure
+                required_fields = [
+                    'overall_score', 'title_score', 'tags_score', 'seo_score',
+                    'strengths', 'weaknesses', 'suggestions', 'predicted_performance'
+                ]
+                
+                missing_fields = [field for field in required_fields if field not in response]
+                if missing_fields:
+                    self.log_test("Beat Analyzer - Response Structure", False, f"Missing fields: {missing_fields}")
+                    return False
+                
+                # Verify field types and values
+                if not isinstance(response.get('overall_score'), int) or not (0 <= response['overall_score'] <= 100):
+                    self.log_test("Beat Analyzer - Overall Score", False, f"Invalid overall_score: {response.get('overall_score')}")
+                    return False
+                
+                if not isinstance(response.get('strengths'), list):
+                    self.log_test("Beat Analyzer - Strengths Format", False, f"Strengths not a list: {type(response.get('strengths'))}")
+                    return False
+                
+                if not isinstance(response.get('weaknesses'), list):
+                    self.log_test("Beat Analyzer - Weaknesses Format", False, f"Weaknesses not a list: {type(response.get('weaknesses'))}")
+                    return False
+                
+                if not isinstance(response.get('suggestions'), list):
+                    self.log_test("Beat Analyzer - Suggestions Format", False, f"Suggestions not a list: {type(response.get('suggestions'))}")
+                    return False
+                
+                print(f"   ✓ Overall Score: {response['overall_score']}/100")
+                print(f"   ✓ Title Score: {response['title_score']}/100")
+                print(f"   ✓ Tags Score: {response['tags_score']}/100")
+                print(f"   ✓ SEO Score: {response['seo_score']}/100")
+                print(f"   ✓ Predicted Performance: {response['predicted_performance']}")
+                print(f"   ✓ Strengths: {len(response['strengths'])} items")
+                print(f"   ✓ Weaknesses: {len(response['weaknesses'])} items")
+                print(f"   ✓ Suggestions: {len(response['suggestions'])} items")
+                
+                self.log_test("Beat Analyzer - Full Analysis", True, "All response fields valid")
+                return True
+            else:
+                # Check if it's an authentication issue
+                if "401" in str(response):
+                    self.log_test("Beat Analyzer - Authentication", False, "401 Unauthorized - Check JWT token")
+                    return False
+                elif "500" in str(response):
+                    self.log_test("Beat Analyzer - Server Error", False, "500 Internal Server Error - Check backend logs")
+                    return False
+                else:
+                    self.log_test("Beat Analyzer - Unknown Error", False, f"Unexpected response: {response}")
+                    return False
+        else:
+            print("   ⚠️ No AI credits available - testing error handling")
+            # Test when no credits available
+            success, error_response = self.run_test(
+                "Beat Analyzer - No Credits",
+                "POST",
+                "beat/analyze",
+                402,  # Expect payment required
+                data=beat_data
+            )
+            
+            if success:
+                print("   ✓ Proper 402 error when no AI credits available")
+                return True
+            else:
+                self.log_test("Beat Analyzer - Credit Limit", False, "Did not receive proper 402 error when no credits available")
+                return False
+        
+        return False
+
+    def test_beat_analyzer_authentication(self):
+        """Test Beat Analyzer endpoint without authentication"""
+        print("\n🔍 Testing Beat Analyzer Authentication...")
+        
+        # Temporarily remove token to test unauthenticated access
+        original_token = self.token
+        self.token = None
+        
+        beat_data = {
+            "title": "Test Beat",
+            "tags": ["test"],
+            "description": "Test description"
+        }
+        
+        success, response = self.run_test(
+            "Beat Analyzer - No Auth",
+            "POST",
+            "beat/analyze",
+            401,  # Expect unauthorized
+            data=beat_data
+        )
+        
+        # Restore token
+        self.token = original_token
+        
+        if success:
+            print("   ✓ Proper 401 error when not authenticated")
+            return True
+        else:
+            self.log_test("Beat Analyzer - Auth Required", False, "Did not receive proper 401 error when not authenticated")
+            return False
+
     def run_all_tests(self):
         """Run all API tests including priority tasks"""
         print("🚀 Starting SendMyBeat API Comprehensive Tests")
