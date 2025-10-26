@@ -1823,8 +1823,12 @@ async def upload_to_youtube(
         video_path = UPLOADS_DIR / video_filename
         
         # Optimized ffmpeg command for large files
+        # Try to find ffmpeg in PATH first, fallback to absolute path
+        import shutil
+        ffmpeg_path = shutil.which('ffmpeg') or '/usr/bin/ffmpeg'
+        
         ffmpeg_cmd = [
-            '/usr/bin/ffmpeg',
+            ffmpeg_path,
             '-loop', '1',
             '-framerate', '0.5',  # 0.5fps for faster processing
             '-i', image_file['file_path'],
