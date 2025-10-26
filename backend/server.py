@@ -1844,26 +1844,27 @@ async def upload_to_youtube(
             str(video_path)
         ]
             
-            logging.info(f"Creating video with ffmpeg: {' '.join(ffmpeg_cmd)}")
+        
+        logging.info(f"Creating video with ffmpeg: {' '.join(ffmpeg_cmd)}")
+        
+        try:
+            # Run ffmpeg with timeout for large files (10 minutes)
+            result = subprocess.run(
+                ffmpeg_cmd, 
+                capture_output=True, 
+                text=True, 
+                timeout=600
+            )
             
-            try:
-                # Run ffmpeg with longer timeout for large files (10 minutes)
-                result = subprocess.run(
-                    ffmpeg_cmd, 
-                    capture_output=True, 
-                    text=True, 
-                    timeout=600  # 10 minute timeout for 150MB+ files
-                )
-                
-                if result.returncode != 0:
-                    logging.error(f"FFmpeg error: {result.stderr}")
-                    raise Exception(f"Video creation failed: {result.stderr[:500]}")
-                
-                logging.info(f"Video created successfully at {video_path}")
-                
-            except subprocess.TimeoutExpired:
-                logging.error("FFmpeg timeout - file too large or system overloaded")
-                raise Exception("Video creation timed out. File may be too large (>150MB). Consider uploading a shorter audio file.")
+            if result.returncode != 0:
+                logging.error(f"FFmpeg error: {result.stderr}")
+                raise Exception(f"Video creation failed: {result.stderr[:500]}")
+            
+            logging.info(f"Video created successfully at {video_path}")
+            
+        except subprocess.TimeoutExpired:
+            logging.error("FFmpeg timeout - file too large")
+            raise Exception("Video creation timed out. File may be too large (>150MB).")
         
         # Upload to YouTube
         youtube = build('youtube', 'v3', credentials=credentials)
