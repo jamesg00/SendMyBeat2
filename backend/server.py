@@ -1890,16 +1890,32 @@ async def upload_to_youtube(
         
         logging.info(f"Uploading to YouTube with title: {title}, tags: {len(tags)}, privacy: {privacy_status}")
         
-        media = MediaFileUpload(str(video_path), chunksize=-1, resumable=True)
+        # Use 5MB chunks for faster, resumable uploads
+        media = MediaFileUpload(str(video_path), chunksize=5*1024*1024, resumable=True)
         
-        logging.info(f"Starting YouTube upload...")
+        logging.info(f"Starting YouTube upload with chunked transfer...")
         request = youtube.videos().insert(
             part='snippet,status',
             body=body,
             media_body=media
         )
         
-        response = request.execute()
+        # Upload in chunks with progress tracking
+        response = None
+        retries = 0
+        max_retries = 3
+        
+        while response is None and retries < max_retries:
+            try:
+                status, response = request.next_chunk()
+                if status:
+                    progress = int(status.progress() * 100)
+                    logging.info(f"Upload progress: {progress}%")
+            except Exception as e:
+                logging.error(f"Upload error (retry {retries + 1}): {str(e)}")
+                retries += 1
+                if retries >= max_retries:
+                    raise
         
         logging.info(f"Video uploaded successfully! Video ID: {response['id']}")
         
