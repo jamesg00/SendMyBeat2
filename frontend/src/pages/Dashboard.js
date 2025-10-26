@@ -597,12 +597,12 @@ const Dashboard = ({ setIsAuthenticated }) => {
     // Warn for very large files
     const fileSizeMB = file.size / (1024 * 1024);
     if (fileSizeMB > 200) {
-      toast.error("File too large! Please use files under 200MB for best results.");
+      toast.error("File too large! Please use files under 200MB.");
       return;
     }
     
     if (fileSizeMB > 100) {
-      toast.warning(`${fileSizeMB.toFixed(0)}MB file detected. Upload may take 3-5 minutes...`, {duration: 5000});
+      toast.warning(`${fileSizeMB.toFixed(0)}MB file detected. Processing may take 3-5 minutes...`, {duration: 5000});
     }
 
     setUploadingAudio(true);
@@ -614,7 +614,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
     try {
       const response = await axios.post(`${API}/upload/audio`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 600000, // 10 minute timeout for large files
+        timeout: 600000,
         onUploadProgress: (progressEvent) => {
           const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
           setUploadProgress(percentCompleted);
@@ -622,14 +622,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
       });
       setAudioFile(file);
       setAudioFileId(response.data.file_id);
-      
-      // Check if it's a video file
-      const isVideo = file.name.match(/\.(mp4|mov)$/i);
-      toast.success(isVideo ? "Video uploaded!" : "Audio uploaded!");
+      toast.success("Audio uploaded!");
     } catch (error) {
       console.error("Upload error:", error);
-      const isVideo = file.name.match(/\.(mp4|mov)$/i);
-      toast.error(error.response?.data?.detail || (isVideo ? "Failed to upload video" : "Failed to upload audio"));
+      toast.error(error.response?.data?.detail || "Failed to upload audio");
     } finally {
       setUploadingAudio(false);
       setUploadProgress(0);
