@@ -1927,12 +1927,23 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                         Completed!
                                       </p>
                                       <p className="text-sm" style={{color: 'var(--text-primary)'}}>
-                                        You crushed it this day! You completed one of these tasks:
+                                        You crushed it this day! You completed:
                                       </p>
-                                      <ul className="text-sm space-y-1" style={{color: 'var(--text-secondary)'}}>
-                                        <li>• Generated YouTube tags</li>
-                                        <li>• Uploaded a beat to YouTube</li>
-                                        <li>• Created/edited a description</li>
+                                      <ul className="text-sm space-y-1">
+                                        <li className={selectedDay.activity === 'tag_generation' ? 'text-green-600 font-semibold' : ''} style={{color: selectedDay.activity === 'tag_generation' ? undefined : 'var(--text-secondary)'}}>
+                                          {selectedDay.activity === 'tag_generation' ? '✓ ' : '• '}Generated YouTube tags
+                                        </li>
+                                        <li className={selectedDay.activity === 'youtube_upload' ? 'text-green-600 font-semibold' : ''} style={{color: selectedDay.activity === 'youtube_upload' ? undefined : 'var(--text-secondary)'}}>
+                                          {selectedDay.activity === 'youtube_upload' ? '✓ ' : '• '}Uploaded a beat to YouTube
+                                        </li>
+                                        <li className={selectedDay.activity === 'description_work' ? 'text-green-600 font-semibold' : ''} style={{color: selectedDay.activity === 'description_work' ? undefined : 'var(--text-secondary)'}}>
+                                          {selectedDay.activity === 'description_work' ? '✓ ' : '• '}Created/edited a description
+                                        </li>
+                                        {selectedDay.activity === 'manual_checkin' && (
+                                          <li className="text-green-600 font-semibold">
+                                            ✓ Manual check-in
+                                          </li>
+                                        )}
                                       </ul>
                                     </div>
                                   )}
