@@ -594,20 +594,32 @@ const Dashboard = ({ setIsAuthenticated }) => {
     if (!file) return;
 
     setUploadingAudio(true);
+    setUploadProgress(0);
+    
     const formData = new FormData();
     formData.append('file', file);
 
     try {
       const response = await axios.post(`${API}/upload/audio`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+        headers: { 'Content-Type': 'multipart/form-data' },
+        onUploadProgress: (progressEvent) => {
+          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          setUploadProgress(percentCompleted);
+        }
       });
       setAudioFile(file);
       setAudioFileId(response.data.file_id);
-      toast.success("Audio uploaded!");
+      
+      // Check if it's a video file
+      const isVideo = file.name.match(/\.(mp4|mov)$/i);
+      toast.success(isVideo ? "Video uploaded!" : "Audio uploaded!");
     } catch (error) {
-      toast.error(error.response?.data?.detail || "Failed to upload audio");
+      console.error("Upload error:", error);
+      const isVideo = file.name.match(/\.(mp4|mov)$/i);
+      toast.error(error.response?.data?.detail || (isVideo ? "Failed to upload video" : "Failed to upload audio"));
     } finally {
       setUploadingAudio(false);
+      setUploadProgress(0);
     }
   };
 
