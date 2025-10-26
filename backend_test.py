@@ -863,11 +863,19 @@ class SendMyBeatAPITester:
         if not self.test_credit_usage_ai_generation():
             print("❌ AI credit usage test failed")
         
-        # BEAT ANALYZER TESTING (USER REPORTED ISSUE)
+        # CRITICAL FIXES VERIFICATION (USER REPORTED ISSUES)
         print("\n" + "=" * 60)
-        print("🎯 BEAT ANALYZER TESTING (USER REPORTED ISSUE)")
+        print("🎯 CRITICAL FIXES VERIFICATION (USER REPORTED ISSUES)")
         print("=" * 60)
         
+        # Test FFmpeg installation and YouTube upload capability
+        if not self.test_youtube_upload_ffmpeg():
+            print("❌ YouTube Upload FFmpeg test failed")
+        
+        if not self.test_youtube_upload_endpoint_structure():
+            print("❌ YouTube Upload endpoint structure test failed")
+        
+        # Test Beat Analyzer after frontend changes
         if not self.test_beat_analyzer_authentication():
             print("❌ Beat Analyzer authentication test failed")
         
