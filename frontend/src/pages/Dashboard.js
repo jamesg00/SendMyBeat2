@@ -84,6 +84,9 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [calendarData, setCalendarData] = useState(null);
   const [selectedDay, setSelectedDay] = useState(null);
 
+  // Check-in prompt state
+  const [showCheckinPrompt, setShowCheckinPrompt] = useState(false);
+
   // Beat Analyzer states
   const [beatAnalysis, setBeatAnalysis] = useState(null);
   const [analyzingBeat, setAnalyzingBeat] = useState(false);
