@@ -1306,11 +1306,26 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         variant="outline"
                         size="sm"
                         className="border-yellow-500 text-yellow-600 hover:bg-yellow-50 dark:text-yellow-400 dark:hover:bg-yellow-950"
+                        title={!uploadTitle ? "Please add a title first" : generatedTags.length === 0 ? "Please generate tags in the Tags tab first" : "Analyze your beat"}
                       >
                         {analyzingBeat ? "Analyzing..." : "Analyze Beat"}
                       </Button>
                     </div>
                     
+                    {(!uploadTitle || generatedTags.length === 0) && !beatAnalysis && !analyzingBeat && (
+                      <Alert className="mb-3">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription>
+                          {!uploadTitle && generatedTags.length === 0 ? (
+                            <>First, go to the <strong>Tags</strong> tab to generate tags, then come back here and add a title to analyze your beat.</>
+                          ) : !uploadTitle ? (
+                            <>Add a title below to analyze your beat.</>
+                          ) : (
+                            <>Go to the <strong>Tags</strong> tab to generate tags first, then come back here to analyze.</>
+                          )}
+                        </AlertDescription>
+                      </Alert>
+                    )}
                     {beatAnalysis && (
                       <div className="space-y-3 mt-4">
                         {/* Overall Score */}
