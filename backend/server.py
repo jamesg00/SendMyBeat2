@@ -1498,9 +1498,14 @@ async def upload_audio(file: UploadFile = File(...), current_user: dict = Depend
         filename = f"{file_id}{file_ext}"
         file_path = UPLOADS_DIR / filename
         
-        # Save file
+        # Save file with chunked reading for better performance
+        chunk_size = 1024 * 1024  # 1MB chunks
         with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+            while True:
+                chunk = await file.read(chunk_size)
+                if not chunk:
+                    break
+                buffer.write(chunk)
         
         # Save metadata to database
         upload_doc = {
@@ -1537,9 +1542,14 @@ async def upload_image(file: UploadFile = File(...), current_user: dict = Depend
         filename = f"{file_id}{file_ext}"
         file_path = UPLOADS_DIR / filename
         
-        # Save file
+        # Save file with chunked reading for better performance
+        chunk_size = 1024 * 1024  # 1MB chunks
         with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+            while True:
+                chunk = await file.read(chunk_size)
+                if not chunk:
+                    break
+                buffer.write(chunk)
         
         # Save metadata to database
         upload_doc = {
