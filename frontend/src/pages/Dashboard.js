@@ -250,6 +250,15 @@ const Dashboard = ({ setIsAuthenticated }) => {
     }
   };
 
+  const promptCheckin = () => {
+    // Only show if user has started the challenge and hasn't checked in today
+    if (growthData && growthData.challenge_start_date) {
+      const today = new Date().toISOString().split('T')[0];
+      if (growthData.last_checkin_date !== today) {
+        setShowCheckinPrompt(true);
+      }
+    }
+  };
 
   const handleGenerateTags = async (e) => {
     e.preventDefault();
