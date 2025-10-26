@@ -208,7 +208,7 @@ const PrivacyPolicy = () => {
                 If you have any questions about this privacy policy or our data practices, please contact us:
               </p>
               <ul className="space-y-2">
-                <li><strong>Website:</strong> <a href="https://musicai-11.preview.emergentagent.com" className="${isDark ? 'text-blue-400' : 'text-blue-600'} hover:underline">SendMyBeat.com</a></li>
+                <li><strong>Website:</strong> <a href="https://musicprodai-1.preview.emergentagent.com" className="${isDark ? 'text-blue-400' : 'text-blue-600'} hover:underline">SendMyBeat.com</a></li>
                 <li><strong>For Data Requests:</strong> Use the contact form on our website</li>
               </ul>
             </section>

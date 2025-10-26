@@ -1,87 +1,95 @@
 <analysis>
-The AI engineer successfully built SendMyBeat.com, a full-stack application, evolving it from a basic MVP to a feature-rich product. Initial development focused on core functionalities like AI tag generation, description management, and JWT authentication using React, FastAPI, and MongoDB. The project iteratively integrated advanced features such as YouTube video upload with Google OAuth and FFmpeg, a Stripe subscription paywall with credit tracking, and a comprehensive UI redesign. Throughout the process, the engineer demonstrated strong debugging skills by resolving critical issues, including Google OAuth redirect mismatches, Stripe API key loading order, FFmpeg installation, credit decrement logic, and frontend UI synchronization. Significant work was also done on improving the tag generation algorithm to use a hybrid, data-driven approach, and adding user experience features like progress bars and confirmation dialogues.
+The AI engineer successfully guided SendMyBeat.com from an MVP to a feature-rich application, meticulously addressing user feedback. Initial work involved resolving critical Stripe subscription display issues, which stemmed from an unconfigured webhook secret and missing  in user documents. The engineer then reverted the tag generation algorithm to a previous, higher-volume version as per user request.
+
+Subsequently, a Stripe Customer Portal integration was added for subscription management, alongside extensive YouTube Analytics functionality. This required fixing OAuth scope mismatches and refining AI prompts for detailed, actionable insights, as well as resolving JSON parsing errors from the LLM.
+
+A major feature, Grow in 120 (a gamified streak system), was implemented, encompassing backend models, endpoints, frontend UI, and activity-based check-ins. Frontend JSX errors were debugged. Further refinements included SEO optimizations, YouTube profile picture display, and dark mode styling fixes.
+
+The latest focus involved enhancing the YouTube upload section: fixing FFmpeg installation and video upload issues, adding a Beat Analyzer AI prediction tool, enabling individual tag deletion, and implementing a check-in reminder popup. Most recently, the capability to upload MP4 videos was added and subsequently reverted to audio-only with a new video preview functionality, while simultaneously debugging related FFmpeg and indentation issues.
 </analysis>
 
 <product_requirements>
-SendMyBeat.com aims to empower music producers by enhancing beat discoverability. The application's core features include:
-1.  **AI Tag Generation & Refinement**: Generate advanced, search-optimized tags (now using a sophisticated hybrid pipeline for YouTube discovery) and refine them for better results. Initially, 2 daily generations were free; this was updated to 3, with unlimited access for subscribers.
-2.  **Description Management**: Save, manage, and refine custom or AI-generated descriptions as templates, with copy-paste functionality.
-3.  **YouTube Integration**: Upload image and audio files (MP3/WAV, now including WEBM) to YouTube with Google OAuth. Supports public, unlisted, private visibility, automatically applying generated tags/descriptions. Free users get 3 daily uploads, subscribers get unlimited.
-4.  **Monetization**: Implement Stripe subscriptions for unlimited AI usage and YouTube uploads. Free users have a daily limit of 3 for each. AdSense banners are integrated for free users.
-5.  **UI/UX**: Modern design with dark/light mode, collapsible description lists, and a progress bar for long operations. The free tier credit display was redesigned, and confirmation dialogs for deletion and cancel options for ongoing tasks were added.
-6.  **Information Pages**: Terms and Conditions, About pages, and a global footer with social media links (Instagram, YouTube, SoundCloud). A Google OAuth explanation for verification was added to the landing page.
+SendMyBeat.com empowers music producers by boosting beat discoverability through several core functionalities. It provides **AI Tag Generation & Refinement**, initially offering 2 free daily generations (now 3) with unlimited access for subscribers, utilizing a sophisticated hybrid pipeline for YouTube. Users can **Manage Descriptions**, saving and refining them as templates. **YouTube Integration** allows uploading audio and image files (originally WAV/MP3, briefly MP4/MOV, now back to audio+image for video creation) with Google OAuth, applying generated tags/descriptions. This includes 3 free daily uploads, unlimited for subscribers. **Monetization** is handled via Stripe subscriptions and Google AdSense banners for free users. The **UI/UX** features a modern design with dark/light mode, collapsible lists, progress bars for long operations, redesigned credit displays, and confirmation dialogs. Additionally, **Information Pages** like Terms and Conditions and About exist, along with a global footer. Recent additions include a comprehensive **YouTube Analytics** section offering personalized insights and recommendations for channel growth (using 1 credit per analysis), and a **Grow in 120** gamified streak system to encourage consistent uploads and engagement, featuring a 120-day calendar, streak counter, milestone badges, and activity tracking.
 </product_requirements>
 
 <key_technical_concepts>
--   **Full-stack**: React, FastAPI, MongoDB.
--   **Authentication**: JWT, Google OAuth 2.0.
--   **AI/LLM**: OpenAI GPT-4o (via Emergent LLM key), sophisticated tag generation pipeline.
--   **Media**: FFmpeg (video creation).
--   **Payments**: Stripe (subscriptions, webhooks).
--   **UI/Styling**: Shadcn UI, Tailwind CSS, Dark/Light mode.
--   **External Integration**: YouTube Data API, Google AdSense.
+- **Full-stack**: React, FastAPI, MongoDB.
+- **Authentication**: JWT, Google OAuth 2.0.
+- **AI/LLM**: OpenAI GPT-4o (via Emergent LLM key) for tag generation, YouTube analytics, and beat analysis.
+- **Media**: FFmpeg (for video creation from audio+image).
+- **Payments**: Stripe (subscriptions, webhooks, Customer Portal).
+- **UI/Styling**: Shadcn UI, Tailwind CSS, Dark/Light mode.
+- **External Integration**: YouTube Data API, Google AdSense.
 </key_technical_concepts>
 
 <code_architecture>
-The application utilizes a standard full-stack architecture with a React frontend, FastAPI backend, and MongoDB database.
+The application uses a React frontend, FastAPI backend, and MongoDB database.
 
 
 
 -   **/app/backend/server.py**: The central FastAPI application.
-    -   **Summary**: Handles authentication, AI tag/description, YouTube OAuth/upload, and Stripe.
-    -   **Changes**: YouTube upload limits increased from 2 to 3. Stripe API key loading order was fixed (load_dotenv before key assignment). Credit decrement logic was ensured for all AI generation and YouTube upload endpoints. Integrated the new  for smarter tag generation. Added  image support for uploads.
--   **/app/backend/ai_tags_pipeline.py**: *New file*.
-    -   **Summary**: Implements a sophisticated YouTube tag generation algorithm using live YouTube autocomplete, LLM-generated candidates, template expansion, scoring, and MMR diversity selection to adhere to a 500-character budget.
-    -   **Changes**: Initial creation. Adjusted parameters (, ) and candidate pool size to generate 25-40 quality tags. Error handling for undefined 'text' variable in JSON parsing.
--   **/app/frontend/src/App.js**: Main React entry point.
-    -   **Summary**: Sets up client-side routing and global state.
-    -   **Changes**: Added routes for , , and globally integrated the  component.
--   **/app/frontend/src/pages/LandingPage.js**: Handles login/registration.
-    -   **Summary**: User authentication.
-    -   **Changes**: Added Google OAuth verification explanation at the bottom of the page.
+    -   **Summary**: Handles all backend logic including authentication, tag/description generation, YouTube OAuth/upload/analytics, Stripe payments, and the Grow in 120 system.
+    -   **Changes**:
+        -   Stripe webhook secret was updated, and subscription checking logic refined to correctly use  and . A new endpoint for Stripe Customer Portal () was added.  in  was updated to the preview URL.
+        -   The advanced  integration for tag generation was reverted to the simpler, older logic and the file was deleted.
+        -   New Pydantic models and endpoints for YouTube Analytics () were added, with an overhauled LLM prompt for more detailed and actionable insights, including robust JSON parsing and markdown extraction. YouTube OAuth scope was expanded to include .
+        -   Pydantic models and endpoints for Grow in 120 (, , ) were added. Auto check-in logic was integrated into YouTube uploads and tag generation, now tracking specific .
+        -   YouTube connection logic was modified to store  and . The  endpoint was updated to return these.
+        -   FFmpeg installation was verified and fixed ( was missing).
+        -   A new  endpoint for AI beat analysis was added.
+        -   The  endpoint was initially updated to handle video files (MP4/MOV) and was renamed conceptually to  with chunked uploads and async processing. This was later reverted back to **audio-only** handling, with FFmpeg used to combine audio with a static image into a video, and the bitrate was set to 128k. FFmpeg timeout increased.
+        -   Numerous minor bug fixes for indentation and error handling.
+-   **/app/backend/ai_tags_pipeline.py**: *Deleted file*.
+    -   **Summary**: Previously implemented a sophisticated tag generation algorithm.
+    -   **Changes**: Deleted as part of reverting to the old tag generation logic.
 -   **/app/frontend/src/pages/Dashboard.js**: The primary user interface.
-    -   **Summary**: UI for AI tag/description, YouTube upload, credit display, and subscription.
-    -   **Changes**: Updated to reflect 3 free daily uses.  now called on success and error for all credit-consuming actions. Integrated  and . Implemented confirmation for description deletion and cancel functionality for tag generation/uploads. Added a Refine Tags button. YouTube upload prompt was changed to Login to connect your YouTube account!.
+    -   **Summary**: Central dashboard for AI tag/description, YouTube upload, credit display, subscription management, analytics, and Grow in 120 features.
+    -   **Changes**:
+        -   Updated to correctly pass  prop to . UI for Manage Subscription button was added.
+        -   New Analytics and Grow in 120 tabs were added to the UI, along with corresponding state variables and handler functions.
+        -   Frontend JSX errors (duplicate , missing  icon) were fixed.
+        -   Check-in logic for Grow in 120 was updated to require actual work (tag generation/upload) before checking in, and the UI reflects this. Calendar displays day numbers, is clickable, and shows activity type.
+        -   YouTube profile picture and username are now displayed in the header and upload section when connected.
+        -   Dark mode styling for the YouTube upload disconnected state was fixed.
+        -   Individual delete buttons were added to recent tag generations in the tag history.
+        -   UI for Beat Analyzer (button, results display) was integrated into the Upload tab.
+        -   A check-in reminder popup now appears after tag generation, description refinement, or YouTube upload.
+        -   An upload progress bar was added to the YouTube upload section.
+        -   Initial support for MP4/MOV video upload and preview was added, then reverted to audio-only upload with a new **video preview player** for the audio+image composite.
+        -   File size warnings for uploads were added.
 -   **/app/frontend/src/components/SubscriptionBanner.js**: Displays subscription status and credits.
     -   **Summary**: Informs users about their subscription and credit usage.
-    -   **Changes**: Redesigned to show AI and upload credits in separate, side-by-side cards. Displays Unlimited for subscribed users and actual remaining credits for free users (now correctly ). Default values were removed to ensure data integrity.
--   **/app/frontend/src/components/Footer.js**: *New file*.
-    -   **Summary**: A global footer with social media links.
-    -   **Changes**: Created with Instagram, YouTube, and SoundCloud links. Instagram URL was corrected (removed ).
--   **/app/frontend/src/pages/PrivacyPolicy.js**: Static page for privacy policy.
-    -   **Summary**: Provides legal information.
-    -   **Changes**: Fixed styling to correctly adapt to dark/light themes and ensured the  properly affected the page's appearance.
--   **/app/frontend/src/components/AdBanner.js**: *New file*.
-    -   **Summary**: Placeholder component for Google AdSense ads.
-    -   **Changes**: Created to conditionally render ads for free users. Configured to load AdSense script programmatically and use .
--   **/app/frontend/src/components/ProgressBar.js**: *New file*.
-    -   **Summary**: A bottom-aligned progress bar.
-    -   **Changes**: Created to show progress during tag generation and YouTube uploads, including a cancel button.
--   **/app/frontend/.env**: Frontend environment variables.
-    -   **Summary**: Contains .
-    -   **Changes**: Added .
+    -   **Changes**: A Manage Subscription button was added for Pro users, which links to the Stripe Customer Portal.
 -   **/app/frontend/public/index.html**: Main HTML file.
     -   **Summary**: Base structure of the frontend application.
-    -   **Changes**: Temporarily removed direct AdSense script to integrate it via  component for better control.
--   **/app/OAUTH_AND_ADSENSE_SETUP.md**: *New file*.
-    -   **Summary**: Instructions for setting up Google OAuth redirect URI and AdSense.
-    -   **Changes**: Initial creation.
--   **/app/SQUARESPACE_OAUTH_SETUP.md**: *New file*.
-    -   **Summary**: Specific instructions for Squarespace OAuth setup.
-    -   **Changes**: Initial creation.
+    -   **Changes**: Added comprehensive SEO meta tags (title, description, Open Graph, Twitter Card, Schema.org structured data).
+-   **/app/frontend/src/pages/LandingPage.js**: Handles login/registration.
+    -   **Summary**: User authentication and marketing content.
+    -   **Changes**: Updated with improved SEO-optimized copy, new feature cards for Analytics and Grow in 120, and enhanced existing feature descriptions.
+-   **/app/frontend/.env**: Frontend environment variables.
+    -   **Summary**: Contains  and .
+    -   **Changes**:  was modified to match the preview URL.
+-   **/app/backend/.env**: Backend environment variables.
+    -   **Summary**: Contains , , etc.
+    -   **Changes**:  was updated from placeholder to user-provided secret.  was updated to the preview URL.
 </code_architecture>
 
 <pending_tasks>
--   User needs to configure the Google OAuth redirect URI in their Google Cloud Console to match  (or their actual Squarespace domain).
--   User needs to verify that the credit updates for AI generations and YouTube uploads are correctly displayed and decremented on the frontend.
--   User needs to verify the AdSense ads are showing correctly (once in production or with development override).
--   The current work on Stripe subscription display for unlimited usage needs to be resolved.
+- User needs to configure the Google OAuth redirect URI in their Google Cloud Console to match .
+- User needs to configure the Stripe Customer Portal in their Stripe Dashboard (live mode).
+- User needs to reconnect their YouTube account to grant the expanded  OAuth scope.
 </pending_tasks>
 
 <current_work>
-Immediately preceding this summary, the AI engineer was addressing a critical bug where a newly purchased Stripe subscription was not reflected on the frontend; users still saw 0 remaining credits instead of unlimited. The investigation revealed that while the backend  function's logic appeared correct, a Key Error ( instead of ) prevented a manual query for a user document during debugging. This indicated potential issues in database access or environment variable consistency. After fixing the  reference and manually updating a user's subscription in MongoDB for testing purposes, the engineer's last action was checking the  component on the frontend. The engineer confirmed the 's  prop correctly handles unlimited display but recognized that the underlying issue was likely  not being properly set or updated from the backend's response, leading to the ongoing investigation into response mapping.
+Immediately preceding this summary, the AI engineer was addressing a persistent issue with video uploads. After initial attempts to optimize for large MP4 files and implement streaming uploads, the user requested to revert to the previous audio-only upload mechanism but with an added preview functionality to show the user the combined audio-image video before uploading to YouTube.
+
+The AI engineer performed several changes to fulfill this:
+1.  **Backend ()**: Reverted modifications related to direct MP4 video handling, ensuring the system processes audio and an image to create a video via FFmpeg. The FFmpeg bitrate was adjusted to 128k, and cleanup logic was corrected. The backend was also being debugged for a persistent  within the FFmpeg processing block, with the last action being a fix for double blank lines and incorrect logging indentation.
+2.  **Frontend ()**: Reverted UI changes that allowed MP4 uploads, making the upload form audio-only again. A new  component and state management (, ) were introduced to display a preview of the combined audio and image video before it's sent to YouTube.
+
+The engineer is currently in the process of ensuring these reverts and the new preview feature are correctly implemented and free of errors, specifically having just fixed an indentation error in the backend.
 </current_work>
 
 <optional_next_step>
-Investigate why the  status is not correctly propagating from the backend subscription status endpoint to the frontend's  component.
+Ensure the backend server restarts successfully after the indentation fix and verify the new video preview functionality on the frontend.
 </optional_next_step>

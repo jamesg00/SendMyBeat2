@@ -528,7 +528,7 @@ agent_communication:
       🔧 TECHNICAL NOTES:
       - AI generation takes 25-35 seconds (LiteLLM + GPT-4o processing time)
       - All credit systems working atomically with proper MongoDB operations
-      - Backend URL: https://musicai-11.preview.emergentagent.com/api
+      - Backend URL: https://musicprodai-1.preview.emergentagent.com/api
       - All endpoints responding correctly with proper error handling
       
       RECOMMENDATION: Backend is production-ready. Proceed with frontend testing.

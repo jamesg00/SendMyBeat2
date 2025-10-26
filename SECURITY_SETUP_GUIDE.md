@@ -58,7 +58,7 @@ User can upload videos anytime, even days/weeks later
    App name: SendMyBeat
    User support email: your-email@gmail.com
    App logo: (optional, upload your logo)
-   Application home page: https://musicai-11.preview.emergentagent.com
+   Application home page: https://musicprodai-1.preview.emergentagent.com
    Authorized domains: emergentagent.com
    Developer contact: your-email@gmail.com
    ```
@@ -88,10 +88,10 @@ User can upload videos anytime, even days/weeks later
    Name: SendMyBeat Web Client
    
    Authorized JavaScript origins:
-   https://musicai-11.preview.emergentagent.com
+   https://musicprodai-1.preview.emergentagent.com
    
    Authorized redirect URIs:
-   https://musicai-11.preview.emergentagent.com/youtube-callback
+   https://musicprodai-1.preview.emergentagent.com/youtube-callback
    ```
    
    Click "Create"
@@ -155,7 +155,7 @@ GOOGLE_CLIENT_ID=123456789-abcdefghijklmnop.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=GOCSPX-your_actual_client_secret_here
 
 # Frontend URL (already correct for preview)
-FRONTEND_URL=https://musicai-11.preview.emergentagent.com
+FRONTEND_URL=https://musicprodai-1.preview.emergentagent.com
 ```
 
 ### Important Security Notes:
@@ -255,7 +255,7 @@ Visit: https://console.cloud.google.com/apis/credentials
 ### Error: "redirect_uri_mismatch"
 **Fix:** Make sure redirect URI in Google Console exactly matches:
 ```
-https://musicai-11.preview.emergentagent.com/youtube-callback
+https://musicprodai-1.preview.emergentagent.com/youtube-callback
 ```
 
 ### Error: "invalid_client"
