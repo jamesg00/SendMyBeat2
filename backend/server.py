@@ -1259,7 +1259,10 @@ Format: Return ONLY the tags separated by commas, no numbering or extra text. Ma
                 total_days = growth.get('total_days_completed', 0) + 1
                 longest_streak = max(growth.get('longest_streak', 0), current_streak)
                 calendar = growth.get('calendar', {})
-                calendar[today] = 'completed'
+                calendar[today] = {
+                    "status": "completed",
+                    "activity": "tag_generation"
+                }
                 
                 await db.growth_streaks.update_one(
                     {"user_id": current_user['id']},
