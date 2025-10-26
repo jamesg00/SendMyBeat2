@@ -295,6 +295,33 @@ backend:
         agent: "main"
         comment: "REVERTED: Removed ai_tags_pipeline.py and restored original simple tag generation that asks GPT-4o for 500 tags directly. System now generates large quantity of tags like before. Backend restarted."
 
+  - task: "Beat Analyzer AI prediction tool"
+    implemented: true
+    working: false
+    file: "/app/backend/server.py, /app/frontend/src/pages/Dashboard.js"
+    stuck_count: 1
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: false
+        agent: "user"
+        comment: "User reported: Beat Analyzer feature stopped working. It's in the YouTube upload function."
+      - working: "investigating"
+        agent: "main"
+        comment: "Investigating Beat Analyzer issue. Backend endpoint at /api/beat/analyze exists and looks correct. Frontend has handleAnalyzeBeat function that calls the endpoint. Need to test if endpoint is accessible and what errors are occurring."
+
+  - task: "Video preview for YouTube upload"
+    implemented: true
+    working: "pending_verification"
+    file: "/app/backend/server.py, /app/frontend/src/pages/Dashboard.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "pending_verification"
+        agent: "main"
+        comment: "NEW FEATURE: Reverted to audio-only upload with new video preview functionality. Backend uses FFmpeg to combine audio with static image at 128k bitrate. Frontend shows video preview before uploading to YouTube. FFmpeg indentation error fixed. Need to verify feature works end-to-end."
+
   - task: "YouTube integration endpoints"
     implemented: true
     working: true
