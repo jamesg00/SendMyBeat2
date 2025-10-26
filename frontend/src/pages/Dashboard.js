@@ -82,6 +82,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [growthData, setGrowthData] = useState(null);
   const [loadingGrowth, setLoadingGrowth] = useState(false);
   const [calendarData, setCalendarData] = useState(null);
+  const [selectedDay, setSelectedDay] = useState(null);
 
   // Beat Analyzer states
   const [beatAnalysis, setBeatAnalysis] = useState(null);
