@@ -1861,12 +1861,12 @@ async def upload_to_youtube(
             logging.info(f"Creating video with ffmpeg: {' '.join(ffmpeg_cmd)}")
             
             try:
-                # Run ffmpeg with timeout (max 2 minutes for video creation)
+                # Run ffmpeg with longer timeout for large files (10 minutes)
                 result = subprocess.run(
                     ffmpeg_cmd, 
                     capture_output=True, 
                     text=True, 
-                    timeout=120  # 2 minute timeout
+                    timeout=600  # 10 minute timeout for 150MB+ files
                 )
                 
                 if result.returncode != 0:
@@ -1876,8 +1876,8 @@ async def upload_to_youtube(
                 logging.info(f"Video created successfully at {video_path}")
                 
             except subprocess.TimeoutExpired:
-                logging.error("FFmpeg timeout - video creation took too long")
-                raise Exception("Video creation timed out. Please try with a shorter audio file.")
+                logging.error("FFmpeg timeout - file too large or system overloaded")
+                raise Exception("Video creation timed out. File may be too large (>150MB). Consider uploading a shorter audio file.")
         
         # Upload to YouTube
         youtube = build('youtube', 'v3', credentials=credentials)
