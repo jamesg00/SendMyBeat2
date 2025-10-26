@@ -1302,7 +1302,15 @@ const Dashboard = ({ setIsAuthenticated }) => {
                           <label htmlFor="audio-upload" className="cursor-pointer">
                             <Upload className="h-8 w-8 mx-auto mb-2 text-slate-400" />
                             {uploadingAudio ? (
-                              <p className="text-sm text-slate-600">Uploading...</p>
+                              <div>
+                                <p className="text-sm text-slate-600 mb-2">Uploading... {uploadProgress}%</p>
+                                <div className="w-full bg-gray-200 rounded-full h-2">
+                                  <div 
+                                    className="bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full transition-all duration-300"
+                                    style={{width: `${uploadProgress}%`}}
+                                  />
+                                </div>
+                              </div>
                             ) : audioFile ? (
                               <p className="text-sm text-green-600 font-medium">{audioFile.name}</p>
                             ) : (
