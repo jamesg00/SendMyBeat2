@@ -754,6 +754,17 @@ class SendMyBeatAPITester:
         if not self.test_credit_usage_ai_generation():
             print("❌ AI credit usage test failed")
         
+        # BEAT ANALYZER TESTING (USER REPORTED ISSUE)
+        print("\n" + "=" * 60)
+        print("🎯 BEAT ANALYZER TESTING (USER REPORTED ISSUE)")
+        print("=" * 60)
+        
+        if not self.test_beat_analyzer_authentication():
+            print("❌ Beat Analyzer authentication test failed")
+        
+        if not self.test_beat_analyzer_endpoint():
+            print("❌ Beat Analyzer endpoint test failed")
+        
         # CRITICAL CONCURRENT TESTING
         print("\n" + "=" * 60)
         print("⚡ CRITICAL CONCURRENT TESTING")
