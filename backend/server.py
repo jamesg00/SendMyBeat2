@@ -1843,7 +1843,6 @@ async def upload_to_youtube(
             '-y',
             str(video_path)
         ]
-            
         
         logging.info(f"Creating video with ffmpeg: {' '.join(ffmpeg_cmd)}")
         
