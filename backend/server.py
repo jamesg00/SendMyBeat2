@@ -907,9 +907,22 @@ async def daily_checkin(current_user: dict = Depends(get_current_user)):
         total_days = growth.get('total_days_completed', 0) + 1
         longest_streak = max(growth.get('longest_streak', 0), current_streak)
         
-        # Update calendar
+        # Update calendar with activity
         calendar = growth.get('calendar', {})
-        calendar[today] = 'completed'
+        
+        # Determine activity type based on what was done today
+        activity_done = "manual_checkin"  # default
+        
+        # Check what activity was actually done
+        if tag_today:
+            activity_done = "tag_generation"
+        elif desc_today:
+            activity_done = "description_work"
+        
+        calendar[today] = {
+            "status": "completed",
+            "activity": activity_done
+        }
         
         # Check for badge unlocks
         badge_unlocked = None
