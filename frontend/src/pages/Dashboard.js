@@ -1412,6 +1412,44 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         </Select>
                       </div>
 
+                      {/* Preview Player */}
+                      {audioFile && imageFile && (
+                        <Card className="producer-card border-l-4 border-blue-500">
+                          <CardHeader>
+                            <CardTitle className="text-lg flex items-center gap-2">
+                              <Music className="h-5 w-5 text-blue-500" />
+                              Preview Your Beat Video
+                            </CardTitle>
+                            <CardDescription>See how your beat will look on YouTube</CardDescription>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="relative rounded-lg overflow-hidden" style={{backgroundColor: '#000'}}>
+                              <img 
+                                src={URL.createObjectURL(imageFile)} 
+                                alt="Beat cover"
+                                className="w-full h-auto"
+                              />
+                              <div className="absolute bottom-0 left-0 right-0 p-4" style={{background: 'linear-gradient(transparent, rgba(0,0,0,0.8))'}}>
+                                <audio 
+                                  controls 
+                                  className="w-full"
+                                  src={URL.createObjectURL(audioFile)}
+                                  style={{
+                                    height: '40px',
+                                    filter: 'invert(1) hue-rotate(180deg)'
+                                  }}
+                                >
+                                  Your browser doesn't support audio
+                                </audio>
+                              </div>
+                            </div>
+                            <p className="text-sm mt-3 text-center" style={{color: 'var(--text-secondary)'}}>
+                              This is how your beat video will appear on YouTube (720p, audio quality: 128kbps)
+                            </p>
+                          </CardContent>
+                        </Card>
+                      )}
+
                       {/* Beat Analyzer Section */}
                       <Card className="producer-card border-l-4 border-yellow-500">
                         <CardContent className="p-4">
