@@ -1831,26 +1831,29 @@ async def upload_to_youtube(
             if not image_file:
                 raise HTTPException(status_code=404, detail="Image file required for audio uploads")
             
-            # Create video from audio + image using ffmpeg (optimized settings)
+            # Create video from audio + image using ffmpeg (EXTREME optimization for large files)
             import subprocess
             video_filename = f"{uuid.uuid4()}.mp4"
             video_path = UPLOADS_DIR / video_filename
             
-            # Optimized ffmpeg command for faster processing
+            # ULTRA-FAST ffmpeg command for large audio files
             ffmpeg_cmd = [
                 '/usr/bin/ffmpeg',
                 '-loop', '1',
-                '-framerate', '1',  # Only 1 frame per second since image is static
+                '-framerate', '0.5',  # 0.5fps = 1 frame every 2 seconds (MUCH faster)
                 '-i', image_file['file_path'],
                 '-i', audio_file['file_path'],
                 '-c:v', 'libx264',
-                '-preset', 'ultrafast',  # Much faster encoding
+                '-preset', 'ultrafast',  # Fastest preset
+                '-crf', '28',  # Higher CRF = smaller file, faster encoding (18-28 range, 28 is fast)
                 '-tune', 'stillimage',
                 '-c:a', 'aac',
-                '-b:a', '128k',  # Lower audio bitrate for faster processing
+                '-b:a', '96k',  # Even lower audio bitrate for speed
                 '-pix_fmt', 'yuv420p',
+                '-vf', 'scale=1280:720',  # Downscale to 720p for MUCH smaller file
                 '-shortest',
-                '-movflags', '+faststart',  # Optimize for web streaming
+                '-movflags', '+faststart',
+                '-threads', '0',  # Use all CPU cores
                 '-y',
                 str(video_path)
             ]
