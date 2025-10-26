@@ -1297,12 +1297,12 @@ const Dashboard = ({ setIsAuthenticated }) => {
                     {/* File Uploads */}
                     <div className="grid md:grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label htmlFor="audio-upload">Audio/Video File (MP3, WAV, MP4)</Label>
+                        <Label htmlFor="audio-upload">Audio File (MP3, WAV)</Label>
                         <div className="border-2 border-dashed border-slate-300 rounded-lg p-4 text-center">
                           <Input
                             id="audio-upload"
                             type="file"
-                            accept=".mp3,.wav,.m4a,.flac,.ogg,.mp4,.mov"
+                            accept=".mp3,.wav,.m4a,.flac,.ogg"
                             onChange={handleAudioUpload}
                             className="hidden"
                             data-testid="audio-upload-input"
@@ -1322,23 +1322,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
                             ) : audioFile ? (
                               <p className="text-sm text-green-600 font-medium">{audioFile.name}</p>
                             ) : (
-                              <p className="text-sm text-slate-600">Click to upload audio/video</p>
+                              <p className="text-sm text-slate-600">Click to upload audio</p>
                             )}
                           </label>
                         </div>
-                        
-                        {/* Video Preview */}
-                        {audioFile && audioFile.name.match(/\.(mp4|mov)$/i) && (
-                          <div className="mt-2">
-                            <video 
-                              controls 
-                              className="w-full rounded-lg max-h-48"
-                              src={audioFile.preview || URL.createObjectURL(audioFile)}
-                            >
-                              Your browser doesn't support video preview
-                            </video>
-                          </div>
-                        )}
                       </div>
 
                       <div className="space-y-2">
