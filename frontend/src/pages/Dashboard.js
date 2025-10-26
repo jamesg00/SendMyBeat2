@@ -2049,6 +2049,53 @@ const Dashboard = ({ setIsAuthenticated }) => {
         onUpgrade={handleUpgrade}
         loading={upgradingSubscription}
       />
+
+      {/* Check-in Prompt Dialog */}
+      <Dialog open={showCheckinPrompt} onOpenChange={setShowCheckinPrompt}>
+        <DialogContent className="sm:max-w-md" data-testid="checkin-prompt-dialog">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <span className="text-2xl">🔥</span>
+              Keep Your Streak Alive!
+            </DialogTitle>
+            <DialogDescription>
+              Great work! You just completed an activity. Check in now to maintain your Grow in 120 streak!
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {growthData && (
+              <div className="text-center p-4 rounded-lg" style={{backgroundColor: 'var(--bg-secondary)'}}>
+                <p className="text-3xl font-bold gradient-text mb-1">{growthData.current_streak}</p>
+                <p className="text-sm font-semibold" style={{color: 'var(--text-secondary)'}}>Day Streak</p>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <Button
+                onClick={async () => {
+                  setShowCheckinPrompt(false);
+                  await handleCheckin();
+                }}
+                className="flex-1 btn-modern"
+                data-testid="checkin-now-btn"
+              >
+                <CheckCircle2 className="mr-2 h-5 w-5" />
+                Check In Now
+              </Button>
+              <Button
+                onClick={() => setShowCheckinPrompt(false)}
+                variant="outline"
+                className="flex-1"
+                data-testid="checkin-later-btn"
+              >
+                Maybe Later
+              </Button>
+            </div>
+            <p className="text-xs text-center" style={{color: 'var(--text-secondary)'}}>
+              You can also check in from the "Grow in 120" tab anytime
+            </p>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
