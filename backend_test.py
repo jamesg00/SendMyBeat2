@@ -579,8 +579,8 @@ class SendMyBeatAPITester:
         return False
 
     def test_beat_analyzer_endpoint(self):
-        """Test Beat Analyzer endpoint - USER REPORTED ISSUE"""
-        print("\n🔍 Testing Beat Analyzer Endpoint (USER REPORTED ISSUE)...")
+        """Test Beat Analyzer endpoint - USER REPORTED ISSUE (RETEST AFTER FRONTEND CHANGES)"""
+        print("\n🔍 Testing Beat Analyzer Endpoint (USER REPORTED ISSUE - RETEST AFTER FRONTEND CHANGES)...")
         
         # Get initial credits to ensure we have credits for testing
         success, initial_status = self.run_test(
@@ -598,9 +598,9 @@ class SendMyBeatAPITester:
         
         # Test data as specified in the review request
         beat_data = {
-            "title": "Hard Trap Beat 2024",
-            "tags": ["trap", "beat", "instrumental", "hard", "type beat"],
-            "description": "Hard trap instrumental"
+            "title": "Drake Type Beat 2024",
+            "tags": ["drake", "type beat", "hip hop", "rap", "instrumental"],
+            "description": "Drake style beat"
         }
         
         if initial_credits > 0:
@@ -651,7 +651,7 @@ class SendMyBeatAPITester:
                 print(f"   ✓ Weaknesses: {len(response['weaknesses'])} items")
                 print(f"   ✓ Suggestions: {len(response['suggestions'])} items")
                 
-                self.log_test("Beat Analyzer - Full Analysis", True, "All response fields valid")
+                self.log_test("Beat Analyzer - Full Analysis", True, "All response fields valid and working after frontend changes")
                 return True
             else:
                 # Check if it's an authentication issue
