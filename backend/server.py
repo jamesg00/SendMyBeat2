@@ -1814,45 +1814,35 @@ async def upload_to_youtube(
         audio_file = await db.uploads.find_one({"id": audio_file_id, "user_id": current_user['id']})
         image_file = await db.uploads.find_one({"id": image_file_id, "user_id": current_user['id']})
         
-        if not audio_file:
-            raise HTTPException(status_code=404, detail="Audio/video file not found")
+        if not audio_file or not image_file:
+            raise HTTPException(status_code=404, detail="Audio and image files are required")
         
-        # Check if audio file is actually a video
-        if audio_file['file_type'] == 'video':
-            # Use the video directly, no need to create one
-            video_path = Path(audio_file['file_path'])
-            logging.info(f"Using uploaded video directly: {video_path}")
-        else:
-            # It's audio - need to create video with image
-            if not image_file:
-                raise HTTPException(status_code=404, detail="Image file required for audio uploads")
-            
-            # Create video from audio + image using ffmpeg (EXTREME optimization for large files)
-            import subprocess
-            video_filename = f"{uuid.uuid4()}.mp4"
-            video_path = UPLOADS_DIR / video_filename
-            
-            # ULTRA-FAST ffmpeg command for large audio files
-            ffmpeg_cmd = [
-                '/usr/bin/ffmpeg',
-                '-loop', '1',
-                '-framerate', '0.5',  # 0.5fps = 1 frame every 2 seconds (MUCH faster)
-                '-i', image_file['file_path'],
-                '-i', audio_file['file_path'],
-                '-c:v', 'libx264',
-                '-preset', 'ultrafast',  # Fastest preset
-                '-crf', '28',  # Higher CRF = smaller file, faster encoding (18-28 range, 28 is fast)
-                '-tune', 'stillimage',
-                '-c:a', 'aac',
-                '-b:a', '96k',  # Even lower audio bitrate for speed
-                '-pix_fmt', 'yuv420p',
-                '-vf', 'scale=1280:720',  # Downscale to 720p for MUCH smaller file
-                '-shortest',
-                '-movflags', '+faststart',
-                '-threads', '0',  # Use all CPU cores
-                '-y',
-                str(video_path)
-            ]
+        # Create video from audio + image using ffmpeg
+        import subprocess
+        video_filename = f"{uuid.uuid4()}.mp4"
+        video_path = UPLOADS_DIR / video_filename
+        
+        # Optimized ffmpeg command for large files
+        ffmpeg_cmd = [
+            '/usr/bin/ffmpeg',
+            '-loop', '1',
+            '-framerate', '0.5',  # 0.5fps for faster processing
+            '-i', image_file['file_path'],
+            '-i', audio_file['file_path'],
+            '-c:v', 'libx264',
+            '-preset', 'ultrafast',
+            '-crf', '28',
+            '-tune', 'stillimage',
+            '-c:a', 'aac',
+            '-b:a', '128k',  # Keep 128k bitrate
+            '-pix_fmt', 'yuv420p',
+            '-vf', 'scale=1280:720',
+            '-shortest',
+            '-movflags', '+faststart',
+            '-threads', '0',
+            '-y',
+            str(video_path)
+        ]
             
             logging.info(f"Creating video with ffmpeg: {' '.join(ffmpeg_cmd)}")
             
