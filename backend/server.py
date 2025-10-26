@@ -1903,8 +1903,13 @@ async def upload_to_youtube(
         
         logging.info(f"Uploading to YouTube with title: {title}, tags: {len(tags)}, privacy: {privacy_status}")
         
-        # Use 5MB chunks for faster, resumable uploads
-        media = MediaFileUpload(str(video_path), chunksize=5*1024*1024, resumable=True)
+        # Use larger chunks for files over 50MB (10MB chunks)
+        # This significantly speeds up large file uploads
+        file_size = video_path.stat().st_size
+        chunk_size = 10*1024*1024 if file_size > 50*1024*1024 else 5*1024*1024
+        
+        logging.info(f"File size: {file_size / (1024*1024):.1f}MB, using {chunk_size/(1024*1024):.0f}MB chunks")
+        media = MediaFileUpload(str(video_path), chunksize=chunk_size, resumable=True)
         
         logging.info(f"Starting YouTube upload with chunked transfer...")
         request = youtube.videos().insert(
@@ -1913,22 +1918,22 @@ async def upload_to_youtube(
             media_body=media
         )
         
-        # Upload in chunks with progress tracking
+        # Upload in chunks with progress tracking and retries
         response = None
         retries = 0
-        max_retries = 3
+        max_retries = 5  # More retries for large files
         
         while response is None and retries < max_retries:
             try:
                 status, response = request.next_chunk()
                 if status:
                     progress = int(status.progress() * 100)
-                    logging.info(f"Upload progress: {progress}%")
+                    logging.info(f"YouTube upload progress: {progress}%")
             except Exception as e:
-                logging.error(f"Upload error (retry {retries + 1}): {str(e)}")
+                logging.error(f"Upload error (retry {retries + 1}/{max_retries}): {str(e)}")
                 retries += 1
                 if retries >= max_retries:
-                    raise
+                    raise Exception(f"YouTube upload failed after {max_retries} retries: {str(e)}")
         
         logging.info(f"Video uploaded successfully! Video ID: {response['id']}")
         
