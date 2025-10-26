@@ -1808,36 +1808,46 @@ async def upload_to_youtube(
         audio_file = await db.uploads.find_one({"id": audio_file_id, "user_id": current_user['id']})
         image_file = await db.uploads.find_one({"id": image_file_id, "user_id": current_user['id']})
         
-        if not audio_file or not image_file:
-            raise HTTPException(status_code=404, detail="Uploaded files not found")
+        if not audio_file:
+            raise HTTPException(status_code=404, detail="Audio/video file not found")
         
-        # Create video from audio + image using ffmpeg (optimized settings)
-        import subprocess
-        video_filename = f"{uuid.uuid4()}.mp4"
-        video_path = UPLOADS_DIR / video_filename
-        
-        # Optimized ffmpeg command for faster processing
-        ffmpeg_cmd = [
-            '/usr/bin/ffmpeg',
-            '-loop', '1',
-            '-framerate', '1',  # Only 1 frame per second since image is static
-            '-i', image_file['file_path'],
-            '-i', audio_file['file_path'],
-            '-c:v', 'libx264',
-            '-preset', 'ultrafast',  # Much faster encoding
-            '-tune', 'stillimage',
-            '-c:a', 'aac',
-            '-b:a', '128k',  # Lower audio bitrate for faster processing
-            '-pix_fmt', 'yuv420p',
-            '-shortest',
-            '-movflags', '+faststart',  # Optimize for web streaming
-            '-y',
-            str(video_path)
-        ]
-        
-        logging.info(f"Creating video with ffmpeg: {' '.join(ffmpeg_cmd)}")
-        
-        try:
+        # Check if audio file is actually a video
+        if audio_file['file_type'] == 'video':
+            # Use the video directly, no need to create one
+            video_path = Path(audio_file['file_path'])
+            logging.info(f"Using uploaded video directly: {video_path}")
+        else:
+            # It's audio - need to create video with image
+            if not image_file:
+                raise HTTPException(status_code=404, detail="Image file required for audio uploads")
+            
+            # Create video from audio + image using ffmpeg (optimized settings)
+            import subprocess
+            video_filename = f"{uuid.uuid4()}.mp4"
+            video_path = UPLOADS_DIR / video_filename
+            
+            # Optimized ffmpeg command for faster processing
+            ffmpeg_cmd = [
+                '/usr/bin/ffmpeg',
+                '-loop', '1',
+                '-framerate', '1',  # Only 1 frame per second since image is static
+                '-i', image_file['file_path'],
+                '-i', audio_file['file_path'],
+                '-c:v', 'libx264',
+                '-preset', 'ultrafast',  # Much faster encoding
+                '-tune', 'stillimage',
+                '-c:a', 'aac',
+                '-b:a', '128k',  # Lower audio bitrate for faster processing
+                '-pix_fmt', 'yuv420p',
+                '-shortest',
+                '-movflags', '+faststart',  # Optimize for web streaming
+                '-y',
+                str(video_path)
+            ]
+            
+            logging.info(f"Creating video with ffmpeg: {' '.join(ffmpeg_cmd)}")
+            
+            try:
             # Run ffmpeg with timeout (max 2 minutes for video creation)
             result = subprocess.run(
                 ffmpeg_cmd, 
