@@ -64,6 +64,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [privacyStatus, setPrivacyStatus] = useState("public");
   const [uploadingAudio, setUploadingAudio] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [audioFileId, setAudioFileId] = useState("");
   const [imageFileId, setImageFileId] = useState("");
   const [uploadingToYouTube, setUploadingToYouTube] = useState(false);
