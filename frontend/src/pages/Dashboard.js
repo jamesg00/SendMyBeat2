@@ -1878,8 +1878,11 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         </CardHeader>
                         <CardContent>
                           <div className="grid grid-cols-10 gap-2 mb-4">
-                            {Object.entries(calendarData.calendar || {}).slice(0, 120).map(([date, status], index) => {
+                            {Object.entries(calendarData.calendar || {}).slice(0, 120).map(([date, statusData], index) => {
                               const dayNumber = index + 1;
+                              const status = typeof statusData === 'string' ? statusData : statusData.status;
+                              const activity = typeof statusData === 'object' ? statusData.activity : null;
+                              
                               const bgColor = 
                                 status === 'completed' ? 'bg-green-500' :
                                 status === 'missed' ? 'bg-red-500' :
@@ -1890,7 +1893,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                 <div
                                   key={date}
                                   className={`h-12 w-12 rounded ${bgColor} opacity-80 hover:opacity-100 transition-all cursor-pointer flex flex-col items-center justify-center text-white font-bold text-xs hover:scale-110`}
-                                  onClick={() => setSelectedDay({ date, status, dayNumber })}
+                                  onClick={() => setSelectedDay({ date, status, dayNumber, activity })}
                                   title={`Day ${dayNumber} - ${date}`}
                                 >
                                   <span className="text-[10px]">D{dayNumber}</span>
