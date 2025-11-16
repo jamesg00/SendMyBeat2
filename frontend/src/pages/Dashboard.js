@@ -718,6 +718,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
       formData.append('privacy_status', privacyStatus);
       formData.append('audio_file_id', audioFileId);
       formData.append('image_file_id', imageFileId);
+      formData.append('remove_watermark', removeWatermark);
 
       const response = await axios.post(`${API}/youtube/upload`, formData, {
         timeout: 180000, // 3 minute timeout
