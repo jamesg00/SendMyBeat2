@@ -295,10 +295,10 @@ const LandingPage = ({ setIsAuthenticated }) => {
                 </div>
               </div>
               <h3 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 matrix-glow rgb-hover">
-                GROW IN 120
+                FREE YOUTUBE UPLOAD
               </h3>
               <p className="text-sm sm:text-base lg:text-lg leading-relaxed matrix-glow">
-                120-day consistency challenge. Streak tracking and milestone badges.
+                Upload beats directly to YouTube for free. Audio + image = video. No credit card required.
               </p>
             </div>
           </div>
