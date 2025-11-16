@@ -947,29 +947,29 @@ const Dashboard = ({ setIsAuthenticated }) => {
                 </form>
 
                 {generatedTags.length > 0 && (
-                  <div className="mt-6 space-y-4" data-testid="generated-tags-section">
-                    <div className="flex items-center justify-between">
-                      <h3 className="font-semibold" style={{color: 'var(--text-primary)'}}>Generated Tags ({generatedTags.length})</h3>
-                      <div className="flex gap-2">
+                  <div className="mt-4 sm:mt-6 space-y-3 sm:space-y-4" data-testid="generated-tags-section">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0">
+                      <h3 className="font-semibold text-sm sm:text-base" style={{color: 'var(--text-primary)'}}>Generated Tags ({generatedTags.length})</h3>
+                      <div className="flex gap-2 w-full sm:w-auto">
                         <Button
                           size="sm"
                           variant="outline"
                           onClick={handleGenerateTags}
-                          className="gap-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:from-purple-700 hover:to-blue-700 border-0"
+                          className="gap-1 sm:gap-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:from-purple-700 hover:to-blue-700 border-0 text-xs sm:text-sm flex-1 sm:flex-none py-2"
                           disabled={loadingTags}
                           data-testid="refine-tags-btn"
                         >
-                          <Sparkles className="h-4 w-4" />
-                          Refine Tags
+                          <Sparkles className="h-3 w-3 sm:h-4 sm:w-4" />
+                          Refine
                         </Button>
                         <Button
                           size="sm"
                           variant="outline"
                           onClick={copyTags}
-                          className="gap-2"
+                          className="gap-1 sm:gap-2 text-xs sm:text-sm flex-1 sm:flex-none py-2"
                           data-testid="copy-tags-btn"
                         >
-                          <Copy className="h-4 w-4" />
+                          <Copy className="h-3 w-3 sm:h-4 sm:w-4" />
                           Copy All
                         </Button>
                       </div>
