@@ -26,13 +26,13 @@ const PrivacyPolicy = () => {
           <h1 className="text-3xl sm:text-4xl font-bold mb-6 text-center brand-text matrix-glow rgb-hover">
             Privacy Policy
           </h1>
-          <p className={`text-sm mb-8 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-            Last Updated: October 16, 2025
+          <p className="text-sm mb-8 text-center matrix-glow">
+            Last Updated: January 2025
           </p>
 
-          <div className={`space-y-8 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+          <div className="space-y-8 matrix-glow">
             <section>
-              <h2 className={`text-2xl font-semibold mb-4 ${isDark ? 'text-white' : 'text-gray-900'}`}>1. Introduction</h2>
+              <h2 className="text-xl sm:text-2xl font-semibold mb-4 matrix-glow">1. Introduction</h2>
               <p>
                 Welcome to SendMyBeat.com ("we," "our," or "us"). We respect your privacy and are committed 
                 to protecting your personal data. This privacy policy explains how we collect, use, and 
