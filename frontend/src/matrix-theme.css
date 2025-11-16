@@ -173,7 +173,7 @@ body, h1, h2, h3, h4, h5, h6, p, div, span, button {
   animation: glitch 0.3s infinite;
 }
 
-/* Matrix Button Styles - Light and Dark */
+/* Matrix Button Styles */
 .matrix-btn {
   background: linear-gradient(135deg, var(--matrix-green), var(--matrix-green-dark)) !important;
   color: var(--matrix-black) !important;
