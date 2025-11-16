@@ -1985,7 +1985,8 @@ async def upload_to_youtube(
             '-crf', '28',
             '-tune', 'stillimage',
             '-c:a', 'aac',
-            '-b:a', '128k',  # Keep 128k bitrate
+            '-b:a', '320k',  # HIGH QUALITY - 320kbps (near lossless)
+            '-ar', '48000',  # 48kHz sample rate (YouTube standard)
             '-pix_fmt', 'yuv420p',
             # Maintain aspect ratio with black letterboxing/pillarboxing like YouTube
             '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:black',
