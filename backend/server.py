@@ -1864,11 +1864,25 @@ async def upload_to_youtube(
     privacy_status: str = Form("public"),
     audio_file_id: str = Form(...),
     image_file_id: str = Form(...),
+    remove_watermark: bool = Form(False),
     current_user: dict = Depends(get_current_user)
 ):
     """Upload video to YouTube with selected description and tags"""
     try:
         logging.info(f"Starting YouTube upload for user {current_user['id']}")
+        
+        # Check if user wants to remove watermark but is not subscribed
+        user_sub_status = await get_user_subscription_status(current_user['id'])
+        is_subscribed = user_sub_status.get('is_subscribed', False)
+        
+        if remove_watermark and not is_subscribed:
+            raise HTTPException(
+                status_code=402,
+                detail={
+                    "message": "Watermark removal is a Pro feature. Upgrade to Pro to remove watermarks!",
+                    "feature": "remove_watermark"
+                }
+            )
         
         # Check if user has upload credits
         has_credit = await check_and_use_upload_credit(current_user['id'])
