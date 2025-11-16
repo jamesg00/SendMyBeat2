@@ -1897,9 +1897,39 @@ async def upload_to_youtube(
         video_path = UPLOADS_DIR / video_filename
         
         # Optimized ffmpeg command for large files
-        # Try to find ffmpeg in PATH first, fallback to absolute path
+        # Try to find ffmpeg, install if not found
         import shutil
-        ffmpeg_path = shutil.which('ffmpeg') or '/usr/bin/ffmpeg'
+        import subprocess
+        
+        ffmpeg_path = shutil.which('ffmpeg')
+        
+        if not ffmpeg_path:
+            # Try to install ffmpeg if not found
+            logging.warning("FFmpeg not found, attempting to install...")
+            try:
+                install_result = subprocess.run(
+                    ['apt-get', 'update'],
+                    capture_output=True,
+                    timeout=120
+                )
+                install_result = subprocess.run(
+                    ['apt-get', 'install', '-y', 'ffmpeg'],
+                    capture_output=True,
+                    timeout=300
+                )
+                ffmpeg_path = shutil.which('ffmpeg')
+                if ffmpeg_path:
+                    logging.info(f"FFmpeg successfully installed at {ffmpeg_path}")
+                else:
+                    raise Exception("FFmpeg installation failed")
+            except Exception as install_error:
+                logging.error(f"Failed to install FFmpeg: {str(install_error)}")
+                raise HTTPException(
+                    status_code=500,
+                    detail="FFmpeg not available. Please contact support or install FFmpeg on the server."
+                )
+        
+        logging.info(f"Using FFmpeg at: {ffmpeg_path}")
         
         ffmpeg_cmd = [
             ffmpeg_path,
