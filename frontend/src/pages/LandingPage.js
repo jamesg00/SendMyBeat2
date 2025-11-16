@@ -174,46 +174,46 @@ const LandingPage = ({ setIsAuthenticated }) => {
       
       {/* Hero Section */}
       <div className="relative overflow-hidden">
-        <div className="container mx-auto px-4 pt-24 pb-32 relative z-10">
+        <div className="container mx-auto px-4 sm:px-6 pt-16 sm:pt-24 pb-20 sm:pb-32 relative z-10">
           <div className="max-w-5xl mx-auto text-center">
-            <div className="inline-block mb-8 pulse-glow">
-              <img src="/logo.png" alt="SendMyBeat" className="h-24 w-24 sm:h-32 sm:w-32 mx-auto object-contain" />
+            <div className="inline-block mb-6 sm:mb-8 pulse-glow">
+              <img src="/logo.png" alt="SendMyBeat" className="h-20 w-20 sm:h-24 sm:w-24 md:h-32 md:w-32 mx-auto object-contain" />
             </div>
-            <h1 className="text-4xl sm:text-5xl lg:text-7xl font-bold mb-6 leading-tight matrix-glow rgb-hover brand-text">
+            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-7xl font-bold mb-4 sm:mb-6 leading-tight matrix-glow rgb-hover brand-text px-2">
               SendMyBeat
             </h1>
-            <p className="text-lg sm:text-xl lg:text-2xl mb-12 max-w-3xl mx-auto leading-relaxed matrix-glow">
+            <p className="text-base sm:text-lg md:text-xl lg:text-2xl mb-8 sm:mb-12 max-w-3xl mx-auto leading-relaxed matrix-glow px-4">
               <span className="rgb-hover inline-block">LEVEL UP YOUR YOUTUBE GAME</span>
-              <br />
-              500+ AI TAGS • FREE YOUTUBE UPLOAD • AI DESCRIPTIONS
+              <br className="hidden sm:block" />
+              <span className="block sm:inline mt-2 sm:mt-0">500+ AI TAGS • FREE YOUTUBE UPLOAD • AI DESCRIPTIONS</span>
             </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-8">
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center items-center mb-8 px-4">
               <Button
                 size="lg"
-                className="matrix-btn text-base sm:text-lg px-8 sm:px-10 py-6 sm:py-7 glitch-effect"
+                className="matrix-btn w-full sm:w-auto text-sm sm:text-base md:text-lg px-6 sm:px-8 md:px-10 py-5 sm:py-6 md:py-7 glitch-effect"
                 onClick={() => setShowAuth(true)}
                 data-testid="get-started-btn"
               >
-                <Rocket className="mr-2 h-5 w-5 sm:h-6 sm:w-6" />
+                <Rocket className="mr-2 h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6" />
                 TRY FOR FREE
               </Button>
-              <p className="text-xs sm:text-sm matrix-glow">
+              <p className="text-xs sm:text-sm matrix-glow text-center">
                 ✅ 3 FREE DAILY USES • NO CREDIT CARD
               </p>
             </div>
             
             {/* Stats */}
-            <div className="grid grid-cols-3 gap-2 sm:gap-4 max-w-2xl mx-auto mt-16">
-              <div className="game-card p-3 sm:p-4 pulse-glow">
-                <div className="text-2xl sm:text-3xl font-bold matrix-glow">500+</div>
+            <div className="grid grid-cols-3 gap-2 sm:gap-3 md:gap-4 max-w-2xl mx-auto mt-12 sm:mt-16 px-2">
+              <div className="game-card p-2 sm:p-3 md:p-4 pulse-glow">
+                <div className="text-xl sm:text-2xl md:text-3xl font-bold matrix-glow">500+</div>
                 <div className="text-xs sm:text-sm matrix-glow">TAGS</div>
               </div>
-              <div className="game-card p-3 sm:p-4 pulse-glow">
-                <div className="text-2xl sm:text-3xl font-bold matrix-glow">FREE</div>
+              <div className="game-card p-2 sm:p-3 md:p-4 pulse-glow">
+                <div className="text-xl sm:text-2xl md:text-3xl font-bold matrix-glow">FREE</div>
                 <div className="text-xs sm:text-sm matrix-glow">YOUTUBE</div>
               </div>
-              <div className="game-card p-3 sm:p-4 pulse-glow">
-                <div className="text-2xl sm:text-3xl font-bold matrix-glow">AI</div>
+              <div className="game-card p-2 sm:p-3 md:p-4 pulse-glow">
+                <div className="text-xl sm:text-2xl md:text-3xl font-bold matrix-glow">AI</div>
                 <div className="text-xs sm:text-sm matrix-glow">DESCRIPTIONS</div>
               </div>
             </div>
