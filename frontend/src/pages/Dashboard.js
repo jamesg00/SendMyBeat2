@@ -1483,7 +1483,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                     )}
 
                     {!beatAnalysis && !analyzingBeat && (
-                      <p className="text-sm text-center" style={{color: 'var(--text-secondary)'}}>
+                      <p className="text-xs sm:text-sm text-center leading-relaxed px-2" style={{color: 'var(--text-secondary)'}}>
                         Fill in title & tags, then analyze to see how well your beat will perform!
                       </p>
                     )}
