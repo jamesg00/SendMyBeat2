@@ -15,6 +15,7 @@
   --matrix-black: #0d0208;
   --matrix-dark: #1a1a1a;
   --matrix-darker: #0a0a0a;
+  --matrix-white: #ffffff;
 }
 
 /* Karmatic Arcade font ONLY for SendMyBeat brand */
@@ -29,8 +30,22 @@ body, h1, h2, h3, h4, h5, h6, p, div, span, button {
   letter-spacing: 1px;
 }
 
-/* Force dark mode everywhere */
-body, .dark, :root {
+/* Light Mode - White & Green */
+body:not(.dark), :root {
+  --bg-primary: var(--matrix-white) !important;
+  --bg-secondary: #f5f5f5 !important;
+  --bg-tertiary: #e8e8e8 !important;
+  --text-primary: #1a1a1a !important;
+  --text-secondary: #00cc33 !important;
+  --accent: var(--matrix-green-dark) !important;
+  --accent-primary: var(--matrix-green-dark) !important;
+  --accent-secondary: var(--matrix-green) !important;
+  background-color: var(--matrix-white) !important;
+  color: #1a1a1a !important;
+}
+
+/* Dark Mode - Black & Green */
+body.dark, .dark {
   --bg-primary: var(--matrix-black) !important;
   --bg-secondary: var(--matrix-dark) !important;
   --bg-tertiary: var(--matrix-darker) !important;
@@ -59,8 +74,8 @@ body, .dark, :root {
   cursor: pointer;
 }
 
-/* Matrix Text Glow */
-.matrix-glow {
+/* Matrix Text Glow - Different for light/dark */
+.dark .matrix-glow {
   color: var(--matrix-green);
   text-shadow: 
     0 0 5px var(--matrix-green-glow),
@@ -68,7 +83,14 @@ body, .dark, :root {
     0 0 20px var(--matrix-green-glow);
 }
 
-.matrix-glow:hover {
+body:not(.dark) .matrix-glow {
+  color: var(--matrix-green-dark);
+  text-shadow: 
+    0 0 3px rgba(0, 204, 51, 0.3),
+    0 0 6px rgba(0, 204, 51, 0.2);
+}
+
+.dark .matrix-glow:hover {
   text-shadow: 
     0 0 10px var(--matrix-green),
     0 0 20px var(--matrix-green),
@@ -83,8 +105,8 @@ body, .dark, :root {
   background-clip: text;
 }
 
-/* Cyber Grid Background - EVERYWHERE */
-.cyber-grid, body, .App, [class*="dashboard"], [class*="container"] {
+/* Cyber Grid Background - Light and Dark versions */
+.dark.cyber-grid, .dark body, .dark .App, .dark [class*="dashboard"], .dark [class*="container"] {
   background-color: var(--matrix-black) !important;
   background-image: 
     linear-gradient(rgba(0, 255, 65, 0.1) 1px, transparent 1px),
@@ -92,8 +114,16 @@ body, .dark, :root {
   background-size: 20px 20px !important;
 }
 
-/* Gaming Card Style */
-.game-card, .producer-card, [class*="card"] {
+body:not(.dark).cyber-grid, body:not(.dark) .App, body:not(.dark) [class*="dashboard"], body:not(.dark) [class*="container"] {
+  background-color: var(--matrix-white) !important;
+  background-image: 
+    linear-gradient(rgba(0, 204, 51, 0.15) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 204, 51, 0.15) 1px, transparent 1px) !important;
+  background-size: 20px 20px !important;
+}
+
+/* Gaming Card Style - Light and Dark */
+.dark .game-card, .dark .producer-card, .dark [class*="card"] {
   background: rgba(0, 0, 0, 0.8) !important;
   border: 2px solid var(--matrix-green) !important;
   box-shadow: 
@@ -102,12 +132,31 @@ body, .dark, :root {
   transition: all 0.3s ease;
 }
 
+body:not(.dark) .game-card, body:not(.dark) .producer-card, body:not(.dark) [class*="card"] {
+  background: rgba(255, 255, 255, 0.9) !important;
+  border: 2px solid var(--matrix-green-dark) !important;
+  box-shadow: 
+    0 0 10px rgba(0, 204, 51, 0.3),
+    inset 0 0 10px rgba(0, 204, 51, 0.05) !important;
+  transition: all 0.3s ease;
+}
+
 .game-card:hover, .producer-card:hover, [class*="card"]:hover {
   transform: translateY(-5px);
+}
+
+.dark .game-card:hover, .dark .producer-card:hover, .dark [class*="card"]:hover {
   box-shadow: 
     0 5px 30px var(--matrix-green),
     inset 0 0 30px rgba(0, 255, 65, 0.2) !important;
   border-color: var(--matrix-green-light) !important;
+}
+
+body:not(.dark) .game-card:hover, body:not(.dark) .producer-card:hover, body:not(.dark) [class*="card"]:hover {
+  box-shadow: 
+    0 5px 20px rgba(0, 204, 51, 0.5),
+    inset 0 0 20px rgba(0, 204, 51, 0.1) !important;
+  border-color: var(--matrix-green) !important;
 }
 
 /* Glitch Effect - ARCADE */
@@ -124,7 +173,7 @@ body, .dark, :root {
   animation: glitch 0.3s infinite;
 }
 
-/* Matrix Button Styles */
+/* Matrix Button Styles - Light and Dark */
 .matrix-btn {
   background: linear-gradient(135deg, var(--matrix-green), var(--matrix-green-dark)) !important;
   color: var(--matrix-black) !important;
@@ -142,16 +191,23 @@ body, .dark, :root {
   animation: rgb-shift 2s linear infinite;
 }
 
-/* Neon Border */
-.neon-border {
+/* Neon Border - Light and Dark */
+.dark .neon-border {
   border: 2px solid var(--matrix-green) !important;
   box-shadow: 
     0 0 5px var(--matrix-green),
     inset 0 0 5px var(--matrix-green-glow) !important;
 }
 
-/* Pulse Animation */
-@keyframes pulse-glow {
+body:not(.dark) .neon-border {
+  border: 2px solid var(--matrix-green-dark) !important;
+  box-shadow: 
+    0 0 3px rgba(0, 204, 51, 0.5),
+    inset 0 0 3px rgba(0, 204, 51, 0.2) !important;
+}
+
+/* Pulse Animation - Light and Dark */
+@keyframes pulse-glow-dark {
   0%, 100% { 
     box-shadow: 0 0 10px var(--matrix-green-glow);
   }
@@ -160,8 +216,21 @@ body, .dark, :root {
   }
 }
 
-.pulse-glow {
-  animation: pulse-glow 2s ease-in-out infinite;
+@keyframes pulse-glow-light {
+  0%, 100% { 
+    box-shadow: 0 0 5px rgba(0, 204, 51, 0.3);
+  }
+  50% { 
+    box-shadow: 0 0 15px rgba(0, 204, 51, 0.5);
+  }
+}
+
+.dark .pulse-glow {
+  animation: pulse-glow-dark 2s ease-in-out infinite;
+}
+
+body:not(.dark) .pulse-glow {
+  animation: pulse-glow-light 2s ease-in-out infinite;
 }
 
 /* Scanline Effect - ARCADE */
@@ -175,7 +244,7 @@ body, .dark, :root {
   overflow: hidden;
 }
 
-.scanline-effect::after {
+.dark.scanline-effect::after {
   content: '';
   position: absolute;
   top: 0;
@@ -194,8 +263,27 @@ body, .dark, :root {
   z-index: 9999;
 }
 
-/* Matrix Rain Background */
-.matrix-bg::before {
+body:not(.dark).scanline-effect::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    var(--matrix-green-dark) 50%,
+    transparent
+  );
+  animation: scanline 4s linear infinite;
+  opacity: 0.2;
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* Matrix Rain Background - Dark mode only */
+.dark.matrix-bg::before {
   content: '';
   position: fixed;
   top: 0;
