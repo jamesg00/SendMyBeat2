@@ -269,23 +269,32 @@ const Dashboard = ({ setIsAuthenticated }) => {
       return;
     }
     
+    // Parse custom tags
+    const customTagsArray = customTags
+      .split(',')
+      .map(tag => tag.trim())
+      .filter(tag => tag.length > 0);
+    
     // Create abort controller for cancellation
     const controller = new AbortController();
     setTagGenerationController(controller);
     
     setLoadingTags(true);
     setProgressActive(true);
-    setProgressMessage("🎵 Generating optimized YouTube tags...");
+    setProgressMessage("🎵 Generating optimized YouTube tags + searching artist's popular songs...");
     setProgressDuration(45000); // 45 seconds for tag generation
     
     try {
       const response = await axios.post(
         `${API}/tags/generate`, 
-        { query: tagQuery },
+        { 
+          query: tagQuery,
+          custom_tags: customTagsArray
+        },
         { signal: controller.signal }
       );
       setGeneratedTags(response.data.tags);
-      toast.success(`Generated ${response.data.tags.length} tags!`);
+      toast.success(`Generated ${response.data.tags.length} tags! (AI + YouTube search + your custom tags)`);
       fetchTagHistory();
       
       // Refresh credits after a short delay to ensure backend has updated
