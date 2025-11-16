@@ -342,35 +342,35 @@ const LandingPage = ({ setIsAuthenticated }) => {
               </p>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 my-6 sm:my-8">
-                <div className="producer-card p-6">
-                  <h3 className="text-xl font-semibold mb-3 gradient-text">Key Features</h3>
-                  <ul className="space-y-2 text-sm">
+                <div className="producer-card p-4 sm:p-5 md:p-6">
+                  <h3 className="text-lg sm:text-xl font-semibold mb-2 sm:mb-3 gradient-text">Key Features</h3>
+                  <ul className="space-y-1.5 sm:space-y-2 text-xs sm:text-sm">
                     <li className="flex items-start gap-2">
-                      <span className="text-green-500 mt-1">✓</span>
+                      <span className="text-green-500 mt-1 flex-shrink-0">✓</span>
                       <span>Upload beats and videos directly to your YouTube channel</span>
                     </li>
                     <li className="flex items-start gap-2">
-                      <span className="text-green-500 mt-1">✓</span>
+                      <span className="text-green-500 mt-1 flex-shrink-0">✓</span>
                       <span>Manage video titles, descriptions, and visibility settings</span>
                     </li>
                     <li className="flex items-start gap-2">
-                      <span className="text-green-500 mt-1">✓</span>
+                      <span className="text-green-500 mt-1 flex-shrink-0">✓</span>
                       <span>AI-powered tag generation for maximum discoverability</span>
                     </li>
                     <li className="flex items-start gap-2">
-                      <span className="text-green-500 mt-1">✓</span>
+                      <span className="text-green-500 mt-1 flex-shrink-0">✓</span>
                       <span>Stay in full control of your YouTube account and data</span>
                     </li>
                   </ul>
                 </div>
 
-                <div className="producer-card p-6">
-                  <h3 className="text-xl font-semibold mb-3 gradient-text">Google API Usage</h3>
-                  <p className="text-sm mb-3">
+                <div className="producer-card p-4 sm:p-5 md:p-6">
+                  <h3 className="text-lg sm:text-xl font-semibold mb-2 sm:mb-3 gradient-text">Google API Usage</h3>
+                  <p className="text-xs sm:text-sm mb-2 sm:mb-3">
                     SendMyBeat uses the YouTube Data API to publish videos to your YouTube channel <strong>only with your explicit permission</strong>.
                   </p>
-                  <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 text-sm">
-                    <p className="font-semibold text-blue-400 mb-2">Privacy Guarantee:</p>
+                  <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-2.5 sm:p-3 text-xs sm:text-sm">
+                    <p className="font-semibold text-blue-400 mb-1.5 sm:mb-2">Privacy Guarantee:</p>
                     <p>We never store or share your Google data with third parties. Your credentials are encrypted and used solely for uploading content to YOUR channel.</p>
                   </div>
                 </div>
