@@ -340,3 +340,68 @@ body, h1, h2, h3, h4, h5, h6, p, div, span, button {
 }
 
 
+
+/* ===== ADDITIONAL MOBILE RESPONSIVE ===== */
+
+/* Better mobile text scaling */
+@media (max-width: 480px) {
+  body { font-size: 14px !important; }
+  .brand-text { letter-spacing: 1px !important; }
+}
+
+/* Mobile-friendly cards */
+@media (max-width: 640px) {
+  .game-card, .producer-card {
+    margin-bottom: 0.75rem !important;
+  }
+  
+  .game-card:hover, .producer-card:hover {
+    transform: translateY(-2px) !important;
+  }
+}
+
+/* Mobile-friendly grids - force single column */
+@media (max-width: 768px) {
+  .grid-cols-2, .grid-cols-3, .md\:grid-cols-2, .md\:grid-cols-3 {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Stats boxes responsive */
+@media (max-width: 480px) {
+  .grid-cols-3 {
+    gap: 0.5rem !important;
+  }
+  
+  .grid-cols-3 > * {
+    padding: 0.5rem !important;
+  }
+}
+
+/* Logo responsive sizing */
+@media (max-width: 640px) {
+  .h-32 { height: 5rem !important; }
+  .w-32 { width: 5rem !important; }
+  .h-24 { height: 4rem !important; }
+  .w-24 { width: 4rem !important; }
+}
+
+/* Footer responsive */
+@media (max-width: 768px) {
+  footer .grid-cols-3 {
+    grid-template-columns: 1fr !important;
+    text-align: center !important;
+  }
+  
+  footer .md\:items-start, footer .md\:items-end {
+    align-items: center !important;
+  }
+}
+
+/* Modal auth card responsive */
+@media (max-width: 640px) {
+  .w-full.max-w-md {
+    max-width: 95vw !important;
+    margin: 0.5rem !important;
+  }
+}
