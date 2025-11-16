@@ -191,15 +191,15 @@ body, h1, h2, h3, h4, h5, h6, p, div, span, button {
   animation: rgb-shift 2s linear infinite;
 }
 
-/* Neon Border - Light and Dark */
-.dark .neon-border {
+/* Neon Border */
+.dark .neon-border, html.dark .neon-border {
   border: 2px solid var(--matrix-green) !important;
   box-shadow: 
     0 0 5px var(--matrix-green),
     inset 0 0 5px var(--matrix-green-glow) !important;
 }
 
-body:not(.dark) .neon-border {
+.neon-border {
   border: 2px solid var(--matrix-green-dark) !important;
   box-shadow: 
     0 0 3px rgba(0, 204, 51, 0.5),
