@@ -45,7 +45,7 @@ body, h1, h2, h3, h4, h5, h6, p, div, span, button {
 }
 
 /* Dark Mode - Black & Green */
-body.dark, .dark {
+.dark, .dark body, html.dark body {
   --bg-primary: var(--matrix-black) !important;
   --bg-secondary: var(--matrix-dark) !important;
   --bg-tertiary: var(--matrix-darker) !important;
