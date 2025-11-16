@@ -185,7 +185,7 @@ const LandingPage = ({ setIsAuthenticated }) => {
             <p className="text-lg sm:text-xl lg:text-2xl mb-12 max-w-3xl mx-auto leading-relaxed matrix-glow">
               <span className="rgb-hover inline-block">LEVEL UP YOUR YOUTUBE GAME</span>
               <br />
-              500+ AI TAGS • BEAT ANALYZER • GROWTH TRACKER
+              500+ AI TAGS • FREE YOUTUBE UPLOAD • AI DESCRIPTIONS
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-8">
               <Button
