@@ -1611,6 +1611,47 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         </Select>
                       </div>
 
+                      {/* Watermark Removal Option */}
+                      <div className="space-y-2 p-4 rounded-lg border-2" style={{
+                        borderColor: subscriptionStatus?.is_subscribed ? 'var(--accent-primary)' : 'var(--border-color)',
+                        backgroundColor: 'var(--bg-secondary)'
+                      }}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              id="remove-watermark"
+                              checked={removeWatermark}
+                              onChange={(e) => {
+                                if (!subscriptionStatus?.is_subscribed && e.target.checked) {
+                                  // Free user trying to enable - show upgrade modal
+                                  setShowUpgradeModal(true);
+                                  toast.info("Upgrade to Pro to remove watermarks!");
+                                } else {
+                                  setRemoveWatermark(e.target.checked);
+                                }
+                              }}
+                              disabled={!subscriptionStatus?.is_subscribed && removeWatermark}
+                              className="w-4 h-4 cursor-pointer"
+                              data-testid="remove-watermark-checkbox"
+                            />
+                            <Label htmlFor="remove-watermark" className="cursor-pointer text-sm font-medium">
+                              Remove watermark
+                            </Label>
+                          </div>
+                          {!subscriptionStatus?.is_subscribed && (
+                            <span className="text-xs px-2 py-1 rounded-full bg-gradient-to-r from-[var(--accent-primary)] to-[var(--accent-secondary)] text-white font-semibold">
+                              PRO
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs leading-relaxed" style={{color: 'var(--text-secondary)'}}>
+                          {subscriptionStatus?.is_subscribed 
+                            ? "✅ As a Pro member, you can remove the watermark from your videos"
+                            : "⚠️ Free users get a small watermark at the top: \"Upload your beats online: https://sendmybeat.com\""}
+                        </p>
+                      </div>
+
                       {/* Preview Player */}
                       {audioFile && imageFile && (
                         <Card className="producer-card border-l-4 border-blue-500">
