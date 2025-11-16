@@ -1018,6 +1018,38 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         </span>
                       ))}
                     </div>
+                    
+                    {/* Add More Tags Section */}
+                    <div className="mt-4 p-4 rounded-lg border-2 border-green-500" style={{backgroundColor: 'var(--bg-secondary)'}}>
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="additional-tags" className="font-semibold">
+                            <Plus className="inline h-4 w-4 mr-1" />
+                            Add More Tags
+                          </Label>
+                          <span className="text-sm" style={{color: 'var(--text-secondary)'}}>
+                            {generatedTags.length}/500
+                          </span>
+                        </div>
+                        <Textarea
+                          id="additional-tags"
+                          placeholder="Add more tags (comma-separated)"
+                          value={additionalTags}
+                          onChange={(e) => setAdditionalTags(e.target.value)}
+                          rows={2}
+                          disabled={generatedTags.length >= 500}
+                        />
+                        <Button
+                          size="sm"
+                          onClick={handleAddMoreTags}
+                          disabled={generatedTags.length >= 500 || !additionalTags.trim()}
+                          className="w-full gap-2 bg-green-600 hover:bg-green-700"
+                        >
+                          <Plus className="h-4 w-4" />
+                          {generatedTags.length >= 500 ? "Limit Reached (500)" : "Add Tags"}
+                        </Button>
+                      </div>
+                    </div>
                   </div>
                 )}
               </CardContent>
