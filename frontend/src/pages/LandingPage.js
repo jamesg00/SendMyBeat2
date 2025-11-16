@@ -329,19 +329,19 @@ const LandingPage = ({ setIsAuthenticated }) => {
       </div>
 
       {/* Google API Integration Explanation */}
-      <div className="container mx-auto px-4 py-16 border-t" style={{borderColor: 'var(--border-color)'}}>
-        <div className="max-w-4xl mx-auto">
-          <div className="glass-card p-8">
-            <h2 className="text-3xl font-bold gradient-text mb-6 text-center">
+      <div className="container mx-auto px-4 sm:px-6 py-12 sm:py-16 border-t" style={{borderColor: 'var(--border-color)'}}>
+        <div className="max-w-4xl mx-auto px-2">
+          <div className="glass-card p-4 sm:p-6 md:p-8">
+            <h2 className="text-xl sm:text-2xl md:text-3xl font-bold gradient-text mb-4 sm:mb-6 text-center px-2">
               About SendMyBeat & Google Integration
             </h2>
             
-            <div className="space-y-6" style={{color: 'var(--text-secondary)'}}>
-              <p className="text-lg leading-relaxed">
+            <div className="space-y-4 sm:space-y-6" style={{color: 'var(--text-secondary)'}}>
+              <p className="text-sm sm:text-base md:text-lg leading-relaxed px-2">
                 <strong className="gradient-text">SendMyBeat</strong> helps artists, producers, and music creators upload, manage, and share their beats directly to YouTube with ease. Using Google's YouTube Data API, SendMyBeat allows users to securely connect their YouTube accounts and upload beats or videos directly from our platform — saving time and simplifying content management.
               </p>
 
-              <div className="grid md:grid-cols-2 gap-6 my-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 my-6 sm:my-8">
                 <div className="producer-card p-6">
                   <h3 className="text-xl font-semibold mb-3 gradient-text">Key Features</h3>
                   <ul className="space-y-2 text-sm">
