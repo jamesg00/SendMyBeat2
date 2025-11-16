@@ -262,42 +262,42 @@ const LandingPage = ({ setIsAuthenticated }) => {
 
             <div className="game-card p-4 sm:p-6" data-testid="feature-ai-refine">
               <div className="mb-4 sm:mb-6">
-                <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-2xl neon-border flex items-center justify-center" style={{background: 'rgba(0, 255, 65, 0.1)'}}>
-                  <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8" style={{color: 'var(--matrix-green)'}} />
+                <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-2xl neon-border flex items-center justify-center pulse-glow" style={{background: 'rgba(0, 255, 65, 0.1)'}}>
+                  <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 matrix-glow" />
                 </div>
               </div>
-              <h3 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 matrix-glow">
-                YouTube Analytics
+              <h3 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 matrix-glow rgb-hover">
+                YOUTUBE ANALYTICS
               </h3>
-              <p className="text-sm sm:text-base lg:text-lg leading-relaxed" style={{color: 'var(--matrix-green-dark)'}}>
-                AI growth coach analyzes your channel. Learn what works and apply proven strategies.
+              <p className="text-sm sm:text-base lg:text-lg leading-relaxed matrix-glow">
+                AI growth coach analyzes your channel. Learn what works and dominate the algorithm.
               </p>
             </div>
 
             <div className="game-card p-4 sm:p-6">
               <div className="mb-4 sm:mb-6">
-                <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-2xl neon-border flex items-center justify-center" style={{background: 'rgba(0, 255, 65, 0.1)'}}>
-                  <Zap className="h-6 w-6 sm:h-8 sm:w-8" style={{color: 'var(--matrix-green)'}} />
+                <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-2xl neon-border flex items-center justify-center pulse-glow" style={{background: 'rgba(0, 255, 65, 0.1)'}}>
+                  <Zap className="h-6 w-6 sm:h-8 sm:w-8 matrix-glow" />
                 </div>
               </div>
-              <h3 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 matrix-glow">
-                Direct Upload
+              <h3 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 matrix-glow rgb-hover">
+                DIRECT UPLOAD
               </h3>
-              <p className="text-sm sm:text-base lg:text-lg leading-relaxed" style={{color: 'var(--matrix-green-dark)'}}>
+              <p className="text-sm sm:text-base lg:text-lg leading-relaxed matrix-glow">
                 Upload beats directly to YouTube with pre-optimized tags. Automate your workflow.
               </p>
             </div>
 
             <div className="game-card p-4 sm:p-6">
               <div className="mb-4 sm:mb-6">
-                <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-2xl neon-border flex items-center justify-center" style={{background: 'rgba(0, 255, 65, 0.1)'}}>
-                  <Rocket className="h-6 w-6 sm:h-8 sm:w-8" style={{color: 'var(--matrix-green)'}} />
+                <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-2xl neon-border flex items-center justify-center pulse-glow" style={{background: 'rgba(0, 255, 65, 0.1)'}}>
+                  <Rocket className="h-6 w-6 sm:h-8 sm:w-8 matrix-glow" />
                 </div>
               </div>
-              <h3 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 matrix-glow">
-                Grow in 120
+              <h3 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 matrix-glow rgb-hover">
+                GROW IN 120
               </h3>
-              <p className="text-sm sm:text-base lg:text-lg leading-relaxed" style={{color: 'var(--matrix-green-dark)'}}>
+              <p className="text-sm sm:text-base lg:text-lg leading-relaxed matrix-glow">
                 120-day consistency challenge. Streak tracking and milestone badges.
               </p>
             </div>
@@ -308,16 +308,16 @@ const LandingPage = ({ setIsAuthenticated }) => {
       {/* CTA Section */}
       <div className="container mx-auto px-4 py-16 sm:py-24">
         <div className="max-w-4xl mx-auto">
-          <div className="game-card text-center p-8 sm:p-16">
-            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold matrix-glow mb-4 sm:mb-6">
-              Ready to Grow?
+          <div className="game-card text-center p-8 sm:p-16 pulse-glow">
+            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold matrix-glow mb-4 sm:mb-6 rgb-hover">
+              READY TO LEVEL UP?
             </h2>
-            <p className="text-base sm:text-lg lg:text-xl mb-8 sm:mb-10 max-w-2xl mx-auto" style={{color: 'var(--matrix-green-dark)'}}>
+            <p className="text-base sm:text-lg lg:text-xl mb-8 sm:mb-10 max-w-2xl mx-auto matrix-glow">
               Join 1000+ producers growing their channels with AI-powered YouTube optimization
             </p>
             <Button
               size="lg"
-              className="matrix-btn text-base sm:text-lg px-8 sm:px-10 py-6 sm:py-7"
+              className="matrix-btn text-base sm:text-lg px-8 sm:px-10 py-6 sm:py-7 glitch-effect"
               onClick={() => setShowAuth(true)}
               data-testid="cta-signup-btn"
             >
