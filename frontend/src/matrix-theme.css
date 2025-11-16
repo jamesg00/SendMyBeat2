@@ -233,7 +233,7 @@ body, h1, h2, h3, h4, h5, h6, p, div, span, button {
   animation: pulse-glow-light 2s ease-in-out infinite;
 }
 
-/* Scanline Effect - ARCADE */
+/* Scanline Effect */
 @keyframes scanline {
   0% { transform: translateY(-100%); }
   100% { transform: translateY(100%); }
@@ -244,7 +244,7 @@ body, h1, h2, h3, h4, h5, h6, p, div, span, button {
   overflow: hidden;
 }
 
-.dark.scanline-effect::after {
+.dark.scanline-effect::after, html.dark .scanline-effect::after {
   content: '';
   position: absolute;
   top: 0;
@@ -263,7 +263,7 @@ body, h1, h2, h3, h4, h5, h6, p, div, span, button {
   z-index: 9999;
 }
 
-body:not(.dark).scanline-effect::after {
+.scanline-effect::after {
   content: '';
   position: absolute;
   top: 0;
