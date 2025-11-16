@@ -412,31 +412,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
     setAdditionalTags(""); // Clear input
     toast.success(`Added ${newTags.length} tags! Total: ${uniqueTags.length}/500`);
   };
-    const fallbackCopy = () => {
-      const textarea = document.createElement('textarea');
-      textarea.value = text;
-      textarea.style.position = 'fixed';
-      textarea.style.opacity = '0';
-      document.body.appendChild(textarea);
-      textarea.select();
-      try {
-        document.execCommand('copy');
-        toast.success("Tags copied to clipboard!");
-      } catch (err) {
-        toast.error("Failed to copy tags");
-      }
-      document.body.removeChild(textarea);
-    };
-    
-    // Try modern API first, fallback if blocked
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text)
-        .then(() => toast.success("Tags copied to clipboard!"))
-        .catch(() => fallbackCopy());
-    } else {
-      fallbackCopy();
-    }
-  };
 
   const copyDescription = (content) => {
     // Fallback copy method for when Clipboard API is blocked
