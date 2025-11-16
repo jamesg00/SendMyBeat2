@@ -77,20 +77,20 @@ const About = () => {
                   <div className="flex items-start gap-2 sm:gap-3">
                     <Youtube className="w-5 h-5 sm:w-6 sm:h-6 matrix-glow mt-1 flex-shrink-0" />
                     <div>
-                      <h3 className="font-semibold text-base sm:text-lg mb-2 matrix-glow">YouTube Integration</h3>
-                      <p className="text-sm matrix-glow">
+                      <h3 className="font-semibold text-sm sm:text-base md:text-lg mb-1.5 sm:mb-2 matrix-glow">YouTube Integration</h3>
+                      <p className="text-xs sm:text-sm matrix-glow">
                         Upload your beats directly to YouTube with audio and image files from your local storage. Automatically apply generated tags and descriptions with options for public, unlisted, or private visibility.
                       </p>
                     </div>
                   </div>
                 </div>
 
-                <div className="game-card p-6">
-                  <div className="flex items-start gap-3">
-                    <Shield className="w-6 h-6 matrix-glow mt-1 flex-shrink-0" />
+                <div className="game-card p-4 sm:p-5 md:p-6">
+                  <div className="flex items-start gap-2 sm:gap-3">
+                    <Shield className="w-5 h-5 sm:w-6 sm:h-6 matrix-glow mt-1 flex-shrink-0" />
                     <div>
-                      <h3 className="font-semibold text-base sm:text-lg mb-2 matrix-glow">Flexible Plans</h3>
-                      <p className="text-sm matrix-glow">
+                      <h3 className="font-semibold text-sm sm:text-base md:text-lg mb-1.5 sm:mb-2 matrix-glow">Flexible Plans</h3>
+                      <p className="text-xs sm:text-sm matrix-glow">
                         Start free with 2 daily AI generations and 2 YouTube uploads, or upgrade to Pro for unlimited access. No commitments, cancel anytime.
                       </p>
                     </div>
@@ -100,31 +100,31 @@ const About = () => {
             </section>
 
             <section>
-              <h2 className="text-2xl sm:text-3xl font-semibold mb-4 matrix-glow">
+              <h2 className="text-xl sm:text-2xl md:text-3xl font-semibold mb-3 sm:mb-4 matrix-glow">
                 Why We Built This
               </h2>
-              <p className="text-base sm:text-lg leading-relaxed mb-4">
+              <p className="text-sm sm:text-base md:text-lg leading-relaxed mb-3 sm:mb-4">
                 As fellow creators in the music industry, we understand the challenges producers face. Creating amazing beats is only half the battle—the other half is getting them in front of potential buyers and collaborators. Traditional methods of tagging and describing content are time-consuming and often ineffective.
               </p>
-              <p className="text-base sm:text-lg leading-relaxed">
+              <p className="text-sm sm:text-base md:text-lg leading-relaxed">
                 That's why we built SendMyBeat.com: to automate and optimize the tedious parts of content management so you can focus on what you do best—making music. Our AI-powered tools analyze trends, optimize for search algorithms, and help you stand out in a crowded marketplace.
               </p>
             </section>
 
             <section>
-              <h2 className="text-2xl sm:text-3xl font-semibold mb-4 matrix-glow">
+              <h2 className="text-xl sm:text-2xl md:text-3xl font-semibold mb-3 sm:mb-4 matrix-glow">
                 Who We Are
               </h2>
-              <p className="text-base sm:text-lg leading-relaxed">
+              <p className="text-sm sm:text-base md:text-lg leading-relaxed">
                 We're a team passionate about music technology and empowering independent creators. We believe that great music deserves to be heard, and we're committed to providing tools that level the playing field for producers of all sizes. Whether you're just starting out or you're an established producer, SendMyBeat.com is designed to help you grow your audience and increase your reach.
               </p>
             </section>
 
-            <section className="game-card p-8">
-              <h2 className="text-2xl sm:text-3xl font-semibold mb-4 matrix-glow text-center">
+            <section className="game-card p-4 sm:p-6 md:p-8">
+              <h2 className="text-xl sm:text-2xl md:text-3xl font-semibold mb-3 sm:mb-4 matrix-glow text-center">
                 Our Commitment
               </h2>
-              <div className="grid md:grid-cols-3 gap-6 text-center">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 text-center">
                 <div>
                   <div className="text-3xl sm:text-4xl font-bold matrix-glow mb-2">Quality</div>
                   <p className="text-sm matrix-glow">
