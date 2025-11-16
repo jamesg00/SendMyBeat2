@@ -1988,11 +1988,15 @@ async def upload_to_youtube(
         
         logging.info(f"Using FFmpeg at: {ffmpeg_path}")
         
-        # Build video filter - add watermark for non-pro users
+        # Build video filter - add watermark for non-pro users OR pro users who didn't uncheck it
         video_filter = 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:black'
         
-        # Add watermark for free users (unless they're pro and chose to remove it)
-        if not is_subscribed or not remove_watermark:
+        # Add watermark logic:
+        # - Free users: ALWAYS get watermark (remove_watermark is ignored/blocked at API level)
+        # - Pro users: Get watermark UNLESS they checked "remove_watermark"
+        should_add_watermark = not is_subscribed or not remove_watermark
+        
+        if should_add_watermark:
             # Add text watermark at the top center
             watermark_text = 'Upload your beats online: https://sendmybeat.com'
             # Escape special characters for FFmpeg
@@ -2000,9 +2004,9 @@ async def upload_to_youtube(
             
             video_filter += f",drawtext=text='{watermark_text_escaped}':fontcolor=white:fontsize=20:x=(w-text_w)/2:y=20:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
             
-            logging.info(f"Adding watermark for {'free' if not is_subscribed else 'pro'} user")
+            logging.info(f"Adding watermark - User type: {'free' if not is_subscribed else 'pro (chose to keep it)'}")
         else:
-            logging.info("Pro user - no watermark added")
+            logging.info("Pro user - watermark removed per user request")
         
         ffmpeg_cmd = [
             ffmpeg_path,
