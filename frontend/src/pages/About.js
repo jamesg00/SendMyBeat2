@@ -150,14 +150,14 @@ const About = () => {
               <h2 className="text-2xl sm:text-3xl font-semibold mb-4 matrix-glow">
                 Get Started Today
               </h2>
-              <p className="text-lg leading-relaxed mb-6">
+              <p className="text-base sm:text-lg leading-relaxed mb-6 matrix-glow">
                 Join thousands of music producers who are already maximizing their beat discoverability with SendMyBeat.com. Start with our free plan and experience the power of AI-optimized content management. Upgrade to Pro whenever you're ready for unlimited access.
               </p>
               <div className="flex justify-center">
                 <Button
                   onClick={() => navigate('/dashboard')}
                   size="lg"
-                  className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-8 py-6 text-lg"
+                  className="matrix-btn text-base sm:text-lg px-8 py-6"
                 >
                   Go to Dashboard
                 </Button>
