@@ -209,12 +209,12 @@ const LandingPage = ({ setIsAuthenticated }) => {
                 <div className="text-xs sm:text-sm matrix-glow">TAGS</div>
               </div>
               <div className="game-card p-3 sm:p-4 pulse-glow">
-                <div className="text-2xl sm:text-3xl font-bold matrix-glow">∞</div>
-                <div className="text-xs sm:text-sm matrix-glow">PRO</div>
+                <div className="text-2xl sm:text-3xl font-bold matrix-glow">FREE</div>
+                <div className="text-xs sm:text-sm matrix-glow">YOUTUBE</div>
               </div>
               <div className="game-card p-3 sm:p-4 pulse-glow">
-                <div className="text-2xl sm:text-3xl font-bold matrix-glow">120</div>
-                <div className="text-xs sm:text-sm matrix-glow">DAYS</div>
+                <div className="text-2xl sm:text-3xl font-bold matrix-glow">AI</div>
+                <div className="text-xs sm:text-sm matrix-glow">DESCRIPTIONS</div>
               </div>
             </div>
           </div>
