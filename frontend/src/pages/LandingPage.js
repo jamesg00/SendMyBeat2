@@ -179,7 +179,7 @@ const LandingPage = ({ setIsAuthenticated }) => {
             <div className="inline-block mb-8 pulse-glow">
               <img src="/logo.png" alt="SendMyBeat" className="h-24 w-24 sm:h-32 sm:w-32 mx-auto object-contain" />
             </div>
-            <h1 className="text-4xl sm:text-5xl lg:text-7xl font-bold mb-6 leading-tight matrix-glow rgb-hover">
+            <h1 className="text-4xl sm:text-5xl lg:text-7xl font-bold mb-6 leading-tight matrix-glow rgb-hover brand-text">
               SendMyBeat
             </h1>
             <p className="text-lg sm:text-xl lg:text-2xl mb-12 max-w-3xl mx-auto leading-relaxed matrix-glow">
