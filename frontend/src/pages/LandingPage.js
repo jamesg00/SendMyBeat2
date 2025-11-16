@@ -169,52 +169,52 @@ const LandingPage = ({ setIsAuthenticated }) => {
   }
 
   return (
-    <div className="min-h-screen matrix-bg cyber-grid relative dark">
+    <div className="min-h-screen cyber-grid relative dark">
       <DarkModeToggle />
       
       {/* Hero Section */}
-      <div className="relative overflow-hidden scanline-effect">
+      <div className="relative overflow-hidden">
         <div className="container mx-auto px-4 pt-24 pb-32 relative z-10">
           <div className="max-w-5xl mx-auto text-center">
-            <div className="inline-block mb-8 pulse-glow">
-              <img src="/logo.png" alt="SendMyBeat" className="h-32 w-32 mx-auto object-contain" />
+            <div className="inline-block mb-8">
+              <img src="/logo.png" alt="SendMyBeat" className="h-24 w-24 sm:h-32 sm:w-32 mx-auto object-contain" />
             </div>
-            <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold mb-6 matrix-font matrix-glow leading-tight rgb-hover">
+            <h1 className="text-4xl sm:text-5xl lg:text-7xl font-bold mb-6 leading-tight matrix-glow">
               SendMyBeat
             </h1>
-            <p className="text-xl sm:text-2xl mb-12 max-w-3xl mx-auto leading-relaxed matrix-font" style={{color: 'var(--matrix-green-dark)'}}>
-              <span className="rgb-hover inline-block">Level Up Your YouTube Game</span>
+            <p className="text-lg sm:text-xl lg:text-2xl mb-12 max-w-3xl mx-auto leading-relaxed" style={{color: 'var(--matrix-green-dark)'}}>
+              AI-Powered YouTube Tag Generator for Beat Producers
               <br />
-              500+ AI Tags • Beat Analyzer • Growth Tracker
+              <span className="text-base sm:text-lg">500+ Tags • Beat Analyzer • Growth Tracker</span>
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-8">
               <Button
                 size="lg"
-                className="matrix-btn text-lg px-10 py-7 glitch-effect"
+                className="matrix-btn text-base sm:text-lg px-8 sm:px-10 py-6 sm:py-7"
                 onClick={() => setShowAuth(true)}
                 data-testid="get-started-btn"
               >
-                <Rocket className="mr-2 h-6 w-6" />
-                ENTER THE MATRIX
+                <Rocket className="mr-2 h-5 w-5 sm:h-6 sm:w-6" />
+                Get Started Free
               </Button>
-              <p className="text-sm matrix-font" style={{color: 'var(--matrix-green-dark)'}}>
+              <p className="text-xs sm:text-sm" style={{color: 'var(--matrix-green-dark)'}}>
                 ✅ 3 Free Daily Uses • No Credit Card
               </p>
             </div>
             
             {/* Stats */}
-            <div className="grid grid-cols-3 gap-4 max-w-2xl mx-auto mt-16">
-              <div className="game-card p-4">
-                <div className="text-3xl font-bold matrix-glow matrix-font">500+</div>
-                <div className="text-sm" style={{color: 'var(--matrix-green-dark)'}}>Tags Per Gen</div>
+            <div className="grid grid-cols-3 gap-2 sm:gap-4 max-w-2xl mx-auto mt-16">
+              <div className="game-card p-3 sm:p-4">
+                <div className="text-2xl sm:text-3xl font-bold matrix-glow">500+</div>
+                <div className="text-xs sm:text-sm" style={{color: 'var(--matrix-green-dark)'}}>Tags</div>
               </div>
-              <div className="game-card p-4">
-                <div className="text-3xl font-bold matrix-glow matrix-font">∞</div>
-                <div className="text-sm" style={{color: 'var(--matrix-green-dark)'}}>Pro Access</div>
+              <div className="game-card p-3 sm:p-4">
+                <div className="text-2xl sm:text-3xl font-bold matrix-glow">∞</div>
+                <div className="text-xs sm:text-sm" style={{color: 'var(--matrix-green-dark)'}}>Pro</div>
               </div>
-              <div className="game-card p-4">
-                <div className="text-3xl font-bold matrix-glow matrix-font">120</div>
-                <div className="text-sm" style={{color: 'var(--matrix-green-dark)'}}>Day Challenge</div>
+              <div className="game-card p-3 sm:p-4">
+                <div className="text-2xl sm:text-3xl font-bold matrix-glow">120</div>
+                <div className="text-xs sm:text-sm" style={{color: 'var(--matrix-green-dark)'}}>Days</div>
               </div>
             </div>
           </div>
@@ -222,40 +222,40 @@ const LandingPage = ({ setIsAuthenticated }) => {
       </div>
 
       {/* Features Section */}
-      <div className="container mx-auto px-4 py-24 relative z-10">
+      <div className="container mx-auto px-4 py-16 sm:py-24 relative z-10">
         <div className="max-w-6xl mx-auto">
-          <h2 className="text-4xl sm:text-5xl font-bold text-center mb-4 matrix-font matrix-glow rgb-hover">
-            POWER-UPS FOR PRODUCERS
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-center mb-4 matrix-glow">
+            Producer Tools
           </h2>
-          <p className="text-center text-xl mb-20 matrix-font" style={{color: 'var(--matrix-green-dark)'}}>
-            Next-Gen Tools For Beat Makers
+          <p className="text-center text-base sm:text-lg lg:text-xl mb-12 sm:mb-20" style={{color: 'var(--matrix-green-dark)'}}>
+            Everything you need to grow your beat channel
           </p>
           
-          <div className="grid md:grid-cols-3 gap-8">
-            <div className="game-card p-6" data-testid="feature-ai-tags">
-              <div className="mb-6">
-                <div className="h-16 w-16 rounded-2xl neon-border flex items-center justify-center pulse-glow" style={{background: 'rgba(0, 255, 65, 0.1)'}}>
-                  <Target className="h-8 w-8" style={{color: 'var(--matrix-green)'}} />
+          <div className="grid md:grid-cols-3 gap-6 sm:gap-8">
+            <div className="game-card p-4 sm:p-6" data-testid="feature-ai-tags">
+              <div className="mb-4 sm:mb-6">
+                <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-2xl neon-border flex items-center justify-center" style={{background: 'rgba(0, 255, 65, 0.1)'}}>
+                  <Target className="h-6 w-6 sm:h-8 sm:w-8" style={{color: 'var(--matrix-green)'}} />
                 </div>
               </div>
-              <h3 className="text-2xl font-bold mb-4 matrix-font matrix-glow">
-                AI TAG GENERATOR
+              <h3 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 matrix-glow">
+                AI Tag Generator
               </h3>
-              <p className="text-lg leading-relaxed" style={{color: 'var(--matrix-green-dark)'}}>
+              <p className="text-sm sm:text-base lg:text-lg leading-relaxed" style={{color: 'var(--matrix-green-dark)'}}>
                 Generate 500 YouTube tags instantly with GPT-4o. Type beat variations, trending keywords, SEO-optimized phrases.
               </p>
             </div>
 
-            <div className="game-card p-6" data-testid="feature-descriptions">
-              <div className="mb-6">
-                <div className="h-16 w-16 rounded-2xl neon-border flex items-center justify-center pulse-glow" style={{background: 'rgba(0, 255, 65, 0.1)', animationDelay: '0.5s'}}>
-                  <Save className="h-8 w-8" style={{color: 'var(--matrix-green)'}} />
+            <div className="game-card p-4 sm:p-6" data-testid="feature-descriptions">
+              <div className="mb-4 sm:mb-6">
+                <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-2xl neon-border flex items-center justify-center" style={{background: 'rgba(0, 255, 65, 0.1)'}}>
+                  <Save className="h-6 w-6 sm:h-8 sm:w-8" style={{color: 'var(--matrix-green)'}} />
                 </div>
               </div>
-              <h3 className="text-2xl font-bold mb-4 matrix-font matrix-glow">
-                SAVE TEMPLATES
+              <h3 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 matrix-glow">
+                Save Templates
               </h3>
-              <p className="text-lg leading-relaxed" style={{color: 'var(--matrix-green-dark)'}}>
+              <p className="text-sm sm:text-base lg:text-lg leading-relaxed" style={{color: 'var(--matrix-green-dark)'}}>
                 Create unlimited description templates. One-click copy for consistent branding across your beat catalog.
               </p>
             </div>
