@@ -886,21 +886,11 @@ const Dashboard = ({ setIsAuthenticated }) => {
 
         <Tabs defaultValue="tags" className="space-y-4 sm:space-y-6">
           <TabsList className="grid w-full max-w-3xl mx-auto grid-cols-5 gap-0.5 sm:gap-1 text-xs sm:text-sm p-0.5 sm:p-1">
-            <TabsTrigger value="tags" data-testid="tags-tab" className="px-1 sm:px-3 py-1.5 sm:py-2 truncate overflow-hidden whitespace-nowrap">
-              <span className="truncate">Tags</span>
-            </TabsTrigger>
-            <TabsTrigger value="descriptions" data-testid="descriptions-tab" className="px-1 sm:px-3 py-1.5 sm:py-2 truncate overflow-hidden whitespace-nowrap">
-              <span className="truncate" title="Descriptions">Descri...</span>
-            </TabsTrigger>
-            <TabsTrigger value="upload" data-testid="upload-tab" className="px-1 sm:px-3 py-1.5 sm:py-2 truncate overflow-hidden whitespace-nowrap">
-              <span className="truncate">Upload</span>
-            </TabsTrigger>
-            <TabsTrigger value="analytics" data-testid="analytics-tab" className="px-1 sm:px-3 py-1.5 sm:py-2 truncate overflow-hidden whitespace-nowrap">
-              <span className="truncate" title="Analytics">Analyt...</span>
-            </TabsTrigger>
-            <TabsTrigger value="grow" data-testid="grow-tab" className="px-1 sm:px-3 py-1.5 sm:py-2 truncate overflow-hidden whitespace-nowrap">
-              <span className="truncate" title="Grow in 120">Grow...</span>
-            </TabsTrigger>
+            <TabsTrigger value="tags" data-testid="tags-tab" className="px-1 sm:px-3 py-1.5 sm:py-2 truncate">Tags</TabsTrigger>
+            <TabsTrigger value="descriptions" data-testid="descriptions-tab" className="px-1 sm:px-3 py-1.5 sm:py-2 truncate">Descriptions</TabsTrigger>
+            <TabsTrigger value="upload" data-testid="upload-tab" className="px-1 sm:px-3 py-1.5 sm:py-2 truncate">Upload</TabsTrigger>
+            <TabsTrigger value="analytics" data-testid="analytics-tab" className="px-1 sm:px-3 py-1.5 sm:py-2 truncate">Analytics</TabsTrigger>
+            <TabsTrigger value="grow" data-testid="grow-tab" className="px-1 sm:px-3 py-1.5 sm:py-2 truncate">Grow in 120</TabsTrigger>
           </TabsList>
 
           {/* Tag Generator Tab */}
