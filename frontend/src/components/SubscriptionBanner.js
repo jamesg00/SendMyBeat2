@@ -88,10 +88,10 @@ const SubscriptionBanner = ({ creditsRemaining, uploadCreditsRemaining, isSubscr
 
   return (
     <Card className={`mb-6 producer-card border-0 ${isAnyLow ? 'neon-glow' : ''}`}>
-      <CardContent className="p-6">
+      <CardContent className="p-4 sm:p-5 md:p-6">
         {/* Header */}
-        <div className="mb-6">
-          <h3 className="text-lg font-bold" style={{color: 'var(--text-primary)'}}>
+        <div className="mb-4 sm:mb-5 md:mb-6">
+          <h3 className="text-base sm:text-lg font-bold" style={{color: 'var(--text-primary)'}}>
             Free Daily Credits
           </h3>
           <p className="text-xs" style={{color: 'var(--text-secondary)'}}>
@@ -100,7 +100,7 @@ const SubscriptionBanner = ({ creditsRemaining, uploadCreditsRemaining, isSubscr
         </div>
 
         {/* Side by Side Credit Cards */}
-        <div className="grid grid-cols-2 gap-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-4 sm:mb-5 md:mb-6">
           {/* AI Generations Card */}
           <div className={`producer-card p-4 rounded-xl ${isAiLow ? 'border-2 border-red-500' : ''}`}>
             <div className="flex flex-col items-center text-center">
