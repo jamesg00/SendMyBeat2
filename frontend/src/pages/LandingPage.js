@@ -306,22 +306,22 @@ const LandingPage = ({ setIsAuthenticated }) => {
       </div>
 
       {/* CTA Section */}
-      <div className="container mx-auto px-4 py-16 sm:py-24">
-        <div className="max-w-4xl mx-auto">
-          <div className="game-card text-center p-8 sm:p-16 pulse-glow">
-            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold matrix-glow mb-4 sm:mb-6 rgb-hover">
+      <div className="container mx-auto px-4 sm:px-6 py-12 sm:py-16 md:py-24">
+        <div className="max-w-4xl mx-auto px-2">
+          <div className="game-card text-center p-6 sm:p-8 md:p-12 lg:p-16 pulse-glow">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold matrix-glow mb-3 sm:mb-4 md:mb-6 rgb-hover px-2">
               READY TO LEVEL UP?
             </h2>
-            <p className="text-base sm:text-lg lg:text-xl mb-8 sm:mb-10 max-w-2xl mx-auto matrix-glow">
+            <p className="text-sm sm:text-base md:text-lg lg:text-xl mb-6 sm:mb-8 md:mb-10 max-w-2xl mx-auto matrix-glow px-4">
               Join 1000+ producers growing their channels with AI-powered YouTube optimization
             </p>
             <Button
               size="lg"
-              className="matrix-btn text-base sm:text-lg px-8 sm:px-10 py-6 sm:py-7 glitch-effect"
+              className="matrix-btn w-full sm:w-auto text-sm sm:text-base md:text-lg px-6 sm:px-8 md:px-10 py-5 sm:py-6 md:py-7 glitch-effect"
               onClick={() => setShowAuth(true)}
               data-testid="cta-signup-btn"
             >
-              <Sparkles className="mr-2 h-5 w-5 sm:h-6 sm:w-6" />
+              <Sparkles className="mr-2 h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6" />
               Start Free Now
             </Button>
           </div>
