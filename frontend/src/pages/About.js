@@ -49,48 +49,48 @@ const About = () => {
                 SendMyBeat.com is a comprehensive platform designed specifically for music producers who want to maximize their beat discoverability. We provide powerful tools that streamline your workflow and optimize your content for search algorithms:
               </p>
               <div className="grid md:grid-cols-2 gap-6 mt-6">
-                <div className="bg-blue-50 dark:bg-slate-700 p-6 rounded-lg">
+                <div className="game-card p-6">
                   <div className="flex items-start gap-3">
-                    <Music className="w-6 h-6 text-blue-600 mt-1 flex-shrink-0" />
+                    <Music className="w-6 h-6 matrix-glow mt-1 flex-shrink-0" />
                     <div>
-                      <h3 className="font-semibold text-lg mb-2 text-gray-900 dark:text-white">AI Tag Generation</h3>
-                      <p className="text-sm">
+                      <h3 className="font-semibold text-base sm:text-lg mb-2 matrix-glow">AI Tag Generation</h3>
+                      <p className="text-sm matrix-glow">
                         Generate up to 500 advanced, search-optimized tags based on your search queries. Our AI analyzes trends and suggests tags that increase discoverability, similar to tools like vidIQ.
                       </p>
                     </div>
                   </div>
                 </div>
 
-                <div className="bg-purple-50 dark:bg-slate-700 p-6 rounded-lg">
+                <div className="game-card p-6">
                   <div className="flex items-start gap-3">
-                    <TrendingUp className="w-6 h-6 text-purple-600 mt-1 flex-shrink-0" />
+                    <TrendingUp className="w-6 h-6 matrix-glow mt-1 flex-shrink-0" />
                     <div>
-                      <h3 className="font-semibold text-lg mb-2 text-gray-900 dark:text-white">Smart Description Management</h3>
-                      <p className="text-sm">
+                      <h3 className="font-semibold text-base sm:text-lg mb-2 matrix-glow">Smart Description Management</h3>
+                      <p className="text-sm matrix-glow">
                         Save and manage multiple custom or AI-refined descriptions as templates. Generate descriptions based on your email, socials, BPM, and pricing information with AI assistance.
                       </p>
                     </div>
                   </div>
                 </div>
 
-                <div className="bg-green-50 dark:bg-slate-700 p-6 rounded-lg">
+                <div className="game-card p-6">
                   <div className="flex items-start gap-3">
-                    <Youtube className="w-6 h-6 text-red-600 mt-1 flex-shrink-0" />
+                    <Youtube className="w-6 h-6 matrix-glow mt-1 flex-shrink-0" />
                     <div>
-                      <h3 className="font-semibold text-lg mb-2 text-gray-900 dark:text-white">YouTube Integration</h3>
-                      <p className="text-sm">
+                      <h3 className="font-semibold text-base sm:text-lg mb-2 matrix-glow">YouTube Integration</h3>
+                      <p className="text-sm matrix-glow">
                         Upload your beats directly to YouTube with audio and image files from your local storage. Automatically apply generated tags and descriptions with options for public, unlisted, or private visibility.
                       </p>
                     </div>
                   </div>
                 </div>
 
-                <div className="bg-orange-50 dark:bg-slate-700 p-6 rounded-lg">
+                <div className="game-card p-6">
                   <div className="flex items-start gap-3">
-                    <Shield className="w-6 h-6 text-orange-600 mt-1 flex-shrink-0" />
+                    <Shield className="w-6 h-6 matrix-glow mt-1 flex-shrink-0" />
                     <div>
-                      <h3 className="font-semibold text-lg mb-2 text-gray-900 dark:text-white">Flexible Plans</h3>
-                      <p className="text-sm">
+                      <h3 className="font-semibold text-base sm:text-lg mb-2 matrix-glow">Flexible Plans</h3>
+                      <p className="text-sm matrix-glow">
                         Start free with 2 daily AI generations and 2 YouTube uploads, or upgrade to Pro for unlimited access. No commitments, cancel anytime.
                       </p>
                     </div>
@@ -100,46 +100,46 @@ const About = () => {
             </section>
 
             <section>
-              <h2 className="text-3xl font-semibold mb-4 text-gray-900 dark:text-white">
+              <h2 className="text-2xl sm:text-3xl font-semibold mb-4 matrix-glow">
                 Why We Built This
               </h2>
-              <p className="text-lg leading-relaxed mb-4">
+              <p className="text-base sm:text-lg leading-relaxed mb-4">
                 As fellow creators in the music industry, we understand the challenges producers face. Creating amazing beats is only half the battle—the other half is getting them in front of potential buyers and collaborators. Traditional methods of tagging and describing content are time-consuming and often ineffective.
               </p>
-              <p className="text-lg leading-relaxed">
+              <p className="text-base sm:text-lg leading-relaxed">
                 That's why we built SendMyBeat.com: to automate and optimize the tedious parts of content management so you can focus on what you do best—making music. Our AI-powered tools analyze trends, optimize for search algorithms, and help you stand out in a crowded marketplace.
               </p>
             </section>
 
             <section>
-              <h2 className="text-3xl font-semibold mb-4 text-gray-900 dark:text-white">
+              <h2 className="text-2xl sm:text-3xl font-semibold mb-4 matrix-glow">
                 Who We Are
               </h2>
-              <p className="text-lg leading-relaxed">
+              <p className="text-base sm:text-lg leading-relaxed">
                 We're a team passionate about music technology and empowering independent creators. We believe that great music deserves to be heard, and we're committed to providing tools that level the playing field for producers of all sizes. Whether you're just starting out or you're an established producer, SendMyBeat.com is designed to help you grow your audience and increase your reach.
               </p>
             </section>
 
-            <section className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-slate-700 dark:to-slate-700 p-8 rounded-lg">
-              <h2 className="text-3xl font-semibold mb-4 text-gray-900 dark:text-white text-center">
+            <section className="game-card p-8">
+              <h2 className="text-2xl sm:text-3xl font-semibold mb-4 matrix-glow text-center">
                 Our Commitment
               </h2>
               <div className="grid md:grid-cols-3 gap-6 text-center">
                 <div>
-                  <div className="text-4xl font-bold text-blue-600 mb-2">Quality</div>
-                  <p className="text-sm">
+                  <div className="text-3xl sm:text-4xl font-bold matrix-glow mb-2">Quality</div>
+                  <p className="text-sm matrix-glow">
                     We use state-of-the-art AI technology to deliver the best results for your content optimization needs.
                   </p>
                 </div>
                 <div>
-                  <div className="text-4xl font-bold text-purple-600 mb-2">Simplicity</div>
-                  <p className="text-sm">
+                  <div className="text-3xl sm:text-4xl font-bold matrix-glow mb-2">Simplicity</div>
+                  <p className="text-sm matrix-glow">
                     Our platform is designed to be intuitive and easy to use, saving you time and effort.
                   </p>
                 </div>
                 <div>
-                  <div className="text-4xl font-bold text-green-600 mb-2">Growth</div>
-                  <p className="text-sm">
+                  <div className="text-3xl sm:text-4xl font-bold matrix-glow mb-2">Growth</div>
+                  <p className="text-sm matrix-glow">
                     We're constantly improving our tools and adding new features based on user feedback.
                   </p>
                 </div>
@@ -147,7 +147,7 @@ const About = () => {
             </section>
 
             <section>
-              <h2 className="text-3xl font-semibold mb-4 text-gray-900 dark:text-white">
+              <h2 className="text-2xl sm:text-3xl font-semibold mb-4 matrix-glow">
                 Get Started Today
               </h2>
               <p className="text-lg leading-relaxed mb-6">
