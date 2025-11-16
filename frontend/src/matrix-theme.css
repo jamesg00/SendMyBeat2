@@ -75,7 +75,7 @@ body, h1, h2, h3, h4, h5, h6, p, div, span, button {
 }
 
 /* Matrix Text Glow - Different for light/dark */
-.dark .matrix-glow {
+.dark .matrix-glow, html.dark .matrix-glow {
   color: var(--matrix-green);
   text-shadow: 
     0 0 5px var(--matrix-green-glow),
@@ -83,7 +83,7 @@ body, h1, h2, h3, h4, h5, h6, p, div, span, button {
     0 0 20px var(--matrix-green-glow);
 }
 
-body:not(.dark) .matrix-glow {
+.matrix-glow {
   color: var(--matrix-green-dark);
   text-shadow: 
     0 0 3px rgba(0, 204, 51, 0.3),
