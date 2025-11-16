@@ -998,14 +998,14 @@ const Dashboard = ({ setIsAuthenticated }) => {
                     </div>
                     
                     {/* Add More Tags Section */}
-                    <div className="mt-4 p-4 rounded-lg border-2 border-green-500" style={{backgroundColor: 'var(--bg-secondary)'}}>
-                      <div className="space-y-3">
+                    <div className="mt-3 sm:mt-4 p-3 sm:p-4 rounded-lg border-2 border-green-500" style={{backgroundColor: 'var(--bg-secondary)'}}>
+                      <div className="space-y-2 sm:space-y-3">
                         <div className="flex items-center justify-between">
-                          <Label htmlFor="additional-tags" className="font-semibold">
-                            <Plus className="inline h-4 w-4 mr-1" />
+                          <Label htmlFor="additional-tags" className="font-semibold text-sm sm:text-base">
+                            <Plus className="inline h-3 w-3 sm:h-4 sm:w-4 mr-1" />
                             Add More Tags
                           </Label>
-                          <span className="text-sm" style={{color: 'var(--text-secondary)'}}>
+                          <span className="text-xs sm:text-sm" style={{color: 'var(--text-secondary)'}}>
                             {generatedTags.length}/500
                           </span>
                         </div>
@@ -1016,14 +1016,15 @@ const Dashboard = ({ setIsAuthenticated }) => {
                           onChange={(e) => setAdditionalTags(e.target.value)}
                           rows={2}
                           disabled={generatedTags.length >= 500}
+                          className="text-sm sm:text-base"
                         />
                         <Button
                           size="sm"
                           onClick={handleAddMoreTags}
                           disabled={generatedTags.length >= 500 || !additionalTags.trim()}
-                          className="w-full gap-2 bg-green-600 hover:bg-green-700"
+                          className="w-full gap-1 sm:gap-2 bg-green-600 hover:bg-green-700 text-sm py-2.5"
                         >
-                          <Plus className="h-4 w-4" />
+                          <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
                           {generatedTags.length >= 500 ? "Limit Reached (500)" : "Add Tags"}
                         </Button>
                       </div>
