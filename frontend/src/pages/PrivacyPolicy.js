@@ -41,7 +41,7 @@ const PrivacyPolicy = () => {
             </section>
 
             <section>
-              <h2 className="text-2xl font-semibold mb-4 ${isDark ? 'text-white' : 'text-gray-900'}">2. What We Do</h2>
+              <h2 className="text-xl sm:text-2xl font-semibold mb-4 matrix-glow">2. What We Do</h2>
               <p>
                 SendMyBeat is a platform that helps music producers and beat makers upload their content 
                 to YouTube with AI-generated tags and descriptions. We provide tools to:
@@ -55,7 +55,7 @@ const PrivacyPolicy = () => {
             </section>
 
             <section>
-              <h2 className="text-2xl font-semibold mb-4 ${isDark ? 'text-white' : 'text-gray-900'}">3. Information We Collect</h2>
+              <h2 className="text-xl sm:text-2xl font-semibold mb-4 matrix-glow">3. Information We Collect</h2>
               <p className="mb-3">We collect the following types of information:</p>
               
               <h3 className="text-xl font-semibold mb-2 ${isDark ? 'text-gray-200' : 'text-gray-800'}">Account Information:</h3>
@@ -80,7 +80,7 @@ const PrivacyPolicy = () => {
             </section>
 
             <section>
-              <h2 className="text-2xl font-semibold mb-4 ${isDark ? 'text-white' : 'text-gray-900'}">4. How We Use Your Information</h2>
+              <h2 className="text-xl sm:text-2xl font-semibold mb-4 matrix-glow">4. How We Use Your Information</h2>
               <ul className="list-disc ml-6 space-y-2">
                 <li><strong>Authentication:</strong> To verify your identity and provide access to your account</li>
                 <li><strong>YouTube Integration:</strong> To upload videos to YOUR YouTube channel on your behalf</li>
@@ -91,7 +91,7 @@ const PrivacyPolicy = () => {
             </section>
 
             <section>
-              <h2 className="text-2xl font-semibold mb-4 ${isDark ? 'text-white' : 'text-gray-900'}">5. Data Storage and Security</h2>
+              <h2 className="text-xl sm:text-2xl font-semibold mb-4 matrix-glow">5. Data Storage and Security</h2>
               <p className="mb-3">We take data security seriously:</p>
               <ul className="list-disc ml-6 space-y-2">
                 <li><strong>File Storage:</strong> Audio and image files are stored temporarily during upload and deleted after successful YouTube upload</li>
@@ -103,7 +103,7 @@ const PrivacyPolicy = () => {
             </section>
 
             <section>
-              <h2 className="text-2xl font-semibold mb-4 ${isDark ? 'text-white' : 'text-gray-900'}">6. Third-Party Services</h2>
+              <h2 className="text-xl sm:text-2xl font-semibold mb-4 matrix-glow">6. Third-Party Services</h2>
               <p className="mb-3">We use the following third-party services:</p>
               
               <h3 className="text-xl font-semibold mb-2 ${isDark ? 'text-gray-200' : 'text-gray-800'}">Google Services:</h3>
@@ -121,7 +121,7 @@ const PrivacyPolicy = () => {
             </section>
 
             <section>
-              <h2 className="text-2xl font-semibold mb-4 ${isDark ? 'text-white' : 'text-gray-900'}">7. Data Sharing</h2>
+              <h2 className="text-xl sm:text-2xl font-semibold mb-4 matrix-glow">7. Data Sharing</h2>
               <p className="mb-3">We do NOT sell or share your personal data with third parties, except:</p>
               <ul className="list-disc ml-6 space-y-2">
                 <li>With your explicit consent (e.g., uploading videos to YOUR YouTube channel)</li>
@@ -131,7 +131,7 @@ const PrivacyPolicy = () => {
             </section>
 
             <section>
-              <h2 className="text-2xl font-semibold mb-4 ${isDark ? 'text-white' : 'text-gray-900'}">8. Your Rights</h2>
+              <h2 className="text-xl sm:text-2xl font-semibold mb-4 matrix-glow">8. Your Rights</h2>
               <p className="mb-3">You have the following rights:</p>
               <ul className="list-disc ml-6 space-y-2">
                 <li><strong>Access:</strong> Request a copy of your data</li>
@@ -143,7 +143,7 @@ const PrivacyPolicy = () => {
             </section>
 
             <section>
-              <h2 className="text-2xl font-semibold mb-4 ${isDark ? 'text-white' : 'text-gray-900'}">9. Data Retention</h2>
+              <h2 className="text-xl sm:text-2xl font-semibold mb-4 matrix-glow">9. Data Retention</h2>
               <ul className="list-disc ml-6 space-y-2">
                 <li><strong>Account Data:</strong> Retained as long as your account is active</li>
                 <li><strong>Uploaded Files:</strong> Deleted immediately after successful YouTube upload</li>
@@ -153,7 +153,7 @@ const PrivacyPolicy = () => {
             </section>
 
             <section>
-              <h2 className="text-2xl font-semibold mb-4 ${isDark ? 'text-white' : 'text-gray-900'}">10. Cookies and Tracking</h2>
+              <h2 className="text-xl sm:text-2xl font-semibold mb-4 matrix-glow">10. Cookies and Tracking</h2>
               <p>
                 We use session cookies for authentication purposes only. We do not use tracking cookies 
                 or third-party analytics. Your session data is cleared when you log out.
@@ -161,7 +161,7 @@ const PrivacyPolicy = () => {
             </section>
 
             <section>
-              <h2 className="text-2xl font-semibold mb-4 ${isDark ? 'text-white' : 'text-gray-900'}">11. Children's Privacy</h2>
+              <h2 className="text-xl sm:text-2xl font-semibold mb-4 matrix-glow">11. Children's Privacy</h2>
               <p>
                 Our service is not intended for users under 13 years of age. We do not knowingly collect 
                 personal information from children under 13. If you believe we have collected data from 
@@ -170,7 +170,7 @@ const PrivacyPolicy = () => {
             </section>
 
             <section>
-              <h2 className="text-2xl font-semibold mb-4 ${isDark ? 'text-white' : 'text-gray-900'}">12. Changes to This Policy</h2>
+              <h2 className="text-xl sm:text-2xl font-semibold mb-4 matrix-glow">12. Changes to This Policy</h2>
               <p>
                 We may update this privacy policy from time to time. We will notify you of any changes 
                 by posting the new policy on this page and updating the "Last Updated" date. Continued 
@@ -179,7 +179,7 @@ const PrivacyPolicy = () => {
             </section>
 
             <section>
-              <h2 className="text-2xl font-semibold mb-4 ${isDark ? 'text-white' : 'text-gray-900'}">13. Contact Us</h2>
+              <h2 className="text-xl sm:text-2xl font-semibold mb-4 matrix-glow">13. Contact Us</h2>
               <p className="mb-3">
                 If you have any questions about this privacy policy or our data practices, please contact us:
               </p>
@@ -190,7 +190,7 @@ const PrivacyPolicy = () => {
             </section>
 
             <section className="border-t pt-6 mt-8">
-              <h2 className="text-2xl font-semibold mb-4 ${isDark ? 'text-white' : 'text-gray-900'}">14. YouTube API Disclosure</h2>
+              <h2 className="text-xl sm:text-2xl font-semibold mb-4 matrix-glow">14. YouTube API Disclosure</h2>
               <p className="mb-3">
                 SendMyBeat uses the YouTube API Services. By using our service, you are also agreeing to be bound by:
               </p>
