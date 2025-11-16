@@ -169,7 +169,7 @@ const LandingPage = ({ setIsAuthenticated }) => {
   }
 
   return (
-    <div className="min-h-screen matrix-bg cyber-grid relative dark scanline-effect">
+    <div className="min-h-screen matrix-bg cyber-grid relative scanline-effect">
       <DarkModeToggle />
       
       {/* Hero Section */}
