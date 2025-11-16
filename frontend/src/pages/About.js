@@ -31,51 +31,51 @@ const About = () => {
 
           <div className="space-y-6 sm:space-y-8 matrix-glow">
             <section>
-              <h2 className="text-2xl sm:text-3xl font-semibold mb-4 matrix-glow flex items-center gap-3">
-                <Target className="w-6 h-6 sm:w-8 sm:h-8 matrix-glow" />
-                Our Mission
+              <h2 className="text-xl sm:text-2xl md:text-3xl font-semibold mb-3 sm:mb-4 matrix-glow flex items-center gap-2 sm:gap-3">
+                <Target className="w-5 h-5 sm:w-6 sm:h-6 md:w-8 md:h-8 matrix-glow flex-shrink-0" />
+                <span>Our Mission</span>
               </h2>
-              <p className="text-base sm:text-lg leading-relaxed">
+              <p className="text-sm sm:text-base md:text-lg leading-relaxed">
                 SendMyBeat.com was created with a single purpose: to help music producers get their beats discovered. In today's competitive music landscape, having great beats isn't enough—they need to be found. We leverage cutting-edge AI technology to optimize your content for maximum visibility across platforms like YouTube, ensuring your music reaches the right audience.
               </p>
             </section>
 
             <section>
-              <h2 className="text-2xl sm:text-3xl font-semibold mb-4 matrix-glow flex items-center gap-3">
-                <Zap className="w-6 h-6 sm:w-8 sm:h-8 matrix-glow" />
-                What We Do
+              <h2 className="text-xl sm:text-2xl md:text-3xl font-semibold mb-3 sm:mb-4 matrix-glow flex items-center gap-2 sm:gap-3">
+                <Zap className="w-5 h-5 sm:w-6 sm:h-6 md:w-8 md:h-8 matrix-glow flex-shrink-0" />
+                <span>What We Do</span>
               </h2>
-              <p className="text-base sm:text-lg leading-relaxed mb-4">
+              <p className="text-sm sm:text-base md:text-lg leading-relaxed mb-3 sm:mb-4">
                 SendMyBeat.com is a comprehensive platform designed specifically for music producers who want to maximize their beat discoverability. We provide powerful tools that streamline your workflow and optimize your content for search algorithms:
               </p>
-              <div className="grid md:grid-cols-2 gap-6 mt-6">
-                <div className="game-card p-6">
-                  <div className="flex items-start gap-3">
-                    <Music className="w-6 h-6 matrix-glow mt-1 flex-shrink-0" />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mt-4 sm:mt-6">
+                <div className="game-card p-4 sm:p-5 md:p-6">
+                  <div className="flex items-start gap-2 sm:gap-3">
+                    <Music className="w-5 h-5 sm:w-6 sm:h-6 matrix-glow mt-1 flex-shrink-0" />
                     <div>
-                      <h3 className="font-semibold text-base sm:text-lg mb-2 matrix-glow">AI Tag Generation</h3>
-                      <p className="text-sm matrix-glow">
+                      <h3 className="font-semibold text-sm sm:text-base md:text-lg mb-1.5 sm:mb-2 matrix-glow">AI Tag Generation</h3>
+                      <p className="text-xs sm:text-sm matrix-glow">
                         Generate up to 500 advanced, search-optimized tags based on your search queries. Our AI analyzes trends and suggests tags that increase discoverability, similar to tools like vidIQ.
                       </p>
                     </div>
                   </div>
                 </div>
 
-                <div className="game-card p-6">
-                  <div className="flex items-start gap-3">
-                    <TrendingUp className="w-6 h-6 matrix-glow mt-1 flex-shrink-0" />
+                <div className="game-card p-4 sm:p-5 md:p-6">
+                  <div className="flex items-start gap-2 sm:gap-3">
+                    <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6 matrix-glow mt-1 flex-shrink-0" />
                     <div>
-                      <h3 className="font-semibold text-base sm:text-lg mb-2 matrix-glow">Smart Description Management</h3>
-                      <p className="text-sm matrix-glow">
+                      <h3 className="font-semibold text-sm sm:text-base md:text-lg mb-1.5 sm:mb-2 matrix-glow">Smart Description Management</h3>
+                      <p className="text-xs sm:text-sm matrix-glow">
                         Save and manage multiple custom or AI-refined descriptions as templates. Generate descriptions based on your email, socials, BPM, and pricing information with AI assistance.
                       </p>
                     </div>
                   </div>
                 </div>
 
-                <div className="game-card p-6">
-                  <div className="flex items-start gap-3">
-                    <Youtube className="w-6 h-6 matrix-glow mt-1 flex-shrink-0" />
+                <div className="game-card p-4 sm:p-5 md:p-6">
+                  <div className="flex items-start gap-2 sm:gap-3">
+                    <Youtube className="w-5 h-5 sm:w-6 sm:h-6 matrix-glow mt-1 flex-shrink-0" />
                     <div>
                       <h3 className="font-semibold text-base sm:text-lg mb-2 matrix-glow">YouTube Integration</h3>
                       <p className="text-sm matrix-glow">
