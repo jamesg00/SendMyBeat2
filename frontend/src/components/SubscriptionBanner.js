@@ -46,21 +46,21 @@ const SubscriptionBanner = ({ creditsRemaining, uploadCreditsRemaining, isSubscr
   if (isSubscribed) {
     return (
       <Card className="mb-6 glass-card border-0">
-        <CardContent className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-4">
-              <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-[var(--accent-primary)] to-[var(--accent-secondary)] flex items-center justify-center shadow-lg">
-                <Sparkles className="h-7 w-7 text-white" />
+        <CardContent className="p-4 sm:p-5 md:p-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4 sm:mb-5">
+            <div className="flex items-center gap-3 sm:gap-4 flex-1">
+              <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-2xl bg-gradient-to-br from-[var(--accent-primary)] to-[var(--accent-secondary)] flex items-center justify-center shadow-lg flex-shrink-0">
+                <Sparkles className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
               </div>
-              <div>
-                <h3 className="text-xl font-bold gradient-text">SendMyBeat Pro</h3>
-                <p className="text-sm" style={{color: 'var(--text-secondary)'}}>
-                  Unlimited AI generations & YouTube uploads
+              <div className="min-w-0 flex-1">
+                <h3 className="text-lg sm:text-xl font-bold gradient-text">SendMyBeat Pro</h3>
+                <p className="text-xs sm:text-sm leading-relaxed" style={{color: 'var(--text-secondary)'}}>
+                  Unlimited AI generations &<br className="sm:hidden" /> YouTube uploads
                 </p>
               </div>
             </div>
-            <div className="text-right">
-              <p className="text-4xl font-bold gradient-text">∞</p>
+            <div className="text-center sm:text-right">
+              <p className="text-3xl sm:text-4xl font-bold gradient-text">∞</p>
               <p className="text-xs font-semibold" style={{color: 'var(--text-secondary)'}}>UNLIMITED</p>
             </div>
           </div>
@@ -68,7 +68,7 @@ const SubscriptionBanner = ({ creditsRemaining, uploadCreditsRemaining, isSubscr
             onClick={handleManageSubscription}
             disabled={loadingPortal}
             variant="outline"
-            className="w-full"
+            className="w-full py-3 sm:py-4 text-sm sm:text-base"
             style={{borderColor: 'var(--accent-primary)', color: 'var(--accent-primary)'}}
           >
             <Settings className="mr-2 h-4 w-4" />
