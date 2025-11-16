@@ -376,8 +376,8 @@ const LandingPage = ({ setIsAuthenticated }) => {
                 </div>
               </div>
 
-              <div className="text-center pt-4">
-                <p className="text-sm italic" style={{color: 'var(--text-secondary)'}}>
+              <div className="text-center pt-3 sm:pt-4 px-2">
+                <p className="text-xs sm:text-sm italic" style={{color: 'var(--text-secondary)'}}>
                   By connecting your YouTube account, you authorize SendMyBeat to upload videos on your behalf using the YouTube Data API v3.
                 </p>
               </div>
