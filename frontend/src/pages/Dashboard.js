@@ -807,30 +807,30 @@ const Dashboard = ({ setIsAuthenticated }) => {
               {subscriptionStatus && !subscriptionStatus.is_subscribed && (
                 <Button
                   onClick={() => setShowUpgradeModal(true)}
-                  className="btn-modern"
+                  className="btn-modern text-xs sm:text-sm px-3 sm:px-4 py-2"
                   data-testid="header-upgrade-btn"
                 >
-                  <Sparkles className="h-4 w-4 mr-2" />
+                  <Sparkles className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
                   Upgrade to Pro
                 </Button>
               )}
               
               {/* Show Pro badge for subscribed users */}
               {subscriptionStatus && subscriptionStatus.is_subscribed && (
-                <div className="px-4 py-2 rounded-full bg-gradient-to-r from-[var(--accent-primary)] to-[var(--accent-secondary)] text-white font-semibold text-sm">
+                <div className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-gradient-to-r from-[var(--accent-primary)] to-[var(--accent-secondary)] text-white font-semibold text-xs sm:text-sm whitespace-nowrap">
                   ✨ Pro Member
                 </div>
               )}
               
               {/* YouTube Profile Picture */}
               {youtubeConnected && youtubeProfilePicture && (
-                <div className="flex items-center gap-2 px-3 py-2 rounded-full" style={{backgroundColor: 'var(--bg-secondary)'}}>
+                <div className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-full" style={{backgroundColor: 'var(--bg-secondary)'}}>
                   <img 
                     src={youtubeProfilePicture} 
                     alt={youtubeName || youtubeEmail}
-                    className="h-8 w-8 rounded-full border-2 border-[var(--accent-primary)]"
+                    className="h-6 w-6 sm:h-8 sm:w-8 rounded-full border-2 border-[var(--accent-primary)]"
                   />
-                  <span className="text-sm font-medium" style={{color: 'var(--text-primary)'}}>
+                  <span className="text-xs sm:text-sm font-medium hidden sm:block" style={{color: 'var(--text-primary)'}}>
                     {youtubeName || youtubeEmail}
                   </span>
                 </div>
@@ -839,11 +839,12 @@ const Dashboard = ({ setIsAuthenticated }) => {
               <Button
                 variant="outline"
                 onClick={handleLogout}
-                className="gap-2 border-[var(--border-color)]"
+                className="gap-1 sm:gap-2 border-[var(--border-color)] text-xs sm:text-sm px-3 sm:px-4 py-2"
                 data-testid="logout-btn"
               >
-                <LogOut className="h-4 w-4" />
-                Logout
+                <LogOut className="h-3 w-3 sm:h-4 sm:w-4" />
+                <span className="hidden sm:inline">Logout</span>
+                <span className="sm:hidden">Exit</span>
               </Button>
             </div>
           </div>
