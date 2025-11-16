@@ -1997,14 +1997,15 @@ async def upload_to_youtube(
         should_add_watermark = not is_subscribed or not remove_watermark
         
         if should_add_watermark:
-            # Add text watermark at the top left
+            # Add text watermark at the top left with black semi-transparent background
             watermark_text = 'Upload your beats online: https://sendmybeat.com'
             # Escape special characters for FFmpeg
             watermark_text_escaped = watermark_text.replace(':', r'\:').replace('/', r'\/')
             
-            video_filter += f",drawtext=text='{watermark_text_escaped}':fontcolor=white:fontsize=20:x=20:y=20:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+            # Add black background box with some padding for better visibility
+            video_filter += f",drawtext=text='{watermark_text_escaped}':fontcolor=white:fontsize=20:x=20:y=20:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:box=1:boxcolor=black@0.6:boxborderw=8"
             
-            logging.info(f"Adding watermark at top-left - User type: {'free' if not is_subscribed else 'pro (chose to keep it)'}")
+            logging.info(f"Adding watermark at top-left with background - User type: {'free' if not is_subscribed else 'pro (chose to keep it)'}")
         else:
             logging.info("Pro user - watermark removed per user request")
         
