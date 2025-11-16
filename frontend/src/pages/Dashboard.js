@@ -358,6 +358,60 @@ const Dashboard = ({ setIsAuthenticated }) => {
     const text = generatedTags.join(", ");
     
     // Fallback copy method for when Clipboard API is blocked
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-999999px';
+    document.body.appendChild(textArea);
+    textArea.select();
+    
+    try {
+      document.execCommand('copy');
+      toast.success("Tags copied to clipboard!");
+    } catch (err) {
+      toast.error("Failed to copy tags");
+    }
+    
+    document.body.removeChild(textArea);
+  };
+
+  const handleAddMoreTags = () => {
+    if (!additionalTags.trim()) {
+      toast.error("Please enter tags to add");
+      return;
+    }
+
+    // Parse additional tags
+    const newTags = additionalTags
+      .split(',')
+      .map(tag => tag.trim())
+      .filter(tag => tag.length > 0);
+
+    // Combine with existing tags
+    const combinedTags = [...generatedTags, ...newTags];
+
+    // Remove duplicates
+    const seen = new Set();
+    const uniqueTags = [];
+    for (const tag of combinedTags) {
+      const tagLower = tag.toLowerCase();
+      if (!seen.has(tagLower)) {
+        seen.add(tagLower);
+        uniqueTags.push(tag);
+      }
+    }
+
+    // Check limit
+    if (uniqueTags.length > 500) {
+      const excess = uniqueTags.length - 500;
+      toast.error(`Cannot add all tags. Would exceed 500 limit by ${excess} tags.`);
+      return;
+    }
+
+    setGeneratedTags(uniqueTags);
+    setAdditionalTags(""); // Clear input
+    toast.success(`Added ${newTags.length} tags! Total: ${uniqueTags.length}/500`);
+  };
     const fallbackCopy = () => {
       const textarea = document.createElement('textarea');
       textarea.value = text;
