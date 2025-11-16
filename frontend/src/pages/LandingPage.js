@@ -232,72 +232,72 @@ const LandingPage = ({ setIsAuthenticated }) => {
           </p>
           
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6 md:gap-8 px-2">
-            <div className="game-card p-4 sm:p-6" data-testid="feature-ai-tags">
-              <div className="mb-4 sm:mb-6">
-                <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-2xl neon-border flex items-center justify-center pulse-glow" style={{background: 'rgba(0, 255, 65, 0.1)'}}>
-                  <Target className="h-6 w-6 sm:h-8 sm:w-8 matrix-glow" />
+            <div className="game-card p-4 sm:p-5 md:p-6" data-testid="feature-ai-tags">
+              <div className="mb-3 sm:mb-4 md:mb-6">
+                <div className="h-10 w-10 sm:h-12 sm:w-12 md:h-16 md:w-16 rounded-2xl neon-border flex items-center justify-center pulse-glow" style={{background: 'rgba(0, 255, 65, 0.1)'}}>
+                  <Target className="h-5 w-5 sm:h-6 sm:w-6 md:h-8 md:w-8 matrix-glow" />
                 </div>
               </div>
-              <h3 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 matrix-glow rgb-hover">
+              <h3 className="text-lg sm:text-xl md:text-2xl font-bold mb-2 sm:mb-3 md:mb-4 matrix-glow rgb-hover">
                 AI TAG GENERATOR
               </h3>
-              <p className="text-sm sm:text-base lg:text-lg leading-relaxed matrix-glow">
+              <p className="text-sm sm:text-base md:text-lg leading-relaxed matrix-glow">
                 Generate 500 YouTube tags instantly with GPT-4o. Type beat variations, trending keywords, SEO-optimized phrases.
               </p>
             </div>
 
-            <div className="game-card p-4 sm:p-6" data-testid="feature-descriptions">
-              <div className="mb-4 sm:mb-6">
-                <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-2xl neon-border flex items-center justify-center pulse-glow" style={{background: 'rgba(0, 255, 65, 0.1)'}}>
-                  <Save className="h-6 w-6 sm:h-8 sm:w-8 matrix-glow" />
+            <div className="game-card p-4 sm:p-5 md:p-6" data-testid="feature-descriptions">
+              <div className="mb-3 sm:mb-4 md:mb-6">
+                <div className="h-10 w-10 sm:h-12 sm:w-12 md:h-16 md:w-16 rounded-2xl neon-border flex items-center justify-center pulse-glow" style={{background: 'rgba(0, 255, 65, 0.1)'}}>
+                  <Save className="h-5 w-5 sm:h-6 sm:w-6 md:h-8 md:w-8 matrix-glow" />
                 </div>
               </div>
-              <h3 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 matrix-glow rgb-hover">
+              <h3 className="text-lg sm:text-xl md:text-2xl font-bold mb-2 sm:mb-3 md:mb-4 matrix-glow rgb-hover">
                 SAVE TEMPLATES
               </h3>
-              <p className="text-sm sm:text-base lg:text-lg leading-relaxed matrix-glow">
+              <p className="text-sm sm:text-base md:text-lg leading-relaxed matrix-glow">
                 Create unlimited description templates. One-click copy for consistent branding across your beat catalog.
               </p>
             </div>
 
-            <div className="game-card p-4 sm:p-6" data-testid="feature-ai-refine">
-              <div className="mb-4 sm:mb-6">
-                <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-2xl neon-border flex items-center justify-center pulse-glow" style={{background: 'rgba(0, 255, 65, 0.1)'}}>
-                  <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 matrix-glow" />
+            <div className="game-card p-4 sm:p-5 md:p-6" data-testid="feature-ai-refine">
+              <div className="mb-3 sm:mb-4 md:mb-6">
+                <div className="h-10 w-10 sm:h-12 sm:w-12 md:h-16 md:w-16 rounded-2xl neon-border flex items-center justify-center pulse-glow" style={{background: 'rgba(0, 255, 65, 0.1)'}}>
+                  <TrendingUp className="h-5 w-5 sm:h-6 sm:w-6 md:h-8 md:w-8 matrix-glow" />
                 </div>
               </div>
-              <h3 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 matrix-glow rgb-hover">
+              <h3 className="text-lg sm:text-xl md:text-2xl font-bold mb-2 sm:mb-3 md:mb-4 matrix-glow rgb-hover">
                 YOUTUBE ANALYTICS
               </h3>
-              <p className="text-sm sm:text-base lg:text-lg leading-relaxed matrix-glow">
+              <p className="text-sm sm:text-base md:text-lg leading-relaxed matrix-glow">
                 AI growth coach analyzes your channel. Learn what works and dominate the algorithm.
               </p>
             </div>
 
-            <div className="game-card p-4 sm:p-6">
-              <div className="mb-4 sm:mb-6">
-                <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-2xl neon-border flex items-center justify-center pulse-glow" style={{background: 'rgba(0, 255, 65, 0.1)'}}>
-                  <Zap className="h-6 w-6 sm:h-8 sm:w-8 matrix-glow" />
+            <div className="game-card p-4 sm:p-5 md:p-6">
+              <div className="mb-3 sm:mb-4 md:mb-6">
+                <div className="h-10 w-10 sm:h-12 sm:w-12 md:h-16 md:w-16 rounded-2xl neon-border flex items-center justify-center pulse-glow" style={{background: 'rgba(0, 255, 65, 0.1)'}}>
+                  <Zap className="h-5 w-5 sm:h-6 sm:w-6 md:h-8 md:w-8 matrix-glow" />
                 </div>
               </div>
-              <h3 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 matrix-glow rgb-hover">
+              <h3 className="text-lg sm:text-xl md:text-2xl font-bold mb-2 sm:mb-3 md:mb-4 matrix-glow rgb-hover">
                 AI DESCRIPTIONS
               </h3>
-              <p className="text-sm sm:text-base lg:text-lg leading-relaxed matrix-glow">
+              <p className="text-sm sm:text-base md:text-lg leading-relaxed matrix-glow">
                 Generate and save video descriptions. Create templates for faster uploads.
               </p>
             </div>
 
-            <div className="game-card p-4 sm:p-6">
-              <div className="mb-4 sm:mb-6">
-                <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-2xl neon-border flex items-center justify-center pulse-glow" style={{background: 'rgba(0, 255, 65, 0.1)'}}>
-                  <Rocket className="h-6 w-6 sm:h-8 sm:w-8 matrix-glow" />
+            <div className="game-card p-4 sm:p-5 md:p-6">
+              <div className="mb-3 sm:mb-4 md:mb-6">
+                <div className="h-10 w-10 sm:h-12 sm:w-12 md:h-16 md:w-16 rounded-2xl neon-border flex items-center justify-center pulse-glow" style={{background: 'rgba(0, 255, 65, 0.1)'}}>
+                  <Rocket className="h-5 w-5 sm:h-6 sm:w-6 md:h-8 md:w-8 matrix-glow" />
                 </div>
               </div>
-              <h3 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 matrix-glow rgb-hover">
+              <h3 className="text-lg sm:text-xl md:text-2xl font-bold mb-2 sm:mb-3 md:mb-4 matrix-glow rgb-hover">
                 FREE YOUTUBE UPLOAD
               </h3>
-              <p className="text-sm sm:text-base lg:text-lg leading-relaxed matrix-glow">
+              <p className="text-sm sm:text-base md:text-lg leading-relaxed matrix-glow">
                 Upload beats directly to YouTube for free. Audio + image = video. No credit card required.
               </p>
             </div>
