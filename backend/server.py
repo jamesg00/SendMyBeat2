@@ -1988,6 +1988,22 @@ async def upload_to_youtube(
         
         logging.info(f"Using FFmpeg at: {ffmpeg_path}")
         
+        # Build video filter - add watermark for non-pro users
+        video_filter = 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:black'
+        
+        # Add watermark for free users (unless they're pro and chose to remove it)
+        if not is_subscribed or not remove_watermark:
+            # Add text watermark at the top center
+            watermark_text = 'Upload your beats online: https://sendmybeat.com'
+            # Escape special characters for FFmpeg
+            watermark_text_escaped = watermark_text.replace(':', r'\:').replace('/', r'\/')
+            
+            video_filter += f",drawtext=text='{watermark_text_escaped}':fontcolor=white:fontsize=20:x=(w-text_w)/2:y=20:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+            
+            logging.info(f"Adding watermark for {'free' if not is_subscribed else 'pro'} user")
+        else:
+            logging.info("Pro user - no watermark added")
+        
         ffmpeg_cmd = [
             ffmpeg_path,
             '-loop', '1',
@@ -2002,8 +2018,8 @@ async def upload_to_youtube(
             '-b:a', '320k',  # HIGH QUALITY - 320kbps (near lossless)
             '-ar', '48000',  # 48kHz sample rate (YouTube standard)
             '-pix_fmt', 'yuv420p',
-            # Maintain aspect ratio with black letterboxing/pillarboxing like YouTube
-            '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:black',
+            # Maintain aspect ratio with black letterboxing/pillarboxing like YouTube + optional watermark
+            '-vf', video_filter,
             '-shortest',
             '-movflags', '+faststart',
             '-threads', '0',
