@@ -169,35 +169,53 @@ const LandingPage = ({ setIsAuthenticated }) => {
   }
 
   return (
-    <div className="min-h-screen mesh-gradient relative">
+    <div className="min-h-screen matrix-bg cyber-grid relative dark">
       <DarkModeToggle />
       
       {/* Hero Section */}
-      <div className="relative overflow-hidden">
+      <div className="relative overflow-hidden scanline-effect">
         <div className="container mx-auto px-4 pt-24 pb-32 relative z-10">
-          <div className="max-w-5xl mx-auto text-center animate-slide-in">
-            <div className="inline-block mb-8 animate-float">
-              <img src="/logo.png" alt="SendMyBeat" className="h-32 w-32 mx-auto object-contain neon-glow" />
+          <div className="max-w-5xl mx-auto text-center">
+            <div className="inline-block mb-8 pulse-glow">
+              <img src="/logo.png" alt="SendMyBeat" className="h-32 w-32 mx-auto object-contain" />
             </div>
-            <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold mb-6 gradient-text leading-tight">
-              Grow Your Beat Channel Fast
+            <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold mb-6 matrix-font matrix-glow leading-tight rgb-hover">
+              SendMyBeat
             </h1>
-            <p className="text-xl sm:text-2xl mb-12 max-w-3xl mx-auto leading-relaxed" style={{color: 'var(--text-secondary)'}}>
-              AI-powered YouTube tag generator built for beat producers. Generate <span className="gradient-text font-semibold">500 SEO-optimized tags</span>, analyze your channel, and build momentum with our 120-day growth challenge.
+            <p className="text-xl sm:text-2xl mb-12 max-w-3xl mx-auto leading-relaxed matrix-font" style={{color: 'var(--matrix-green-dark)'}}>
+              <span className="rgb-hover inline-block">Level Up Your YouTube Game</span>
+              <br />
+              500+ AI Tags • Beat Analyzer • Growth Tracker
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-8">
               <Button
                 size="lg"
-                className="btn-modern text-lg px-10 py-7"
+                className="matrix-btn text-lg px-10 py-7 glitch-effect"
                 onClick={() => setShowAuth(true)}
                 data-testid="get-started-btn"
               >
                 <Rocket className="mr-2 h-6 w-6" />
-                Start Free Today
+                ENTER THE MATRIX
               </Button>
-              <p className="text-sm" style={{color: 'var(--text-secondary)'}}>
-                ✅ 3 free daily uses • No credit card required
+              <p className="text-sm matrix-font" style={{color: 'var(--matrix-green-dark)'}}>
+                ✅ 3 Free Daily Uses • No Credit Card
               </p>
+            </div>
+            
+            {/* Stats */}
+            <div className="grid grid-cols-3 gap-4 max-w-2xl mx-auto mt-16">
+              <div className="game-card p-4">
+                <div className="text-3xl font-bold matrix-glow matrix-font">500+</div>
+                <div className="text-sm" style={{color: 'var(--matrix-green-dark)'}}>Tags Per Gen</div>
+              </div>
+              <div className="game-card p-4">
+                <div className="text-3xl font-bold matrix-glow matrix-font">∞</div>
+                <div className="text-sm" style={{color: 'var(--matrix-green-dark)'}}>Pro Access</div>
+              </div>
+              <div className="game-card p-4">
+                <div className="text-3xl font-bold matrix-glow matrix-font">120</div>
+                <div className="text-sm" style={{color: 'var(--matrix-green-dark)'}}>Day Challenge</div>
+              </div>
             </div>
           </div>
         </div>
@@ -206,38 +224,38 @@ const LandingPage = ({ setIsAuthenticated }) => {
       {/* Features Section */}
       <div className="container mx-auto px-4 py-24 relative z-10">
         <div className="max-w-6xl mx-auto">
-          <h2 className="text-4xl sm:text-5xl font-bold text-center mb-4 gradient-text">
-            Everything You Need to Grow
+          <h2 className="text-4xl sm:text-5xl font-bold text-center mb-4 matrix-font matrix-glow rgb-hover">
+            POWER-UPS FOR PRODUCERS
           </h2>
-          <p className="text-center text-xl mb-20" style={{color: 'var(--text-secondary)'}}>
-            Beat producer tools designed to increase discoverability and build consistency
+          <p className="text-center text-xl mb-20 matrix-font" style={{color: 'var(--matrix-green-dark)'}}>
+            Next-Gen Tools For Beat Makers
           </p>
           
           <div className="grid md:grid-cols-3 gap-8">
-            <div className="producer-card card-hover" data-testid="feature-ai-tags">
+            <div className="game-card p-6" data-testid="feature-ai-tags">
               <div className="mb-6">
-                <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-[var(--accent-primary)] to-[var(--accent-secondary)] flex items-center justify-center neon-glow">
-                  <Target className="h-8 w-8 text-white" />
+                <div className="h-16 w-16 rounded-2xl neon-border flex items-center justify-center pulse-glow" style={{background: 'rgba(0, 255, 65, 0.1)'}}>
+                  <Target className="h-8 w-8" style={{color: 'var(--matrix-green)'}} />
                 </div>
               </div>
-              <h3 className="text-2xl font-bold mb-4" style={{color: 'var(--text-primary)'}}>
-                AI Tag Generator
+              <h3 className="text-2xl font-bold mb-4 matrix-font matrix-glow">
+                AI TAG GENERATOR
               </h3>
-              <p className="text-lg leading-relaxed" style={{color: 'var(--text-secondary)'}}>
-                Generate 500 YouTube tags instantly with GPT-4o. Includes type beat variations, trending keywords, and SEO-optimized long-tail phrases. Beats TubeBuddy and vidIQ combined.
+              <p className="text-lg leading-relaxed" style={{color: 'var(--matrix-green-dark)'}}>
+                Generate 500 YouTube tags instantly with GPT-4o. Type beat variations, trending keywords, SEO-optimized phrases.
               </p>
             </div>
 
-            <div className="producer-card card-hover" style={{animationDelay: '0.1s'}} data-testid="feature-descriptions">
+            <div className="game-card p-6" data-testid="feature-descriptions">
               <div className="mb-6">
-                <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-[var(--accent-primary)] to-[var(--accent-secondary)] flex items-center justify-center neon-glow">
-                  <Save className="h-8 w-8 text-white" />
+                <div className="h-16 w-16 rounded-2xl neon-border flex items-center justify-center pulse-glow" style={{background: 'rgba(0, 255, 65, 0.1)', animationDelay: '0.5s'}}>
+                  <Save className="h-8 w-8" style={{color: 'var(--matrix-green)'}} />
                 </div>
               </div>
-              <h3 className="text-2xl font-bold mb-4" style={{color: 'var(--text-primary)'}}>
-                Save Templates
+              <h3 className="text-2xl font-bold mb-4 matrix-font matrix-glow">
+                SAVE TEMPLATES
               </h3>
-              <p className="text-lg leading-relaxed" style={{color: 'var(--text-secondary)'}}>
+              <p className="text-lg leading-relaxed" style={{color: 'var(--matrix-green-dark)'}}>
                 Create unlimited description templates. One-click copy for consistent branding across your beat catalog.
               </p>
             </div>
