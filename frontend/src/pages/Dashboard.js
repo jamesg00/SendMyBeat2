@@ -759,10 +759,19 @@ const Dashboard = ({ setIsAuthenticated }) => {
         return;
       }
       
-      // Handle credit limit
+      // Handle credit limit and watermark removal
       if (error.response?.status === 402) {
-        setShowUpgradeModal(true);
-        toast.error("Daily upload limit reached! Upgrade to continue.");
+        const errorDetail = error.response.data.detail;
+        if (errorDetail?.feature === 'remove_watermark') {
+          // Watermark removal requires Pro
+          setShowUpgradeModal(true);
+          setRemoveWatermark(false); // Uncheck the box
+          toast.error("Watermark removal is a Pro feature! Upgrade to remove watermarks.");
+        } else {
+          // Daily upload limit
+          setShowUpgradeModal(true);
+          toast.error("Daily upload limit reached! Upgrade to continue.");
+        }
       } else if (error.code === 'ECONNABORTED') {
         toast.error("Upload timed out. Your audio file might be too long. Try a shorter file.");
       } else {
