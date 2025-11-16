@@ -8,28 +8,28 @@ const About = () => {
 
   return (
     <div className="min-h-screen cyber-grid scanline-effect" style={{backgroundColor: 'var(--bg-primary)'}}>
-      <div className="container mx-auto px-4 py-8 max-w-5xl">
-        <div className="flex justify-between items-center mb-8">
+      <div className="container mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-6 md:py-8 max-w-5xl">
+        <div className="flex justify-between items-center mb-6 sm:mb-8">
           <Button
             variant="ghost"
             onClick={() => navigate(-1)}
-            className="flex items-center gap-2 matrix-glow hover:scale-105 transition-transform"
+            className="flex items-center gap-1 sm:gap-2 matrix-glow hover:scale-105 transition-transform text-sm sm:text-base"
           >
-            <ArrowLeft className="w-4 h-4" />
+            <ArrowLeft className="w-3 h-3 sm:w-4 sm:h-4" />
             Back
           </Button>
           <DarkModeToggle />
         </div>
 
-        <div className="game-card p-8 md:p-12">
-          <h1 className="text-4xl sm:text-5xl font-bold mb-4 text-center brand-text matrix-glow rgb-hover">
+        <div className="game-card p-4 sm:p-6 md:p-8 lg:p-12">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-3 sm:mb-4 text-center brand-text matrix-glow rgb-hover">
             About SendMyBeat
           </h1>
-          <p className="text-lg sm:text-xl text-center matrix-glow mb-12">
+          <p className="text-sm sm:text-base md:text-lg lg:text-xl text-center matrix-glow mb-8 sm:mb-12 px-2">
             Empowering Music Producers to Maximize Beat Discoverability
           </p>
 
-          <div className="space-y-8 matrix-glow">
+          <div className="space-y-6 sm:space-y-8 matrix-glow">
             <section>
               <h2 className="text-2xl sm:text-3xl font-semibold mb-4 matrix-glow flex items-center gap-3">
                 <Target className="w-6 h-6 sm:w-8 sm:h-8 matrix-glow" />
