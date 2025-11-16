@@ -90,7 +90,7 @@ body, h1, h2, h3, h4, h5, h6, p, div, span, button {
     0 0 6px rgba(0, 204, 51, 0.2);
 }
 
-.dark .matrix-glow:hover {
+.dark .matrix-glow:hover, html.dark .matrix-glow:hover {
   text-shadow: 
     0 0 10px var(--matrix-green),
     0 0 20px var(--matrix-green),
