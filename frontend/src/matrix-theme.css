@@ -123,7 +123,7 @@ body, h1, h2, h3, h4, h5, h6, p, div, span, button {
 }
 
 /* Gaming Card Style - Light and Dark */
-.dark .game-card, .dark .producer-card, .dark [class*="card"] {
+.dark .game-card, .dark .producer-card, html.dark .game-card, html.dark .producer-card {
   background: rgba(0, 0, 0, 0.8) !important;
   border: 2px solid var(--matrix-green) !important;
   box-shadow: 
@@ -132,7 +132,7 @@ body, h1, h2, h3, h4, h5, h6, p, div, span, button {
   transition: all 0.3s ease;
 }
 
-body:not(.dark) .game-card, body:not(.dark) .producer-card, body:not(.dark) [class*="card"] {
+.game-card, .producer-card {
   background: rgba(255, 255, 255, 0.9) !important;
   border: 2px solid var(--matrix-green-dark) !important;
   box-shadow: 
