@@ -169,52 +169,52 @@ const LandingPage = ({ setIsAuthenticated }) => {
   }
 
   return (
-    <div className="min-h-screen cyber-grid relative dark">
+    <div className="min-h-screen matrix-bg cyber-grid relative dark scanline-effect">
       <DarkModeToggle />
       
       {/* Hero Section */}
       <div className="relative overflow-hidden">
         <div className="container mx-auto px-4 pt-24 pb-32 relative z-10">
           <div className="max-w-5xl mx-auto text-center">
-            <div className="inline-block mb-8">
+            <div className="inline-block mb-8 pulse-glow">
               <img src="/logo.png" alt="SendMyBeat" className="h-24 w-24 sm:h-32 sm:w-32 mx-auto object-contain" />
             </div>
-            <h1 className="text-4xl sm:text-5xl lg:text-7xl font-bold mb-6 leading-tight matrix-glow">
+            <h1 className="text-4xl sm:text-5xl lg:text-7xl font-bold mb-6 leading-tight matrix-glow rgb-hover">
               SendMyBeat
             </h1>
-            <p className="text-lg sm:text-xl lg:text-2xl mb-12 max-w-3xl mx-auto leading-relaxed" style={{color: 'var(--matrix-green-dark)'}}>
-              AI-Powered YouTube Tag Generator for Beat Producers
+            <p className="text-lg sm:text-xl lg:text-2xl mb-12 max-w-3xl mx-auto leading-relaxed matrix-glow">
+              <span className="rgb-hover inline-block">LEVEL UP YOUR YOUTUBE GAME</span>
               <br />
-              <span className="text-base sm:text-lg">500+ Tags • Beat Analyzer • Growth Tracker</span>
+              500+ AI TAGS • BEAT ANALYZER • GROWTH TRACKER
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-8">
               <Button
                 size="lg"
-                className="matrix-btn text-base sm:text-lg px-8 sm:px-10 py-6 sm:py-7"
+                className="matrix-btn text-base sm:text-lg px-8 sm:px-10 py-6 sm:py-7 glitch-effect"
                 onClick={() => setShowAuth(true)}
                 data-testid="get-started-btn"
               >
                 <Rocket className="mr-2 h-5 w-5 sm:h-6 sm:w-6" />
-                Get Started Free
+                ENTER THE MATRIX
               </Button>
-              <p className="text-xs sm:text-sm" style={{color: 'var(--matrix-green-dark)'}}>
-                ✅ 3 Free Daily Uses • No Credit Card
+              <p className="text-xs sm:text-sm matrix-glow">
+                ✅ 3 FREE DAILY USES • NO CREDIT CARD
               </p>
             </div>
             
             {/* Stats */}
             <div className="grid grid-cols-3 gap-2 sm:gap-4 max-w-2xl mx-auto mt-16">
-              <div className="game-card p-3 sm:p-4">
+              <div className="game-card p-3 sm:p-4 pulse-glow">
                 <div className="text-2xl sm:text-3xl font-bold matrix-glow">500+</div>
-                <div className="text-xs sm:text-sm" style={{color: 'var(--matrix-green-dark)'}}>Tags</div>
+                <div className="text-xs sm:text-sm matrix-glow">TAGS</div>
               </div>
-              <div className="game-card p-3 sm:p-4">
+              <div className="game-card p-3 sm:p-4 pulse-glow">
                 <div className="text-2xl sm:text-3xl font-bold matrix-glow">∞</div>
-                <div className="text-xs sm:text-sm" style={{color: 'var(--matrix-green-dark)'}}>Pro</div>
+                <div className="text-xs sm:text-sm matrix-glow">PRO</div>
               </div>
-              <div className="game-card p-3 sm:p-4">
+              <div className="game-card p-3 sm:p-4 pulse-glow">
                 <div className="text-2xl sm:text-3xl font-bold matrix-glow">120</div>
-                <div className="text-xs sm:text-sm" style={{color: 'var(--matrix-green-dark)'}}>Days</div>
+                <div className="text-xs sm:text-sm matrix-glow">DAYS</div>
               </div>
             </div>
           </div>
@@ -224,38 +224,38 @@ const LandingPage = ({ setIsAuthenticated }) => {
       {/* Features Section */}
       <div className="container mx-auto px-4 py-16 sm:py-24 relative z-10">
         <div className="max-w-6xl mx-auto">
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-center mb-4 matrix-glow">
-            Producer Tools
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-center mb-4 matrix-glow rgb-hover">
+            POWER-UPS FOR PRODUCERS
           </h2>
-          <p className="text-center text-base sm:text-lg lg:text-xl mb-12 sm:mb-20" style={{color: 'var(--matrix-green-dark)'}}>
-            Everything you need to grow your beat channel
+          <p className="text-center text-base sm:text-lg lg:text-xl mb-12 sm:mb-20 matrix-glow">
+            NEXT-GEN TOOLS FOR BEAT MAKERS
           </p>
           
           <div className="grid md:grid-cols-3 gap-6 sm:gap-8">
             <div className="game-card p-4 sm:p-6" data-testid="feature-ai-tags">
               <div className="mb-4 sm:mb-6">
-                <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-2xl neon-border flex items-center justify-center" style={{background: 'rgba(0, 255, 65, 0.1)'}}>
-                  <Target className="h-6 w-6 sm:h-8 sm:w-8" style={{color: 'var(--matrix-green)'}} />
+                <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-2xl neon-border flex items-center justify-center pulse-glow" style={{background: 'rgba(0, 255, 65, 0.1)'}}>
+                  <Target className="h-6 w-6 sm:h-8 sm:w-8 matrix-glow" />
                 </div>
               </div>
-              <h3 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 matrix-glow">
-                AI Tag Generator
+              <h3 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 matrix-glow rgb-hover">
+                AI TAG GENERATOR
               </h3>
-              <p className="text-sm sm:text-base lg:text-lg leading-relaxed" style={{color: 'var(--matrix-green-dark)'}}>
+              <p className="text-sm sm:text-base lg:text-lg leading-relaxed matrix-glow">
                 Generate 500 YouTube tags instantly with GPT-4o. Type beat variations, trending keywords, SEO-optimized phrases.
               </p>
             </div>
 
             <div className="game-card p-4 sm:p-6" data-testid="feature-descriptions">
               <div className="mb-4 sm:mb-6">
-                <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-2xl neon-border flex items-center justify-center" style={{background: 'rgba(0, 255, 65, 0.1)'}}>
-                  <Save className="h-6 w-6 sm:h-8 sm:w-8" style={{color: 'var(--matrix-green)'}} />
+                <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-2xl neon-border flex items-center justify-center pulse-glow" style={{background: 'rgba(0, 255, 65, 0.1)'}}>
+                  <Save className="h-6 w-6 sm:h-8 sm:w-8 matrix-glow" />
                 </div>
               </div>
-              <h3 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 matrix-glow">
-                Save Templates
+              <h3 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 matrix-glow rgb-hover">
+                SAVE TEMPLATES
               </h3>
-              <p className="text-sm sm:text-base lg:text-lg leading-relaxed" style={{color: 'var(--matrix-green-dark)'}}>
+              <p className="text-sm sm:text-base lg:text-lg leading-relaxed matrix-glow">
                 Create unlimited description templates. One-click copy for consistent branding across your beat catalog.
               </p>
             </div>
