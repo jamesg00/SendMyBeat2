@@ -1244,23 +1244,66 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
         chat = LlmChat(
             api_key=os.environ['EMERGENT_LLM_KEY'],
             session_id=f"tags_{uuid.uuid4()}",
-            system_message="You are an expert YouTube music tag generator for beat producers. Generate diverse, high-performing tags that maximize discoverability."
+            system_message="You are an expert YouTube SEO specialist for beat producers. You ONLY generate hyper-specific, laser-targeted tags that match EXACTLY what people search for. NO generic tags."
         ).with_model("openai", "gpt-4o")
         
         # Generate tags (reduce count to make room for YouTube + custom tags)
         base_tag_count = 450  # Leave room for YouTube search tags and custom tags
-        prompt = f"""Generate exactly {base_tag_count} YouTube tags for a beat/music production with the following style: "{request.query}"
+        prompt = f"""Generate exactly {base_tag_count} YouTube tags for: "{request.query}"
 
-The tags should include:
-- Artist name/style variations (e.g., "lil uzi vert type beat", "lil uzi style")
-- Genre tags (e.g., "trap beat", "hip hop instrumental")
-- Mood tags (e.g., "dark beat", "energetic instrumental")
-- Production tags (e.g., "type beat", "prod by", "free beat")
-- Popular search terms
-- Trending related terms
-- Year tags (e.g., "2025 type beat")
+CRITICAL RULES:
+1. BE HYPER-SPECIFIC to the artist/style mentioned
+2. NO GENERIC TAGS (like "zen beat", "groove beat", "chill instrumental") - these DON'T work for specific searches
+3. ONLY tags that someone would actually type when searching for THIS specific artist/style
+4. Focus on variations of the EXACT artist name and related artists in the SAME genre
 
-Format: Return ONLY the tags separated by commas, no numbering or extra text. Make them diverse and search-optimized for YouTube."""
+REQUIRED TAG CATEGORIES:
+
+1. ARTIST NAME VARIATIONS (50+ tags):
+   - Full name variations (e.g., "lil uzi vert type beat", "uzi type beat", "lil uzi")
+   - With "type beat", "style beat", "instrumental", "beat"
+   - Real name if famous (e.g., "symere woods type beat")
+   - Year variations (e.g., "lil uzi vert type beat 2025")
+   - Location if relevant (e.g., "philly type beat")
+
+2. ARTIST'S POPULAR PROJECTS/ERAS (30+ tags):
+   - Album names (e.g., "pink tape type beat", "eternal atake type beat")
+   - Song names (e.g., "just wanna rock type beat")
+   - Era/style (e.g., "2020 lil uzi type beat", "new lil uzi type beat")
+
+3. SIMILAR/RELATED ARTISTS (100+ tags):
+   - Artists in the SAME genre/subgenre
+   - Artists with similar sound
+   - All with "type beat" variations
+   - Example: If lil uzi, include: playboi carti, ken carson, destroy lonely, yeat, etc.
+
+4. SPECIFIC SUBGENRE TAGS (50+ tags):
+   - Exact subgenre (e.g., "rage type beat", "melodic trap beat", "plugg type beat")
+   - NOT generic genres (avoid just "trap" or "hip hop")
+   - Be specific to the sound
+
+5. PRODUCER TAGS (30+ tags):
+   - Famous producers in that style (e.g., "working on dying type beat", "maaly raw type beat")
+   - Production style (e.g., "808 mafia type beat")
+
+6. SEARCH INTENT TAGS (30+ tags):
+   - "free [artist] type beat"
+   - "[artist] type beat free for profit"
+   - "[artist] instrumental"
+   - "beat like [artist]"
+   - "[artist] style"
+
+7. COMPETITIVE TAGS (30+ tags):
+   - Other popular beat makers' styles
+   - Trending sounds in that niche
+
+FORMAT: Return ONLY the tags separated by commas. NO explanations, NO generic filler tags, ONLY hyper-specific tags that match real searches.
+
+EXAMPLE of GOOD vs BAD:
+GOOD: "lil uzi vert type beat", "pink tape type beat", "playboi carti type beat", "rage type beat", "philly type beat"
+BAD: "zen beat", "groove beat", "chill instrumental", "relaxing music", "study beats"
+
+Generate {base_tag_count} HYPER-SPECIFIC tags now:"""
         
         user_message = UserMessage(text=prompt)
         response = await chat.send_message(user_message)
