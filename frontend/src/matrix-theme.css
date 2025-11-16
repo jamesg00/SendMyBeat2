@@ -206,7 +206,7 @@ body, h1, h2, h3, h4, h5, h6, p, div, span, button {
     inset 0 0 3px rgba(0, 204, 51, 0.2) !important;
 }
 
-/* Pulse Animation - Light and Dark */
+/* Pulse Animation */
 @keyframes pulse-glow-dark {
   0%, 100% { 
     box-shadow: 0 0 10px var(--matrix-green-glow);
@@ -225,11 +225,11 @@ body, h1, h2, h3, h4, h5, h6, p, div, span, button {
   }
 }
 
-.dark .pulse-glow {
+.dark .pulse-glow, html.dark .pulse-glow {
   animation: pulse-glow-dark 2s ease-in-out infinite;
 }
 
-body:not(.dark) .pulse-glow {
+.pulse-glow {
   animation: pulse-glow-light 2s ease-in-out infinite;
 }
 
