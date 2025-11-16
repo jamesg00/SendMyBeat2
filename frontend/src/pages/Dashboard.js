@@ -22,6 +22,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [user, setUser] = useState(null);
   const [tagQuery, setTagQuery] = useState("");
   const [customTags, setCustomTags] = useState(""); // User's custom tags (comma-separated)
+  const [additionalTags, setAdditionalTags] = useState(""); // Add more tags to existing generation
   const [generatedTags, setGeneratedTags] = useState([]);
   const [loadingTags, setLoadingTags] = useState(false);
   const [tagHistory, setTagHistory] = useState([]);
