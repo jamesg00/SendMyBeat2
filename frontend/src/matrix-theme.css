@@ -106,7 +106,7 @@ body, h1, h2, h3, h4, h5, h6, p, div, span, button {
 }
 
 /* Cyber Grid Background - Light and Dark versions */
-.dark.cyber-grid, .dark body, .dark .App, .dark [class*="dashboard"], .dark [class*="container"] {
+.dark .cyber-grid, .dark body, .dark .App, html.dark body, html.dark .App {
   background-color: var(--matrix-black) !important;
   background-image: 
     linear-gradient(rgba(0, 255, 65, 0.1) 1px, transparent 1px),
@@ -114,7 +114,7 @@ body, h1, h2, h3, h4, h5, h6, p, div, span, button {
   background-size: 20px 20px !important;
 }
 
-body:not(.dark).cyber-grid, body:not(.dark) .App, body:not(.dark) [class*="dashboard"], body:not(.dark) [class*="container"] {
+.cyber-grid, body, .App {
   background-color: var(--matrix-white) !important;
   background-image: 
     linear-gradient(rgba(0, 204, 51, 0.15) 1px, transparent 1px),
