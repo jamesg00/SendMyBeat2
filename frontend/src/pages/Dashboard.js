@@ -792,17 +792,17 @@ const Dashboard = ({ setIsAuthenticated }) => {
       <DarkModeToggle />
       
       {/* Header */}
-      <div className="glass-card mx-4 mt-4 rounded-2xl border-0">
-        <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <img src="/logo.png" alt="SendMyBeat" className="h-12 w-12 object-contain" />
+      <div className="glass-card mx-2 sm:mx-4 mt-2 sm:mt-4 rounded-xl sm:rounded-2xl border-0">
+        <div className="container mx-auto px-3 sm:px-4 md:px-6 py-3 sm:py-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
+            <div className="flex items-center gap-2 sm:gap-3 md:gap-4">
+              <img src="/logo.png" alt="SendMyBeat" className="h-10 w-10 sm:h-12 sm:w-12 object-contain" />
               <div>
-                <h1 className="text-2xl font-bold gradient-text">SendMyBeat</h1>
-                {user && <p className="text-sm" style={{color: 'var(--text-secondary)'}}>Welcome back, {user.username}</p>}
+                <h1 className="text-lg sm:text-xl md:text-2xl font-bold gradient-text">SendMyBeat</h1>
+                {user && <p className="text-xs sm:text-sm" style={{color: 'var(--text-secondary)'}}>Welcome back, {user.username}</p>}
               </div>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto flex-wrap">
               {/* Show Upgrade button for free users */}
               {subscriptionStatus && !subscriptionStatus.is_subscribed && (
                 <Button
