@@ -155,7 +155,7 @@ const SubscriptionBanner = ({ creditsRemaining, uploadCreditsRemaining, isSubscr
         {/* Upgrade Button */}
         {isAnyLow ? (
           <div>
-            <p className="text-sm mb-3 text-center font-medium" style={{color: 'var(--text-secondary)'}}>
+            <p className="text-xs sm:text-sm mb-3 text-center font-medium leading-relaxed" style={{color: 'var(--text-secondary)'}}>
               {isAiLow && isUploadLow 
                 ? "🚫 All free credits used for today" 
                 : isAiLow 
@@ -164,10 +164,10 @@ const SubscriptionBanner = ({ creditsRemaining, uploadCreditsRemaining, isSubscr
             </p>
             <Button 
               onClick={onUpgrade}
-              className="w-full btn-modern py-6 text-base"
+              className="w-full btn-modern py-5 sm:py-6 text-sm sm:text-base"
               data-testid="upgrade-banner-btn"
             >
-              <Sparkles className="mr-2 h-5 w-5" />
+              <Sparkles className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
               Upgrade to Pro - Unlimited Access
             </Button>
           </div>
@@ -175,7 +175,7 @@ const SubscriptionBanner = ({ creditsRemaining, uploadCreditsRemaining, isSubscr
           <Button 
             onClick={onUpgrade}
             variant="ghost"
-            className="w-full py-4"
+            className="w-full py-3 sm:py-4 text-sm sm:text-base"
             style={{color: 'var(--accent-primary)'}}
           >
             <Sparkles className="mr-2 h-4 w-4" />
