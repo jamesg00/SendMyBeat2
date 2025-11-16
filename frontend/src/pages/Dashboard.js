@@ -64,6 +64,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [selectedDescriptionId, setSelectedDescriptionId] = useState("");
   const [selectedTagsId, setSelectedTagsId] = useState("");
   const [privacyStatus, setPrivacyStatus] = useState("public");
+  const [removeWatermark, setRemoveWatermark] = useState(false);
   const [uploadingAudio, setUploadingAudio] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
