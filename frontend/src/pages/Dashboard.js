@@ -894,17 +894,17 @@ const Dashboard = ({ setIsAuthenticated }) => {
           </TabsList>
 
           {/* Tag Generator Tab */}
-          <TabsContent value="tags" className="space-y-6">
+          <TabsContent value="tags" className="space-y-4 sm:space-y-6">
             <Card className="shadow-lg border-0">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Sparkles className="h-5 w-5 text-blue-600" />
-                  Generate YouTube Tags
+              <CardHeader className="px-4 sm:px-6 py-4 sm:py-6">
+                <CardTitle className="flex items-center gap-2 text-base sm:text-lg md:text-xl">
+                  <Sparkles className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 flex-shrink-0" />
+                  <span>Generate YouTube Tags</span>
                 </CardTitle>
-                <CardDescription>AI generates tags + searches artist's popular songs + adds your custom tags (500 total)</CardDescription>
+                <CardDescription className="text-xs sm:text-sm">AI generates tags + searches artist's popular songs + adds your custom tags (500 total)</CardDescription>
               </CardHeader>
-              <CardContent>
-                <form onSubmit={handleGenerateTags} className="space-y-4" data-testid="tag-generator-form">
+              <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
+                <form onSubmit={handleGenerateTags} className="space-y-3 sm:space-y-4" data-testid="tag-generator-form">
                   <div className="space-y-2">
                     <Label htmlFor="tag-query">Search Query</Label>
                     <Input
