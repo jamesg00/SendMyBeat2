@@ -138,8 +138,8 @@ const About = () => {
                   </p>
                 </div>
                 <div>
-                  <div className="text-3xl sm:text-4xl font-bold matrix-glow mb-2">Growth</div>
-                  <p className="text-sm matrix-glow">
+                  <div className="text-2xl sm:text-3xl md:text-4xl font-bold matrix-glow mb-1.5 sm:mb-2">Growth</div>
+                  <p className="text-xs sm:text-sm matrix-glow">
                     We're constantly improving our tools and adding new features based on user feedback.
                   </p>
                 </div>
@@ -147,17 +147,17 @@ const About = () => {
             </section>
 
             <section>
-              <h2 className="text-2xl sm:text-3xl font-semibold mb-4 matrix-glow">
+              <h2 className="text-xl sm:text-2xl md:text-3xl font-semibold mb-3 sm:mb-4 matrix-glow">
                 Get Started Today
               </h2>
-              <p className="text-base sm:text-lg leading-relaxed mb-6 matrix-glow">
+              <p className="text-sm sm:text-base md:text-lg leading-relaxed mb-4 sm:mb-6 matrix-glow">
                 Join thousands of music producers who are already maximizing their beat discoverability with SendMyBeat.com. Start with our free plan and experience the power of AI-optimized content management. Upgrade to Pro whenever you're ready for unlimited access.
               </p>
-              <div className="flex justify-center">
+              <div className="flex justify-center px-2">
                 <Button
                   onClick={() => navigate('/dashboard')}
                   size="lg"
-                  className="matrix-btn text-base sm:text-lg px-8 py-6"
+                  className="matrix-btn w-full sm:w-auto text-sm sm:text-base md:text-lg px-6 sm:px-8 py-5 sm:py-6"
                 >
                   Go to Dashboard
                 </Button>
@@ -165,8 +165,8 @@ const About = () => {
             </section>
           </div>
 
-          <div className="mt-12 pt-8 border-t border-gray-200 dark:border-gray-700">
-            <p className="text-center text-gray-600 dark:text-gray-400">
+          <div className="mt-8 sm:mt-12 pt-6 sm:pt-8 border-t border-gray-200 dark:border-gray-700">
+            <p className="text-center text-xs sm:text-sm text-gray-600 dark:text-gray-400 px-2">
               Have questions or feedback? We'd love to hear from you. Connect with us on social media or reach out through our support channels.
             </p>
           </div>
