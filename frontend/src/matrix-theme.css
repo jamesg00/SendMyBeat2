@@ -283,7 +283,7 @@ body, h1, h2, h3, h4, h5, h6, p, div, span, button {
 }
 
 /* Matrix Rain Background - Dark mode only */
-.dark.matrix-bg::before {
+.dark.matrix-bg::before, html.dark .matrix-bg::before {
   content: '';
   position: fixed;
   top: 0;
