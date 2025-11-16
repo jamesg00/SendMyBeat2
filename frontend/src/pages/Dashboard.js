@@ -1339,48 +1339,49 @@ const Dashboard = ({ setIsAuthenticated }) => {
               </CardHeader>
               <CardContent className="space-y-6">
                 {/* YouTube Connection Status */}
-                <div className="p-4 rounded-lg" style={{backgroundColor: 'var(--bg-secondary)'}}>
+                <div className="p-4 sm:p-5 md:p-6 rounded-lg" style={{backgroundColor: 'var(--bg-secondary)'}}>
                   {youtubeConnected ? (
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+                      <div className="flex items-center gap-3 sm:gap-4 flex-1">
                         {youtubeProfilePicture && (
                           <img 
                             src={youtubeProfilePicture} 
                             alt={youtubeName || youtubeEmail}
-                            className="h-10 w-10 rounded-full border-2 border-green-500"
+                            className="h-12 w-12 sm:h-14 sm:w-14 rounded-full border-2 border-green-500 flex-shrink-0"
                           />
                         )}
                         {!youtubeProfilePicture && (
-                          <CheckCircle2 className="h-5 w-5 text-green-600" />
+                          <CheckCircle2 className="h-6 w-6 sm:h-7 sm:w-7 text-green-600 flex-shrink-0" />
                         )}
-                        <div>
-                          <p className="font-medium" style={{color: 'var(--text-primary)'}}>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm sm:text-base truncate" style={{color: 'var(--text-primary)'}}>
                             {youtubeName || "YouTube Connected"}
                           </p>
-                          <p className="text-sm" style={{color: 'var(--text-secondary)'}}>{youtubeEmail}</p>
+                          <p className="text-xs sm:text-sm truncate" style={{color: 'var(--text-secondary)'}}>{youtubeEmail}</p>
                         </div>
                       </div>
                       <Button
                         variant="outline"
-                        size="sm"
+                        size="default"
                         onClick={disconnectYouTube}
                         data-testid="disconnect-youtube-btn"
+                        className="w-full sm:w-auto px-4 sm:px-6 py-2 sm:py-2.5 text-sm sm:text-base whitespace-nowrap"
                       >
                         Disconnect
                       </Button>
                     </div>
                   ) : (
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-3 mb-4">
-                        <AlertCircle className="h-5 w-5 text-amber-600" />
-                        <p className="font-medium" style={{color: 'var(--text-primary)'}}>YouTube Not Connected</p>
+                    <div className="space-y-3 sm:space-y-4">
+                      <div className="flex items-center gap-3 mb-3 sm:mb-4">
+                        <AlertCircle className="h-5 w-5 sm:h-6 sm:w-6 text-amber-600 flex-shrink-0" />
+                        <p className="font-medium text-sm sm:text-base" style={{color: 'var(--text-primary)'}}>YouTube Not Connected</p>
                       </div>
                       <Button
                         onClick={connectYouTube}
-                        className="w-full bg-red-600 hover:bg-red-700 text-white py-6 text-lg"
+                        className="w-full bg-red-600 hover:bg-red-700 text-white py-5 sm:py-6 text-base sm:text-lg"
                         data-testid="connect-youtube-btn"
                       >
-                        <Link className="h-5 w-5 mr-2" />
+                        <Link className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
                         Login to Connect Your YouTube Account!
                       </Button>
                     </div>
