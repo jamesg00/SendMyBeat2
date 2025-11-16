@@ -222,16 +222,16 @@ const LandingPage = ({ setIsAuthenticated }) => {
       </div>
 
       {/* Features Section */}
-      <div className="container mx-auto px-4 py-16 sm:py-24 relative z-10">
+      <div className="container mx-auto px-4 sm:px-6 py-12 sm:py-16 md:py-24 relative z-10">
         <div className="max-w-6xl mx-auto">
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-center mb-4 matrix-glow rgb-hover">
+          <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-center mb-3 sm:mb-4 matrix-glow rgb-hover px-2">
             POWER-UPS FOR PRODUCERS
           </h2>
-          <p className="text-center text-base sm:text-lg lg:text-xl mb-12 sm:mb-20 matrix-glow">
+          <p className="text-center text-sm sm:text-base md:text-lg lg:text-xl mb-8 sm:mb-12 md:mb-20 matrix-glow px-4">
             NEXT-GEN TOOLS FOR BEAT MAKERS
           </p>
           
-          <div className="grid md:grid-cols-3 gap-6 sm:gap-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6 md:gap-8 px-2">
             <div className="game-card p-4 sm:p-6" data-testid="feature-ai-tags">
               <div className="mb-4 sm:mb-6">
                 <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-2xl neon-border flex items-center justify-center pulse-glow" style={{background: 'rgba(0, 255, 65, 0.1)'}}>
