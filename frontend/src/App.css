@@ -417,6 +417,20 @@ input, textarea, select {
   font-size: 16px !important; /* Prevents zoom on iOS */
 }
 
+/* Tabs truncation fix */
+[role="tablist"] [role="tab"] {
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+
+[role="tablist"] [role="tab"] span {
+  display: block !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  min-width: 0 !important;
+}
+
 /* Spacing responsive */
 @media (max-width: 640px) {
   .py-24 { padding-top: 3rem !important; padding-bottom: 3rem !important; }
