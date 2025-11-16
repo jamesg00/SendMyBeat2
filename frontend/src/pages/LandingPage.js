@@ -61,9 +61,11 @@ const LandingPage = ({ setIsAuthenticated }) => {
             <div className="flex items-center justify-center mb-6 animate-float">
               <img src="/logo.png" alt="SendMyBeat" className="h-20 w-20 object-contain" />
             </div>
-            <CardTitle className="text-2xl text-center font-bold gradient-text">Welcome to SendMyBeat</CardTitle>
-            <CardDescription className="text-center text-base" style={{color: 'var(--text-secondary)'}}>
-              Start creating pro YouTube tags
+            <CardTitle className="text-2xl text-center font-bold matrix-font rgb-hover">
+              SendMyBeat
+            </CardTitle>
+            <CardDescription className="text-center text-base matrix-glow" style={{color: 'var(--text-secondary)'}}>
+              Level Up Your YouTube Game
             </CardDescription>
           </CardHeader>
           <CardContent>
