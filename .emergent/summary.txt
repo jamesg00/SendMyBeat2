@@ -1,95 +1,88 @@
 <analysis>
-The AI engineer successfully guided SendMyBeat.com from an MVP to a feature-rich application, meticulously addressing user feedback. Initial work involved resolving critical Stripe subscription display issues, which stemmed from an unconfigured webhook secret and missing  in user documents. The engineer then reverted the tag generation algorithm to a previous, higher-volume version as per user request.
+The trajectory details an intensive development and debugging process for the SendMyBeat.com application. The work began with addressing user-reported bugs, specifically a non-functional Analyze Beat feature and failing YouTube uploads. The upload issue was traced to a missing FFmpeg dependency, which was subsequently installed. The Analyze Beat bug was a frontend issue where the component was incorrectly rendered only when a YouTube account was connected; this was fixed by moving the component's code block.
 
-Subsequently, a Stripe Customer Portal integration was added for subscription management, alongside extensive YouTube Analytics functionality. This required fixing OAuth scope mismatches and refining AI prompts for detailed, actionable insights, as well as resolving JSON parsing errors from the LLM.
+A major portion of the work involved a complete, iterative redesign of the UI/UX based on user feedback. The user requested a Matrix/arcade theme, providing a specific font. This led to multiple cycles of implementing a black/green theme, adjusting font usage, applying the theme globally across all pages (including static ones like Privacy Policy), and fixing light/dark mode toggling.
 
-A major feature, Grow in 120 (a gamified streak system), was implemented, encompassing backend models, endpoints, frontend UI, and activity-based check-ins. Frontend JSX errors were debugged. Further refinements included SEO optimizations, YouTube profile picture display, and dark mode styling fixes.
+Simultaneously, significant feature enhancements were made to the core AI tag generation. This included:
+1.  Adding a YouTube search algorithm to find popular songs by an artist and create type beat tags.
+2.  Allowing users to add their own custom tags during generation.
+3.  Enabling users to add more tags to an already-generated set.
+4.  Dramatically improving the AI prompt to generate hyper-specific, SEO-friendly tags instead of generic ones.
+5.  Fixing the FFmpeg video creation process to preserve the original image aspect ratio (using padding) and prevent audio quality degradation by removing compression.
 
-The latest focus involved enhancing the YouTube upload section: fixing FFmpeg installation and video upload issues, adding a Beat Analyzer AI prediction tool, enabling individual tag deletion, and implementing a check-in reminder popup. Most recently, the capability to upload MP4 videos was added and subsequently reverted to audio-only with a new video preview functionality, while simultaneously debugging related FFmpeg and indentation issues.
+The most recent task, requested just before this summary, is to make the entire website responsive and mobile-friendly to fix scaling and layout issues on smaller screens. The previous engineer had just begun adding responsive utility classes to the CSS files.
+
+The user's primary language is English. The next agent must respond in English only.
 </analysis>
-
 <product_requirements>
-SendMyBeat.com empowers music producers by boosting beat discoverability through several core functionalities. It provides **AI Tag Generation & Refinement**, initially offering 2 free daily generations (now 3) with unlimited access for subscribers, utilizing a sophisticated hybrid pipeline for YouTube. Users can **Manage Descriptions**, saving and refining them as templates. **YouTube Integration** allows uploading audio and image files (originally WAV/MP3, briefly MP4/MOV, now back to audio+image for video creation) with Google OAuth, applying generated tags/descriptions. This includes 3 free daily uploads, unlimited for subscribers. **Monetization** is handled via Stripe subscriptions and Google AdSense banners for free users. The **UI/UX** features a modern design with dark/light mode, collapsible lists, progress bars for long operations, redesigned credit displays, and confirmation dialogs. Additionally, **Information Pages** like Terms and Conditions and About exist, along with a global footer. Recent additions include a comprehensive **YouTube Analytics** section offering personalized insights and recommendations for channel growth (using 1 credit per analysis), and a **Grow in 120** gamified streak system to encourage consistent uploads and engagement, featuring a 120-day calendar, streak counter, milestone badges, and activity tracking.
+SendMyBeat.com is a web application for music producers designed to enhance beat discoverability on YouTube.
+
+Core features include:
+-   **AI Tag & Description Generation:** Users can generate YouTube tags and descriptions based on a title and artist influences. The AI has been enhanced to search YouTube for an artist's popular tracks to create highly specific, SEO-optimized type beat tags.
+-   **Custom Tag Management:** Users can input their own tags during generation and add more tags to an existing generated set, up to a 500-character limit.
+-   **YouTube Upload:** Users upload an audio file (e.g., MP3, WAV) and an image. The backend uses FFmpeg to create a high-quality video (preserving audio and image aspect ratio) and uploads it to their connected YouTube channel with the generated metadata.
+-   **Beat Analyzer:** An AI tool that analyzes a beat's title and tags to predict its YouTube performance potential, providing strengths and weaknesses.
+-   **UI/UX:** The application now features a comprehensive Matrix/Arcade theme, with a black-and-green dark mode and a white-and-green light mode. This theme, including a custom Karmatic Arcade font for branding, is applied globally across the landing page, dashboard, and all informational pages. The entire site is expected to be fully responsive and mobile-friendly.
 </product_requirements>
-
 <key_technical_concepts>
-- **Full-stack**: React, FastAPI, MongoDB.
-- **Authentication**: JWT, Google OAuth 2.0.
-- **AI/LLM**: OpenAI GPT-4o (via Emergent LLM key) for tag generation, YouTube analytics, and beat analysis.
-- **Media**: FFmpeg (for video creation from audio+image).
-- **Payments**: Stripe (subscriptions, webhooks, Customer Portal).
-- **UI/Styling**: Shadcn UI, Tailwind CSS, Dark/Light mode.
-- **External Integration**: YouTube Data API, Google AdSense.
+- **Full-stack:** React (Frontend), FastAPI (Backend), MongoDB (Database).
+- **Styling:** Tailwind CSS, with custom CSS for a global Matrix theme (, ).
+- **Media Processing:** FFmpeg for creating video from audio and image, ensuring aspect ratio is preserved and audio is not re-compressed.
+- **AI/LLM:** OpenAI models for hyper-specific tag generation, beat analysis, and YouTube analytics.
+- **API Integration:** YouTube Data API for video uploads and artist song searches.
+- **Authentication:** JWT and Google OAuth 2.0.
 </key_technical_concepts>
-
 <code_architecture>
-The application uses a React frontend, FastAPI backend, and MongoDB database.
+The application follows a standard monorepo structure with a separate  and .
 
 
 
--   **/app/backend/server.py**: The central FastAPI application.
-    -   **Summary**: Handles all backend logic including authentication, tag/description generation, YouTube OAuth/upload/analytics, Stripe payments, and the Grow in 120 system.
-    -   **Changes**:
-        -   Stripe webhook secret was updated, and subscription checking logic refined to correctly use  and . A new endpoint for Stripe Customer Portal () was added.  in  was updated to the preview URL.
-        -   The advanced  integration for tag generation was reverted to the simpler, older logic and the file was deleted.
-        -   New Pydantic models and endpoints for YouTube Analytics () were added, with an overhauled LLM prompt for more detailed and actionable insights, including robust JSON parsing and markdown extraction. YouTube OAuth scope was expanded to include .
-        -   Pydantic models and endpoints for Grow in 120 (, , ) were added. Auto check-in logic was integrated into YouTube uploads and tag generation, now tracking specific .
-        -   YouTube connection logic was modified to store  and . The  endpoint was updated to return these.
-        -   FFmpeg installation was verified and fixed ( was missing).
-        -   A new  endpoint for AI beat analysis was added.
-        -   The  endpoint was initially updated to handle video files (MP4/MOV) and was renamed conceptually to  with chunked uploads and async processing. This was later reverted back to **audio-only** handling, with FFmpeg used to combine audio with a static image into a video, and the bitrate was set to 128k. FFmpeg timeout increased.
-        -   Numerous minor bug fixes for indentation and error handling.
--   **/app/backend/ai_tags_pipeline.py**: *Deleted file*.
-    -   **Summary**: Previously implemented a sophisticated tag generation algorithm.
-    -   **Changes**: Deleted as part of reverting to the old tag generation logic.
--   **/app/frontend/src/pages/Dashboard.js**: The primary user interface.
-    -   **Summary**: Central dashboard for AI tag/description, YouTube upload, credit display, subscription management, analytics, and Grow in 120 features.
-    -   **Changes**:
-        -   Updated to correctly pass  prop to . UI for Manage Subscription button was added.
-        -   New Analytics and Grow in 120 tabs were added to the UI, along with corresponding state variables and handler functions.
-        -   Frontend JSX errors (duplicate , missing  icon) were fixed.
-        -   Check-in logic for Grow in 120 was updated to require actual work (tag generation/upload) before checking in, and the UI reflects this. Calendar displays day numbers, is clickable, and shows activity type.
-        -   YouTube profile picture and username are now displayed in the header and upload section when connected.
-        -   Dark mode styling for the YouTube upload disconnected state was fixed.
-        -   Individual delete buttons were added to recent tag generations in the tag history.
-        -   UI for Beat Analyzer (button, results display) was integrated into the Upload tab.
-        -   A check-in reminder popup now appears after tag generation, description refinement, or YouTube upload.
-        -   An upload progress bar was added to the YouTube upload section.
-        -   Initial support for MP4/MOV video upload and preview was added, then reverted to audio-only upload with a new **video preview player** for the audio+image composite.
-        -   File size warnings for uploads were added.
--   **/app/frontend/src/components/SubscriptionBanner.js**: Displays subscription status and credits.
-    -   **Summary**: Informs users about their subscription and credit usage.
-    -   **Changes**: A Manage Subscription button was added for Pro users, which links to the Stripe Customer Portal.
--   **/app/frontend/public/index.html**: Main HTML file.
-    -   **Summary**: Base structure of the frontend application.
-    -   **Changes**: Added comprehensive SEO meta tags (title, description, Open Graph, Twitter Card, Schema.org structured data).
--   **/app/frontend/src/pages/LandingPage.js**: Handles login/registration.
-    -   **Summary**: User authentication and marketing content.
-    -   **Changes**: Updated with improved SEO-optimized copy, new feature cards for Analytics and Grow in 120, and enhanced existing feature descriptions.
--   **/app/frontend/.env**: Frontend environment variables.
-    -   **Summary**: Contains  and .
-    -   **Changes**:  was modified to match the preview URL.
--   **/app/backend/.env**: Backend environment variables.
-    -   **Summary**: Contains , , etc.
-    -   **Changes**:  was updated from placeholder to user-provided secret.  was updated to the preview URL.
+-   ****
+    -   **Importance:** This is the core of the backend, handling all API logic.
+    -   **Summary of Changes:**
+        -   The  endpoint was heavily modified. The Pydantic model  was updated to include . The AI prompt was significantly improved to generate hyper-specific, SEO-focused tags. A new function  was added to get popular songs for type beat tag generation.
+        -   The  endpoint's FFmpeg command was updated. The  filter was changed to  to prevent image stretching. The audio codec  was set to  to prevent audio compression and quality loss. A check for FFmpeg's existence was also made more robust.
+
+-   ****
+    -   **Importance:** The main user-facing interface for all core features after login.
+    -   **Summary of Changes:**
+        -   The Beat Analyzer component was moved out of a conditional  block to make it always accessible. A tooltip was added to its disabled state to guide users.
+        -   The tag generation section was updated to include a new input for .
+        -   A new Add More Tags feature was added, including state management (), a new input field, and a handler function () to append tags to an existing generation.
+        -   A syntax error (a misplaced ) was fixed.
+
+-   ****
+    -   **Importance:** The application's main entry point for new users.
+    -   **Summary of Changes:** This file underwent a complete overhaul to implement the Matrix/arcade theme. All sections (hero, features, CTA) were rewritten with new components and styles. Text was updated multiple times based on user feedback, including changing button text from ENTER THE MATRIX to Try For Free. A hardcoded  class was removed to allow the theme toggle to function correctly.
+
+-   ** (New File)**
+    -   **Importance:** Contains the primary styling for the new Matrix/arcade theme.
+    -   **Summary of Changes:** Created to define the Karmatic Arcade font-face, the animated grid background, RGB hover effects, and the core green/black (dark) and white/green (light) color schemes. Updated to use the arcade font only for a specific  class.
+
+-   ** & **
+    -   **Importance:** Global CSS files.
+    -   **Summary of Changes:** Updated to import and apply the . The CSS variables for light and dark modes were updated to match the Matrix theme. Responsive utility classes were recently added to  to begin fixing mobile scaling issues.
+
+-   **, ,  & **
+    -   **Importance:** Static content and global components.
+    -   **Summary of Changes:** All files were heavily modified to strip out old styling and apply the new Matrix theme classes for a consistent look and feel across the entire application. A runtime error  was fixed in .
 </code_architecture>
-
 <pending_tasks>
-- User needs to configure the Google OAuth redirect URI in their Google Cloud Console to match .
-- User needs to configure the Stripe Customer Portal in their Stripe Dashboard (live mode).
-- User needs to reconnect their YouTube account to grant the expanded  OAuth scope.
+- The primary and only pending task is to make the entire website fully responsive and mobile-friendly. The user reported that the UI looks squished on narrow screens.
 </pending_tasks>
-
 <current_work>
-Immediately preceding this summary, the AI engineer was addressing a persistent issue with video uploads. After initial attempts to optimize for large MP4 files and implement streaming uploads, the user requested to revert to the previous audio-only upload mechanism but with an added preview functionality to show the user the combined audio-image video before uploading to YouTube.
+The last task initiated by the previous engineer was to address the user's request to make the entire website responsive and mobile-friendly. The user complained that the site looks squished up if i mae the window more narrow.
 
-The AI engineer performed several changes to fulfill this:
-1.  **Backend ()**: Reverted modifications related to direct MP4 video handling, ensuring the system processes audio and an image to create a video via FFmpeg. The FFmpeg bitrate was adjusted to 128k, and cleanup logic was corrected. The backend was also being debugged for a persistent  within the FFmpeg processing block, with the last action being a fix for double blank lines and incorrect logging indentation.
-2.  **Frontend ()**: Reverted UI changes that allowed MP4 uploads, making the upload form audio-only again. A new  component and state management (, ) were introduced to display a preview of the combined audio and image video before it's sent to YouTube.
+To begin this task, the engineer took the following steps:
+1.  **Identified the Need:** Acknowledged the user's request to fix scaling issues across the application for better viewing on all screen sizes, including mobile phones.
+2.  **Initial CSS Implementation:** Started by adding global responsive utility classes to the application's CSS files. Specifically, edits were made to:
+    -   **/app/frontend/src/App.css**: Added comprehensive responsive utilities to handle different screen sizes.
+    -   **/app/frontend/src/matrix-theme.css**: Added responsive utilities to ensure the theme-specific elements (like the grid background) scale properly.
+3.  **Service Restart:** A final action was to restart the frontend service to apply these initial CSS changes.
 
-The engineer is currently in the process of ensuring these reverts and the new preview feature are correctly implemented and free of errors, specifically having just fixed an indentation error in the backend.
+The work was paused at this point. The next logical step would be to apply these new utility classes and other responsive design principles (like Flexbox/Grid adjustments and media queries) to individual components, starting with  and , to fix the specific layout issues.
 </current_work>
-
 <optional_next_step>
-Ensure the backend server restarts successfully after the indentation fix and verify the new video preview functionality on the frontend.
+Continue the work on making the website responsive by applying the newly added CSS utilities and further refining the styling of components, starting with the , to ensure they scale correctly on all screen sizes.
 </optional_next_step>
+

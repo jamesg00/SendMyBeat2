@@ -10,7 +10,7 @@ from pathlib import Path
 
 class FFmpegFixTester:
     def __init__(self):
-        self.base_url = "https://musicprodai-1.preview.emergentagent.com"
+        self.base_url = "https://tagbeats.preview.emergentagent.com"
         self.token = None
         self.user_id = None
 

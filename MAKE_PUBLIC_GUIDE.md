@@ -29,7 +29,7 @@ To allow **any user** to connect their YouTube account, you need to publish your
    App name: SendMyBeat
    User support email: your-email@gmail.com
    App logo: (Upload a logo - 120x120px PNG/JPG)
-   Application home page: https://musicprodai-1.preview.emergentagent.com
+   Application home page: https://tagbeats.preview.emergentagent.com
    Application privacy policy: (Create simple privacy policy - see below)
    Application terms of service: (Optional)
    Authorized domains: emergentagent.com
