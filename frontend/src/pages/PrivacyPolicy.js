@@ -58,13 +58,13 @@ const PrivacyPolicy = () => {
               <h2 className="text-xl sm:text-2xl font-semibold mb-4 matrix-glow">3. Information We Collect</h2>
               <p className="mb-3">We collect the following types of information:</p>
               
-              <h3 className="text-xl font-semibold mb-2 ${isDark ? 'text-gray-200' : 'text-gray-800'}">Account Information:</h3>
+              <h3 className="text-lg sm:text-xl font-semibold mb-2 matrix-glow">Account Information:</h3>
               <ul className="list-disc ml-6 mb-4 space-y-1">
                 <li>Username and password (encrypted)</li>
                 <li>Google account email address (when you connect YouTube)</li>
               </ul>
 
-              <h3 className="text-xl font-semibold mb-2 ${isDark ? 'text-gray-200' : 'text-gray-800'}">Content You Upload:</h3>
+              <h3 className="text-lg sm:text-xl font-semibold mb-2 matrix-glow">Content You Upload:</h3>
               <ul className="list-disc ml-6 mb-4 space-y-1">
                 <li>Audio files (MP3, WAV, etc.)</li>
                 <li>Thumbnail images (JPG, PNG, etc.)</li>
@@ -72,7 +72,7 @@ const PrivacyPolicy = () => {
                 <li>Tags you generate or customize</li>
               </ul>
 
-              <h3 className="text-xl font-semibold mb-2 ${isDark ? 'text-gray-200' : 'text-gray-800'}">YouTube Access:</h3>
+              <h3 className="text-lg sm:text-xl font-semibold mb-2 matrix-glow">YouTube Access:</h3>
               <ul className="list-disc ml-6 space-y-1">
                 <li>YouTube channel access for uploading videos</li>
                 <li>OAuth tokens for maintaining connection to your YouTube account</li>
@@ -106,14 +106,14 @@ const PrivacyPolicy = () => {
               <h2 className="text-xl sm:text-2xl font-semibold mb-4 matrix-glow">6. Third-Party Services</h2>
               <p className="mb-3">We use the following third-party services:</p>
               
-              <h3 className="text-xl font-semibold mb-2 ${isDark ? 'text-gray-200' : 'text-gray-800'}">Google Services:</h3>
+              <h3 className="text-lg sm:text-xl font-semibold mb-2 matrix-glow">Google Services:</h3>
               <ul className="list-disc ml-6 mb-4 space-y-1">
                 <li><strong>Google OAuth 2.0:</strong> For secure authentication with your Google account</li>
                 <li><strong>YouTube Data API v3:</strong> For uploading videos to your YouTube channel</li>
                 <li>Privacy Policy: <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="${isDark ? 'text-blue-400' : 'text-blue-600'} hover:underline">https://policies.google.com/privacy</a></li>
               </ul>
 
-              <h3 className="text-xl font-semibold mb-2 ${isDark ? 'text-gray-200' : 'text-gray-800'}">OpenAI:</h3>
+              <h3 className="text-lg sm:text-xl font-semibold mb-2 matrix-glow">OpenAI:</h3>
               <ul className="list-disc ml-6 space-y-1">
                 <li><strong>GPT-4o:</strong> For AI-powered tag generation and description creation</li>
                 <li>Privacy Policy: <a href="https://openai.com/privacy" target="_blank" rel="noopener noreferrer" className="${isDark ? 'text-blue-400' : 'text-blue-600'} hover:underline">https://openai.com/privacy</a></li>
