@@ -215,7 +215,7 @@ const PrivacyPolicy = () => {
             </section>
           </div>
 
-          <div className={`mt-12 pt-6 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+          <div className={`mt-12 pt-6 border-t neon-border`}>
             <p className={`text-sm text-center matrix-glow`}>
               © 2025 SendMyBeat.com. All rights reserved.
             </p>
