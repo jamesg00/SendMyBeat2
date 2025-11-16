@@ -905,22 +905,23 @@ const Dashboard = ({ setIsAuthenticated }) => {
               </CardHeader>
               <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
                 <form onSubmit={handleGenerateTags} className="space-y-3 sm:space-y-4" data-testid="tag-generator-form">
-                  <div className="space-y-2">
-                    <Label htmlFor="tag-query">Search Query</Label>
+                  <div className="space-y-1.5 sm:space-y-2">
+                    <Label htmlFor="tag-query" className="text-sm sm:text-base">Search Query</Label>
                     <Input
                       id="tag-query"
                       placeholder="e.g., lil uzi, travis scott, dark trap beat"
                       value={tagQuery}
                       onChange={(e) => setTagQuery(e.target.value)}
                       data-testid="tag-query-input"
+                      className="text-sm sm:text-base"
                     />
                     <p className="text-xs" style={{color: 'var(--text-secondary)'}}>
                       💡 Tip: Include artist name for popular song "type beat" variations
                     </p>
                   </div>
                   
-                  <div className="space-y-2">
-                    <Label htmlFor="custom-tags">Your Custom Tags (Optional)</Label>
+                  <div className="space-y-1.5 sm:space-y-2">
+                    <Label htmlFor="custom-tags" className="text-sm sm:text-base">Your Custom Tags (Optional)</Label>
                     <Textarea
                       id="custom-tags"
                       placeholder="e.g., free for profit, exclusive beat, lease available (comma-separated)"
@@ -928,6 +929,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                       onChange={(e) => setCustomTags(e.target.value)}
                       rows={3}
                       data-testid="custom-tags-input"
+                      className="text-sm sm:text-base"
                     />
                     <p className="text-xs" style={{color: 'var(--text-secondary)'}}>
                       Add your own tags (comma-separated). Total limit: 500 tags
@@ -936,7 +938,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                   
                   <Button
                     type="submit"
-                    className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+                    className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-sm sm:text-base py-5 sm:py-6"
                     disabled={loadingTags}
                     data-testid="generate-tags-btn"
                   >
