@@ -195,7 +195,7 @@ const LandingPage = ({ setIsAuthenticated }) => {
                 data-testid="get-started-btn"
               >
                 <Rocket className="mr-2 h-5 w-5 sm:h-6 sm:w-6" />
-                ENTER THE MATRIX
+                TRY FOR FREE
               </Button>
               <p className="text-xs sm:text-sm matrix-glow">
                 ✅ 3 FREE DAILY USES • NO CREDIT CARD
