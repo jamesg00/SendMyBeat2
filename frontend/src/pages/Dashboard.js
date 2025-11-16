@@ -1090,17 +1090,17 @@ const Dashboard = ({ setIsAuthenticated }) => {
           </TabsContent>
 
           {/* Descriptions Tab */}
-          <TabsContent value="descriptions" className="space-y-6">
-            <div className="grid md:grid-cols-2 gap-6">
+          <TabsContent value="descriptions" className="space-y-4 sm:space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
               {/* Create/Save Description */}
               <Card className="shadow-lg border-0">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Save className="h-5 w-5 text-blue-600" />
-                    Create & Save Description
+                <CardHeader className="px-4 sm:px-6 py-4 sm:py-6">
+                  <CardTitle className="flex items-center gap-2 text-base sm:text-lg md:text-xl">
+                    <Save className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 flex-shrink-0" />
+                    <span>Create & Save Description</span>
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6 space-y-3 sm:space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="desc-title">Title</Label>
                     <Input
