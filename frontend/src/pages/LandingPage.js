@@ -281,10 +281,10 @@ const LandingPage = ({ setIsAuthenticated }) => {
                 </div>
               </div>
               <h3 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 matrix-glow rgb-hover">
-                DIRECT UPLOAD
+                AI DESCRIPTIONS
               </h3>
               <p className="text-sm sm:text-base lg:text-lg leading-relaxed matrix-glow">
-                Upload beats directly to YouTube with pre-optimized tags. Automate your workflow.
+                Generate and save video descriptions. Create templates for faster uploads.
               </p>
             </div>
 
