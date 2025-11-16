@@ -1,4 +1,4 @@
-/* Matrix Theme - Clean Professional Style */
+/* Matrix Arcade Theme - Full Gaming Style */
 @font-face {
   font-family: 'Karmatic Arcade';
   src: url('./karmatic-arcade.ttf') format('truetype');
@@ -6,103 +6,207 @@
   font-style: normal;
 }
 
-/* Matrix Colors */
+/* Matrix Colors - Black & Green Only */
 :root {
   --matrix-green: #00ff41;
   --matrix-green-dark: #00cc33;
   --matrix-green-light: #39ff14;
+  --matrix-green-glow: rgba(0, 255, 65, 0.5);
   --matrix-black: #0d0208;
   --matrix-dark: #1a1a1a;
-  --matrix-white: #ffffff;
+  --matrix-darker: #0a0a0a;
 }
 
-/* Apply font to specific elements only */
-h1, h2, .brand-text {
-  font-family: 'Karmatic Arcade', 'Courier New', monospace;
-  letter-spacing: 1px;
+/* Apply Karmatic Arcade font everywhere */
+body, h1, h2, h3, h4, h5, h6, .matrix-font, .brand-text {
+  font-family: 'Karmatic Arcade', 'Courier New', monospace !important;
+  letter-spacing: 2px;
 }
 
-/* Dark theme */
-.dark {
-  --bg-primary: var(--matrix-black);
-  --bg-secondary: var(--matrix-dark);
-  --bg-tertiary: #2a2a2a;
-  --text-primary: var(--matrix-green);
-  --text-secondary: var(--matrix-green-dark);
-  --accent: var(--matrix-green-light);
-  --accent-primary: var(--matrix-green);
-  --accent-secondary: var(--matrix-green-dark);
-  background-color: var(--matrix-black);
-  color: var(--matrix-green);
+/* Force dark mode everywhere */
+body, .dark, :root {
+  --bg-primary: var(--matrix-black) !important;
+  --bg-secondary: var(--matrix-dark) !important;
+  --bg-tertiary: var(--matrix-darker) !important;
+  --text-primary: var(--matrix-green) !important;
+  --text-secondary: var(--matrix-green-dark) !important;
+  --accent: var(--matrix-green-light) !important;
+  --accent-primary: var(--matrix-green) !important;
+  --accent-secondary: var(--matrix-green-light) !important;
+  background-color: var(--matrix-black) !important;
+  color: var(--matrix-green) !important;
 }
 
-/* Light theme */
-body:not(.dark) {
-  --bg-primary: var(--matrix-white);
-  --bg-secondary: #f5f5f5;
-  --bg-tertiary: #e8e8e8;
-  --text-primary: #1a1a1a;
-  --text-secondary: #4a4a4a;
-  --accent: var(--matrix-green-dark);
-  --accent-primary: var(--matrix-green-dark);
-  --accent-secondary: var(--matrix-green);
-  background-color: var(--matrix-white);
+/* RGB Hover Effect - ARCADE STYLE */
+@keyframes rgb-shift {
+  0% { color: #ff0000; text-shadow: 0 0 20px #ff0000; }
+  16% { color: #ff9900; text-shadow: 0 0 20px #ff9900; }
+  33% { color: #ffff00; text-shadow: 0 0 20px #ffff00; }
+  50% { color: #00ff00; text-shadow: 0 0 20px #00ff00; }
+  66% { color: #0099ff; text-shadow: 0 0 20px #0099ff; }
+  83% { color: #9933ff; text-shadow: 0 0 20px #9933ff; }
+  100% { color: #ff0000; text-shadow: 0 0 20px #ff0000; }
 }
 
-/* Matrix glow */
+.rgb-hover:hover {
+  animation: rgb-shift 2s linear infinite !important;
+  cursor: pointer;
+}
+
+/* Matrix Text Glow */
 .matrix-glow {
   color: var(--matrix-green);
-  text-shadow: 0 0 10px rgba(0, 255, 65, 0.5);
+  text-shadow: 
+    0 0 5px var(--matrix-green-glow),
+    0 0 10px var(--matrix-green-glow),
+    0 0 20px var(--matrix-green-glow);
 }
 
-/* Gradient text */
+.matrix-glow:hover {
+  text-shadow: 
+    0 0 10px var(--matrix-green),
+    0 0 20px var(--matrix-green),
+    0 0 40px var(--matrix-green);
+}
+
+/* Gradient Text */
 .gradient-text {
-  background: linear-gradient(135deg, var(--matrix-green), var(--matrix-green-dark));
+  background: linear-gradient(135deg, var(--matrix-green), var(--matrix-green-light));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
-/* Cyber grid background */
-.cyber-grid {
+/* Cyber Grid Background - EVERYWHERE */
+.cyber-grid, body, .App, [class*="dashboard"], [class*="container"] {
+  background-color: var(--matrix-black) !important;
   background-image: 
-    linear-gradient(rgba(0, 255, 65, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 255, 65, 0.05) 1px, transparent 1px);
-  background-size: 20px 20px;
+    linear-gradient(rgba(0, 255, 65, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 65, 0.1) 1px, transparent 1px) !important;
+  background-size: 20px 20px !important;
 }
 
-/* Card styles */
-.game-card, .producer-card {
-  background: rgba(0, 0, 0, 0.7);
-  border: 1px solid var(--matrix-green);
-  box-shadow: 0 4px 6px rgba(0, 255, 65, 0.1);
+/* Gaming Card Style */
+.game-card, .producer-card, [class*="card"] {
+  background: rgba(0, 0, 0, 0.8) !important;
+  border: 2px solid var(--matrix-green) !important;
+  box-shadow: 
+    0 0 20px var(--matrix-green-glow),
+    inset 0 0 20px rgba(0, 255, 65, 0.1) !important;
   transition: all 0.3s ease;
 }
 
-.game-card:hover, .producer-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 12px rgba(0, 255, 65, 0.2);
-  border-color: var(--matrix-green-light);
+.game-card:hover, .producer-card:hover, [class*="card"]:hover {
+  transform: translateY(-5px);
+  box-shadow: 
+    0 5px 30px var(--matrix-green),
+    inset 0 0 30px rgba(0, 255, 65, 0.2) !important;
+  border-color: var(--matrix-green-light) !important;
 }
 
-/* Button styles */
+/* Glitch Effect - ARCADE */
+@keyframes glitch {
+  0% { transform: translate(0); }
+  20% { transform: translate(-2px, 2px); }
+  40% { transform: translate(-2px, -2px); }
+  60% { transform: translate(2px, 2px); }
+  80% { transform: translate(2px, -2px); }
+  100% { transform: translate(0); }
+}
+
+.glitch-effect:hover {
+  animation: glitch 0.3s infinite;
+}
+
+/* Matrix Button Styles */
 .matrix-btn {
-  background: var(--matrix-green);
-  color: var(--matrix-black);
-  border: 2px solid var(--matrix-green);
-  font-weight: 600;
+  background: linear-gradient(135deg, var(--matrix-green), var(--matrix-green-dark)) !important;
+  color: var(--matrix-black) !important;
+  border: 2px solid var(--matrix-green) !important;
+  font-weight: bold;
+  text-transform: uppercase;
   transition: all 0.3s ease;
+  box-shadow: 0 0 10px var(--matrix-green-glow);
 }
 
 .matrix-btn:hover {
-  background: var(--matrix-green-light);
-  box-shadow: 0 0 15px rgba(0, 255, 65, 0.4);
+  background: var(--matrix-green-light) !important;
+  box-shadow: 0 0 20px var(--matrix-green), 0 0 40px var(--matrix-green-glow) !important;
+  transform: scale(1.05);
+  animation: rgb-shift 2s linear infinite;
 }
 
-/* Neon border */
+/* Neon Border */
 .neon-border {
-  border: 1px solid var(--matrix-green);
-  box-shadow: 0 0 5px rgba(0, 255, 65, 0.3);
+  border: 2px solid var(--matrix-green) !important;
+  box-shadow: 
+    0 0 5px var(--matrix-green),
+    inset 0 0 5px var(--matrix-green-glow) !important;
+}
+
+/* Pulse Animation */
+@keyframes pulse-glow {
+  0%, 100% { 
+    box-shadow: 0 0 10px var(--matrix-green-glow);
+  }
+  50% { 
+    box-shadow: 0 0 30px var(--matrix-green), 0 0 50px var(--matrix-green-glow);
+  }
+}
+
+.pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Scanline Effect - ARCADE */
+@keyframes scanline {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100%); }
+}
+
+.scanline-effect {
+  position: relative;
+  overflow: hidden;
+}
+
+.scanline-effect::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    var(--matrix-green) 50%,
+    transparent
+  );
+  animation: scanline 4s linear infinite;
+  opacity: 0.3;
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* Matrix Rain Background */
+.matrix-bg::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: 
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      var(--matrix-green-glow) 2px,
+      var(--matrix-green-glow) 4px
+    );
+  opacity: 0.03;
+  pointer-events: none;
+  z-index: 0;
 }
 
 /* Responsive text scaling */
@@ -141,17 +245,4 @@ body:not(.dark) {
   .text-lg { font-size: 0.9rem !important; }
 }
 
-/* Remove all arcade effects */
-@keyframes pulse-glow {
-  0%, 100% { 
-    box-shadow: 0 0 5px rgba(0, 255, 65, 0.2);
-  }
-  50% { 
-    box-shadow: 0 0 10px rgba(0, 255, 65, 0.3);
-  }
-}
-
-.pulse-glow {
-  animation: pulse-glow 3s ease-in-out infinite;
-}
 
