@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
@@ -6,39 +6,15 @@ import DarkModeToggle from '@/components/DarkModeToggle';
 
 const PrivacyPolicy = () => {
   const navigate = useNavigate();
-  const [isDark, setIsDark] = useState(false);
-
-  // Check initial theme and listen for changes
-  useEffect(() => {
-    // Check initial state
-    const checkDarkMode = () => {
-      const hasDarkClass = document.documentElement.classList.contains('dark');
-      setIsDark(hasDarkClass);
-    };
-    
-    checkDarkMode();
-
-    // Listen for theme changes
-    const observer = new MutationObserver(() => {
-      checkDarkMode();
-    });
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class']
-    });
-
-    return () => observer.disconnect();
-  }, []);
 
   return (
-    <div className={`min-h-screen ${isDark ? 'bg-gradient-to-br from-slate-900 to-slate-800' : 'bg-gradient-to-br from-slate-50 to-blue-50'}`}>
+    <div className="min-h-screen cyber-grid scanline-effect" style={{backgroundColor: 'var(--bg-primary)'}}>
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         <div className="flex justify-between items-center mb-8">
           <Button
             variant="ghost"
             onClick={() => navigate(-1)}
-            className="flex items-center gap-2"
+            className="flex items-center gap-2 matrix-glow hover:scale-105 transition-transform"
           >
             <ArrowLeft className="w-4 h-4" />
             Back
@@ -46,8 +22,8 @@ const PrivacyPolicy = () => {
           <DarkModeToggle />
         </div>
 
-        <div className={`rounded-xl shadow-xl p-8 md:p-12 ${isDark ? 'bg-slate-800' : 'bg-white'}`}>
-          <h1 className="text-4xl font-bold mb-6 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+        <div className="game-card p-8 md:p-12">
+          <h1 className="text-3xl sm:text-4xl font-bold mb-6 text-center brand-text matrix-glow rgb-hover">
             Privacy Policy
           </h1>
           <p className={`text-sm mb-8 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
