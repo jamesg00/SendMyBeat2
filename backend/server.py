@@ -120,6 +120,7 @@ class GenerateDescriptionRequest(BaseModel):
 
 class TagGenerationRequest(BaseModel):
     query: str
+    custom_tags: Optional[List[str]] = []  # User's custom tags
 
 class TagGenerationResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
