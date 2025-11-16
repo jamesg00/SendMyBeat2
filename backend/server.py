@@ -1197,6 +1197,49 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
                 }
             )
         
+        # Extract artist name from query (e.g., "drake type beat" -> "drake")
+        query_lower = request.query.lower()
+        artist_name = query_lower.replace("type beat", "").replace("style", "").replace("beat", "").strip()
+        
+        # Search YouTube for artist's popular songs
+        youtube_type_beat_tags = []
+        try:
+            # Get user's YouTube credentials if available for search
+            user = await db.users.find_one({"id": current_user['id']})
+            if user and user.get('youtube_token'):
+                credentials_dict = user['youtube_token']
+                credentials = Credentials(**credentials_dict)
+                youtube = build('youtube', 'v3', credentials=credentials)
+            else:
+                # Use basic API without credentials (limited but works for search)
+                youtube = build('youtube', 'v3', developerKey=os.environ.get('GOOGLE_CLIENT_SECRET', ''))
+            
+            # Search for artist's popular songs
+            search_response = youtube.search().list(
+                q=artist_name,
+                part='snippet',
+                type='video',
+                videoCategoryId='10',  # Music category
+                order='viewCount',  # Get most popular
+                maxResults=10
+            ).execute()
+            
+            # Extract song titles and create "type beat" variations
+            for item in search_response.get('items', []):
+                title = item['snippet']['title']
+                # Clean the title (remove common suffixes)
+                clean_title = title.split('(')[0].split('[')[0].split('|')[0].strip()
+                if clean_title and len(clean_title) < 50:  # Reasonable length
+                    # Add variations
+                    youtube_type_beat_tags.append(f"{clean_title} type beat")
+                    youtube_type_beat_tags.append(f"{clean_title} instrumental")
+                    youtube_type_beat_tags.append(f"{clean_title} beat")
+            
+            logging.info(f"Found {len(youtube_type_beat_tags)} YouTube song variations for {artist_name}")
+        except Exception as e:
+            logging.warning(f"YouTube search for popular songs failed: {str(e)}")
+            # Continue without YouTube search results
+        
         # Initialize AI chat
         chat = LlmChat(
             api_key=os.environ['EMERGENT_LLM_KEY'],
@@ -1204,8 +1247,9 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
             system_message="You are an expert YouTube music tag generator for beat producers. Generate diverse, high-performing tags that maximize discoverability."
         ).with_model("openai", "gpt-4o")
         
-        # Generate tags
-        prompt = f"""Generate exactly 500 YouTube tags for a beat/music production with the following style: "{request.query}"
+        # Generate tags (reduce count to make room for YouTube + custom tags)
+        base_tag_count = 450  # Leave room for YouTube search tags and custom tags
+        prompt = f"""Generate exactly {base_tag_count} YouTube tags for a beat/music production with the following style: "{request.query}"
 
 The tags should include:
 - Artist name/style variations (e.g., "lil uzi vert type beat", "lil uzi style")
@@ -1214,21 +1258,50 @@ The tags should include:
 - Production tags (e.g., "type beat", "prod by", "free beat")
 - Popular search terms
 - Trending related terms
+- Year tags (e.g., "2025 type beat")
 
 Format: Return ONLY the tags separated by commas, no numbering or extra text. Make them diverse and search-optimized for YouTube."""
         
         user_message = UserMessage(text=prompt)
         response = await chat.send_message(user_message)
         
-        # Parse tags
+        # Parse AI-generated tags
         tags_text = response.strip()
-        tags = [tag.strip() for tag in tags_text.split(',') if tag.strip()]
+        ai_tags = [tag.strip() for tag in tags_text.split(',') if tag.strip()]
+        
+        # Combine all tags: AI tags + YouTube song type beat tags + custom tags
+        all_tags = []
+        
+        # Add AI tags first
+        all_tags.extend(ai_tags)
+        
+        # Add YouTube popular song variations
+        all_tags.extend(youtube_type_beat_tags)
+        
+        # Add user's custom tags
+        if request.custom_tags:
+            custom_cleaned = [tag.strip() for tag in request.custom_tags if tag.strip()]
+            all_tags.extend(custom_cleaned)
+        
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_tags = []
+        for tag in all_tags:
+            tag_lower = tag.lower()
+            if tag_lower not in seen:
+                seen.add(tag_lower)
+                unique_tags.append(tag)
+        
+        # Limit to 500 tags
+        final_tags = unique_tags[:500]
+        
+        logging.info(f"Generated {len(final_tags)} total tags: {len(ai_tags)} AI + {len(youtube_type_beat_tags)} YouTube + {len(request.custom_tags or [])} custom")
         
         # Save to database
         tag_gen = TagGenerationResponse(
             user_id=current_user['id'],
             query=request.query,
-            tags=tags
+            tags=final_tags
         )
         
         tag_doc = tag_gen.model_dump()
