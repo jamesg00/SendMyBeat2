@@ -102,18 +102,18 @@ const SubscriptionBanner = ({ creditsRemaining, uploadCreditsRemaining, isSubscr
         {/* Side by Side Credit Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-4 sm:mb-5 md:mb-6">
           {/* AI Generations Card */}
-          <div className={`producer-card p-4 rounded-xl ${isAiLow ? 'border-2 border-red-500' : ''}`}>
+          <div className={`producer-card p-3 sm:p-4 rounded-xl ${isAiLow ? 'border-2 border-red-500' : ''}`}>
             <div className="flex flex-col items-center text-center">
-              <div className={`h-12 w-12 rounded-full flex items-center justify-center mb-3 ${isAiLow ? 'bg-red-500' : 'bg-gradient-to-br from-blue-500 to-purple-600'}`}>
-                <Zap className="h-6 w-6 text-white" />
+              <div className={`h-10 w-10 sm:h-12 sm:w-12 rounded-full flex items-center justify-center mb-2 sm:mb-3 ${isAiLow ? 'bg-red-500' : 'bg-gradient-to-br from-blue-500 to-purple-600'}`}>
+                <Zap className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
               </div>
-              <p className="text-sm font-semibold mb-1" style={{color: 'var(--text-primary)'}}>
+              <p className="text-xs sm:text-sm font-semibold mb-1" style={{color: 'var(--text-primary)'}}>
                 AI Generations
               </p>
-              <div className="text-3xl font-bold mb-2" style={{color: isAiLow ? '#ef4444' : 'var(--text-primary)'}}>
+              <div className="text-2xl sm:text-3xl font-bold mb-1.5 sm:mb-2" style={{color: isAiLow ? '#ef4444' : 'var(--text-primary)'}}>
                 {creditsRemaining}
               </div>
-              <p className="text-xs mb-3" style={{color: 'var(--text-secondary)'}}>
+              <p className="text-xs mb-2 sm:mb-3" style={{color: 'var(--text-secondary)'}}>
                 of 3 remaining
               </p>
               {/* Progress Bar */}
@@ -127,18 +127,18 @@ const SubscriptionBanner = ({ creditsRemaining, uploadCreditsRemaining, isSubscr
           </div>
 
           {/* YouTube Uploads Card */}
-          <div className={`producer-card p-4 rounded-xl ${isUploadLow ? 'border-2 border-red-500' : ''}`}>
+          <div className={`producer-card p-3 sm:p-4 rounded-xl ${isUploadLow ? 'border-2 border-red-500' : ''}`}>
             <div className="flex flex-col items-center text-center">
-              <div className={`h-12 w-12 rounded-full flex items-center justify-center mb-3 ${isUploadLow ? 'bg-red-500' : 'bg-gradient-to-br from-green-500 to-emerald-600'}`}>
-                <Upload className="h-6 w-6 text-white" />
+              <div className={`h-10 w-10 sm:h-12 sm:w-12 rounded-full flex items-center justify-center mb-2 sm:mb-3 ${isUploadLow ? 'bg-red-500' : 'bg-gradient-to-br from-green-500 to-emerald-600'}`}>
+                <Upload className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
               </div>
-              <p className="text-sm font-semibold mb-1" style={{color: 'var(--text-primary)'}}>
+              <p className="text-xs sm:text-sm font-semibold mb-1" style={{color: 'var(--text-primary)'}}>
                 YouTube Uploads
               </p>
-              <div className="text-3xl font-bold mb-2" style={{color: isUploadLow ? '#ef4444' : 'var(--text-primary)'}}>
+              <div className="text-2xl sm:text-3xl font-bold mb-1.5 sm:mb-2" style={{color: isUploadLow ? '#ef4444' : 'var(--text-primary)'}}>
                 {uploadCreditsRemaining}
               </div>
-              <p className="text-xs mb-3" style={{color: 'var(--text-secondary)'}}>
+              <p className="text-xs mb-2 sm:mb-3" style={{color: 'var(--text-secondary)'}}>
                 of 3 remaining
               </p>
               {/* Progress Bar */}
