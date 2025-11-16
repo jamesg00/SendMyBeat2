@@ -141,18 +141,18 @@ body, h1, h2, h3, h4, h5, h6, p, div, span, button {
   transition: all 0.3s ease;
 }
 
-.game-card:hover, .producer-card:hover, [class*="card"]:hover {
+.game-card:hover, .producer-card:hover {
   transform: translateY(-5px);
 }
 
-.dark .game-card:hover, .dark .producer-card:hover, .dark [class*="card"]:hover {
+.dark .game-card:hover, .dark .producer-card:hover, html.dark .game-card:hover, html.dark .producer-card:hover {
   box-shadow: 
     0 5px 30px var(--matrix-green),
     inset 0 0 30px rgba(0, 255, 65, 0.2) !important;
   border-color: var(--matrix-green-light) !important;
 }
 
-body:not(.dark) .game-card:hover, body:not(.dark) .producer-card:hover, body:not(.dark) [class*="card"]:hover {
+.game-card:hover, .producer-card:hover {
   box-shadow: 
     0 5px 20px rgba(0, 204, 51, 0.5),
     inset 0 0 20px rgba(0, 204, 51, 0.1) !important;
