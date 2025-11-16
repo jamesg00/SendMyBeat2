@@ -883,14 +883,33 @@ const Dashboard = ({ setIsAuthenticated }) => {
                       onChange={(e) => setTagQuery(e.target.value)}
                       data-testid="tag-query-input"
                     />
+                    <p className="text-xs" style={{color: 'var(--text-secondary)'}}>
+                      💡 Tip: Include artist name for popular song "type beat" variations
+                    </p>
                   </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="custom-tags">Your Custom Tags (Optional)</Label>
+                    <Textarea
+                      id="custom-tags"
+                      placeholder="e.g., free for profit, exclusive beat, lease available (comma-separated)"
+                      value={customTags}
+                      onChange={(e) => setCustomTags(e.target.value)}
+                      rows={3}
+                      data-testid="custom-tags-input"
+                    />
+                    <p className="text-xs" style={{color: 'var(--text-secondary)'}}>
+                      Add your own tags (comma-separated). Total limit: 500 tags
+                    </p>
+                  </div>
+                  
                   <Button
                     type="submit"
                     className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
                     disabled={loadingTags}
                     data-testid="generate-tags-btn"
                   >
-                    {loadingTags ? "Generating Tags..." : "Generate Tags"}
+                    {loadingTags ? "Generating Tags..." : "Generate 500 Tags (AI + YouTube + Custom)"}
                   </Button>
                 </form>
 
