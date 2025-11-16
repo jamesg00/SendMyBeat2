@@ -1390,18 +1390,18 @@ const Dashboard = ({ setIsAuthenticated }) => {
 
                 {/* Beat Analyzer Section - Available for all users */}
                 <Card className="producer-card border-l-4 border-yellow-500">
-                  <CardContent className="p-4">
-                    <div className="flex justify-between items-center mb-3">
-                      <p className="font-semibold flex items-center gap-2">
-                        <Target className="h-5 w-5 text-yellow-500" />
-                        Check Your Beat's Potential
+                  <CardContent className="p-4 sm:p-5 md:p-6">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+                      <p className="font-semibold flex items-center gap-2 text-sm sm:text-base">
+                        <Target className="h-5 w-5 sm:h-6 sm:w-6 text-yellow-500 flex-shrink-0" />
+                        <span>Check Your Beat's Potential</span>
                       </p>
                       <Button
                         onClick={handleAnalyzeBeat}
                         disabled={analyzingBeat || !uploadTitle || generatedTags.length === 0}
                         variant="outline"
-                        size="sm"
-                        className="border-yellow-500 text-yellow-600 hover:bg-yellow-50 dark:text-yellow-400 dark:hover:bg-yellow-950"
+                        size="default"
+                        className="w-full sm:w-auto border-yellow-500 text-yellow-600 hover:bg-yellow-50 dark:text-yellow-400 dark:hover:bg-yellow-950 px-4 sm:px-6 py-2 sm:py-2.5 text-sm sm:text-base whitespace-nowrap"
                         title={!uploadTitle ? "Please add a title first" : generatedTags.length === 0 ? "Please generate tags in the Tags tab first" : "Analyze your beat"}
                       >
                         {analyzingBeat ? "Analyzing..." : "Analyze Beat"}
@@ -1409,9 +1409,9 @@ const Dashboard = ({ setIsAuthenticated }) => {
                     </div>
                     
                     {(!uploadTitle || generatedTags.length === 0) && !beatAnalysis && !analyzingBeat && (
-                      <Alert className="mb-3">
-                        <AlertCircle className="h-4 w-4" />
-                        <AlertDescription>
+                      <Alert className="mb-4 p-3 sm:p-4">
+                        <AlertCircle className="h-4 w-4 sm:h-5 sm:w-5" />
+                        <AlertDescription className="text-xs sm:text-sm leading-relaxed">
                           {!uploadTitle && generatedTags.length === 0 ? (
                             <>First, go to the <strong>Tags</strong> tab to generate tags, then come back here and add a title to analyze your beat.</>
                           ) : !uploadTitle ? (
@@ -1423,7 +1423,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                       </Alert>
                     )}
                     {beatAnalysis && (
-                      <div className="space-y-3 mt-4">
+                      <div className="space-y-3 sm:space-y-4 mt-4">
                         {/* Overall Score */}
                         <div className="text-center p-4 rounded-lg" style={{backgroundColor: 'var(--bg-tertiary)'}}>
                           <p className="text-3xl font-bold gradient-text mb-1">{beatAnalysis.overall_score}/100</p>
