@@ -1,7 +1,7 @@
 /* Karmatic Arcade Font */
 @font-face {
   font-family: 'Karmatic Arcade';
-  src: url('/karmatic-arcade.ttf') format('truetype');
+  src: url('./karmatic-arcade.ttf') format('truetype');
   font-weight: normal;
   font-style: normal;
 }
