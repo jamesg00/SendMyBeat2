@@ -870,7 +870,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                   <Sparkles className="h-5 w-5 text-blue-600" />
                   Generate YouTube Tags
                 </CardTitle>
-                <CardDescription>Enter a style or artist name to generate 500 optimized tags</CardDescription>
+                <CardDescription>AI generates tags + searches artist's popular songs + adds your custom tags (500 total)</CardDescription>
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleGenerateTags} className="space-y-4" data-testid="tag-generator-form">
