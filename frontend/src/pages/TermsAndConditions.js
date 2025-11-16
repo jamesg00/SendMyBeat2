@@ -7,13 +7,13 @@ const TermsAndConditions = () => {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800">
+    <div className="min-h-screen cyber-grid scanline-effect" style={{backgroundColor: 'var(--bg-primary)'}}>
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         <div className="flex justify-between items-center mb-8">
           <Button
             variant="ghost"
             onClick={() => navigate(-1)}
-            className="flex items-center gap-2"
+            className="flex items-center gap-2 matrix-glow hover:scale-105 transition-transform"
           >
             <ArrowLeft className="w-4 h-4" />
             Back
@@ -21,17 +21,17 @@ const TermsAndConditions = () => {
           <DarkModeToggle />
         </div>
 
-        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl p-8 md:p-12">
-          <h1 className="text-4xl font-bold mb-6 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+        <div className="game-card p-8 md:p-12">
+          <h1 className="text-3xl sm:text-4xl font-bold mb-6 text-center brand-text matrix-glow rgb-hover">
             Terms and Conditions
           </h1>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mb-8">
-            Last Updated: {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+          <p className="text-sm mb-8 text-center matrix-glow">
+            Last Updated: January 2025
           </p>
 
-          <div className="space-y-6 text-gray-700 dark:text-gray-300">
+          <div className="space-y-6 matrix-glow">
             <section>
-              <h2 className="text-2xl font-semibold mb-3 text-gray-900 dark:text-white">
+              <h2 className="text-xl sm:text-2xl font-semibold mb-3 matrix-glow">
                 1. Acceptance of Terms
               </h2>
               <p>
