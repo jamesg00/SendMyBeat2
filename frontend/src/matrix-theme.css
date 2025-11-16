@@ -17,10 +17,16 @@
   --matrix-darker: #0a0a0a;
 }
 
-/* Apply Karmatic Arcade font everywhere */
-body, h1, h2, h3, h4, h5, h6, .matrix-font, .brand-text {
-  font-family: 'Karmatic Arcade', 'Courier New', monospace !important;
-  letter-spacing: 2px;
+/* Karmatic Arcade font ONLY for SendMyBeat brand */
+.brand-text, .logo-text {
+  font-family: 'Karmatic Arcade', monospace !important;
+  letter-spacing: 3px;
+}
+
+/* Matrix arcade font for everything else */
+body, h1, h2, h3, h4, h5, h6, p, div, span, button {
+  font-family: 'Courier New', 'Courier', monospace !important;
+  letter-spacing: 1px;
 }
 
 /* Force dark mode everywhere */
