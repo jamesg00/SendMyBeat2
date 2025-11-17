@@ -48,31 +48,35 @@ const ProgressBar = ({ isActive, message = "Processing...", duration = 30000, on
   };
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 bg-white dark:bg-slate-800 shadow-lg border-t border-gray-200 dark:border-gray-700">
+    <div className="fixed bottom-0 left-0 right-0 z-50 cyber-grid neon-border-top shadow-2xl" style={{backgroundColor: 'var(--bg-primary)', borderTop: '2px solid var(--accent-primary)'}}>
       <div className="container mx-auto px-4 py-3">
         <div className="flex items-center justify-between mb-2">
-          <p className="text-sm font-medium" style={{color: 'var(--text-primary)'}}>
+          <p className="text-sm font-medium matrix-glow pulse-glow">
             {message}
           </p>
           <div className="flex items-center gap-3">
-            <p className="text-sm font-semibold" style={{color: 'var(--accent-primary)'}}>
+            <p className="text-sm font-bold matrix-glow" style={{color: 'var(--accent-primary)'}}>
               {Math.round(progress)}%
             </p>
             {onCancel && (
               <button
                 onClick={handleCancel}
-                className="p-1.5 rounded-full hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+                className="p-1.5 rounded-full neon-border hover:scale-110 transition-transform rgb-hover"
+                style={{backgroundColor: 'rgba(239, 68, 68, 0.1)'}}
                 title="Cancel operation"
               >
-                <X className="w-5 h-5 text-red-500" />
+                <X className="w-5 h-5" style={{color: '#ef4444'}} />
               </button>
             )}
           </div>
         </div>
-        <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+        <div className="w-full h-3 neon-border rounded-full overflow-hidden" style={{backgroundColor: 'rgba(0, 255, 65, 0.1)'}}>
           <div 
-            className="h-full bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 transition-all duration-300 ease-out"
-            style={{ width: `${progress}%` }}
+            className="h-full bg-gradient-to-r from-[var(--accent-primary)] to-[var(--accent-secondary)] transition-all duration-300 ease-out matrix-glow"
+            style={{ 
+              width: `${progress}%`,
+              boxShadow: '0 0 20px var(--accent-primary)'
+            }}
           />
         </div>
       </div>
