@@ -13,7 +13,7 @@ import uuid
 from datetime import datetime, timezone, timedelta
 import jwt
 from passlib.hash import bcrypt
-from emergentintegrations.llm.chat import LlmChat, UserMessage
+from openai import AsyncOpenAI
 from authlib.integrations.starlette_client import OAuth, OAuthError
 from starlette.requests import Request
 from starlette.responses import RedirectResponse
@@ -66,6 +66,53 @@ api_router = APIRouter(prefix="/api")
 # Create uploads directory
 UPLOADS_DIR = Path("/app/uploads")
 UPLOADS_DIR.mkdir(exist_ok=True)
+
+# ============ LLM Helper ============
+_llm_client = None
+_llm_config = None
+
+
+def _get_llm_settings() -> dict:
+    provider = os.environ.get("LLM_PROVIDER", "openai").lower()
+    if provider == "grok":
+        api_key = os.environ.get("GROK_API_KEY") or os.environ.get("XAI_API_KEY")
+        base_url = os.environ.get("GROK_BASE_URL", "https://api.x.ai/v1")
+        model = os.environ.get("LLM_MODEL", "grok-2-latest")
+    elif provider == "openai":
+        api_key = os.environ.get("OPENAI_API_KEY")
+        base_url = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
+        model = os.environ.get("LLM_MODEL", "gpt-4o")
+    else:
+        raise RuntimeError(f"Unsupported LLM_PROVIDER: {provider}")
+
+    if not api_key:
+        raise RuntimeError(f"Missing API key for LLM_PROVIDER={provider}")
+
+    return {"provider": provider, "api_key": api_key, "base_url": base_url, "model": model}
+
+
+def _get_llm_client():
+    global _llm_client, _llm_config
+    settings = _get_llm_settings()
+    config_key = (settings["provider"], settings["base_url"], settings["model"])
+    if _llm_client is None or _llm_config != config_key:
+        _llm_client = AsyncOpenAI(api_key=settings["api_key"], base_url=settings["base_url"])
+        _llm_config = config_key
+    return _llm_client, settings
+
+
+async def llm_chat(system_message: str, user_message: str, temperature: float = 0.7, max_tokens: int | None = None) -> str:
+    client, settings = _get_llm_client()
+    response = await client.chat.completions.create(
+        model=settings["model"],
+        messages=[
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": user_message},
+        ],
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
+    return (response.choices[0].message.content or "").strip()
 
 
 # ============ Models ============
@@ -688,14 +735,10 @@ CRITICAL RULES:
 """
         
         # Get AI insights with enhanced system message
-        chat = LlmChat(
-            api_key=os.environ['EMERGENT_LLM_KEY'],
-            session_id=f"analytics_{uuid.uuid4()}",
-            system_message="You are a top YouTube growth consultant who has helped music producers grow from 0 to 1M+ subscribers. You specialize in beat producer channels and understand YouTube's algorithm deeply. You give specific, tactical advice like a mentor. You reference successful producers like Internet Money, Nick Mira, Kyle Beats as examples. You're encouraging but brutally honest about what needs to change."
-        ).with_model("openai", "gpt-4o")
-        
-        user_message = UserMessage(text=analysis_prompt)
-        response = await chat.send_message(user_message)
+        response = await llm_chat(
+            system_message="You are a top YouTube growth consultant who has helped music producers grow from 0 to 1M+ subscribers. You specialize in beat producer channels and understand YouTube's algorithm deeply. You give specific, tactical advice like a mentor. You reference successful producers like Internet Money, Nick Mira, Kyle Beats as examples. You're encouraging but brutally honest about what needs to change.",
+            user_message=analysis_prompt,
+        )
         
         # Parse AI response - handle markdown code blocks
         try:
@@ -1241,12 +1284,6 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
             # Continue without YouTube search results
         
         # Initialize AI chat
-        chat = LlmChat(
-            api_key=os.environ['EMERGENT_LLM_KEY'],
-            session_id=f"tags_{uuid.uuid4()}",
-            system_message="You are an expert YouTube SEO specialist for beat producers. You ONLY generate hyper-specific, laser-targeted tags that match EXACTLY what people search for. NO generic tags."
-        ).with_model("openai", "gpt-4o")
-        
         # Generate tags (reduce count to make room for YouTube + custom tags)
         base_tag_count = 450  # Leave room for YouTube search tags and custom tags
         prompt = f"""Generate exactly {base_tag_count} YouTube tags for: "{request.query}"
@@ -1305,8 +1342,10 @@ BAD: "zen beat", "groove beat", "chill instrumental", "relaxing music", "study b
 
 Generate {base_tag_count} HYPER-SPECIFIC tags now:"""
         
-        user_message = UserMessage(text=prompt)
-        response = await chat.send_message(user_message)
+        response = await llm_chat(
+            system_message="You are an expert YouTube SEO specialist for beat producers. You ONLY generate hyper-specific, laser-targeted tags that match EXACTLY what people search for. NO generic tags.",
+            user_message=prompt,
+        )
         
         # Parse AI-generated tags
         tags_text = response.strip()
@@ -1512,20 +1551,16 @@ async def refine_description(request: RefineDescriptionRequest, current_user: di
                     "resets_at": status.get('resets_at')
                 }
             )
-        chat = LlmChat(
-            api_key=os.environ['EMERGENT_LLM_KEY'],
-            session_id=f"refine_{uuid.uuid4()}",
-            system_message="You are an expert at refining YouTube beat descriptions to maximize engagement and professionalism."
-        ).with_model("openai", "gpt-4o")
-        
         prompt = f"""Refine and improve this YouTube beat description:
 
 {request.description}
 
 Make it more engaging, professional, and optimized for YouTube. Keep the same information but improve the structure, flow, and appeal. Return only the refined description."""
         
-        user_message = UserMessage(text=prompt)
-        response = await chat.send_message(user_message)
+        response = await llm_chat(
+            system_message="You are an expert at refining YouTube beat descriptions to maximize engagement and professionalism.",
+            user_message=prompt,
+        )
         
         return {"refined_description": response.strip()}
         
@@ -1547,12 +1582,6 @@ async def generate_description(request: GenerateDescriptionRequest, current_user
                     "resets_at": status.get('resets_at')
                 }
             )
-        
-        chat = LlmChat(
-            api_key=os.environ['EMERGENT_LLM_KEY'],
-            session_id=f"generate_{uuid.uuid4()}",
-            system_message="You are an expert at creating compelling YouTube beat descriptions that convert viewers into buyers."
-        ).with_model("openai", "gpt-4o")
         
         info_parts = []
         if request.key:
@@ -1584,8 +1613,10 @@ The description should:
 
 Return only the complete description."""
         
-        user_message = UserMessage(text=prompt)
-        response = await chat.send_message(user_message)
+        response = await llm_chat(
+            system_message="You are an expert at creating compelling YouTube beat descriptions that convert viewers into buyers.",
+            user_message=prompt,
+        )
         
         return {"generated_description": response.strip()}
         
@@ -1811,14 +1842,10 @@ PREDICTED PERFORMANCE: "Poor" (0-40), "Average" (41-65), "Good" (66-85), "Excell
 Be honest but encouraging. Focus on actionable improvements."""
 
         # Get AI analysis
-        chat = LlmChat(
-            api_key=os.environ['EMERGENT_LLM_KEY'],
-            session_id=f"beat_analysis_{uuid.uuid4()}",
-            system_message="You are a YouTube SEO expert who helps beat producers optimize their uploads for maximum discoverability. You provide specific, actionable feedback."
-        ).with_model("openai", "gpt-4o")
-        
-        user_message = UserMessage(text=analysis_prompt)
-        response = await chat.send_message(user_message)
+        response = await llm_chat(
+            system_message="You are a YouTube SEO expert who helps beat producers optimize their uploads for maximum discoverability. You provide specific, actionable feedback.",
+            user_message=analysis_prompt,
+        )
         
         # Parse response
         try:
