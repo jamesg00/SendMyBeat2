@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -67,7 +67,9 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [selectedTagsId, setSelectedTagsId] = useState("");
   const [privacyStatus, setPrivacyStatus] = useState("public");
   const [videoAspectRatio, setVideoAspectRatio] = useState("16:9");
-  const [imageScale, setImageScale] = useState(1);
+  const [imageScaleX, setImageScaleX] = useState(1);
+  const [imageScaleY, setImageScaleY] = useState(1);
+  const [lockImageScale, setLockImageScale] = useState(true);
   const [imagePosX, setImagePosX] = useState(0);
   const [imagePosY, setImagePosY] = useState(0);
   const [backgroundColor, setBackgroundColor] = useState("black");
@@ -101,6 +103,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
   // Beat Analyzer states
   const [beatAnalysis, setBeatAnalysis] = useState(null);
   const [analyzingBeat, setAnalyzingBeat] = useState(false);
+
+  const isPro = !!subscriptionStatus?.is_subscribed;
 
   useEffect(() => {
     fetchUser();
@@ -738,7 +742,9 @@ const Dashboard = ({ setIsAuthenticated }) => {
       formData.append('remove_watermark', removeWatermark);
       formData.append('description_override', uploadDescriptionText);
       formData.append('aspect_ratio', videoAspectRatio);
-      formData.append('image_scale', String(imageScale));
+      formData.append('image_scale', String(lockImageScale ? imageScaleX : (imageScaleX + imageScaleY) / 2));
+      formData.append('image_scale_x', String(imageScaleX));
+      formData.append('image_scale_y', String(imageScaleY));
       formData.append('image_pos_x', String(imagePosX));
       formData.append('image_pos_y', String(imagePosY));
       formData.append('background_color', backgroundColor);
@@ -824,10 +830,54 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const previewAspectRatio = videoAspectRatio === "1:1"
     ? "1 / 1"
     : videoAspectRatio === "9:16"
-      ? "9 / 16"
-      : videoAspectRatio === "4:5"
-        ? "4 / 5"
-        : "16 / 9";
+    ? "9 / 16"
+    : videoAspectRatio === "4:5"
+    ? "4 / 5"
+    : "16 / 9";
+
+  const previewSectionRef = useRef(null);
+  const previewContainerRef = useRef(null);
+  const [dragState, setDragState] = useState(null);
+
+  const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
+  useEffect(() => {
+    if (!dragState) return;
+
+    const handleMove = (event) => {
+      if (!previewContainerRef.current) return;
+      const rect = previewContainerRef.current.getBoundingClientRect();
+      const deltaX = event.clientX - dragState.startX;
+      const deltaY = event.clientY - dragState.startY;
+      const nextX = clamp(dragState.originX + deltaX / (rect.width / 2), -1, 1);
+      const nextY = clamp(dragState.originY + deltaY / (rect.height / 2), -1, 1);
+      setImagePosX(nextX);
+      setImagePosY(nextY);
+    };
+
+    const handleUp = () => setDragState(null);
+
+    window.addEventListener("mousemove", handleMove);
+    window.addEventListener("mouseup", handleUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMove);
+      window.removeEventListener("mouseup", handleUp);
+    };
+  }, [dragState]);
+
+  const handlePreviewMouseDown = (event) => {
+    if (!previewContainerRef.current) return;
+    setDragState({
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: imagePosX,
+      originY: imagePosY
+    });
+  };
+
+  const scrollToPreview = () => {
+    previewSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
 
   return (
     <div className="min-h-screen mesh-gradient" data-testid="dashboard">
@@ -1704,19 +1754,95 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         </div>
 
                         <div className="space-y-2">
+                          <Label className="text-sm">Quick Position</Label>
+                          <div className="grid grid-cols-3 gap-2">
+                            <Button type="button" variant="outline" className="text-xs" onClick={() => { setImagePosX(-1); setImagePosY(-1); }}>
+                              Top Left
+                            </Button>
+                            <Button type="button" variant="outline" className="text-xs" onClick={() => { setImagePosX(0); setImagePosY(-1); }}>
+                              Top
+                            </Button>
+                            <Button type="button" variant="outline" className="text-xs" onClick={() => { setImagePosX(1); setImagePosY(-1); }}>
+                              Top Right
+                            </Button>
+                            <Button type="button" variant="outline" className="text-xs" onClick={() => { setImagePosX(-1); setImagePosY(0); }}>
+                              Left
+                            </Button>
+                            <Button type="button" variant="outline" className="text-xs" onClick={() => { setImagePosX(0); setImagePosY(0); }}>
+                              Center
+                            </Button>
+                            <Button type="button" variant="outline" className="text-xs" onClick={() => { setImagePosX(1); setImagePosY(0); }}>
+                              Right
+                            </Button>
+                            <Button type="button" variant="outline" className="text-xs" onClick={() => { setImagePosX(-1); setImagePosY(1); }}>
+                              Bottom Left
+                            </Button>
+                            <Button type="button" variant="outline" className="text-xs" onClick={() => { setImagePosX(0); setImagePosY(1); }}>
+                              Bottom
+                            </Button>
+                            <Button type="button" variant="outline" className="text-xs" onClick={() => { setImagePosX(1); setImagePosY(1); }}>
+                              Bottom Right
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
                           <div className="flex items-center justify-between">
-                            <Label htmlFor="image-scale" className="text-sm">Image Scale</Label>
-                            <span className="text-xs" style={{color: 'var(--text-secondary)'}}>{imageScale.toFixed(2)}x</span>
+                            <Label htmlFor="image-scale-x" className="text-sm">Scale X</Label>
+                            <span className="text-xs" style={{color: 'var(--text-secondary)'}}>{imageScaleX.toFixed(2)}x</span>
                           </div>
                           <Input
-                            id="image-scale"
+                            id="image-scale-x"
                             type="range"
                             min="0.5"
                             max="2"
                             step="0.05"
-                            value={imageScale}
-                            onChange={(e) => setImageScale(Number(e.target.value))}
+                            value={imageScaleX}
+                            onChange={(e) => {
+                              const value = Number(e.target.value);
+                              setImageScaleX(value);
+                              if (lockImageScale) setImageScaleY(value);
+                            }}
                           />
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label htmlFor="image-scale-y" className="text-sm">Scale Y</Label>
+                            <span className="text-xs" style={{color: 'var(--text-secondary)'}}>{imageScaleY.toFixed(2)}x</span>
+                          </div>
+                          <Input
+                            id="image-scale-y"
+                            type="range"
+                            min="0.5"
+                            max="2"
+                            step="0.05"
+                            value={imageScaleY}
+                            onChange={(e) => {
+                              const value = Number(e.target.value);
+                              setImageScaleY(value);
+                              if (lockImageScale) setImageScaleX(value);
+                            }}
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <input
+                              id="lock-image-scale"
+                              type="checkbox"
+                              checked={lockImageScale}
+                              onChange={(e) => {
+                                const locked = e.target.checked;
+                                setLockImageScale(locked);
+                                if (locked) setImageScaleY(imageScaleX);
+                              }}
+                              className="w-4 h-4 cursor-pointer"
+                            />
+                            <Label htmlFor="lock-image-scale" className="text-sm cursor-pointer">
+                              Lock X/Y scale
+                            </Label>
+                          </div>
                         </div>
 
                         <div className="space-y-2">
@@ -1809,7 +1935,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
 
                       {/* Preview Player */}
                       {audioFile && imageFile && (
-                        <Card className="producer-card border-l-4 border-blue-500">
+                        <Card className="producer-card border-l-4 border-blue-500" ref={previewSectionRef}>
                           <CardHeader>
                             <CardTitle className="text-lg flex items-center gap-2">
                               <Music className="h-5 w-5 text-blue-500" />
@@ -1820,14 +1946,16 @@ const Dashboard = ({ setIsAuthenticated }) => {
                           <CardContent>
                             <div
                               className="relative rounded-lg overflow-hidden"
+                              ref={previewContainerRef}
+                              onMouseDown={handlePreviewMouseDown}
                               style={{
                                 backgroundColor: backgroundColor === "white" ? "#ffffff" : "#000000",
                                 resize: 'both',
                                 overflow: 'auto',
-                                width: '360px',
+                                width: '280px',
                                 maxWidth: '100%',
-                                minWidth: '240px',
-                                minHeight: '240px',
+                                minWidth: '220px',
+                                minHeight: '220px',
                                 aspectRatio: previewAspectRatio
                               }}
                             >
@@ -1836,7 +1964,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                 alt="Beat cover"
                                 className="w-full h-full object-cover"
                                 style={{
-                                  transform: `translate(${imagePosX * 50}%, ${imagePosY * 50}%) scale(${imageScale})`,
+                                  transform: `translate(${imagePosX * 50}%, ${imagePosY * 50}%) scale(${imageScaleX}, ${imageScaleY})`,
                                   transformOrigin: 'center'
                                 }}
                               />
@@ -1855,10 +1983,37 @@ const Dashboard = ({ setIsAuthenticated }) => {
                               </div>
                             </div>
                             <p className="text-sm mt-3 text-center" style={{color: 'var(--text-secondary)'}}>
-                              Preview is resizable. Aspect ratio: {videoAspectRatio}
+                              Drag to reposition. Resize the box. Aspect ratio: {videoAspectRatio}
                             </p>
                           </CardContent>
                         </Card>
+                      )}
+
+                      {audioFile && imageFile && (
+                        <div
+                          className="fixed bottom-4 right-4 z-50 border rounded-lg shadow-lg p-2"
+                          style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}
+                        >
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="rounded overflow-hidden"
+                              style={{ width: 72, height: 72, backgroundColor: backgroundColor === "white" ? "#ffffff" : "#000000" }}
+                            >
+                              <img
+                                src={URL.createObjectURL(imageFile)}
+                                alt="Mini preview"
+                                className="w-full h-full object-cover"
+                                style={{
+                                  transform: `translate(${imagePosX * 50}%, ${imagePosY * 50}%) scale(${imageScaleX}, ${imageScaleY})`,
+                                  transformOrigin: 'center'
+                                }}
+                              />
+                            </div>
+                            <Button type="button" size="sm" variant="outline" onClick={scrollToPreview}>
+                              Back to preview
+                            </Button>
+                          </div>
+                        </div>
                       )}
 
                       <Button
@@ -1888,27 +2043,33 @@ const Dashboard = ({ setIsAuthenticated }) => {
                   Get AI-powered insights on your channel performance (uses 1 AI credit)
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6">
-                {!youtubeConnected ? (
-                  <Alert>
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>
-                      Connect your YouTube account first to analyze your channel.
-                    </AlertDescription>
-                  </Alert>
-                ) : (
-                  <Button
-                    onClick={handleAnalyzeChannel}
-                    disabled={loadingAnalytics}
-                    className="w-full btn-modern"
-                  >
-                    <Sparkles className="mr-2 h-5 w-5" />
-                    {loadingAnalytics ? "Analyzing..." : "Analyze My Channel"}
-                  </Button>
-                )}
+              <CardContent className="space-y-6 relative">
+                <div
+                  style={{
+                    filter: isPro ? "none" : "blur(6px)",
+                    pointerEvents: isPro ? "auto" : "none"
+                  }}
+                >
+                  {!youtubeConnected ? (
+                    <Alert>
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        Connect your YouTube account first to analyze your channel.
+                      </AlertDescription>
+                    </Alert>
+                  ) : (
+                    <Button
+                      onClick={handleAnalyzeChannel}
+                      disabled={loadingAnalytics || !isPro}
+                      className="w-full btn-modern"
+                    >
+                      <Sparkles className="mr-2 h-5 w-5" />
+                      {loadingAnalytics ? "Analyzing..." : "Analyze My Channel"}
+                    </Button>
+                  )}
 
-                {analyticsData && (
-                  <div className="space-y-6 mt-6">
+                  {analyticsData && (
+                    <div className="space-y-6 mt-6">
                     {/* Channel Health Score */}
                     <Card className="producer-card glass-card border-2 border-purple-500">
                       <CardContent className="p-6">
@@ -2124,6 +2285,23 @@ const Dashboard = ({ setIsAuthenticated }) => {
                       </Card>
                     )}
                   </div>
+                  )}
+                </div>
+
+                {!isPro && (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="text-center p-6 rounded-xl border-2 shadow-lg max-w-md"
+                      style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--accent-primary)' }}
+                    >
+                      <p className="text-lg font-semibold mb-2">Unlock Analytics</p>
+                      <p className="text-sm mb-4" style={{color: 'var(--text-secondary)'}}>
+                        Premium-only insights. Upgrade to access analytics and AI coaching.
+                      </p>
+                      <Button onClick={() => setShowUpgradeModal(true)} className="btn-modern">
+                        Upgrade to Pro
+                      </Button>
+                    </div>
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -2141,7 +2319,13 @@ const Dashboard = ({ setIsAuthenticated }) => {
                   Work every day for 120 days. Generate tags, upload beats, or create descriptions to maintain your streak!
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6">
+              <CardContent className="space-y-6 relative">
+                <div
+                  style={{
+                    filter: isPro ? "none" : "blur(6px)",
+                    pointerEvents: isPro ? "auto" : "none"
+                  }}
+                >
                 {!growthData?.challenge_start_date ? (
                   // Not started
                   <div className="text-center py-12">
@@ -2403,6 +2587,23 @@ const Dashboard = ({ setIsAuthenticated }) => {
                     {/* Load calendar on tab view */}
                     {!calendarData && fetchCalendar()}
                   </>
+                )}
+                </div>
+
+                {!isPro && (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="text-center p-6 rounded-xl border-2 shadow-lg max-w-md"
+                      style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--accent-primary)' }}
+                    >
+                      <p className="text-lg font-semibold mb-2">Unlock Grow in 120</p>
+                      <p className="text-sm mb-4" style={{color: 'var(--text-secondary)'}}>
+                        Premium-only momentum tracking. Upgrade to access the 120-day challenge.
+                      </p>
+                      <Button onClick={() => setShowUpgradeModal(true)} className="btn-modern">
+                        Upgrade to Pro
+                      </Button>
+                    </div>
+                  </div>
                 )}
               </CardContent>
             </Card>

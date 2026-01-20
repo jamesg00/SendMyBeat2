@@ -1309,7 +1309,7 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
 
         # Generate tags (reduce count to make room for YouTube + custom tags)
         # Grok is faster/cheaper at a lower count; OpenAI can handle a higher count.
-        base_tag_count = 250 if llm_provider == "grok" else 450
+        base_tag_count = 300 if llm_provider == "grok" else 450
         prompt = f"""Generate exactly {base_tag_count} YouTube tags for: "{request.query}"
 
 CRITICAL RULES:
@@ -1922,6 +1922,8 @@ async def upload_to_youtube(
     description_override: Optional[str] = Form(None),
     aspect_ratio: str = Form("16:9"),
     image_scale: float = Form(1.0),
+    image_scale_x: Optional[float] = Form(None),
+    image_scale_y: Optional[float] = Form(None),
     image_pos_x: float = Form(0.0),
     image_pos_y: float = Form(0.0),
     background_color: str = Form("black"),
@@ -1972,12 +1974,13 @@ async def upload_to_youtube(
         
         description_text = (description_override or desc_doc['content']).strip()
         promo_line = "Visit www.sendmybeat.com to upload beats for free!"
-        if description_text.lower().startswith(promo_line.lower()):
-            description_text = description_text
-        elif description_text:
-            description_text = f"{promo_line}\n{description_text}"
-        else:
-            description_text = promo_line
+        if not is_subscribed:
+            if description_text.lower().startswith(promo_line.lower()):
+                description_text = description_text
+            elif description_text:
+                description_text = f"{promo_line}\n{description_text}"
+            else:
+                description_text = promo_line
         
         # Get tags if provided
         tags = []
@@ -2067,8 +2070,13 @@ async def upload_to_youtube(
             raise HTTPException(status_code=400, detail="Invalid aspect_ratio. Use 16:9, 1:1, 9:16, or 4:5.")
         target_w, target_h = aspect_map[aspect_ratio]
 
-        if not 0.5 <= image_scale <= 2.0:
-            raise HTTPException(status_code=400, detail="image_scale must be between 0.5 and 2.0.")
+        scale_x = image_scale_x if image_scale_x is not None else image_scale
+        scale_y = image_scale_y if image_scale_y is not None else image_scale
+
+        if not 0.5 <= scale_x <= 2.0:
+            raise HTTPException(status_code=400, detail="image_scale_x must be between 0.5 and 2.0.")
+        if not 0.5 <= scale_y <= 2.0:
+            raise HTTPException(status_code=400, detail="image_scale_y must be between 0.5 and 2.0.")
         if not -1.0 <= image_pos_x <= 1.0:
             raise HTTPException(status_code=400, detail="image_pos_x must be between -1 and 1.")
         if not -1.0 <= image_pos_y <= 1.0:
@@ -2080,7 +2088,7 @@ async def upload_to_youtube(
 
         # Build video filter - add watermark for non-pro users OR pro users who didn't uncheck it
         video_filter = (
-            f"scale=iw*{image_scale}:ih*{image_scale},"
+            f"scale=iw*{scale_x}:ih*{scale_y},"
             f"pad={target_w}:{target_h}:(ow-iw)/2+(ow-iw)/2*{image_pos_x}:(oh-ih)/2+(oh-ih)/2*{image_pos_y}:{background_color}"
         )
         
@@ -2102,6 +2110,11 @@ async def upload_to_youtube(
         else:
             logging.info("Pro user - watermark removed per user request")
         
+        audio_ext = Path(audio_file['file_path']).suffix.lower()
+        copy_audio = audio_ext in (".mp3", ".m4a", ".aac")
+
+        audio_args = ['-c:a', 'copy'] if copy_audio else ['-c:a', 'aac', '-b:a', '320k', '-ar', '48000']
+
         ffmpeg_cmd = [
             ffmpeg_path,
             '-loop', '1',
@@ -2112,9 +2125,7 @@ async def upload_to_youtube(
             '-preset', 'ultrafast',
             '-crf', '28',
             '-tune', 'stillimage',
-            '-c:a', 'aac',
-            '-b:a', '320k',  # HIGH QUALITY - 320kbps (near lossless)
-            '-ar', '48000',  # 48kHz sample rate (YouTube standard)
+            *audio_args,
             '-pix_fmt', 'yuv420p',
             # Maintain aspect ratio with black letterboxing/pillarboxing like YouTube + optional watermark
             '-vf', video_filter,
