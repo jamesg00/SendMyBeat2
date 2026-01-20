@@ -77,11 +77,11 @@ def _get_llm_settings(provider_override: str | None = None, model_override: str 
     if provider == "grok":
         api_key = os.environ.get("GROK_API_KEY") or os.environ.get("XAI_API_KEY")
         base_url = os.environ.get("GROK_BASE_URL", "https://api.x.ai/v1")
-        model = model_override or os.environ.get("LLM_MODEL", "grok-2-latest")
+        model = model_override or os.environ.get("GROK_MODEL") or os.environ.get("LLM_MODEL", "grok-2-latest")
     elif provider == "openai":
         api_key = os.environ.get("OPENAI_API_KEY")
         base_url = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
-        model = model_override or os.environ.get("LLM_MODEL", "gpt-4o")
+        model = model_override or os.environ.get("OPENAI_MODEL") or os.environ.get("LLM_MODEL", "gpt-4o")
     else:
         raise RuntimeError(f"Unsupported LLM_PROVIDER: {provider}")
 
@@ -324,8 +324,8 @@ async def get_user_subscription_status(user_id: str) -> dict:
         "resets_at": resets_at
     }
 
-async def check_and_use_credit(user_id: str) -> bool:
-    """Check if user has credits and use one. Returns True if successful."""
+async def check_and_use_credit(user_id: str, consume: bool = True) -> bool:
+    """Check if user has credits and optionally use one. Returns True if allowed."""
     status = await get_user_subscription_status(user_id)
     
     # Pro users always have access
@@ -336,13 +336,24 @@ async def check_and_use_credit(user_id: str) -> bool:
     if status['credits_remaining'] <= 0:
         return False
     
-    # Use one credit
+    if consume:
+        # Use one credit
+        await db.users.update_one(
+            {"id": user_id},
+            {"$inc": {"daily_usage_count": 1}}
+        )
+    
+    return True
+
+async def consume_credit(user_id: str) -> None:
+    """Consume one credit for free users after a successful operation."""
+    status = await get_user_subscription_status(user_id)
+    if status['is_subscribed']:
+        return
     await db.users.update_one(
         {"id": user_id},
         {"$inc": {"daily_usage_count": 1}}
     )
-    
-    return True
 
 async def check_and_use_upload_credit(user_id: str) -> bool:
     """Check if user has upload credits and use one. Returns True if successful."""
@@ -566,7 +577,7 @@ async def get_youtube_analytics(current_user: dict = Depends(get_current_user)):
     """Analyze YouTube channel performance and provide AI insights"""
     try:
         # Check if user has credits
-        has_credit = await check_and_use_credit(current_user['id'])
+        has_credit = await check_and_use_credit(current_user['id'], consume=False)
         if not has_credit:
             status = await get_user_subscription_status(current_user['id'])
             raise HTTPException(
@@ -816,6 +827,7 @@ CRITICAL RULES:
                 ]
             }
         
+        await consume_credit(current_user['id'])
         return YouTubeAnalyticsResponse(
             channel_name=channel_snippet['title'],
             subscriber_count=int(channel_stats.get('subscriberCount', 0)),
@@ -1237,7 +1249,7 @@ async def create_customer_portal_session(current_user: dict = Depends(get_curren
 async def generate_tags(request: TagGenerationRequest, current_user: dict = Depends(get_current_user)):
     try:
         # Check if user has credits
-        has_credit = await check_and_use_credit(current_user['id'])
+        has_credit = await check_and_use_credit(current_user['id'], consume=False)
         if not has_credit:
             status = await get_user_subscription_status(current_user['id'])
             raise HTTPException(
@@ -1446,6 +1458,7 @@ Generate {base_tag_count} HYPER-SPECIFIC tags now:"""
         except Exception as e:
             logging.error(f"Auto checkin on tags failed: {str(e)}")
         
+        await consume_credit(current_user['id'])
         return tag_gen
         
     except Exception as e:
@@ -1553,7 +1566,7 @@ async def delete_description(description_id: str, current_user: dict = Depends(g
 async def refine_description(request: RefineDescriptionRequest, current_user: dict = Depends(get_current_user)):
     try:
         # Check if user has credits
-        has_credit = await check_and_use_credit(current_user['id'])
+        has_credit = await check_and_use_credit(current_user['id'], consume=False)
         if not has_credit:
             status = await get_user_subscription_status(current_user['id'])
             raise HTTPException(
@@ -1574,6 +1587,7 @@ Make it more engaging, professional, and optimized for YouTube. Keep the same in
             user_message=prompt,
         )
         
+        await consume_credit(current_user['id'])
         return {"refined_description": response.strip()}
         
     except Exception as e:
@@ -1584,7 +1598,7 @@ Make it more engaging, professional, and optimized for YouTube. Keep the same in
 async def generate_description(request: GenerateDescriptionRequest, current_user: dict = Depends(get_current_user)):
     try:
         # Check if user has credits
-        has_credit = await check_and_use_credit(current_user['id'])
+        has_credit = await check_and_use_credit(current_user['id'], consume=False)
         if not has_credit:
             status = await get_user_subscription_status(current_user['id'])
             raise HTTPException(
@@ -1630,6 +1644,7 @@ Return only the complete description."""
             user_message=prompt,
         )
         
+        await consume_credit(current_user['id'])
         return {"generated_description": response.strip()}
         
     except Exception as e:
