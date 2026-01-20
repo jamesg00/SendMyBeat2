@@ -2007,40 +2007,44 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                 onMouseDown={handlePreviewMouseDown}
                                 aria-label="Drag image"
                               />
-                              <img 
-                                src={URL.createObjectURL(imageFile)} 
-                                alt="Beat cover"
-                                className="w-full h-full object-cover"
+                              <div
+                                className="absolute inset-0"
                                 style={{
                                   transform: `translate(${imagePosX * 50}%, ${imagePosY * 50}%) scale(${imageScaleX}, ${imageScaleY})`,
-                                  transformOrigin: 'center'
+                                  transformOrigin: "center"
                                 }}
-                              />
-                              <div className="absolute inset-0 pointer-events-none">
-                                <button
-                                  type="button"
-                                  onMouseDown={handleResizeStart("tl")}
-                                  className="absolute -top-2 -left-2 h-4 w-4 rounded-full border border-white bg-black/70 pointer-events-auto"
-                                  aria-label="Resize top left"
+                              >
+                                <img 
+                                  src={URL.createObjectURL(imageFile)} 
+                                  alt="Beat cover"
+                                  className="w-full h-full object-cover"
                                 />
-                                <button
-                                  type="button"
-                                  onMouseDown={handleResizeStart("tr")}
-                                  className="absolute -top-2 -right-2 h-4 w-4 rounded-full border border-white bg-black/70 pointer-events-auto"
-                                  aria-label="Resize top right"
-                                />
-                                <button
-                                  type="button"
-                                  onMouseDown={handleResizeStart("bl")}
-                                  className="absolute -bottom-2 -left-2 h-4 w-4 rounded-full border border-white bg-black/70 pointer-events-auto"
-                                  aria-label="Resize bottom left"
-                                />
-                                <button
-                                  type="button"
-                                  onMouseDown={handleResizeStart("br")}
-                                  className="absolute -bottom-2 -right-2 h-4 w-4 rounded-full border border-white bg-black/70 pointer-events-auto"
-                                  aria-label="Resize bottom right"
-                                />
+                                <div className="absolute inset-0 pointer-events-none">
+                                  <button
+                                    type="button"
+                                    onMouseDown={handleResizeStart("tl")}
+                                    className="absolute -top-2 -left-2 h-4 w-4 rounded-full border border-white bg-black/70 pointer-events-auto"
+                                    aria-label="Resize top left"
+                                  />
+                                  <button
+                                    type="button"
+                                    onMouseDown={handleResizeStart("tr")}
+                                    className="absolute -top-2 -right-2 h-4 w-4 rounded-full border border-white bg-black/70 pointer-events-auto"
+                                    aria-label="Resize top right"
+                                  />
+                                  <button
+                                    type="button"
+                                    onMouseDown={handleResizeStart("bl")}
+                                    className="absolute -bottom-2 -left-2 h-4 w-4 rounded-full border border-white bg-black/70 pointer-events-auto"
+                                    aria-label="Resize bottom left"
+                                  />
+                                  <button
+                                    type="button"
+                                    onMouseDown={handleResizeStart("br")}
+                                    className="absolute -bottom-2 -right-2 h-4 w-4 rounded-full border border-white bg-black/70 pointer-events-auto"
+                                    aria-label="Resize bottom right"
+                                  />
+                                </div>
                               </div>
                               <div className="absolute bottom-0 left-0 right-0 p-4" style={{background: 'linear-gradient(transparent, rgba(0,0,0,0.8))'}}>
                                 <audio 
