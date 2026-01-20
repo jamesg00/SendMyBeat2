@@ -1308,7 +1308,8 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
             raise HTTPException(status_code=400, detail="Invalid llm_provider. Use 'openai' or 'grok'.")
 
         # Generate tags (reduce count to make room for YouTube + custom tags)
-        base_tag_count = 450  # Leave room for YouTube search tags and custom tags
+        # Grok is faster/cheaper at a lower count; OpenAI can handle a higher count.
+        base_tag_count = 250 if llm_provider == "grok" else 450
         prompt = f"""Generate exactly {base_tag_count} YouTube tags for: "{request.query}"
 
 CRITICAL RULES:

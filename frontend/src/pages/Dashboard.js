@@ -21,7 +21,7 @@ import ProgressBar from "@/components/ProgressBar";
 const Dashboard = ({ setIsAuthenticated }) => {
   const [user, setUser] = useState(null);
   const [tagQuery, setTagQuery] = useState("");
-  const [tagProvider, setTagProvider] = useState("openai");
+  const [tagProvider, setTagProvider] = useState("grok");
   const [customTags, setCustomTags] = useState(""); // User's custom tags (comma-separated)
   const [additionalTags, setAdditionalTags] = useState(""); // Add more tags to existing generation
   const [generatedTags, setGeneratedTags] = useState([]);
@@ -963,18 +963,17 @@ const Dashboard = ({ setIsAuthenticated }) => {
                   </div>
                   
                   <div className="space-y-1.5 sm:space-y-2">
-                    <Label htmlFor="tag-provider" className="text-sm sm:text-base">AI Provider</Label>
+                    <Label htmlFor="tag-provider" className="text-sm sm:text-base">AI Provider (Grok)</Label>
                     <Select value={tagProvider} onValueChange={setTagProvider}>
                       <SelectTrigger id="tag-provider" data-testid="tag-provider">
-                        <SelectValue placeholder="Choose provider" />
+                        <SelectValue placeholder="Grok" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="openai">OpenAI</SelectItem>
                         <SelectItem value="grok">Grok</SelectItem>
                       </SelectContent>
                     </Select>
                     <p className="text-xs" style={{color: 'var(--text-secondary)'}}>
-                      Uses the API key set on the backend for the selected provider
+                      Uses the Grok API key configured on the backend
                     </p>
                   </div>
                   
@@ -1395,7 +1394,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                 </CardTitle>
                 <CardDescription>Connect your YouTube account and upload beats automatically</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6">
+              <CardContent className="space-y-4 sm:space-y-6">
                 {/* YouTube Connection Status */}
                 <div className="p-4 sm:p-5 md:p-6 rounded-lg" style={{backgroundColor: 'var(--bg-secondary)'}}>
                   {youtubeConnected ? (
@@ -1835,7 +1834,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                               <img 
                                 src={URL.createObjectURL(imageFile)} 
                                 alt="Beat cover"
-                                className="w-full h-full object-contain"
+                                className="w-full h-full object-cover"
                                 style={{
                                   transform: `translate(${imagePosX * 50}%, ${imagePosY * 50}%) scale(${imageScale})`,
                                   transformOrigin: 'center'
@@ -2131,7 +2130,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
           </TabsContent>
 
           {/* Grow in 120 Tab */}
-          <TabsContent value="grow" className="space-y-6">
+          <TabsContent value="grow" className="space-y-4 sm:space-y-6">
             <Card className="shadow-lg border-0">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -2164,22 +2163,22 @@ const Dashboard = ({ setIsAuthenticated }) => {
                 ) : (
                   <>
                     {/* Stats Overview */}
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                       <Card className="producer-card">
-                        <CardContent className="p-6 text-center">
-                          <p className="text-4xl font-bold mb-2">{growthData.current_streak} 🔥</p>
+                        <CardContent className="p-4 sm:p-6 text-center">
+                          <p className="text-3xl sm:text-4xl font-bold mb-2">{growthData.current_streak} 🔥</p>
                           <p className="text-sm" style={{color: 'var(--text-secondary)'}}>Current Streak</p>
                         </CardContent>
                       </Card>
                       <Card className="producer-card">
-                        <CardContent className="p-6 text-center">
-                          <p className="text-4xl font-bold mb-2">{growthData.total_days_completed}/120</p>
+                        <CardContent className="p-4 sm:p-6 text-center">
+                          <p className="text-3xl sm:text-4xl font-bold mb-2">{growthData.total_days_completed}/120</p>
                           <p className="text-sm" style={{color: 'var(--text-secondary)'}}>Days Complete</p>
                         </CardContent>
                       </Card>
                       <Card className="producer-card">
-                        <CardContent className="p-6 text-center">
-                          <p className="text-4xl font-bold mb-2">{growthData.longest_streak} 🏆</p>
+                        <CardContent className="p-4 sm:p-6 text-center">
+                          <p className="text-3xl sm:text-4xl font-bold mb-2">{growthData.longest_streak} 🏆</p>
                           <p className="text-sm" style={{color: 'var(--text-secondary)'}}>Longest Streak</p>
                         </CardContent>
                       </Card>
@@ -2187,8 +2186,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
 
                     {/* Progress Bar */}
                     <Card className="producer-card">
-                      <CardContent className="p-6">
-                        <div className="flex justify-between mb-2">
+                      <CardContent className="p-4 sm:p-6">
+                        <div className="flex flex-wrap justify-between gap-2 mb-2">
                           <p className="font-semibold">Challenge Progress</p>
                           <p className="font-bold gradient-text">
                             {Math.round((growthData.total_days_completed / 120) * 100)}%
@@ -2208,7 +2207,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
 
                     {/* Check-in Button */}
                     <Card className="producer-card border-l-4 border-blue-500">
-                      <CardContent className="p-6">
+                      <CardContent className="p-4 sm:p-6">
                         <div className="mb-4">
                           <p className="font-semibold mb-2">📋 Daily Requirements:</p>
                           <ul className="text-sm space-y-1" style={{color: 'var(--text-secondary)'}}>
@@ -2257,7 +2256,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                     {calendarData && (
                       <Card className="producer-card">
                         <CardHeader>
-                          <div className="flex justify-between items-center">
+                          <div className="flex flex-wrap justify-between items-center gap-2">
                             <CardTitle className="text-lg">📅 Your 120-Day Calendar</CardTitle>
                             <Button
                               onClick={fetchCalendar}
@@ -2269,7 +2268,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                           </div>
                         </CardHeader>
                         <CardContent>
-                          <div className="grid grid-cols-10 gap-2 mb-4">
+                          <div className="grid grid-cols-5 sm:grid-cols-8 lg:grid-cols-10 gap-2 mb-4">
                             {Object.entries(calendarData.calendar || {}).slice(0, 120).map(([date, statusData], index) => {
                               const dayNumber = index + 1;
                               const status = typeof statusData === 'string' ? statusData : statusData.status;
@@ -2284,11 +2283,11 @@ const Dashboard = ({ setIsAuthenticated }) => {
                               return (
                                 <div
                                   key={date}
-                                  className={`h-12 w-12 rounded ${bgColor} opacity-80 hover:opacity-100 transition-all cursor-pointer flex flex-col items-center justify-center text-white font-bold text-xs hover:scale-110`}
+                                  className={`h-10 w-10 sm:h-11 sm:w-11 lg:h-12 lg:w-12 rounded ${bgColor} opacity-80 hover:opacity-100 transition-all cursor-pointer flex flex-col items-center justify-center text-white font-bold text-[10px] hover:scale-105`}
                                   onClick={() => setSelectedDay({ date, status, dayNumber, activity })}
                                   title={`Day ${dayNumber} - ${date}`}
                                 >
-                                  <span className="text-[10px]">D{dayNumber}</span>
+                                  <span className="text-[9px] sm:text-[10px]">D{dayNumber}</span>
                                   {status === 'completed' && <span className="text-lg">✓</span>}
                                   {status === 'missed' && <span className="text-lg">✗</span>}
                                   {status === 'today' && <span className="text-lg">•</span>}
@@ -2379,7 +2378,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                             </Card>
                           )}
 
-                          <div className="flex gap-4 text-sm">
+                          <div className="flex flex-wrap gap-3 text-sm">
                             <div className="flex items-center gap-2">
                               <div className="h-4 w-4 rounded bg-green-500" />
                               <span>Complete</span>
