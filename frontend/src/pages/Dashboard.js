@@ -21,6 +21,7 @@ import ProgressBar from "@/components/ProgressBar";
 const Dashboard = ({ setIsAuthenticated }) => {
   const [user, setUser] = useState(null);
   const [tagQuery, setTagQuery] = useState("");
+  const [tagProvider, setTagProvider] = useState("openai");
   const [customTags, setCustomTags] = useState(""); // User's custom tags (comma-separated)
   const [additionalTags, setAdditionalTags] = useState(""); // Add more tags to existing generation
   const [generatedTags, setGeneratedTags] = useState([]);
@@ -291,7 +292,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
         `${API}/tags/generate`, 
         { 
           query: tagQuery,
-          custom_tags: customTagsArray
+          custom_tags: customTagsArray,
+          llm_provider: tagProvider
         },
         { signal: controller.signal }
       );
@@ -928,6 +930,22 @@ const Dashboard = ({ setIsAuthenticated }) => {
                     />
                     <p className="text-xs" style={{color: 'var(--text-secondary)'}}>
                       💡 Tip: Include artist name for popular song "type beat" variations
+                    </p>
+                  </div>
+                  
+                  <div className="space-y-1.5 sm:space-y-2">
+                    <Label htmlFor="tag-provider" className="text-sm sm:text-base">AI Provider</Label>
+                    <Select value={tagProvider} onValueChange={setTagProvider}>
+                      <SelectTrigger id="tag-provider" data-testid="tag-provider">
+                        <SelectValue placeholder="Choose provider" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="openai">OpenAI</SelectItem>
+                        <SelectItem value="grok">Grok</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs" style={{color: 'var(--text-secondary)'}}>
+                      Uses the API key set on the backend for the selected provider
                     </p>
                   </div>
                   

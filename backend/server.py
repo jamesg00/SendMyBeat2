@@ -72,16 +72,16 @@ _llm_client = None
 _llm_config = None
 
 
-def _get_llm_settings() -> dict:
-    provider = os.environ.get("LLM_PROVIDER", "openai").lower()
+def _get_llm_settings(provider_override: str | None = None, model_override: str | None = None) -> dict:
+    provider = (provider_override or os.environ.get("LLM_PROVIDER", "openai")).lower()
     if provider == "grok":
         api_key = os.environ.get("GROK_API_KEY") or os.environ.get("XAI_API_KEY")
         base_url = os.environ.get("GROK_BASE_URL", "https://api.x.ai/v1")
-        model = os.environ.get("LLM_MODEL", "grok-2-latest")
+        model = model_override or os.environ.get("LLM_MODEL", "grok-2-latest")
     elif provider == "openai":
         api_key = os.environ.get("OPENAI_API_KEY")
         base_url = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
-        model = os.environ.get("LLM_MODEL", "gpt-4o")
+        model = model_override or os.environ.get("LLM_MODEL", "gpt-4o")
     else:
         raise RuntimeError(f"Unsupported LLM_PROVIDER: {provider}")
 
@@ -91,9 +91,9 @@ def _get_llm_settings() -> dict:
     return {"provider": provider, "api_key": api_key, "base_url": base_url, "model": model}
 
 
-def _get_llm_client():
+def _get_llm_client(provider_override: str | None = None, model_override: str | None = None):
     global _llm_client, _llm_config
-    settings = _get_llm_settings()
+    settings = _get_llm_settings(provider_override=provider_override, model_override=model_override)
     config_key = (settings["provider"], settings["base_url"], settings["model"])
     if _llm_client is None or _llm_config != config_key:
         _llm_client = AsyncOpenAI(api_key=settings["api_key"], base_url=settings["base_url"])
@@ -101,8 +101,15 @@ def _get_llm_client():
     return _llm_client, settings
 
 
-async def llm_chat(system_message: str, user_message: str, temperature: float = 0.7, max_tokens: int | None = None) -> str:
-    client, settings = _get_llm_client()
+async def llm_chat(
+    system_message: str,
+    user_message: str,
+    temperature: float = 0.7,
+    max_tokens: int | None = None,
+    provider: str | None = None,
+    model: str | None = None,
+) -> str:
+    client, settings = _get_llm_client(provider_override=provider, model_override=model)
     response = await client.chat.completions.create(
         model=settings["model"],
         messages=[
@@ -168,6 +175,7 @@ class GenerateDescriptionRequest(BaseModel):
 class TagGenerationRequest(BaseModel):
     query: str
     custom_tags: Optional[List[str]] = []  # User's custom tags
+    llm_provider: Optional[str] = None  # "openai" or "grok"
 
 class TagGenerationResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -1283,7 +1291,10 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
             logging.warning(f"YouTube search for popular songs failed: {str(e)}")
             # Continue without YouTube search results
         
-        # Initialize AI chat
+        llm_provider = request.llm_provider.lower() if request.llm_provider else None
+        if llm_provider not in (None, "openai", "grok"):
+            raise HTTPException(status_code=400, detail="Invalid llm_provider. Use 'openai' or 'grok'.")
+
         # Generate tags (reduce count to make room for YouTube + custom tags)
         base_tag_count = 450  # Leave room for YouTube search tags and custom tags
         prompt = f"""Generate exactly {base_tag_count} YouTube tags for: "{request.query}"
@@ -1345,6 +1356,7 @@ Generate {base_tag_count} HYPER-SPECIFIC tags now:"""
         response = await llm_chat(
             system_message="You are an expert YouTube SEO specialist for beat producers. You ONLY generate hyper-specific, laser-targeted tags that match EXACTLY what people search for. NO generic tags.",
             user_message=prompt,
+            provider=llm_provider,
         )
         
         # Parse AI-generated tags
