@@ -63,8 +63,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [imageFile, setImageFile] = useState(null);
   const [uploadTitle, setUploadTitle] = useState("");
   const [selectedDescriptionId, setSelectedDescriptionId] = useState("");
+  const [uploadDescriptionText, setUploadDescriptionText] = useState("");
   const [selectedTagsId, setSelectedTagsId] = useState("");
   const [privacyStatus, setPrivacyStatus] = useState("public");
+  const [videoAspectRatio, setVideoAspectRatio] = useState("16:9");
   const [removeWatermark, setRemoveWatermark] = useState(false);
   const [uploadingAudio, setUploadingAudio] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -104,6 +106,15 @@ const Dashboard = ({ setIsAuthenticated }) => {
     fetchSubscriptionStatus();
     fetchGrowthStatus();
   }, []);
+
+  useEffect(() => {
+    if (!selectedDescriptionId) {
+      setUploadDescriptionText("");
+      return;
+    }
+    const selectedDesc = descriptions.find(d => d.id === selectedDescriptionId);
+    setUploadDescriptionText(selectedDesc?.content || "");
+  }, [selectedDescriptionId, descriptions]);
 
   const fetchUser = async () => {
     try {
@@ -721,6 +732,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
       formData.append('audio_file_id', audioFileId);
       formData.append('image_file_id', imageFileId);
       formData.append('remove_watermark', removeWatermark);
+      formData.append('description_override', uploadDescriptionText);
+      formData.append('aspect_ratio', videoAspectRatio);
 
       const response = await axios.post(`${API}/youtube/upload`, formData, {
         timeout: 180000, // 3 minute timeout
@@ -799,6 +812,14 @@ const Dashboard = ({ setIsAuthenticated }) => {
       setUploadController(null);
     }
   };
+
+  const previewAspectRatio = videoAspectRatio === "1:1"
+    ? "1 / 1"
+    : videoAspectRatio === "9:16"
+      ? "9 / 16"
+      : videoAspectRatio === "4:5"
+        ? "4 / 5"
+        : "16 / 9";
 
   return (
     <div className="min-h-screen mesh-gradient" data-testid="dashboard">
@@ -1610,6 +1631,20 @@ const Dashboard = ({ setIsAuthenticated }) => {
                       </div>
 
                       <div className="space-y-2">
+                        <Label htmlFor="upload-description">Edit Description</Label>
+                        <Textarea
+                          id="upload-description"
+                          placeholder="Edit your description before upload"
+                          value={uploadDescriptionText}
+                          onChange={(e) => setUploadDescriptionText(e.target.value)}
+                          rows={6}
+                        />
+                        <p className="text-xs" style={{color: 'var(--text-secondary)'}}>
+                          A line will be added to the top: "Visit www.sendmybeat.com to upload beats for free!"
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
                         <Label htmlFor="select-tags">Select Tags (Optional)</Label>
                         <Select value={selectedTagsId} onValueChange={setSelectedTagsId}>
                           <SelectTrigger id="select-tags" data-testid="select-tags">
@@ -1621,6 +1656,21 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                 {tag.query} ({tag.tags.length} tags)
                               </SelectItem>
                             ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="aspect-ratio">Video Aspect Ratio</Label>
+                        <Select value={videoAspectRatio} onValueChange={setVideoAspectRatio}>
+                          <SelectTrigger id="aspect-ratio" data-testid="aspect-ratio">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="16:9">16:9 (Wide)</SelectItem>
+                            <SelectItem value="1:1">1:1 (Square)</SelectItem>
+                            <SelectItem value="9:16">9:16 (Vertical)</SelectItem>
+                            <SelectItem value="4:5">4:5 (Portrait)</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -1691,11 +1741,23 @@ const Dashboard = ({ setIsAuthenticated }) => {
                             <CardDescription>See how your beat will look on YouTube</CardDescription>
                           </CardHeader>
                           <CardContent>
-                            <div className="relative rounded-lg overflow-hidden" style={{backgroundColor: '#000'}}>
+                            <div
+                              className="relative rounded-lg overflow-hidden"
+                              style={{
+                                backgroundColor: '#000',
+                                resize: 'both',
+                                overflow: 'auto',
+                                width: '360px',
+                                maxWidth: '100%',
+                                minWidth: '240px',
+                                minHeight: '240px',
+                                aspectRatio: previewAspectRatio
+                              }}
+                            >
                               <img 
                                 src={URL.createObjectURL(imageFile)} 
                                 alt="Beat cover"
-                                className="w-full h-auto"
+                                className="w-full h-full object-contain"
                               />
                               <div className="absolute bottom-0 left-0 right-0 p-4" style={{background: 'linear-gradient(transparent, rgba(0,0,0,0.8))'}}>
                                 <audio 
@@ -1712,7 +1774,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                               </div>
                             </div>
                             <p className="text-sm mt-3 text-center" style={{color: 'var(--text-secondary)'}}>
-                              This is how your beat video will appear on YouTube (720p, audio quality: 128kbps)
+                              Preview is resizable. Aspect ratio: {videoAspectRatio}
                             </p>
                           </CardContent>
                         </Card>

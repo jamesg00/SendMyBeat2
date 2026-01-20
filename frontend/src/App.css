@@ -195,6 +195,13 @@ h1, h2, h3, h4, h5, h6 {
   font-family: 'Space Mono', monospace;
 }
 
+body.dark .tag-item,
+.dark .tag-item {
+  color: #000;
+  background: #e8e8e8;
+  border-color: #c0c0c0;
+}
+
 .tag-item:hover {
   background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
   color: white;

@@ -1903,6 +1903,8 @@ async def upload_to_youtube(
     privacy_status: str = Form("public"),
     audio_file_id: str = Form(...),
     image_file_id: str = Form(...),
+    description_override: Optional[str] = Form(None),
+    aspect_ratio: str = Form("16:9"),
     remove_watermark: bool = Form(False),
     current_user: dict = Depends(get_current_user)
 ):
@@ -1948,7 +1950,14 @@ async def upload_to_youtube(
         if not desc_doc:
             raise HTTPException(status_code=404, detail="Description not found")
         
-        description_text = desc_doc['content']
+        description_text = (description_override or desc_doc['content']).strip()
+        promo_line = "Visit www.sendmybeat.com to upload beats for free!"
+        if description_text.lower().startswith(promo_line.lower()):
+            description_text = description_text
+        elif description_text:
+            description_text = f"{promo_line}\n{description_text}"
+        else:
+            description_text = promo_line
         
         # Get tags if provided
         tags = []
@@ -2027,8 +2036,19 @@ async def upload_to_youtube(
         
         logging.info(f"Using FFmpeg at: {ffmpeg_path}")
         
+        aspect_ratio = (aspect_ratio or "16:9").strip()
+        aspect_map = {
+            "16:9": (1280, 720),
+            "1:1": (1080, 1080),
+            "9:16": (1080, 1920),
+            "4:5": (1080, 1350),
+        }
+        if aspect_ratio not in aspect_map:
+            raise HTTPException(status_code=400, detail="Invalid aspect_ratio. Use 16:9, 1:1, 9:16, or 4:5.")
+        target_w, target_h = aspect_map[aspect_ratio]
+
         # Build video filter - add watermark for non-pro users OR pro users who didn't uncheck it
-        video_filter = 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:black'
+        video_filter = f"scale={target_w}:{target_h}:force_original_aspect_ratio=decrease,pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2:black"
         
         # Add watermark logic:
         # - Free users: ALWAYS get watermark (remove_watermark is ignored/blocked at API level)
