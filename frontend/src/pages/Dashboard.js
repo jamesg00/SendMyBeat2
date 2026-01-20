@@ -838,6 +838,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const previewSectionRef = useRef(null);
   const previewContainerRef = useRef(null);
   const [dragState, setDragState] = useState(null);
+  const [resizeState, setResizeState] = useState(null);
+  const [previewSize, setPreviewSize] = useState(280);
 
   const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
@@ -863,15 +865,60 @@ const Dashboard = ({ setIsAuthenticated }) => {
       window.removeEventListener("mousemove", handleMove);
       window.removeEventListener("mouseup", handleUp);
     };
-  }, [dragState]);
+  }, [dragState, imagePosX, imagePosY]);
+
+  useEffect(() => {
+    if (!resizeState || !previewContainerRef.current) return;
+
+    const handleMove = (event) => {
+      const rect = previewContainerRef.current.getBoundingClientRect();
+      const deltaX = event.clientX - resizeState.startX;
+      const deltaY = event.clientY - resizeState.startY;
+      const xSign = resizeState.corner.includes("l") ? -1 : 1;
+      const ySign = resizeState.corner.includes("t") ? -1 : 1;
+      const nextX = clamp(resizeState.originX + xSign * deltaX / (rect.width / 2), 0.5, 2);
+      const nextY = clamp(resizeState.originY + ySign * deltaY / (rect.height / 2), 0.5, 2);
+
+      if (lockImageScale) {
+        const locked = clamp((nextX + nextY) / 2, 0.5, 2);
+        setImageScaleX(locked);
+        setImageScaleY(locked);
+      } else {
+        setImageScaleX(nextX);
+        setImageScaleY(nextY);
+      }
+    };
+
+    const handleUp = () => setResizeState(null);
+
+    window.addEventListener("mousemove", handleMove);
+    window.addEventListener("mouseup", handleUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMove);
+      window.removeEventListener("mouseup", handleUp);
+    };
+  }, [resizeState, lockImageScale]);
 
   const handlePreviewMouseDown = (event) => {
     if (!previewContainerRef.current) return;
+    setLockImageScale(true);
     setDragState({
       startX: event.clientX,
       startY: event.clientY,
       originX: imagePosX,
       originY: imagePosY
+    });
+  };
+
+  const handleResizeStart = (corner) => (event) => {
+    event.stopPropagation();
+    if (!previewContainerRef.current) return;
+    setResizeState({
+      corner,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: imageScaleX,
+      originY: imageScaleY
     });
   };
 
@@ -1756,15 +1803,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         <div className="space-y-2">
                           <Label className="text-sm">Quick Position</Label>
                           <div className="grid grid-cols-3 gap-2">
-                            <Button type="button" variant="outline" className="text-xs" onClick={() => { setImagePosX(-1); setImagePosY(-1); }}>
-                              Top Left
-                            </Button>
-                            <Button type="button" variant="outline" className="text-xs" onClick={() => { setImagePosX(0); setImagePosY(-1); }}>
-                              Top
-                            </Button>
-                            <Button type="button" variant="outline" className="text-xs" onClick={() => { setImagePosX(1); setImagePosY(-1); }}>
-                              Top Right
-                            </Button>
                             <Button type="button" variant="outline" className="text-xs" onClick={() => { setImagePosX(-1); setImagePosY(0); }}>
                               Left
                             </Button>
@@ -1773,15 +1811,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
                             </Button>
                             <Button type="button" variant="outline" className="text-xs" onClick={() => { setImagePosX(1); setImagePosY(0); }}>
                               Right
-                            </Button>
-                            <Button type="button" variant="outline" className="text-xs" onClick={() => { setImagePosX(-1); setImagePosY(1); }}>
-                              Bottom Left
-                            </Button>
-                            <Button type="button" variant="outline" className="text-xs" onClick={() => { setImagePosX(0); setImagePosY(1); }}>
-                              Bottom
-                            </Button>
-                            <Button type="button" variant="outline" className="text-xs" onClick={() => { setImagePosX(1); setImagePosY(1); }}>
-                              Bottom Right
                             </Button>
                           </div>
                         </div>
@@ -1823,6 +1852,22 @@ const Dashboard = ({ setIsAuthenticated }) => {
                               setImageScaleY(value);
                               if (lockImageScale) setImageScaleX(value);
                             }}
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label htmlFor="preview-size" className="text-sm">Preview Size</Label>
+                            <span className="text-xs" style={{color: 'var(--text-secondary)'}}>{previewSize}px</span>
+                          </div>
+                          <Input
+                            id="preview-size"
+                            type="range"
+                            min="220"
+                            max="520"
+                            step="10"
+                            value={previewSize}
+                            onChange={(e) => setPreviewSize(Number(e.target.value))}
                           />
                         </div>
 
@@ -1947,18 +1992,21 @@ const Dashboard = ({ setIsAuthenticated }) => {
                             <div
                               className="relative rounded-lg overflow-hidden"
                               ref={previewContainerRef}
-                              onMouseDown={handlePreviewMouseDown}
                               style={{
                                 backgroundColor: backgroundColor === "white" ? "#ffffff" : "#000000",
-                                resize: 'both',
-                                overflow: 'auto',
-                                width: '280px',
+                                overflow: 'hidden',
+                                width: `${previewSize}px`,
                                 maxWidth: '100%',
                                 minWidth: '220px',
                                 minHeight: '220px',
                                 aspectRatio: previewAspectRatio
                               }}
                             >
+                              <div
+                                className="absolute inset-0 cursor-move"
+                                onMouseDown={handlePreviewMouseDown}
+                                aria-label="Drag image"
+                              />
                               <img 
                                 src={URL.createObjectURL(imageFile)} 
                                 alt="Beat cover"
@@ -1968,6 +2016,32 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                   transformOrigin: 'center'
                                 }}
                               />
+                              <div className="absolute inset-0 pointer-events-none">
+                                <button
+                                  type="button"
+                                  onMouseDown={handleResizeStart("tl")}
+                                  className="absolute -top-2 -left-2 h-4 w-4 rounded-full border border-white bg-black/70 pointer-events-auto"
+                                  aria-label="Resize top left"
+                                />
+                                <button
+                                  type="button"
+                                  onMouseDown={handleResizeStart("tr")}
+                                  className="absolute -top-2 -right-2 h-4 w-4 rounded-full border border-white bg-black/70 pointer-events-auto"
+                                  aria-label="Resize top right"
+                                />
+                                <button
+                                  type="button"
+                                  onMouseDown={handleResizeStart("bl")}
+                                  className="absolute -bottom-2 -left-2 h-4 w-4 rounded-full border border-white bg-black/70 pointer-events-auto"
+                                  aria-label="Resize bottom left"
+                                />
+                                <button
+                                  type="button"
+                                  onMouseDown={handleResizeStart("br")}
+                                  className="absolute -bottom-2 -right-2 h-4 w-4 rounded-full border border-white bg-black/70 pointer-events-auto"
+                                  aria-label="Resize bottom right"
+                                />
+                              </div>
                               <div className="absolute bottom-0 left-0 right-0 p-4" style={{background: 'linear-gradient(transparent, rgba(0,0,0,0.8))'}}>
                                 <audio 
                                   controls 
