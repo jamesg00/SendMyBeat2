@@ -1905,6 +1905,10 @@ async def upload_to_youtube(
     image_file_id: str = Form(...),
     description_override: Optional[str] = Form(None),
     aspect_ratio: str = Form("16:9"),
+    image_scale: float = Form(1.0),
+    image_pos_x: float = Form(0.0),
+    image_pos_y: float = Form(0.0),
+    background_color: str = Form("black"),
     remove_watermark: bool = Form(False),
     current_user: dict = Depends(get_current_user)
 ):
@@ -2047,8 +2051,22 @@ async def upload_to_youtube(
             raise HTTPException(status_code=400, detail="Invalid aspect_ratio. Use 16:9, 1:1, 9:16, or 4:5.")
         target_w, target_h = aspect_map[aspect_ratio]
 
+        if not 0.5 <= image_scale <= 2.0:
+            raise HTTPException(status_code=400, detail="image_scale must be between 0.5 and 2.0.")
+        if not -1.0 <= image_pos_x <= 1.0:
+            raise HTTPException(status_code=400, detail="image_pos_x must be between -1 and 1.")
+        if not -1.0 <= image_pos_y <= 1.0:
+            raise HTTPException(status_code=400, detail="image_pos_y must be between -1 and 1.")
+
+        background_color = (background_color or "black").strip().lower()
+        if background_color not in ("black", "white"):
+            raise HTTPException(status_code=400, detail="background_color must be black or white.")
+
         # Build video filter - add watermark for non-pro users OR pro users who didn't uncheck it
-        video_filter = f"scale={target_w}:{target_h}:force_original_aspect_ratio=decrease,pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2:black"
+        video_filter = (
+            f"scale=iw*{image_scale}:ih*{image_scale},"
+            f"pad={target_w}:{target_h}:(ow-iw)/2+(ow-iw)/2*{image_pos_x}:(oh-ih)/2+(oh-ih)/2*{image_pos_y}:{background_color}"
+        )
         
         # Add watermark logic:
         # - Free users: ALWAYS get watermark (remove_watermark is ignored/blocked at API level)

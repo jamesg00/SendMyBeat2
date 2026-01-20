@@ -67,6 +67,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [selectedTagsId, setSelectedTagsId] = useState("");
   const [privacyStatus, setPrivacyStatus] = useState("public");
   const [videoAspectRatio, setVideoAspectRatio] = useState("16:9");
+  const [imageScale, setImageScale] = useState(1);
+  const [imagePosX, setImagePosX] = useState(0);
+  const [imagePosY, setImagePosY] = useState(0);
+  const [backgroundColor, setBackgroundColor] = useState("black");
   const [removeWatermark, setRemoveWatermark] = useState(false);
   const [uploadingAudio, setUploadingAudio] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -734,6 +738,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
       formData.append('remove_watermark', removeWatermark);
       formData.append('description_override', uploadDescriptionText);
       formData.append('aspect_ratio', videoAspectRatio);
+      formData.append('image_scale', String(imageScale));
+      formData.append('image_pos_x', String(imagePosX));
+      formData.append('image_pos_y', String(imagePosY));
+      formData.append('background_color', backgroundColor);
 
       const response = await axios.post(`${API}/youtube/upload`, formData, {
         timeout: 180000, // 3 minute timeout
@@ -1675,6 +1683,76 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         </Select>
                       </div>
 
+                      <div className="space-y-3">
+                        <Label>Background & Image Position</Label>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button
+                            type="button"
+                            variant={backgroundColor === "black" ? "default" : "outline"}
+                            onClick={() => setBackgroundColor("black")}
+                            className="text-xs sm:text-sm"
+                          >
+                            Black Background
+                          </Button>
+                          <Button
+                            type="button"
+                            variant={backgroundColor === "white" ? "default" : "outline"}
+                            onClick={() => setBackgroundColor("white")}
+                            className="text-xs sm:text-sm"
+                          >
+                            White Background
+                          </Button>
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label htmlFor="image-scale" className="text-sm">Image Scale</Label>
+                            <span className="text-xs" style={{color: 'var(--text-secondary)'}}>{imageScale.toFixed(2)}x</span>
+                          </div>
+                          <Input
+                            id="image-scale"
+                            type="range"
+                            min="0.5"
+                            max="2"
+                            step="0.05"
+                            value={imageScale}
+                            onChange={(e) => setImageScale(Number(e.target.value))}
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label htmlFor="image-pos-x" className="text-sm">Horizontal Position</Label>
+                            <span className="text-xs" style={{color: 'var(--text-secondary)'}}>{imagePosX.toFixed(2)}</span>
+                          </div>
+                          <Input
+                            id="image-pos-x"
+                            type="range"
+                            min="-1"
+                            max="1"
+                            step="0.05"
+                            value={imagePosX}
+                            onChange={(e) => setImagePosX(Number(e.target.value))}
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label htmlFor="image-pos-y" className="text-sm">Vertical Position</Label>
+                            <span className="text-xs" style={{color: 'var(--text-secondary)'}}>{imagePosY.toFixed(2)}</span>
+                          </div>
+                          <Input
+                            id="image-pos-y"
+                            type="range"
+                            min="-1"
+                            max="1"
+                            step="0.05"
+                            value={imagePosY}
+                            onChange={(e) => setImagePosY(Number(e.target.value))}
+                          />
+                        </div>
+                      </div>
+
                       <div className="space-y-2">
                         <Label htmlFor="privacy-status">Privacy Status</Label>
                         <Select value={privacyStatus} onValueChange={setPrivacyStatus}>
@@ -1744,7 +1822,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                             <div
                               className="relative rounded-lg overflow-hidden"
                               style={{
-                                backgroundColor: '#000',
+                                backgroundColor: backgroundColor === "white" ? "#ffffff" : "#000000",
                                 resize: 'both',
                                 overflow: 'auto',
                                 width: '360px',
@@ -1758,6 +1836,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                 src={URL.createObjectURL(imageFile)} 
                                 alt="Beat cover"
                                 className="w-full h-full object-contain"
+                                style={{
+                                  transform: `translate(${imagePosX * 50}%, ${imagePosY * 50}%) scale(${imageScale})`,
+                                  transformOrigin: 'center'
+                                }}
                               />
                               <div className="absolute bottom-0 left-0 right-0 p-4" style={{background: 'linear-gradient(transparent, rgba(0,0,0,0.8))'}}>
                                 <audio 
