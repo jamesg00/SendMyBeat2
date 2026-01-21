@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, UploadFile, File, Form
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, UploadFile, File, Form, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -1954,6 +1954,7 @@ If tags look stuffed or irrelevant, explicitly say so and recommend a smaller, h
 # ============ Thumbnail Checker Route ============
 @api_router.post("/beat/thumbnail-check", response_model=ThumbnailCheckResponse)
 async def check_thumbnail(
+    request: Request,
     file: UploadFile = File(...),
     title: str = Form(""),
     tags: str = Form(""),
@@ -1982,19 +1983,24 @@ async def check_thumbnail(
         if not image_bytes:
             raise HTTPException(status_code=400, detail="Empty image file.")
 
-        analysis_prompt = f"""You are a YouTube thumbnail expert for beat producers. Analyze this thumbnail for click-through potential.
+        analysis_prompt = f"""You are a YouTube beat-thumbnail specialist and active internet-money style producer in LA (~10k subs).
+Your job is to improve CTR and retention for TYPE BEAT uploads using a single static image.
 
 Context:
 - Video title: "{title}"
 - Tags: "{tags}"
 - Description (optional): "{description}"
 
+Analyze like a producer who uploads daily and optimizes thumbnails for YouTube search + suggested.
 Focus on:
-1) Readability at small size (mobile)
-2) Contrast and focal point clarity
-3) Visual relevance to the title/artist vibe
-4) Branding consistency and uniqueness
-5) Whether the text is too small or cluttered
+1) Mobile legibility and instant clarity (1-second glance test)
+2) Contrast, focal point, and visual hierarchy
+3) Relevance to the artist/type beat vibe in the title
+4) Simple, repeatable branding (corner badge, color system)
+5) Whether text (if any) is minimal, bold, and useful
+
+Avoid irrelevant advice (e.g., motion). Assume the thumbnail is a static image.
+Be practical and specific to beat uploads.
 
 Return STRICT JSON with this exact schema:
 {{
@@ -2009,7 +2015,7 @@ Return STRICT JSON with this exact schema:
 """
 
         response_text = await llm_chat_with_image(
-            system_message="You are a ruthless but helpful thumbnail critic. Be concise, practical, and focused on CTR.",
+            system_message="You are a ruthless but helpful beat-thumbnail critic. Be concise, actionable, and focused on CTR for type beat uploads.",
             user_message=analysis_prompt,
             image_bytes=image_bytes,
             image_mime=file.content_type,
@@ -2019,10 +2025,24 @@ Return STRICT JSON with this exact schema:
 
         try:
             analysis = json.loads(response_text)
+            if await request.is_disconnected():
+                logging.info("Thumbnail check canceled by client; skipping credit use.")
+                return ThumbnailCheckResponse(**analysis)
             await consume_credit(current_user['id'])
             return ThumbnailCheckResponse(**analysis)
         except Exception as e:
             logging.error(f"Failed to parse thumbnail analysis: {str(e)}")
+            if await request.is_disconnected():
+                logging.info("Thumbnail check canceled by client; skipping credit use.")
+                return ThumbnailCheckResponse(
+                    score=55,
+                    verdict="Thumbnail analysis completed but formatting failed.",
+                    strengths=["Clear subject or artwork present"],
+                    issues=["Unable to parse detailed feedback"],
+                    suggestions=["Try again for full details", "Increase contrast and simplify text"],
+                    text_overlay_suggestion="FUTURE x UZI TYPE BEAT",
+                    branding_suggestion="Add a consistent corner badge with your logo",
+                )
             await consume_credit(current_user['id'])
             return ThumbnailCheckResponse(
                 score=55,
