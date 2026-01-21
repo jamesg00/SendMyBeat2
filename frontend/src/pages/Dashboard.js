@@ -835,12 +835,30 @@ const Dashboard = ({ setIsAuthenticated }) => {
     : videoAspectRatio === "4:5"
     ? "4 / 5"
     : "16 / 9";
+  const previewRatio = videoAspectRatio === "1:1"
+    ? 1
+    : videoAspectRatio === "9:16"
+    ? 9 / 16
+    : videoAspectRatio === "4:5"
+    ? 4 / 5
+    : 16 / 9;
 
   const previewSectionRef = useRef(null);
   const previewContainerRef = useRef(null);
   const [dragState, setDragState] = useState(null);
   const [resizeState, setResizeState] = useState(null);
   const [previewSize, setPreviewSize] = useState(320);
+  const [imageMeta, setImageMeta] = useState({ width: 0, height: 0, ratio: 1 });
+  const [imagePreviewUrl, setImagePreviewUrl] = useState("");
+  const [audioPreviewUrl, setAudioPreviewUrl] = useState("");
+
+  const frameWidth = previewSize;
+  const frameHeight = previewSize / previewRatio;
+  const imageRatio = imageMeta.ratio || 1;
+  const fitWidth = previewRatio > imageRatio ? frameHeight * imageRatio : frameWidth;
+  const fitHeight = previewRatio > imageRatio ? frameHeight : frameWidth / imageRatio;
+  const fitLeft = (frameWidth - fitWidth) / 2;
+  const fitTop = (frameHeight - fitHeight) / 2;
 
   const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
@@ -867,6 +885,33 @@ const Dashboard = ({ setIsAuthenticated }) => {
       window.removeEventListener("mouseup", handleUp);
     };
   }, [dragState, imagePosX, imagePosY]);
+
+  useEffect(() => {
+    if (!imageFile) {
+      setImagePreviewUrl("");
+      setImageMeta({ width: 0, height: 0, ratio: 1 });
+      return;
+    }
+    const url = URL.createObjectURL(imageFile);
+    setImagePreviewUrl(url);
+    const img = new Image();
+    img.onload = () => {
+      const ratio = img.width && img.height ? img.width / img.height : 1;
+      setImageMeta({ width: img.width, height: img.height, ratio });
+    };
+    img.src = url;
+    return () => URL.revokeObjectURL(url);
+  }, [imageFile]);
+
+  useEffect(() => {
+    if (!audioFile) {
+      setAudioPreviewUrl("");
+      return;
+    }
+    const url = URL.createObjectURL(audioFile);
+    setAudioPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [audioFile]);
 
   useEffect(() => {
     if (!resizeState || !previewContainerRef.current) return;
@@ -2012,7 +2057,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
                               style={{
                                 backgroundColor: backgroundColor === "white" ? "#ffffff" : "#000000",
                                 overflow: 'hidden',
-                                width: `${previewSize}px`,
+                                width: `${frameWidth}px`,
+                                height: `${frameHeight}px`,
                                 maxWidth: '100%',
                                 minWidth: '220px',
                                 minHeight: '220px',
@@ -2025,14 +2071,18 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                 aria-label="Drag image"
                               />
                               <div
-                                className="absolute inset-0"
+                                className="absolute"
                                 style={{
+                                  width: `${fitWidth}px`,
+                                  height: `${fitHeight}px`,
+                                  left: `${fitLeft}px`,
+                                  top: `${fitTop}px`,
                                   transform: `translate(${imagePosX * 50}%, ${imagePosY * 50}%) scale(${imageScaleX}, ${imageScaleY})`,
                                   transformOrigin: "center"
                                 }}
                               >
                                 <img 
-                                  src={URL.createObjectURL(imageFile)} 
+                                  src={imagePreviewUrl} 
                                   alt="Beat cover"
                                   className="w-full h-full object-contain"
                                   style={{ objectFit: "contain" }}
@@ -2068,7 +2118,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                 <audio 
                                   controls 
                                   className="w-full"
-                                  src={URL.createObjectURL(audioFile)}
+                                  src={audioPreviewUrl}
                                   style={{
                                     height: '40px',
                                     filter: 'invert(1) hue-rotate(180deg)'
@@ -2096,7 +2146,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                               style={{ width: 72, height: 72, backgroundColor: backgroundColor === "white" ? "#ffffff" : "#000000" }}
                             >
                               <img
-                                src={URL.createObjectURL(imageFile)}
+                                src={imagePreviewUrl}
                                 alt="Mini preview"
                                 className="w-full h-full object-contain"
                                 style={{
