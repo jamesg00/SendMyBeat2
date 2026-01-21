@@ -977,8 +977,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
       <DarkModeToggle />
       
       {/* Header */}
-      <div className="glass-card mx-2 sm:mx-4 mt-2 sm:mt-4 rounded-xl sm:rounded-2xl border-0">
-        <div className="container mx-auto px-3 sm:px-4 md:px-6 py-3 sm:py-4">
+      <div className="glass-card mx-2 sm:mx-4 mt-2 sm:mt-4 rounded-xl sm:rounded-2xl border-0 dashboard-card">
+        <div className="container mx-auto px-3 sm:px-4 md:px-6 py-3 sm:py-4 dashboard-shell">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
             <div className="flex items-center gap-2 sm:gap-3 md:gap-4">
               <img src="/logo.png" alt="SendMyBeat" className="h-10 w-10 sm:h-12 sm:w-12 object-contain" />
@@ -1037,7 +1037,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
       </div>
 
       {/* Main Content */}
-      <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-6 md:py-8">
+      <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-6 md:py-8 dashboard-shell space-y-6 sm:space-y-8">
         {/* Subscription Banner */}
         {subscriptionStatus && (
           <SubscriptionBanner
@@ -1070,7 +1070,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
         />
 
         <Tabs defaultValue="tags" className="space-y-4 sm:space-y-6">
-          <TabsList className="grid w-full max-w-3xl mx-auto grid-cols-5 gap-0.5 sm:gap-1 text-xs sm:text-sm p-0.5 sm:p-1">
+          <TabsList className="grid w-full max-w-3xl mx-auto grid-cols-5 gap-1 text-xs sm:text-sm dashboard-tabs">
             <TabsTrigger value="tags" data-testid="tags-tab" className="px-1 sm:px-3 py-1.5 sm:py-2 truncate">Tags</TabsTrigger>
             <TabsTrigger value="descriptions" data-testid="descriptions-tab" className="px-1 sm:px-3 py-1.5 sm:py-2 truncate">Descriptions</TabsTrigger>
             <TabsTrigger value="upload" data-testid="upload-tab" className="px-1 sm:px-3 py-1.5 sm:py-2 truncate">Upload</TabsTrigger>
@@ -1079,221 +1079,231 @@ const Dashboard = ({ setIsAuthenticated }) => {
           </TabsList>
 
           {/* Tag Generator Tab */}
-          <TabsContent value="tags" className="space-y-4 sm:space-y-6">
-            <Card className="shadow-lg border-0">
-              <CardHeader className="px-4 sm:px-6 py-4 sm:py-6">
-                <CardTitle className="flex items-center gap-2 text-base sm:text-lg md:text-xl">
-                  <Sparkles className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 flex-shrink-0" />
-                  <span>Generate YouTube Tags</span>
-                </CardTitle>
-                <CardDescription className="text-xs sm:text-sm">AI generates tags + searches artist's popular songs + adds your custom tags (500 total)</CardDescription>
-              </CardHeader>
-              <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
-                <form onSubmit={handleGenerateTags} className="space-y-3 sm:space-y-4" data-testid="tag-generator-form">
-                  <div className="space-y-1.5 sm:space-y-2">
-                    <Label htmlFor="tag-query" className="text-sm sm:text-base">Search Query</Label>
-                    <Input
-                      id="tag-query"
-                      placeholder="e.g., lil uzi, travis scott, dark trap beat"
-                      value={tagQuery}
-                      onChange={(e) => setTagQuery(e.target.value)}
-                      data-testid="tag-query-input"
-                      className="text-sm sm:text-base"
-                    />
-                    <p className="text-xs" style={{color: 'var(--text-secondary)'}}>
-                      💡 Tip: Include artist name for popular song "type beat" variations
-                    </p>
-                  </div>
-                  
-                  <div className="space-y-1.5 sm:space-y-2">
-                    <Label htmlFor="tag-provider" className="text-sm sm:text-base">AI Provider (Grok)</Label>
-                    <Select value={tagProvider} onValueChange={setTagProvider}>
-                      <SelectTrigger id="tag-provider" data-testid="tag-provider">
-                        <SelectValue placeholder="Grok" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="grok">Grok</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs" style={{color: 'var(--text-secondary)'}}>
-                      Uses the Grok API key configured on the backend
-                    </p>
-                  </div>
-                  
-                  <div className="space-y-1.5 sm:space-y-2">
-                    <Label htmlFor="custom-tags" className="text-sm sm:text-base">Your Custom Tags (Optional)</Label>
-                    <Textarea
-                      id="custom-tags"
-                      placeholder="e.g., free for profit, exclusive beat, lease available (comma-separated)"
-                      value={customTags}
-                      onChange={(e) => setCustomTags(e.target.value)}
-                      rows={3}
-                      data-testid="custom-tags-input"
-                      className="text-sm sm:text-base"
-                    />
-                    <p className="text-xs" style={{color: 'var(--text-secondary)'}}>
-                      Add your own tags (comma-separated). Total limit: 500 tags
-                    </p>
-                  </div>
-                  
-                  <Button
-                    type="submit"
-                    className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-sm sm:text-base py-5 sm:py-6"
-                    disabled={loadingTags}
-                    data-testid="generate-tags-btn"
-                  >
-                    {loadingTags ? "Generating Tags..." : "Generate 500 Tags (AI + YouTube + Custom)"}
-                  </Button>
-                </form>
-
-                {generatedTags.length > 0 && (
-                  <div className="mt-4 sm:mt-6 space-y-3 sm:space-y-4" data-testid="generated-tags-section">
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0">
-                      <h3 className="font-semibold text-sm sm:text-base" style={{color: 'var(--text-primary)'}}>Generated Tags ({generatedTags.length})</h3>
-                      <div className="flex gap-2 w-full sm:w-auto">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={handleGenerateTags}
-                          className="gap-1 sm:gap-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:from-purple-700 hover:to-blue-700 border-0 text-xs sm:text-sm flex-1 sm:flex-none py-2"
-                          disabled={loadingTags}
-                          data-testid="refine-tags-btn"
-                        >
-                          <Sparkles className="h-3 w-3 sm:h-4 sm:w-4" />
-                          Refine
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={copyTags}
-                          className="gap-1 sm:gap-2 text-xs sm:text-sm flex-1 sm:flex-none py-2"
-                          data-testid="copy-tags-btn"
-                        >
-                          <Copy className="h-3 w-3 sm:h-4 sm:w-4" />
-                          Copy All
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="tag-cloud" data-testid="tags-list">
-                      {generatedTags.map((tag, index) => (
-                        <span 
-                          key={index} 
-                          className="tag-item group relative" 
-                          data-testid={`tag-${index}`}
-                        >
-                          {tag}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setGeneratedTags(generatedTags.filter((_, i) => i !== index));
-                              toast.success("Tag removed");
-                            }}
-                            className="ml-2 text-red-500 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-700"
-                            title="Delete tag"
-                          >
-                            ×
-                          </button>
-                        </span>
-                      ))}
+          <TabsContent value="tags" className="space-y-4 sm:space-y-6 dashboard-section">
+            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] gap-4 sm:gap-6">
+              <Card className="dashboard-card">
+                <CardHeader className="px-4 sm:px-6 py-4 sm:py-6">
+                  <CardTitle className="flex items-center gap-2 text-base sm:text-lg md:text-xl">
+                    <Sparkles className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 flex-shrink-0" />
+                    <span>Generate YouTube Tags</span>
+                  </CardTitle>
+                  <CardDescription className="text-xs sm:text-sm">AI generates tags + searches artist's popular songs + adds your custom tags (500 total)</CardDescription>
+                </CardHeader>
+                <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
+                  <form onSubmit={handleGenerateTags} className="space-y-3 sm:space-y-4" data-testid="tag-generator-form">
+                    <div className="space-y-1.5 sm:space-y-2">
+                      <Label htmlFor="tag-query" className="text-sm sm:text-base">Search Query</Label>
+                      <Input
+                        id="tag-query"
+                        placeholder="e.g., lil uzi, travis scott, dark trap beat"
+                        value={tagQuery}
+                        onChange={(e) => setTagQuery(e.target.value)}
+                        data-testid="tag-query-input"
+                        className="text-sm sm:text-base"
+                      />
+                      <p className="text-xs" style={{color: 'var(--text-secondary)'}}>
+                        Tip: Include artist name for popular song "type beat" variations
+                      </p>
                     </div>
                     
-                    {/* Add More Tags Section */}
-                    <div className="mt-3 sm:mt-4 p-3 sm:p-4 rounded-lg border-2 border-green-500" style={{backgroundColor: 'var(--bg-secondary)'}}>
-                      <div className="space-y-2 sm:space-y-3">
-                        <div className="flex items-center justify-between">
-                          <Label htmlFor="additional-tags" className="font-semibold text-sm sm:text-base">
-                            <Plus className="inline h-3 w-3 sm:h-4 sm:w-4 mr-1" />
-                            Add More Tags
-                          </Label>
-                          <span className="text-xs sm:text-sm" style={{color: 'var(--text-secondary)'}}>
-                            {generatedTags.length}/500
-                          </span>
-                        </div>
-                        <Textarea
-                          id="additional-tags"
-                          placeholder="Add more tags (comma-separated)"
-                          value={additionalTags}
-                          onChange={(e) => setAdditionalTags(e.target.value)}
-                          rows={2}
-                          disabled={generatedTags.length >= 500}
-                          className="text-sm sm:text-base"
-                        />
-                        <Button
-                          size="sm"
-                          onClick={handleAddMoreTags}
-                          disabled={generatedTags.length >= 500 || !additionalTags.trim()}
-                          className="w-full gap-1 sm:gap-2 bg-green-600 hover:bg-green-700 text-sm py-2.5"
-                        >
-                          <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
-                          {generatedTags.length >= 500 ? "Limit Reached (500)" : "Add Tags"}
-                        </Button>
-                      </div>
+                    <div className="space-y-1.5 sm:space-y-2">
+                      <Label htmlFor="tag-provider" className="text-sm sm:text-base">AI Provider (Grok)</Label>
+                      <Select value={tagProvider} onValueChange={setTagProvider}>
+                        <SelectTrigger id="tag-provider" data-testid="tag-provider">
+                          <SelectValue placeholder="Grok" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="grok">Grok</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs" style={{color: 'var(--text-secondary)'}}>
+                        Uses the Grok API key configured on the backend
+                      </p>
                     </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                    
+                    <div className="space-y-1.5 sm:space-y-2">
+                      <Label htmlFor="custom-tags" className="text-sm sm:text-base">Your Custom Tags (Optional)</Label>
+                      <Textarea
+                        id="custom-tags"
+                        placeholder="e.g., free for profit, exclusive beat, lease available (comma-separated)"
+                        value={customTags}
+                        onChange={(e) => setCustomTags(e.target.value)}
+                        rows={3}
+                        data-testid="custom-tags-input"
+                        className="text-sm sm:text-base"
+                      />
+                      <p className="text-xs" style={{color: 'var(--text-secondary)'}}>
+                        Add your own tags (comma-separated). Total limit: 500 tags
+                      </p>
+                    </div>
+                    
+                    <Button
+                      type="submit"
+                      className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-sm sm:text-base py-5 sm:py-6"
+                      disabled={loadingTags}
+                      data-testid="generate-tags-btn"
+                    >
+                      {loadingTags ? "Generating Tags..." : "Generate 500 Tags (AI + YouTube + Custom)"}
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
 
-            {/* Tag History */}
-            {tagHistory.length > 0 && (
-              <Card className="shadow-lg border-0">
-                <CardHeader>
-                  <CardTitle>Recent Generations</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {tagHistory.slice(0, 5).map((item) => (
-                      <div
-                        key={item.id}
-                        className="p-4 rounded-lg border-2 transition-all hover:border-purple-500 cursor-pointer relative group"
-                        style={{
-                          backgroundColor: 'var(--bg-secondary)',
-                          borderColor: 'var(--border-color)'
-                        }}
-                        onClick={() => {
-                          setGeneratedTags(item.tags);
-                          setTagQuery(item.query);
-                          toast.success("Tags loaded!");
-                        }}
-                        data-testid="tag-history-item"
-                      >
-                        <div className="flex justify-between items-start">
-                          <div className="flex-1">
-                            <p className="font-medium mb-1" style={{color: 'var(--text-primary)'}}>{item.query}</p>
-                            <p className="text-sm" style={{color: 'var(--text-secondary)'}}>{item.tags.length} tags generated</p>
-                          </div>
+              <div className="space-y-4 sm:space-y-6">
+                {generatedTags.length > 0 && (
+                  <Card className="dashboard-card" data-testid="generated-tags-section">
+                    <CardHeader className="px-4 sm:px-6 py-4 sm:py-5">
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0">
+                        <CardTitle className="text-sm sm:text-base" style={{color: 'var(--text-primary)'}}>
+                          Generated Tags ({generatedTags.length})
+                        </CardTitle>
+                        <div className="flex gap-2 w-full sm:w-auto">
                           <Button
-                            variant="ghost"
                             size="sm"
-                            className="opacity-0 group-hover:opacity-100 transition-opacity text-red-500 hover:text-red-700 hover:bg-red-50"
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              try {
-                                // Delete from tag history
-                                const updatedHistory = tagHistory.filter(t => t.id !== item.id);
-                                setTagHistory(updatedHistory);
-                                toast.success("Generation deleted");
-                              } catch (error) {
-                                toast.error("Failed to delete");
-                              }
-                            }}
+                            variant="outline"
+                            onClick={handleGenerateTags}
+                            className="gap-1 sm:gap-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:from-purple-700 hover:to-blue-700 border-0 text-xs sm:text-sm flex-1 sm:flex-none py-2"
+                            disabled={loadingTags}
+                            data-testid="refine-tags-btn"
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Sparkles className="h-3 w-3 sm:h-4 sm:w-4" />
+                            Refine
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={copyTags}
+                            className="gap-1 sm:gap-2 text-xs sm:text-sm flex-1 sm:flex-none py-2"
+                            data-testid="copy-tags-btn"
+                          >
+                            <Copy className="h-3 w-3 sm:h-4 sm:w-4" />
+                            Copy All
                           </Button>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+                    </CardHeader>
+                    <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6 space-y-4">
+                      <div className="tag-cloud" data-testid="tags-list">
+                        {generatedTags.map((tag, index) => (
+                          <span 
+                            key={index} 
+                            className="tag-item group relative" 
+                            data-testid={`tag-${index}`}
+                          >
+                            {tag}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setGeneratedTags(generatedTags.filter((_, i) => i !== index));
+                                toast.success("Tag removed");
+                              }}
+                              className="ml-2 text-red-500 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-700"
+                              title="Delete tag"
+                            >
+                              A-
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                      
+                      {/* Add More Tags Section */}
+                      <div className="p-3 sm:p-4 rounded-lg border-2 border-green-500" style={{backgroundColor: 'var(--bg-secondary)'}}>
+                        <div className="space-y-2 sm:space-y-3">
+                          <div className="flex items-center justify-between">
+                            <Label htmlFor="additional-tags" className="font-semibold text-sm sm:text-base">
+                              <Plus className="inline h-3 w-3 sm:h-4 sm:w-4 mr-1" />
+                              Add More Tags
+                            </Label>
+                            <span className="text-xs sm:text-sm" style={{color: 'var(--text-secondary)'}}>
+                              {generatedTags.length}/500
+                            </span>
+                          </div>
+                          <Textarea
+                            id="additional-tags"
+                            placeholder="Add more tags (comma-separated)"
+                            value={additionalTags}
+                            onChange={(e) => setAdditionalTags(e.target.value)}
+                            rows={2}
+                            disabled={generatedTags.length >= 500}
+                            className="text-sm sm:text-base"
+                          />
+                          <Button
+                            size="sm"
+                            onClick={handleAddMoreTags}
+                            disabled={generatedTags.length >= 500 || !additionalTags.trim()}
+                            className="w-full gap-1 sm:gap-2 bg-green-600 hover:bg-green-700 text-sm py-2.5"
+                          >
+                            <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
+                            {generatedTags.length >= 500 ? "Limit Reached (500)" : "Add Tags"}
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Tag History */}
+                {tagHistory.length > 0 && (
+                  <Card className="dashboard-card-muted">
+                    <CardHeader className="px-4 sm:px-6 py-4 sm:py-5">
+                      <CardTitle className="text-sm sm:text-base">Recent Generations</CardTitle>
+                    </CardHeader>
+                    <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
+                      <div className="space-y-3">
+                        {tagHistory.slice(0, 5).map((item) => (
+                          <div
+                            key={item.id}
+                            className="p-4 rounded-lg border-2 transition-all hover:border-purple-500 cursor-pointer relative group"
+                            style={{
+                              backgroundColor: 'var(--bg-secondary)',
+                              borderColor: 'var(--border-color)'
+                            }}
+                            onClick={() => {
+                              setGeneratedTags(item.tags);
+                              setTagQuery(item.query);
+                              toast.success("Tags loaded!");
+                            }}
+                            data-testid="tag-history-item"
+                          >
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1">
+                                <p className="font-medium mb-1" style={{color: 'var(--text-primary)'}}>{item.query}</p>
+                                <p className="text-sm" style={{color: 'var(--text-secondary)'}}>{item.tags.length} tags generated</p>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="opacity-0 group-hover:opacity-100 transition-opacity text-red-500 hover:text-red-700 hover:bg-red-50"
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  try {
+                                    // Delete from tag history
+                                    const updatedHistory = tagHistory.filter(t => t.id !== item.id);
+                                    setTagHistory(updatedHistory);
+                                    toast.success("Generation deleted");
+                                  } catch (error) {
+                                    toast.error("Failed to delete");
+                                  }
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            </div>
           </TabsContent>
 
           {/* Descriptions Tab */}
-          <TabsContent value="descriptions" className="space-y-4 sm:space-y-6">
+          <TabsContent value="descriptions" className="space-y-4 sm:space-y-6 dashboard-section">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
               {/* Create/Save Description */}
-              <Card className="shadow-lg border-0">
+              <Card className="dashboard-card">
                 <CardHeader className="px-4 sm:px-6 py-4 sm:py-6">
                   <CardTitle className="flex items-center gap-2 text-base sm:text-lg md:text-xl">
                     <Save className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 flex-shrink-0" />
@@ -1336,7 +1346,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
               {/* AI Tools */}
               <div className="space-y-6">
                 {/* Refine Description */}
-                <Card className="shadow-lg border-0">
+              <Card className="dashboard-card">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <Sparkles className="h-5 w-5 text-blue-600" />
@@ -1363,8 +1373,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
                   </CardContent>
                 </Card>
 
-                {/* Generate Description */}
-                <Card className="shadow-lg border-0">
+              {/* Generate Description */}
+              <Card className="dashboard-card">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <Plus className="h-5 w-5 text-blue-600" />
@@ -1426,7 +1436,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
             </div>
 
             {/* Saved Descriptions */}
-            <Card className="shadow-lg border-0 producer-card bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm">
+            <Card className="dashboard-card producer-card">
               <CardHeader>
                 <CardTitle>Saved Descriptions ({descriptions.length})</CardTitle>
               </CardHeader>
@@ -1528,8 +1538,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
           </TabsContent>
 
           {/* YouTube Upload Tab */}
-          <TabsContent value="upload" className="space-y-6">
-            <Card className="shadow-lg border-0">
+          <TabsContent value="upload" className="space-y-6 dashboard-section">
+            <Card className="dashboard-card">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Youtube className="h-5 w-5 text-red-600" />
@@ -1539,7 +1549,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
               </CardHeader>
               <CardContent className="space-y-4 sm:space-y-6">
                 {/* YouTube Connection Status */}
-                <div className="p-4 sm:p-5 md:p-6 rounded-lg" style={{backgroundColor: 'var(--bg-secondary)'}}>
+                <div className="p-4 sm:p-5 md:p-6 rounded-lg dashboard-card-muted">
                   {youtubeConnected ? (
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
                       <div className="flex items-center gap-3 sm:gap-4 flex-1">
@@ -2179,8 +2189,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
           </TabsContent>
 
           {/* YouTube Analytics Tab */}
-          <TabsContent value="analytics" className="space-y-6">
-            <Card className="shadow-lg border-0">
+          <TabsContent value="analytics" className="space-y-6 dashboard-section">
+            <Card className="dashboard-card">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Sparkles className="h-6 w-6 text-purple-500" />
@@ -2455,8 +2465,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
           </TabsContent>
 
           {/* Grow in 120 Tab */}
-          <TabsContent value="grow" className="space-y-4 sm:space-y-6">
-            <Card className="shadow-lg border-0">
+          <TabsContent value="grow" className="space-y-4 sm:space-y-6 dashboard-section">
+            <Card className="dashboard-card">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <span className="text-2xl">🔥</span>
