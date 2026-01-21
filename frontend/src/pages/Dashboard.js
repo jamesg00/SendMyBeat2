@@ -2114,19 +2114,19 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                   />
                                 </div>
                               </div>
-                              <div className="absolute bottom-0 left-0 right-0 p-4" style={{background: 'linear-gradient(transparent, rgba(0,0,0,0.8))'}}>
-                                <audio 
-                                  controls 
-                                  className="w-full"
-                                  src={audioPreviewUrl}
-                                  style={{
-                                    height: '40px',
-                                    filter: 'invert(1) hue-rotate(180deg)'
-                                  }}
-                                >
-                                  Your browser doesn't support audio
-                                </audio>
-                              </div>
+                            </div>
+                            <div className="mt-3 rounded-lg p-2" style={{ backgroundColor: 'var(--bg-secondary)' }}>
+                              <audio 
+                                controls 
+                                className="w-full"
+                                src={audioPreviewUrl}
+                                style={{
+                                  height: '40px',
+                                  filter: 'invert(1) hue-rotate(180deg)'
+                                }}
+                              >
+                                Your browser doesn't support audio
+                              </audio>
                             </div>
                             <p className="text-sm mt-3 text-center" style={{color: 'var(--text-secondary)'}}>
                               Drag to reposition. Scale with the slider. Aspect ratio: {videoAspectRatio}
