@@ -840,7 +840,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const previewContainerRef = useRef(null);
   const [dragState, setDragState] = useState(null);
   const [resizeState, setResizeState] = useState(null);
-  const [previewSize, setPreviewSize] = useState(280);
+  const [previewSize, setPreviewSize] = useState(320);
 
   const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
@@ -1872,14 +1872,14 @@ const Dashboard = ({ setIsAuthenticated }) => {
 
                         <div className="space-y-2">
                           <div className="flex items-center justify-between">
-                            <Label htmlFor="preview-size" className="text-sm">Preview Size</Label>
+                            <Label htmlFor="preview-size" className="text-sm">Preview Scale</Label>
                             <span className="text-xs" style={{color: 'var(--text-secondary)'}}>{previewSize}px</span>
                           </div>
                           <Input
                             id="preview-size"
                             type="range"
-                            min="220"
-                            max="520"
+                            min="280"
+                            max="720"
                             step="10"
                             value={previewSize}
                             onChange={(e) => setPreviewSize(Number(e.target.value))}
@@ -2078,7 +2078,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                               </div>
                             </div>
                             <p className="text-sm mt-3 text-center" style={{color: 'var(--text-secondary)'}}>
-                              Drag to reposition. Resize the box. Aspect ratio: {videoAspectRatio}
+                              Drag to reposition. Scale with the slider. Aspect ratio: {videoAspectRatio}
                             </p>
                           </CardContent>
                         </Card>
