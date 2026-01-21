@@ -1975,6 +1975,12 @@ async def check_thumbnail(
                 }
             )
 
+        if not title.strip() or not tags.strip() or not description.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="Title, tags, and description are required for thumbnail checks."
+            )
+
         allowed_types = {"image/jpeg", "image/png", "image/webp"}
         if file.content_type not in allowed_types:
             raise HTTPException(status_code=400, detail="Invalid image type. Use JPG, PNG, or WEBP.")

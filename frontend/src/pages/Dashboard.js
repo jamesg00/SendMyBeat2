@@ -116,6 +116,11 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const thumbnailProgressIntervalRef = useRef(null);
 
   const isPro = !!subscriptionStatus?.is_subscribed;
+  const thumbnailContextReady = Boolean(
+    uploadTitle?.trim() &&
+    uploadDescriptionText?.trim() &&
+    generatedTags?.length
+  );
 
   useEffect(() => {
     fetchUser();
@@ -655,6 +660,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const handleThumbnailCheck = async () => {
     if (!thumbnailCheckFile) {
       toast.error("Please upload a thumbnail image first");
+      return;
+    }
+    if (!thumbnailContextReady) {
+      toast.error("Add a title, description, and tags first");
       return;
     }
 
@@ -1783,7 +1792,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         <div className="flex w-full sm:w-auto gap-2">
                           <Button
                             onClick={handleThumbnailCheck}
-                            disabled={checkingThumbnail || !thumbnailCheckFile}
+                            disabled={checkingThumbnail || !thumbnailCheckFile || !thumbnailContextReady}
                             variant="outline"
                             size="default"
                             className="w-full sm:w-auto border-emerald-500 text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950 px-4 sm:px-6 py-2 sm:py-2.5 text-sm sm:text-base whitespace-nowrap"
@@ -1848,7 +1857,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         )}
 
                         <p className="text-xs text-center" style={{color: 'var(--text-secondary)'}}>
-                          Uses 1 AI credit. Focuses on clarity, contrast, and CTR.
+                          Requires title, description, and tags. Uses 1 AI credit.
                         </p>
                       </div>
 
