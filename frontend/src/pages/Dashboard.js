@@ -2035,6 +2035,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                   src={URL.createObjectURL(imageFile)} 
                                   alt="Beat cover"
                                   className="w-full h-full object-contain"
+                                  style={{ objectFit: "contain" }}
                                 />
                                 <div className="absolute inset-0 pointer-events-none">
                                   <button
@@ -2099,6 +2100,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                 alt="Mini preview"
                                 className="w-full h-full object-contain"
                                 style={{
+                                  objectFit: "contain",
                                   transform: `translate(${imagePosX * 50}%, ${imagePosY * 50}%) scale(${imageScaleX}, ${imageScaleY})`,
                                   transformOrigin: 'center'
                                 }}
