@@ -847,7 +847,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const previewContainerRef = useRef(null);
   const [dragState, setDragState] = useState(null);
   const [resizeState, setResizeState] = useState(null);
-  const [previewSize, setPreviewSize] = useState(320);
+  const [previewSize, setPreviewSize] = useState(720);
   const [imageMeta, setImageMeta] = useState({ width: 0, height: 0, ratio: 1 });
   const [imagePreviewUrl, setImagePreviewUrl] = useState("");
   const [audioPreviewUrl, setAudioPreviewUrl] = useState("");
