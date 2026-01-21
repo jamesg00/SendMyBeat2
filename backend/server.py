@@ -22,6 +22,7 @@ from google.auth.transport.requests import Request as GoogleRequest
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 import json
+import base64
 import shutil
 import stripe
 
@@ -115,6 +116,37 @@ async def llm_chat(
         messages=[
             {"role": "system", "content": system_message},
             {"role": "user", "content": user_message},
+        ],
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
+    return (response.choices[0].message.content or "").strip()
+
+
+async def llm_chat_with_image(
+    system_message: str,
+    user_message: str,
+    image_bytes: bytes,
+    image_mime: str,
+    temperature: float = 0.5,
+    max_tokens: int | None = None,
+    provider: str | None = None,
+    model: str | None = None,
+) -> str:
+    client, settings = _get_llm_client(provider_override=provider, model_override=model)
+    image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+    image_url = f"data:{image_mime};base64,{image_b64}"
+    response = await client.chat.completions.create(
+        model=settings["model"],
+        messages=[
+            {"role": "system", "content": system_message},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": user_message},
+                    {"type": "image_url", "image_url": {"url": image_url}},
+                ],
+            },
         ],
         temperature=temperature,
         max_tokens=max_tokens,
@@ -219,6 +251,15 @@ class BeatAnalysisResponse(BaseModel):
     weaknesses: List[str]
     suggestions: List[str]
     predicted_performance: str  # "Poor", "Average", "Good", "Excellent"
+
+class ThumbnailCheckResponse(BaseModel):
+    score: int  # 0-100 overall thumbnail quality
+    verdict: str
+    strengths: List[str]
+    issues: List[str]
+    suggestions: List[str]
+    text_overlay_suggestion: str
+    branding_suggestion: str
 
 class GrowthStreak(BaseModel):
     user_id: str
@@ -1307,58 +1348,57 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
         if llm_provider not in (None, "openai", "grok"):
             raise HTTPException(status_code=400, detail="Invalid llm_provider. Use 'openai' or 'grok'.")
 
-        # Generate tags (reduce count to make room for YouTube + custom tags)
-        # Grok is faster/cheaper at a lower count; OpenAI can handle a higher count.
-        base_tag_count = 300 if llm_provider == "grok" else 450
+        # Generate tags (avoid tag stuffing; focus on relevance + search intent)
+        base_tag_count = 60 if llm_provider == "grok" else 80
         prompt = f"""Generate exactly {base_tag_count} YouTube tags for: "{request.query}"
 
 CRITICAL RULES:
 1. BE HYPER-SPECIFIC to the artist/style mentioned
-2. NO GENERIC TAGS (like "zen beat", "groove beat", "chill instrumental") - these DON'T work for specific searches
+2. NO GENERIC TAGS (like "zen beat", "groove beat", "chill instrumental")
 3. ONLY tags that someone would actually type when searching for THIS specific artist/style
-4. Focus on variations of the EXACT artist name and related artists in the SAME genre
+4. Avoid tag stuffing: no redundant variations, no off-genre artists, no unrelated trends
+5. Favor high-intent searches over volume padding
 
 REQUIRED TAG CATEGORIES:
 
-1. ARTIST NAME VARIATIONS (50+ tags):
+1. ARTIST NAME VARIATIONS (15-20 tags):
    - Full name variations (e.g., "lil uzi vert type beat", "uzi type beat", "lil uzi")
    - With "type beat", "style beat", "instrumental", "beat"
    - Real name if famous (e.g., "symere woods type beat")
-   - Year variations (e.g., "lil uzi vert type beat 2025")
-   - Location if relevant (e.g., "philly type beat")
+   - 1-2 year variations only if relevant
+   - Location only if strongly tied to the artist (e.g., "philly type beat")
 
-2. ARTIST'S POPULAR PROJECTS/ERAS (30+ tags):
+2. ARTIST'S POPULAR PROJECTS/ERAS (8-12 tags):
    - Album names (e.g., "pink tape type beat", "eternal atake type beat")
    - Song names (e.g., "just wanna rock type beat")
    - Era/style (e.g., "2020 lil uzi type beat", "new lil uzi type beat")
 
-3. SIMILAR/RELATED ARTISTS (100+ tags):
+3. SIMILAR/RELATED ARTISTS (12-18 tags):
    - Artists in the SAME genre/subgenre
    - Artists with similar sound
    - All with "type beat" variations
    - Example: If lil uzi, include: playboi carti, ken carson, destroy lonely, yeat, etc.
 
-4. SPECIFIC SUBGENRE TAGS (50+ tags):
+4. SPECIFIC SUBGENRE TAGS (8-12 tags):
    - Exact subgenre (e.g., "rage type beat", "melodic trap beat", "plugg type beat")
    - NOT generic genres (avoid just "trap" or "hip hop")
    - Be specific to the sound
 
-5. PRODUCER TAGS (30+ tags):
+5. PRODUCER TAGS (5-8 tags):
    - Famous producers in that style (e.g., "working on dying type beat", "maaly raw type beat")
    - Production style (e.g., "808 mafia type beat")
 
-6. SEARCH INTENT TAGS (30+ tags):
+6. SEARCH INTENT TAGS (6-10 tags):
    - "free [artist] type beat"
    - "[artist] type beat free for profit"
    - "[artist] instrumental"
    - "beat like [artist]"
    - "[artist] style"
 
-7. COMPETITIVE TAGS (30+ tags):
-   - Other popular beat makers' styles
-   - Trending sounds in that niche
+7. COMPETITIVE TAGS (5-8 tags):
+   - ONLY if directly relevant to the artist's niche
 
-FORMAT: Return ONLY the tags separated by commas. NO explanations, NO generic filler tags, ONLY hyper-specific tags that match real searches.
+FORMAT: Return ONLY the tags separated by commas. NO explanations, NO generic filler tags. Keep tags short (2-5 words max).
 
 EXAMPLE of GOOD vs BAD:
 GOOD: "lil uzi vert type beat", "pink tape type beat", "playboi carti type beat", "rage type beat", "philly type beat"
@@ -1367,7 +1407,7 @@ BAD: "zen beat", "groove beat", "chill instrumental", "relaxing music", "study b
 Generate {base_tag_count} HYPER-SPECIFIC tags now:"""
         
         response = await llm_chat(
-            system_message="You are an expert YouTube SEO specialist for beat producers. You ONLY generate hyper-specific, laser-targeted tags that match EXACTLY what people search for. NO generic tags.",
+            system_message="You are an expert YouTube SEO specialist for beat producers. You ONLY generate hyper-specific, high-intent tags. Avoid tag stuffing, redundancy, and off-genre artists.",
             user_message=prompt,
             provider=llm_provider,
         )
@@ -1399,8 +1439,8 @@ Generate {base_tag_count} HYPER-SPECIFIC tags now:"""
                 seen.add(tag_lower)
                 unique_tags.append(tag)
         
-        # Limit to 500 tags
-        final_tags = unique_tags[:500]
+        # Limit to a focused set to avoid tag stuffing
+        final_tags = unique_tags[:120]
         
         logging.info(f"Generated {len(final_tags)} total tags: {len(ai_tags)} AI + {len(youtube_type_beat_tags)} YouTube + {len(request.custom_tags or [])} custom")
         
@@ -1861,13 +1901,14 @@ Analyze and provide ONLY valid JSON in this format:
 
 SCORING CRITERIA:
 - Title Score (0-100): Is it searchable? Does it include artist name? Type beat format?
-- Tags Score (0-100): Quantity, diversity, relevance, trending terms included?
+- Tags Score (0-100): Relevance and intent matter more than volume. Penalize tag stuffing or off-genre tags.
 - SEO Score (0-100): Overall searchability and discoverability
 - Overall Score: Average of all scores
 
 PREDICTED PERFORMANCE: "Poor" (0-40), "Average" (41-65), "Good" (66-85), "Excellent" (86-100)
 
-Be honest but encouraging. Focus on actionable improvements."""
+Be honest but encouraging. Focus on actionable improvements.
+If tags look stuffed or irrelevant, explicitly say so and recommend a smaller, high-intent set (20-40)."""
 
         # Get AI analysis
         response = await llm_chat(
@@ -1908,6 +1949,95 @@ Be honest but encouraging. Focus on actionable improvements."""
     except Exception as e:
         logging.error(f"Beat analysis error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============ Thumbnail Checker Route ============
+@api_router.post("/beat/thumbnail-check", response_model=ThumbnailCheckResponse)
+async def check_thumbnail(
+    file: UploadFile = File(...),
+    title: str = Form(""),
+    tags: str = Form(""),
+    description: str = Form(""),
+    llm_provider: Optional[str] = Form(None),
+    current_user: dict = Depends(get_current_user),
+):
+    """Analyze a thumbnail image for click potential and clarity"""
+    try:
+        has_credit = await check_and_use_credit(current_user['id'], consume=False)
+        if not has_credit:
+            status = await get_user_subscription_status(current_user['id'])
+            raise HTTPException(
+                status_code=402,
+                detail={
+                    "message": "Daily limit reached. Upgrade to Pro for unlimited thumbnail checks!",
+                    "resets_at": status.get('resets_at')
+                }
+            )
+
+        allowed_types = {"image/jpeg", "image/png", "image/webp"}
+        if file.content_type not in allowed_types:
+            raise HTTPException(status_code=400, detail="Invalid image type. Use JPG, PNG, or WEBP.")
+
+        image_bytes = await file.read()
+        if not image_bytes:
+            raise HTTPException(status_code=400, detail="Empty image file.")
+
+        analysis_prompt = f"""You are a YouTube thumbnail expert for beat producers. Analyze this thumbnail for click-through potential.
+
+Context:
+- Video title: "{title}"
+- Tags: "{tags}"
+- Description (optional): "{description}"
+
+Focus on:
+1) Readability at small size (mobile)
+2) Contrast and focal point clarity
+3) Visual relevance to the title/artist vibe
+4) Branding consistency and uniqueness
+5) Whether the text is too small or cluttered
+
+Return STRICT JSON with this exact schema:
+{{
+  "score": 0-100,
+  "verdict": "one short sentence",
+  "strengths": ["..."],
+  "issues": ["..."],
+  "suggestions": ["..."],
+  "text_overlay_suggestion": "short text idea for the thumbnail",
+  "branding_suggestion": "one short branding tweak"
+}}
+"""
+
+        response_text = await llm_chat_with_image(
+            system_message="You are a ruthless but helpful thumbnail critic. Be concise, practical, and focused on CTR.",
+            user_message=analysis_prompt,
+            image_bytes=image_bytes,
+            image_mime=file.content_type,
+            provider=llm_provider,
+            max_tokens=600,
+        )
+
+        try:
+            analysis = json.loads(response_text)
+            await consume_credit(current_user['id'])
+            return ThumbnailCheckResponse(**analysis)
+        except Exception as e:
+            logging.error(f"Failed to parse thumbnail analysis: {str(e)}")
+            await consume_credit(current_user['id'])
+            return ThumbnailCheckResponse(
+                score=55,
+                verdict="Thumbnail analysis completed but formatting failed.",
+                strengths=["Clear subject or artwork present"],
+                issues=["Unable to parse detailed feedback"],
+                suggestions=["Try again for full details", "Increase contrast and simplify text"],
+                text_overlay_suggestion="FUTURE x UZI TYPE BEAT",
+                branding_suggestion="Add a consistent corner badge with your logo",
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Thumbnail check error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to analyze thumbnail: {str(e)}")
 
 
 # ============ YouTube Upload Routes ============

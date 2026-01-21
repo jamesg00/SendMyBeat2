@@ -18,6 +18,8 @@ import UpgradeModal from "@/components/UpgradeModal";
 import AdBanner from "@/components/AdBanner";
 import ProgressBar from "@/components/ProgressBar";
 
+const TAG_LIMIT = 120;
+
 const Dashboard = ({ setIsAuthenticated }) => {
   const [user, setUser] = useState(null);
   const [tagQuery, setTagQuery] = useState("");
@@ -104,6 +106,11 @@ const Dashboard = ({ setIsAuthenticated }) => {
   // Beat Analyzer states
   const [beatAnalysis, setBeatAnalysis] = useState(null);
   const [analyzingBeat, setAnalyzingBeat] = useState(false);
+
+  // Thumbnail Checker states
+  const [thumbnailCheckFile, setThumbnailCheckFile] = useState(null);
+  const [thumbnailCheckResult, setThumbnailCheckResult] = useState(null);
+  const [checkingThumbnail, setCheckingThumbnail] = useState(false);
 
   const isPro = !!subscriptionStatus?.is_subscribed;
 
@@ -425,15 +432,15 @@ const Dashboard = ({ setIsAuthenticated }) => {
     }
 
     // Check limit
-    if (uniqueTags.length > 500) {
-      const excess = uniqueTags.length - 500;
-      toast.error(`Cannot add all tags. Would exceed 500 limit by ${excess} tags.`);
+    if (uniqueTags.length > TAG_LIMIT) {
+      const excess = uniqueTags.length - TAG_LIMIT;
+      toast.error(`Cannot add all tags. Would exceed ${TAG_LIMIT} limit by ${excess} tags.`);
       return;
     }
 
     setGeneratedTags(uniqueTags);
     setAdditionalTags(""); // Clear input
-    toast.success(`Added ${newTags.length} tags! Total: ${uniqueTags.length}/500`);
+    toast.success(`Added ${newTags.length} tags! Total: ${uniqueTags.length}/${TAG_LIMIT}`);
   };
 
   const copyDescription = (content) => {
@@ -639,6 +646,41 @@ const Dashboard = ({ setIsAuthenticated }) => {
       toast.error("Failed to analyze beat");
     } finally {
       setAnalyzingBeat(false);
+    }
+  };
+
+  const handleThumbnailCheck = async () => {
+    if (!thumbnailCheckFile) {
+      toast.error("Please upload a thumbnail image first");
+      return;
+    }
+
+    setCheckingThumbnail(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", thumbnailCheckFile);
+      formData.append("title", uploadTitle || "");
+      formData.append("tags", generatedTags.join(", "));
+      formData.append("description", uploadDescriptionText || "");
+      formData.append("llm_provider", "grok");
+
+      const response = await axios.post(`${API}/beat/thumbnail-check`, formData, {
+        headers: { "Content-Type": "multipart/form-data" }
+      });
+      setThumbnailCheckResult(response.data);
+      toast.success("Thumbnail check complete!");
+    } catch (error) {
+      if (error.response?.status === 402) {
+        setShowUpgradeModal(true);
+        toast.error("Daily limit reached! Upgrade to continue.");
+      } else {
+        toast.error("Failed to analyze thumbnail");
+      }
+    } finally {
+      setCheckingThumbnail(false);
+      setTimeout(() => {
+        fetchSubscriptionStatus();
+      }, 500);
     }
   };
 
@@ -1087,7 +1129,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                     <Sparkles className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 flex-shrink-0" />
                     <span>Generate YouTube Tags</span>
                   </CardTitle>
-                  <CardDescription className="text-xs sm:text-sm">AI generates tags + searches artist's popular songs + adds your custom tags (500 total)</CardDescription>
+                  <CardDescription className="text-xs sm:text-sm">AI generates focused tags + searches artist's popular songs + adds your custom tags (up to 120 total)</CardDescription>
                 </CardHeader>
                 <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
                   <form onSubmit={handleGenerateTags} className="space-y-3 sm:space-y-4" data-testid="tag-generator-form">
@@ -1133,7 +1175,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         className="text-sm sm:text-base"
                       />
                       <p className="text-xs" style={{color: 'var(--text-secondary)'}}>
-                        Add your own tags (comma-separated). Total limit: 500 tags
+                        Add your own tags (comma-separated). Total limit: {TAG_LIMIT} tags
                       </p>
                     </div>
                     
@@ -1143,7 +1185,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                       disabled={loadingTags}
                       data-testid="generate-tags-btn"
                     >
-                      {loadingTags ? "Generating Tags..." : "Generate 500 Tags (AI + YouTube + Custom)"}
+                      {loadingTags ? "Generating Tags..." : "Generate 60-80 Tags (AI + YouTube + Custom)"}
                     </Button>
                   </form>
                 </CardContent>
@@ -1215,7 +1257,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                               Add More Tags
                             </Label>
                             <span className="text-xs sm:text-sm" style={{color: 'var(--text-secondary)'}}>
-                              {generatedTags.length}/500
+                              {generatedTags.length}/{TAG_LIMIT}
                             </span>
                           </div>
                           <Textarea
@@ -1224,17 +1266,17 @@ const Dashboard = ({ setIsAuthenticated }) => {
                             value={additionalTags}
                             onChange={(e) => setAdditionalTags(e.target.value)}
                             rows={2}
-                            disabled={generatedTags.length >= 500}
+                            disabled={generatedTags.length >= TAG_LIMIT}
                             className="text-sm sm:text-base"
                           />
                           <Button
                             size="sm"
                             onClick={handleAddMoreTags}
-                            disabled={generatedTags.length >= 500 || !additionalTags.trim()}
+                            disabled={generatedTags.length >= TAG_LIMIT || !additionalTags.trim()}
                             className="w-full gap-1 sm:gap-2 bg-green-600 hover:bg-green-700 text-sm py-2.5"
                           >
                             <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
-                            {generatedTags.length >= 500 ? "Limit Reached (500)" : "Add Tags"}
+                            {generatedTags.length >= TAG_LIMIT ? `Limit Reached (${TAG_LIMIT})` : "Add Tags"}
                           </Button>
                         </div>
                       </div>
@@ -1691,6 +1733,101 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         </div>
                       </div>
                     )}
+
+                    <div className="mt-5 border-t pt-4" style={{ borderColor: 'var(--border-color)' }}>
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-3">
+                        <p className="font-semibold flex items-center gap-2 text-sm sm:text-base">
+                          <Sparkles className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-500 flex-shrink-0" />
+                          <span>Thumbnail Checker (AI)</span>
+                        </p>
+                        <Button
+                          onClick={handleThumbnailCheck}
+                          disabled={checkingThumbnail || !thumbnailCheckFile}
+                          variant="outline"
+                          size="default"
+                          className="w-full sm:w-auto border-emerald-500 text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950 px-4 sm:px-6 py-2 sm:py-2.5 text-sm sm:text-base whitespace-nowrap"
+                        >
+                          {checkingThumbnail ? "Checking..." : "Check Thumbnail"}
+                        </Button>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="border-2 border-dashed rounded-lg p-3 text-center" style={{ borderColor: 'var(--border-color)' }}>
+                          <Input
+                            id="thumbnail-check-upload"
+                            type="file"
+                            accept=".jpg,.jpeg,.png,.webp"
+                            onChange={(e) => setThumbnailCheckFile(e.target.files?.[0] || null)}
+                            className="hidden"
+                            data-testid="thumbnail-check-upload-input"
+                          />
+                          <label htmlFor="thumbnail-check-upload" className="cursor-pointer">
+                            <Upload className="h-7 w-7 mx-auto mb-2 text-slate-400" />
+                            {thumbnailCheckFile ? (
+                              <p className="text-sm text-green-600 font-medium">{thumbnailCheckFile.name}</p>
+                            ) : (
+                              <p className="text-sm text-slate-600">Click to upload thumbnail</p>
+                            )}
+                          </label>
+                        </div>
+
+                        {imageFile && !thumbnailCheckFile && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setThumbnailCheckFile(imageFile)}
+                            className="w-full text-xs sm:text-sm"
+                          >
+                            Use uploaded thumbnail image
+                          </Button>
+                        )}
+
+                        <p className="text-xs text-center" style={{color: 'var(--text-secondary)'}}>
+                          Uses 1 AI credit. Focuses on clarity, contrast, and CTR.
+                        </p>
+                      </div>
+
+                      {thumbnailCheckResult && (
+                        <div className="mt-4 space-y-3">
+                          <div className="text-center p-3 rounded-lg" style={{backgroundColor: 'var(--bg-tertiary)'}}>
+                            <p className="text-2xl font-bold gradient-text mb-1">{thumbnailCheckResult.score}/100</p>
+                            <p className="text-xs sm:text-sm" style={{color: 'var(--text-secondary)'}}>
+                              {thumbnailCheckResult.verdict}
+                            </p>
+                          </div>
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <div>
+                              <p className="font-semibold text-emerald-600 mb-1 text-sm">Strengths</p>
+                              <ul className="text-xs sm:text-sm space-y-1">
+                                {thumbnailCheckResult.strengths.map((s, i) => (
+                                  <li key={i} className="text-emerald-600">• {s}</li>
+                                ))}
+                              </ul>
+                            </div>
+                            <div>
+                              <p className="font-semibold text-orange-600 mb-1 text-sm">Issues</p>
+                              <ul className="text-xs sm:text-sm space-y-1">
+                                {thumbnailCheckResult.issues.map((s, i) => (
+                                  <li key={i} className="text-orange-600">• {s}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          </div>
+                          <div>
+                            <p className="font-semibold text-blue-600 mb-1 text-sm">Suggestions</p>
+                            <ul className="text-xs sm:text-sm space-y-1">
+                              {thumbnailCheckResult.suggestions.map((s, i) => (
+                                <li key={i} style={{color: 'var(--text-primary)'}}>• {s}</li>
+                              ))}
+                            </ul>
+                          </div>
+                          <div className="text-xs sm:text-sm rounded-lg p-3" style={{backgroundColor: 'var(--bg-secondary)'}}>
+                            <p><strong>Overlay idea:</strong> {thumbnailCheckResult.text_overlay_suggestion}</p>
+                            <p><strong>Branding:</strong> {thumbnailCheckResult.branding_suggestion}</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
 
                     {!beatAnalysis && !analyzingBeat && (
                       <p className="text-xs sm:text-sm text-center leading-relaxed px-2" style={{color: 'var(--text-secondary)'}}>
