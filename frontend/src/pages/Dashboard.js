@@ -111,6 +111,9 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [thumbnailCheckFile, setThumbnailCheckFile] = useState(null);
   const [thumbnailCheckResult, setThumbnailCheckResult] = useState(null);
   const [checkingThumbnail, setCheckingThumbnail] = useState(false);
+  const [thumbnailProgress, setThumbnailProgress] = useState(0);
+  const thumbnailAbortRef = useRef(null);
+  const thumbnailProgressIntervalRef = useRef(null);
 
   const isPro = !!subscriptionStatus?.is_subscribed;
 
@@ -656,6 +659,15 @@ const Dashboard = ({ setIsAuthenticated }) => {
     }
 
     setCheckingThumbnail(true);
+    setThumbnailProgress(5);
+    const controller = new AbortController();
+    thumbnailAbortRef.current = controller;
+    if (thumbnailProgressIntervalRef.current) {
+      clearInterval(thumbnailProgressIntervalRef.current);
+    }
+    thumbnailProgressIntervalRef.current = setInterval(() => {
+      setThumbnailProgress((prev) => (prev < 95 ? prev + 5 : prev));
+    }, 500);
     try {
       const formData = new FormData();
       formData.append("file", thumbnailCheckFile);
@@ -665,11 +677,17 @@ const Dashboard = ({ setIsAuthenticated }) => {
       formData.append("llm_provider", "grok");
 
       const response = await axios.post(`${API}/beat/thumbnail-check`, formData, {
-        headers: { "Content-Type": "multipart/form-data" }
+        headers: { "Content-Type": "multipart/form-data" },
+        signal: controller.signal
       });
       setThumbnailCheckResult(response.data);
+      setThumbnailProgress(100);
       toast.success("Thumbnail check complete!");
     } catch (error) {
+      if (error?.code === "ERR_CANCELED") {
+        return;
+      }
+      setThumbnailProgress(0);
       if (error.response?.status === 402) {
         setShowUpgradeModal(true);
         toast.error("Daily limit reached! Upgrade to continue.");
@@ -677,11 +695,33 @@ const Dashboard = ({ setIsAuthenticated }) => {
         toast.error("Failed to analyze thumbnail");
       }
     } finally {
+      if (thumbnailProgressIntervalRef.current) {
+        clearInterval(thumbnailProgressIntervalRef.current);
+        thumbnailProgressIntervalRef.current = null;
+      }
+      thumbnailAbortRef.current = null;
       setCheckingThumbnail(false);
       setTimeout(() => {
         fetchSubscriptionStatus();
       }, 500);
     }
+  };
+
+  const cancelThumbnailCheck = () => {
+    if (!checkingThumbnail) {
+      return;
+    }
+    if (thumbnailAbortRef.current) {
+      thumbnailAbortRef.current.abort();
+      thumbnailAbortRef.current = null;
+    }
+    if (thumbnailProgressIntervalRef.current) {
+      clearInterval(thumbnailProgressIntervalRef.current);
+      thumbnailProgressIntervalRef.current = null;
+    }
+    setThumbnailProgress(0);
+    setCheckingThumbnail(false);
+    toast.info("Thumbnail check canceled");
   };
 
   const disconnectYouTube = async () => {
@@ -1740,16 +1780,41 @@ const Dashboard = ({ setIsAuthenticated }) => {
                           <Sparkles className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-500 flex-shrink-0" />
                           <span>Thumbnail Checker (AI)</span>
                         </p>
-                        <Button
-                          onClick={handleThumbnailCheck}
-                          disabled={checkingThumbnail || !thumbnailCheckFile}
-                          variant="outline"
-                          size="default"
-                          className="w-full sm:w-auto border-emerald-500 text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950 px-4 sm:px-6 py-2 sm:py-2.5 text-sm sm:text-base whitespace-nowrap"
-                        >
-                          {checkingThumbnail ? "Checking..." : "Check Thumbnail"}
-                        </Button>
+                        <div className="flex w-full sm:w-auto gap-2">
+                          <Button
+                            onClick={handleThumbnailCheck}
+                            disabled={checkingThumbnail || !thumbnailCheckFile}
+                            variant="outline"
+                            size="default"
+                            className="w-full sm:w-auto border-emerald-500 text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950 px-4 sm:px-6 py-2 sm:py-2.5 text-sm sm:text-base whitespace-nowrap"
+                          >
+                            {checkingThumbnail ? "Checking..." : "Check Thumbnail"}
+                          </Button>
+                          {checkingThumbnail && (
+                            <Button
+                              onClick={cancelThumbnailCheck}
+                              variant="ghost"
+                              size="default"
+                              className="w-full sm:w-auto text-slate-600 dark:text-slate-300"
+                            >
+                              Cancel
+                            </Button>
+                          )}
+                        </div>
                       </div>
+                      {checkingThumbnail && (
+                        <div className="mb-3">
+                          <div className="w-full bg-slate-200 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
+                            <div
+                              className="h-2 bg-emerald-500 transition-all duration-300"
+                              style={{ width: `${thumbnailProgress}%` }}
+                            />
+                          </div>
+                          <p className="text-xs text-center mt-1" style={{ color: 'var(--text-secondary)' }}>
+                            Analyzing thumbnail... {thumbnailProgress}%
+                          </p>
+                        </div>
+                      )}
 
                       <div className="space-y-3">
                         <div className="border-2 border-dashed rounded-lg p-3 text-center" style={{ borderColor: 'var(--border-color)' }}>
