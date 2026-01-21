@@ -74,6 +74,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [imagePosY, setImagePosY] = useState(0);
   const [backgroundColor, setBackgroundColor] = useState("black");
   const [removeWatermark, setRemoveWatermark] = useState(false);
+  const [showImageSettings, setShowImageSettings] = useState(true);
   const [uploadingAudio, setUploadingAudio] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -1780,6 +1781,20 @@ const Dashboard = ({ setIsAuthenticated }) => {
                       </div>
 
                       <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label>Image Settings</Label>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setShowImageSettings((prev) => !prev)}
+                          >
+                            {showImageSettings ? "Hide" : "Show"}
+                          </Button>
+                        </div>
+
+                        {showImageSettings && (
+                          <>
                         <Label>Background & Image Position</Label>
                         <div className="flex flex-wrap items-center gap-2">
                           <Button
@@ -1921,6 +1936,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
                             onChange={(e) => setImagePosY(Number(e.target.value))}
                           />
                         </div>
+                        </>
+                        )}
                       </div>
 
                       <div className="space-y-2">
@@ -2017,7 +2034,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                 <img 
                                   src={URL.createObjectURL(imageFile)} 
                                   alt="Beat cover"
-                                  className="w-full h-full object-cover"
+                                  className="w-full h-full object-contain"
                                 />
                                 <div className="absolute inset-0 pointer-events-none">
                                   <button
@@ -2080,7 +2097,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                               <img
                                 src={URL.createObjectURL(imageFile)}
                                 alt="Mini preview"
-                                className="w-full h-full object-cover"
+                                className="w-full h-full object-contain"
                                 style={{
                                   transform: `translate(${imagePosX * 50}%, ${imagePosY * 50}%) scale(${imageScaleX}, ${imageScaleY})`,
                                   transformOrigin: 'center'
