@@ -1409,6 +1409,12 @@ const Dashboard = ({ setIsAuthenticated }) => {
                       placeholder="e.g., Trap Beat Template"
                       value={newDescription.title}
                       onChange={(e) => setNewDescription({ ...newDescription, title: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && newDescription.content.trim()) {
+                          e.preventDefault();
+                          handleSaveDescription();
+                        }
+                      }}
                       data-testid="desc-title-input"
                     />
                   </div>
@@ -1420,8 +1426,17 @@ const Dashboard = ({ setIsAuthenticated }) => {
                       rows={8}
                       value={newDescription.content}
                       onChange={(e) => setNewDescription({ ...newDescription, content: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey && newDescription.title.trim()) {
+                          e.preventDefault();
+                          handleSaveDescription();
+                        }
+                      }}
                       data-testid="desc-content-input"
                     />
+                    <p className="text-xs" style={{color: 'var(--text-secondary)'}}>
+                      Press Enter to save. Use Shift+Enter for a new line.
+                    </p>
                   </div>
                   <Button
                     onClick={handleSaveDescription}
