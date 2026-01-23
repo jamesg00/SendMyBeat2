@@ -76,7 +76,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [imagePosY, setImagePosY] = useState(0);
   const [backgroundColor, setBackgroundColor] = useState("black");
   const [removeWatermark, setRemoveWatermark] = useState(false);
-  const [showImageSettings, setShowImageSettings] = useState(true);
+  const [showImageSettings, setShowImageSettings] = useState(false);
   const [uploadingAudio, setUploadingAudio] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -994,6 +994,14 @@ const Dashboard = ({ setIsAuthenticated }) => {
     };
   }, [dragState, imagePosX, imagePosY]);
 
+  const fitImageToFrame = () => {
+    setImageScaleX(1);
+    setImageScaleY(1);
+    setImagePosX(0);
+    setImagePosY(0);
+    setLockImageScale(true);
+  };
+
   useEffect(() => {
     if (!imageFile) {
       setImagePreviewUrl("");
@@ -1010,6 +1018,20 @@ const Dashboard = ({ setIsAuthenticated }) => {
     img.src = url;
     return () => URL.revokeObjectURL(url);
   }, [imageFile]);
+
+  useEffect(() => {
+    if (imageFile) {
+      fitImageToFrame();
+    }
+  }, [imageFile, videoAspectRatio]);
+
+  useEffect(() => {
+    if (audioFile && imageFile) {
+      setShowImageSettings(true);
+      return;
+    }
+    setShowImageSettings(false);
+  }, [audioFile, imageFile]);
 
   useEffect(() => {
     if (!audioFile) {
@@ -1030,11 +1052,11 @@ const Dashboard = ({ setIsAuthenticated }) => {
       const deltaY = event.clientY - resizeState.startY;
       const xSign = resizeState.corner.includes("l") ? -1 : 1;
       const ySign = resizeState.corner.includes("t") ? -1 : 1;
-      const nextX = clamp(resizeState.originX + xSign * deltaX / (rect.width / 2), 0.5, 2);
-      const nextY = clamp(resizeState.originY + ySign * deltaY / (rect.height / 2), 0.5, 2);
+      const nextX = clamp(resizeState.originX + xSign * deltaX / (rect.width / 2), 0.5, 1);
+      const nextY = clamp(resizeState.originY + ySign * deltaY / (rect.height / 2), 0.5, 1);
 
       if (lockImageScale) {
-        const locked = clamp((nextX + nextY) / 2, 0.5, 2);
+        const locked = clamp((nextX + nextY) / 2, 0.5, 1);
         setImageScaleX(locked);
         setImageScaleY(locked);
       } else {
@@ -2079,6 +2101,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         </Select>
                       </div>
 
+                      {audioFile && imageFile && (
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
                           <Label>Image Settings</Label>
@@ -2127,6 +2150,11 @@ const Dashboard = ({ setIsAuthenticated }) => {
                               Right
                             </Button>
                           </div>
+                          <div className="pt-2">
+                            <Button type="button" variant="outline" size="sm" onClick={fitImageToFrame}>
+                              Fit image
+                            </Button>
+                          </div>
                         </div>
 
                         <div className="space-y-2">
@@ -2138,7 +2166,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                             id="image-scale-x"
                             type="range"
                             min="0.5"
-                            max="2"
+                            max="1"
                             step="0.05"
                             value={imageScaleX}
                             onChange={(e) => {
@@ -2158,7 +2186,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                             id="image-scale-y"
                             type="range"
                             min="0.5"
-                            max="2"
+                            max="1"
                             step="0.05"
                             value={imageScaleY}
                             onChange={(e) => {
@@ -2238,6 +2266,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         </>
                         )}
                       </div>
+                      )}
 
                       <div className="space-y-2">
                         <Label htmlFor="privacy-status">Privacy Status</Label>
@@ -2345,25 +2374,25 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                   <button
                                     type="button"
                                     onMouseDown={handleResizeStart("tl")}
-                                    className="absolute -top-2 -left-2 h-4 w-4 rounded-full border border-white bg-black/70 pointer-events-auto"
+                                    className="absolute -top-2.5 -left-2.5 h-5 w-5 rounded-full border-2 border-white/80 bg-black/80 shadow-md pointer-events-auto"
                                     aria-label="Resize top left"
                                   />
                                   <button
                                     type="button"
                                     onMouseDown={handleResizeStart("tr")}
-                                    className="absolute -top-2 -right-2 h-4 w-4 rounded-full border border-white bg-black/70 pointer-events-auto"
+                                    className="absolute -top-2.5 -right-2.5 h-5 w-5 rounded-full border-2 border-white/80 bg-black/80 shadow-md pointer-events-auto"
                                     aria-label="Resize top right"
                                   />
                                   <button
                                     type="button"
                                     onMouseDown={handleResizeStart("bl")}
-                                    className="absolute -bottom-2 -left-2 h-4 w-4 rounded-full border border-white bg-black/70 pointer-events-auto"
+                                    className="absolute -bottom-2.5 -left-2.5 h-5 w-5 rounded-full border-2 border-white/80 bg-black/80 shadow-md pointer-events-auto"
                                     aria-label="Resize bottom left"
                                   />
                                   <button
                                     type="button"
                                     onMouseDown={handleResizeStart("br")}
-                                    className="absolute -bottom-2 -right-2 h-4 w-4 rounded-full border border-white bg-black/70 pointer-events-auto"
+                                    className="absolute -bottom-2.5 -right-2.5 h-5 w-5 rounded-full border-2 border-white/80 bg-black/80 shadow-md pointer-events-auto"
                                     aria-label="Resize bottom right"
                                   />
                                 </div>
@@ -2382,9 +2411,9 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                 Your browser doesn't support audio
                               </audio>
                             </div>
-                            <p className="text-sm mt-3 text-center" style={{color: 'var(--text-secondary)'}}>
-                              Drag to reposition. Scale with the slider. Aspect ratio: {videoAspectRatio}
-                            </p>
+                              <p className="text-sm mt-3 text-center" style={{color: 'var(--text-secondary)'}}>
+                                Drag to reposition. Scale down only. Use "Fit image" to lock. Aspect ratio: {videoAspectRatio}
+                              </p>
                           </CardContent>
                         </Card>
                       )}
