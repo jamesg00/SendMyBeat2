@@ -1307,8 +1307,9 @@ const Dashboard = ({ setIsAuthenticated }) => {
                               }}
                               className="ml-2 text-red-500 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-700"
                               title="Delete tag"
+                              aria-label="Delete tag"
                             >
-                              A-
+                              x
                             </button>
                           </span>
                         ))}
