@@ -32,23 +32,9 @@ const AdBanner = ({
     env: process.env.NODE_ENV 
   });
 
-  // Show placeholder if not configured
+  // Hide slot entirely if not configured to avoid empty space
   if (!isAdSenseConfigured) {
-    return (
-      <div 
-        className="bg-gray-100 dark:bg-gray-800 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg flex items-center justify-center p-4"
-        style={{ minHeight: '90px', ...style }}
-      >
-        <div className="text-center">
-          <p className="text-sm text-gray-500 dark:text-gray-400 font-semibold">
-            Advertisement Space
-          </p>
-          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-            (Configure AdSense to show ads)
-          </p>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   // Real AdSense code - Will show in both dev and production
