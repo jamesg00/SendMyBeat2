@@ -104,7 +104,7 @@ const SubscriptionBanner = ({ creditsRemaining, uploadCreditsRemaining, isSubscr
           {/* AI Generations Card */}
           <div className={`producer-card p-3 sm:p-4 rounded-xl ${isAiLow ? 'border-2 border-red-500' : ''}`}>
             <div className="flex flex-col items-center text-center">
-              <div className={`h-10 w-10 sm:h-12 sm:w-12 rounded-full flex items-center justify-center mb-2 sm:mb-3 ${isAiLow ? 'bg-red-500' : 'bg-gradient-to-br from-blue-500 to-purple-600'}`}>
+              <div className={`h-10 w-10 sm:h-12 sm:w-12 rounded-full flex items-center justify-center mb-2 sm:mb-3 ${isAiLow ? 'bg-red-500' : 'bg-gradient-to-br from-emerald-500 to-green-600'}`}>
                 <Zap className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
               </div>
               <p className="text-xs sm:text-sm font-semibold mb-1" style={{color: 'var(--text-primary)'}}>
@@ -119,7 +119,7 @@ const SubscriptionBanner = ({ creditsRemaining, uploadCreditsRemaining, isSubscr
               {/* Progress Bar */}
               <div className="w-full h-2 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
                 <div 
-                  className={`h-full transition-all duration-300 ${isAiLow ? 'bg-red-500' : 'bg-gradient-to-r from-blue-500 to-purple-600'}`}
+                  className={`h-full transition-all duration-300 ${isAiLow ? 'bg-red-500' : 'bg-gradient-to-r from-emerald-500 to-green-600'}`}
                   style={{ width: `${aiPercentage}%` }}
                 />
               </div>
