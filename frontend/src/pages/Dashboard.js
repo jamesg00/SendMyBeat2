@@ -89,6 +89,9 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [subscriptionStatus, setSubscriptionStatus] = useState(null);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [upgradingSubscription, setUpgradingSubscription] = useState(false);
+  const [userLoaded, setUserLoaded] = useState(false);
+  const [descriptionsLoaded, setDescriptionsLoaded] = useState(false);
+  const [tagHistoryLoaded, setTagHistoryLoaded] = useState(false);
 
   // Analytics states
   const [loadingAnalytics, setLoadingAnalytics] = useState(false);
@@ -121,6 +124,13 @@ const Dashboard = ({ setIsAuthenticated }) => {
     uploadDescriptionText?.trim() &&
     generatedTags?.length
   );
+  const canShowAds = Boolean(
+    subscriptionStatus &&
+    !subscriptionStatus.is_subscribed &&
+    userLoaded &&
+    descriptionsLoaded &&
+    tagHistoryLoaded
+  );
 
   useEffect(() => {
     fetchUser();
@@ -146,6 +156,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
       setUser(response.data);
     } catch (error) {
       toast.error("Failed to fetch user data");
+    } finally {
+      setUserLoaded(true);
     }
   };
 
@@ -155,6 +167,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
       setDescriptions(response.data);
     } catch (error) {
       toast.error("Failed to fetch descriptions");
+    } finally {
+      setDescriptionsLoaded(true);
     }
   };
 
@@ -164,6 +178,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
       setTagHistory(response.data);
     } catch (error) {
       console.error("Failed to fetch tag history", error);
+    } finally {
+      setTagHistoryLoaded(true);
     }
   };
 
@@ -1141,7 +1157,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
         )}
 
         {/* Advertisement Banner - Only for free users */}
-        {subscriptionStatus && !subscriptionStatus.is_subscribed && (
+        {canShowAds && (
           <AdBanner 
             isSubscribed={subscriptionStatus.is_subscribed}
             style={{ marginBottom: '24px' }}
