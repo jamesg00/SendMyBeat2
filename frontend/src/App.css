@@ -289,17 +289,17 @@ body.dark .tag-item,
 /* Mesh Gradient Background */
 .mesh-gradient {
   background: 
-    radial-gradient(at 40% 20%, rgba(99, 102, 241, 0.3) 0px, transparent 50%),
-    radial-gradient(at 80% 0%, rgba(139, 92, 246, 0.3) 0px, transparent 50%),
-    radial-gradient(at 0% 50%, rgba(99, 102, 241, 0.2) 0px, transparent 50%);
+    radial-gradient(at 40% 20%, rgba(0, 255, 65, 0.18) 0px, transparent 55%),
+    radial-gradient(at 80% 0%, rgba(0, 204, 51, 0.22) 0px, transparent 55%),
+    radial-gradient(at 0% 50%, rgba(57, 255, 20, 0.14) 0px, transparent 55%);
   min-height: 100vh;
 }
 
 .dark .mesh-gradient {
   background: 
-    radial-gradient(at 40% 20%, rgba(129, 140, 248, 0.15) 0px, transparent 50%),
-    radial-gradient(at 80% 0%, rgba(167, 139, 250, 0.15) 0px, transparent 50%),
-    radial-gradient(at 0% 50%, rgba(129, 140, 248, 0.1) 0px, transparent 50%);
+    radial-gradient(at 40% 20%, rgba(0, 255, 65, 0.12) 0px, transparent 55%),
+    radial-gradient(at 80% 0%, rgba(0, 204, 51, 0.12) 0px, transparent 55%),
+    radial-gradient(at 0% 50%, rgba(57, 255, 20, 0.08) 0px, transparent 55%);
 }
 
 /* Music Producer Vibes */
