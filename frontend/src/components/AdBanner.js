@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 const AdBanner = ({ 
   isSubscribed, 
@@ -11,6 +11,9 @@ const AdBanner = ({
     return null;
   }
 
+  const adRef = useRef(null);
+  const [adVisible, setAdVisible] = useState(false);
+
   useEffect(() => {
     // Push ad when component mounts
     try {
@@ -20,6 +23,25 @@ const AdBanner = ({
     } catch (err) {
       console.log('AdSense error:', err);
     }
+  }, []);
+
+  useEffect(() => {
+    if (!adRef.current) return;
+
+    let attempts = 0;
+    const interval = setInterval(() => {
+      attempts += 1;
+      const status = adRef.current.getAttribute('data-ad-status');
+      if (status === 'filled') {
+        setAdVisible(true);
+        clearInterval(interval);
+      }
+      if (attempts >= 12) {
+        clearInterval(interval);
+      }
+    }, 500);
+
+    return () => clearInterval(interval);
   }, []);
 
   // Check if AdSense is configured
@@ -39,10 +61,21 @@ const AdBanner = ({
 
   // Real AdSense code - Will show in both dev and production
   return (
-    <div className="ad-container" style={style}>
+    <div
+      className="ad-container"
+      style={{
+        ...style,
+        overflow: 'hidden',
+        minHeight: adVisible ? '90px' : 0,
+        height: adVisible ? 'auto' : 0,
+        opacity: adVisible ? 1 : 0,
+        transition: 'opacity 200ms ease'
+      }}
+    >
       <ins
+        ref={adRef}
         className="adsbygoogle"
-        style={{ display: 'block', ...style }}
+        style={{ display: 'block' }}
         data-ad-client={process.env.REACT_APP_ADSENSE_CLIENT_ID}
         data-ad-slot={adSlot}
         data-ad-format={format}
