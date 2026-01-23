@@ -131,6 +131,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
     descriptionsLoaded &&
     tagHistoryLoaded
   );
+  const adsUnlocked = generatedTags.length > 0 || (tagHistory?.length || 0) > 0;
 
   useEffect(() => {
     fetchUser();
@@ -1157,7 +1158,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
         )}
 
         {/* Advertisement Banner - Only for free users */}
-        {canShowAds && (
+        {canShowAds && adsUnlocked && (
           <AdBanner 
             isSubscribed={subscriptionStatus.is_subscribed}
             style={{ marginBottom: '24px' }}
