@@ -59,7 +59,7 @@ const LandingPage = ({ setIsAuthenticated }) => {
         <Card className="w-full max-w-md glass-card animate-slide-in border-0">
           <CardHeader className="space-y-1">
             <div className="flex items-center justify-center mb-6 animate-float">
-              <img src="/logo.png" alt="SendMyBeat" className="h-20 w-20 object-contain" />
+              <img src="/sendmybeat.png" alt="SendMyBeat" className="h-20 w-20 object-contain" />
             </div>
             <CardTitle className="text-xl sm:text-2xl text-center font-bold matrix-glow rgb-hover brand-text">
               SendMyBeat
@@ -177,7 +177,7 @@ const LandingPage = ({ setIsAuthenticated }) => {
         <div className="container mx-auto px-4 sm:px-6 pt-16 sm:pt-24 pb-20 sm:pb-32 relative z-10">
           <div className="max-w-5xl mx-auto text-center">
             <div className="inline-block mb-6 sm:mb-8 pulse-glow">
-              <img src="/logo.png" alt="SendMyBeat" className="h-20 w-20 sm:h-24 sm:w-24 md:h-32 md:w-32 mx-auto object-contain" />
+              <img src="/sendmybeat.png" alt="SendMyBeat" className="h-20 w-20 sm:h-24 sm:w-24 md:h-32 md:w-32 mx-auto object-contain" />
             </div>
             <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-7xl font-bold mb-4 sm:mb-6 leading-tight matrix-glow rgb-hover brand-text px-2">
               SendMyBeat

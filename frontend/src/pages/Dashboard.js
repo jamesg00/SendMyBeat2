@@ -1111,7 +1111,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
         <div className="container mx-auto px-3 sm:px-4 md:px-6 py-3 sm:py-4 dashboard-shell">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
             <div className="flex items-center gap-2 sm:gap-3 md:gap-4">
-              <img src="/logo.png" alt="SendMyBeat" className="h-10 w-10 sm:h-12 sm:w-12 object-contain" />
+              <img src="/sendmybeat.png" alt="SendMyBeat" className="h-10 w-10 sm:h-12 sm:w-12 object-contain" />
               <div>
                 <h1 className="text-lg sm:text-xl md:text-2xl font-bold gradient-text">SendMyBeat</h1>
                 {user && <p className="text-xs sm:text-sm" style={{color: 'var(--text-secondary)'}}>Welcome back, {user.username}</p>}
