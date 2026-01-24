@@ -1,5 +1,5 @@
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -91,6 +91,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [selectedDescriptionId, setSelectedDescriptionId] = useState("");
   const [uploadDescriptionText, setUploadDescriptionText] = useState("");
   const [selectedTagsId, setSelectedTagsId] = useState("");
+  const [refinedTags, setRefinedTags] = useState([]);
+  const [refinedTagsLabel, setRefinedTagsLabel] = useState("");
   const [privacyStatus, setPrivacyStatus] = useState("public");
   const [videoAspectRatio, setVideoAspectRatio] = useState("16:9");
   const [imageScaleX, setImageScaleX] = useState(1);
@@ -120,6 +122,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
   // Analytics states
   const [loadingAnalytics, setLoadingAnalytics] = useState(false);
   const [analyticsData, setAnalyticsData] = useState(null);
+  const [joiningTagHistory, setJoiningTagHistory] = useState(false);
 
   // Grow in 120 states
   const [growthData, setGrowthData] = useState(null);
@@ -129,6 +132,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
 
   // Check-in prompt state
   const [showCheckinPrompt, setShowCheckinPrompt] = useState(false);
+  const [activeTab, setActiveTab] = useState("tags");
 
   // Beat Analyzer states
   const [beatAnalysis, setBeatAnalysis] = useState(null);
@@ -145,10 +149,18 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const thumbnailProgressIntervalRef = useRef(null);
 
   const isPro = !!subscriptionStatus?.is_subscribed;
+  const selectedTagRecord = useMemo(
+    () => tagHistory.find((tag) => tag.id === selectedTagsId),
+    [tagHistory, selectedTagsId]
+  );
+  const effectiveTags = selectedTagsId === "refined"
+    ? refinedTags
+    : (generatedTags.length ? generatedTags : (selectedTagRecord?.tags || []));
+  const hasEffectiveTags = effectiveTags.length > 0;
   const thumbnailContextReady = Boolean(
     uploadTitle?.trim() &&
     uploadDescriptionText?.trim() &&
-    generatedTags?.length
+    hasEffectiveTags
   );
   const canShowAds = Boolean(
     subscriptionStatus &&
@@ -506,24 +518,21 @@ const Dashboard = ({ setIsAuthenticated }) => {
       toast.error("Select at least two generations to join");
       return;
     }
+    if (selectedItems.length > 3) {
+      toast.error("You can join up to 3 generations at once.");
+      return;
+    }
 
+    setJoiningTagHistory(true);
     const mergedTags = selectedItems.flatMap((item) => item.tags || []);
-    const combinedTags = [...generatedTags, ...mergedTags];
-
     const seen = new Set();
-    const uniqueTags = [];
-    for (const tag of combinedTags) {
+    const candidateTags = [];
+    for (const tag of mergedTags) {
       const tagLower = tag.toLowerCase();
       if (!seen.has(tagLower)) {
         seen.add(tagLower);
-        uniqueTags.push(tag);
+        candidateTags.push(tag);
       }
-    }
-
-    if (uniqueTags.length > TAG_LIMIT) {
-      const excess = uniqueTags.length - TAG_LIMIT;
-      toast.error(`Joined tags exceed ${TAG_LIMIT} limit by ${excess}. Remove some tags first.`);
-      return;
     }
 
     const joinLabel = selectedItems
@@ -531,21 +540,42 @@ const Dashboard = ({ setIsAuthenticated }) => {
       .filter(Boolean)
       .join(" x ");
 
-    setGeneratedTags(uniqueTags);
-    setSelectedTagHistoryIds([]);
-
     try {
+      const response = await axios.post(`${API}/tags/join-ai`, {
+        queries: selectedItems.map((item) => item.query),
+        candidate_tags: candidateTags,
+        max_tags: TAG_LIMIT
+      });
+
+      const aiTags = response.data?.tags || [];
+      if (!aiTags.length) {
+        throw new Error("No tags returned");
+      }
+
+      setGeneratedTags(aiTags);
+      setSelectedTagHistoryIds([]);
+
       const saveResponse = await axios.post(`${API}/tags/history`, {
         query: joinLabel || "Joined Tags",
-        tags: uniqueTags
+        tags: aiTags
       });
       setTagHistory((prev) => {
         const merged = [saveResponse.data, ...prev];
         return merged.slice(0, TAG_HISTORY_LIMIT);
       });
-      toast.success(`Joined ${selectedItems.length} generations! Total: ${uniqueTags.length}/${TAG_LIMIT}`);
+      toast.success(`Joined ${selectedItems.length} generations! Total: ${aiTags.length}/${TAG_LIMIT}`);
     } catch (error) {
-      toast.error("Joined tags saved locally, but failed to save to history.");
+      if (error.response?.status === 402) {
+        setShowUpgradeModal(true);
+        toast.error("Daily limit reached! Upgrade to continue.");
+      } else {
+        toast.error("Failed to join tags with AI. Try again.");
+      }
+    } finally {
+      setJoiningTagHistory(false);
+      setTimeout(() => {
+        fetchSubscriptionStatus();
+      }, 500);
     }
   };
 
@@ -730,19 +760,22 @@ const Dashboard = ({ setIsAuthenticated }) => {
   };
 
   const handleAnalyzeBeat = async () => {
-    if (!uploadTitle || generatedTags.length === 0) {
-      toast.error("Please add a title and generate tags first");
+    if (!uploadTitle || !hasEffectiveTags) {
+      toast.error("Please add a title and tags first");
       return;
     }
 
     setAnalyzingBeat(true);
     try {
       const selectedDesc = descriptions.find(d => d.id === selectedDescriptionId);
+      const descriptionText = uploadDescriptionText?.trim()
+        ? uploadDescriptionText
+        : (selectedDesc?.content || "");
       
       const response = await axios.post(`${API}/beat/analyze`, {
         title: uploadTitle,
-        tags: generatedTags,
-        description: selectedDesc?.content || ""
+        tags: effectiveTags,
+        description: descriptionText
       });
       
       setBeatAnalysis(response.data);
@@ -760,7 +793,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
       toast.error("Analyze your beat first to unlock fixes");
       return;
     }
-    if (!uploadTitle || generatedTags.length === 0) {
+    if (!uploadTitle || !hasEffectiveTags) {
       toast.error("Please add a title and tags first");
       return;
     }
@@ -774,7 +807,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
 
       const response = await axios.post(`${API}/beat/fix`, {
         title: uploadTitle,
-        tags: generatedTags,
+        tags: effectiveTags,
         description: baseDescription,
         analysis: beatAnalysis
       });
@@ -783,8 +816,13 @@ const Dashboard = ({ setIsAuthenticated }) => {
       if (fixed.title) {
         setUploadTitle(fixed.title);
       }
-      if (Array.isArray(fixed.tags)) {
-        setGeneratedTags(fixed.tags);
+      if (applied.tags && Array.isArray(fixed.tags) && fixed.tags.length) {
+        setRefinedTags(fixed.tags);
+        const baseLabel = formatTagHistoryLabel(
+          selectedTagRecord?.query || tagQuery || uploadTitle || "Tag list"
+        );
+        setRefinedTagsLabel(`${baseLabel} (refined)`);
+        setSelectedTagsId("refined");
       }
       if (fixed.description !== undefined) {
         setUploadDescriptionText(fixed.description);
@@ -845,7 +883,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
       const formData = new FormData();
       formData.append("file", fileToUse);
       formData.append("title", uploadTitle || "");
-      formData.append("tags", generatedTags.join(", "));
+      formData.append("tags", effectiveTags.join(", "));
       formData.append("description", uploadDescriptionText || "");
       formData.append("llm_provider", "grok");
 
@@ -1246,7 +1284,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
   };
 
   const scrollToPreview = () => {
-    previewSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    setActiveTab("upload");
+    setTimeout(() => {
+      previewSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 200);
   };
 
   return (
@@ -1377,7 +1418,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
           </div>
         )}
 
-        <Tabs defaultValue="tags" className="space-y-4 sm:space-y-6">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 sm:space-y-6">
           <TabsList className="grid w-full max-w-3xl mx-auto grid-cols-5 gap-1 text-xs sm:text-sm dashboard-tabs">
             <TabsTrigger value="tags" data-testid="tags-tab" className="px-1 sm:px-3 py-1.5 sm:py-2 truncate">Tags</TabsTrigger>
             <TabsTrigger value="descriptions" data-testid="descriptions-tab" className="px-1 sm:px-3 py-1.5 sm:py-2 truncate">Descriptions</TabsTrigger>
@@ -1565,10 +1606,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
                             variant="outline"
                             size="sm"
                             onClick={handleJoinSelectedTagHistory}
-                            disabled={selectedTagHistoryIds.length < 2}
+                            disabled={selectedTagHistoryIds.length < 2 || joiningTagHistory}
                             className="text-xs sm:text-sm"
                           >
-                            Join Selected
+                            {joiningTagHistory ? "Joining..." : "Join Selected"}
                           </Button>
                           {selectedTagHistoryIds.length > 0 && (
                             <Button
@@ -1998,26 +2039,26 @@ const Dashboard = ({ setIsAuthenticated }) => {
                             </p>
                             <Button
                               onClick={handleAnalyzeBeat}
-                              disabled={analyzingBeat || !uploadTitle || generatedTags.length === 0}
+                              disabled={analyzingBeat || !uploadTitle || !hasEffectiveTags}
                               variant="outline"
                               size="default"
                               className="w-full sm:w-auto border-yellow-500 text-yellow-600 hover:bg-yellow-50 dark:text-yellow-400 dark:hover:bg-yellow-950 px-4 sm:px-6 py-2 sm:py-2.5 text-sm sm:text-base whitespace-nowrap"
-                              title={!uploadTitle ? "Please add a title first" : generatedTags.length === 0 ? "Please generate tags in the Tags tab first" : "Analyze your beat"}
+                              title={!uploadTitle ? "Please add a title first" : !hasEffectiveTags ? "Please select or generate tags first" : "Analyze your beat"}
                             >
                               {analyzingBeat ? "Analyzing..." : "Analyze Beat"}
                             </Button>
                           </div>
 
-                          {(!uploadTitle || generatedTags.length === 0) && !beatAnalysis && !analyzingBeat && (
+                          {(!uploadTitle || !hasEffectiveTags) && !beatAnalysis && !analyzingBeat && (
                             <Alert className="mb-4 p-3 sm:p-4">
                               <AlertCircle className="h-4 w-4 sm:h-5 sm:w-5" />
                               <AlertDescription className="text-xs sm:text-sm leading-relaxed">
-                                {!uploadTitle && generatedTags.length === 0 ? (
-                                  <>First, go to the <strong>Tags</strong> tab to generate tags, then come back here and add a title to analyze your beat.</>
+                                {!uploadTitle && !hasEffectiveTags ? (
+                                  <>First, add a title and either generate tags in <strong>Tags</strong> or select tags in <strong>Upload</strong>.</>
                                 ) : !uploadTitle ? (
                                   <>Add a title below to analyze your beat.</>
                                 ) : (
-                                  <>Go to the <strong>Tags</strong> tab to generate tags first, then come back here to analyze.</>
+                                  <>Select tags in <strong>Upload</strong> or generate them in <strong>Tags</strong> first, then analyze.</>
                                 )}
                               </AlertDescription>
                             </Alert>
@@ -2343,6 +2384,11 @@ const Dashboard = ({ setIsAuthenticated }) => {
                             <SelectValue placeholder="Choose tags" />
                           </SelectTrigger>
                           <SelectContent>
+                            {refinedTags.length > 0 && (
+                              <SelectItem value="refined">
+                                {refinedTagsLabel || "Refined Tags"} ({refinedTags.length} tags)
+                              </SelectItem>
+                            )}
                             {tagHistory.map((tag) => (
                               <SelectItem key={tag.id} value={tag.id}>
                                 {formatTagHistoryLabel(tag.query)} ({tag.tags.length} tags)
@@ -2350,6 +2396,11 @@ const Dashboard = ({ setIsAuthenticated }) => {
                             ))}
                           </SelectContent>
                         </Select>
+                        {hasEffectiveTags && (
+                          <p className="text-xs" style={{color: 'var(--text-secondary)'}}>
+                            Using {effectiveTags.length} tags
+                          </p>
+                        )}
                       </div>
 
                       <div className="space-y-2">
@@ -2640,25 +2691,25 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                   <button
                                     type="button"
                                     onMouseDown={handleResizeStart("tl")}
-                                    className="absolute -top-2.5 -left-2.5 h-5 w-5 rounded-full border-2 border-white/80 bg-black/80 shadow-md pointer-events-auto"
+                                    className="absolute -top-3 -left-3 h-6 w-6 rounded-full aspect-square border-2 border-white/80 bg-black/80 shadow-md pointer-events-auto"
                                     aria-label="Resize top left"
                                   />
                                   <button
                                     type="button"
                                     onMouseDown={handleResizeStart("tr")}
-                                    className="absolute -top-2.5 -right-2.5 h-5 w-5 rounded-full border-2 border-white/80 bg-black/80 shadow-md pointer-events-auto"
+                                    className="absolute -top-3 -right-3 h-6 w-6 rounded-full aspect-square border-2 border-white/80 bg-black/80 shadow-md pointer-events-auto"
                                     aria-label="Resize top right"
                                   />
                                   <button
                                     type="button"
                                     onMouseDown={handleResizeStart("bl")}
-                                    className="absolute -bottom-2.5 -left-2.5 h-5 w-5 rounded-full border-2 border-white/80 bg-black/80 shadow-md pointer-events-auto"
+                                    className="absolute -bottom-3 -left-3 h-6 w-6 rounded-full aspect-square border-2 border-white/80 bg-black/80 shadow-md pointer-events-auto"
                                     aria-label="Resize bottom left"
                                   />
                                   <button
                                     type="button"
                                     onMouseDown={handleResizeStart("br")}
-                                    className="absolute -bottom-2.5 -right-2.5 h-5 w-5 rounded-full border-2 border-white/80 bg-black/80 shadow-md pointer-events-auto"
+                                    className="absolute -bottom-3 -right-3 h-6 w-6 rounded-full aspect-square border-2 border-white/80 bg-black/80 shadow-md pointer-events-auto"
                                     aria-label="Resize bottom right"
                                   />
                                 </div>

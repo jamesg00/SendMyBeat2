@@ -213,6 +213,15 @@ class TagHistorySaveRequest(BaseModel):
     query: str
     tags: List[str]
 
+class TagJoinRequest(BaseModel):
+    queries: List[str]
+    candidate_tags: List[str]
+    max_tags: int = 120
+    llm_provider: Optional[str] = None  # "openai" or "grok"
+
+class TagJoinResponse(BaseModel):
+    tags: List[str]
+
 class TagGenerationResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -1576,6 +1585,111 @@ async def save_tag_history(request: TagHistorySaveRequest, current_user: dict = 
     tag_doc['created_at'] = tag_doc['created_at'].isoformat()
     await db.tag_generations.insert_one(tag_doc)
     return tag_gen
+
+
+@api_router.post("/tags/join-ai", response_model=TagJoinResponse)
+async def join_tags_ai(request: TagJoinRequest, current_user: dict = Depends(get_current_user)):
+    if not request.queries or len(request.queries) < 2:
+        raise HTTPException(status_code=400, detail="At least two tag queries are required.")
+    if len(request.queries) > 3:
+        raise HTTPException(status_code=400, detail="You can join up to 3 tag generations at once.")
+    if not request.candidate_tags:
+        raise HTTPException(status_code=400, detail="Candidate tags are required.")
+
+    has_credit = await check_and_use_credit(current_user['id'], consume=False)
+    if not has_credit:
+        status = await get_user_subscription_status(current_user['id'])
+        raise HTTPException(
+            status_code=402,
+            detail={
+                "message": "Daily limit reached. Upgrade to Pro for unlimited generations!",
+                "resets_at": status.get('resets_at')
+            }
+        )
+
+    max_tags = max(10, min(120, request.max_tags or 120))
+    llm_provider = request.llm_provider.lower() if request.llm_provider else None
+    if llm_provider not in (None, "openai", "grok"):
+        raise HTTPException(status_code=400, detail="Invalid llm_provider. Use 'openai' or 'grok'.")
+
+    candidate_tags = [t.strip() for t in request.candidate_tags if t and t.strip()]
+    # Deduplicate candidates
+    seen = set()
+    unique_candidates = []
+    for tag in candidate_tags:
+        key = tag.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        unique_candidates.append(tag)
+
+    query_summary = " x ".join(request.queries)
+    prompt = f"""You are a YouTube SEO expert for beat producers.
+We are combining tags from multiple artists to create ONE optimized set of tags.
+
+Artists/queries: {request.queries}
+
+Rules:
+1) Select ONLY from the candidate tag list provided.
+2) Max {max_tags} tags. Never exceed the limit.
+3) Prefer high-intent, relevant tags for a "{query_summary} type beat".
+4) Avoid tag stuffing or near-duplicate variations.
+5) Keep tags short (2-5 words).
+
+Candidate tags:
+{", ".join(unique_candidates)}
+
+Return STRICT JSON:
+{{ "tags": ["tag1", "tag2", "..."] }}
+"""
+
+    response = await llm_chat(
+        system_message="You pick the best, most relevant tags without stuffing. Return JSON only.",
+        user_message=prompt,
+        provider=llm_provider,
+    )
+
+    try:
+        response_text = response.strip()
+        if '```json' in response_text:
+            start = response_text.find('```json') + 7
+            end = response_text.find('```', start)
+            response_text = response_text[start:end].strip()
+        elif '```' in response_text:
+            start = response_text.find('```') + 3
+            end = response_text.find('```', start)
+            response_text = response_text[start:end].strip()
+
+        parsed = json.loads(response_text)
+        tags = parsed.get("tags", [])
+        if not isinstance(tags, list):
+            tags = []
+
+        # Clean + enforce max + dedupe
+        seen = set()
+        final_tags = []
+        for tag in tags:
+            if not isinstance(tag, str):
+                continue
+            clean = tag.strip()
+            if not clean:
+                continue
+            key = clean.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            final_tags.append(clean)
+            if len(final_tags) >= max_tags:
+                break
+
+        if not final_tags:
+            raise ValueError("No tags returned from AI")
+
+        await consume_credit(current_user['id'])
+        return TagJoinResponse(tags=final_tags)
+    except Exception as e:
+        logging.error(f"Failed to parse AI joined tags: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to join tags with AI.")
 
 
 # ============ Description Routes ============
