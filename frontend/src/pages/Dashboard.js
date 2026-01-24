@@ -1885,7 +1885,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                           <Input
                             id="thumbnail-check-upload"
                             type="file"
-                            accept=".jpg,.jpeg,.png,.webp"
+                            accept=".jpg,.jpeg,.png,.webp,.avif,.heic,.heif"
                             onChange={(e) => setThumbnailCheckFile(e.target.files?.[0] || null)}
                             className="hidden"
                             data-testid="thumbnail-check-upload-input"
@@ -2008,7 +2008,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                           <Input
                             id="image-upload"
                             type="file"
-                            accept=".jpg,.jpeg,.png,.webp"
+                            accept=".jpg,.jpeg,.png,.webp,.avif,.heic,.heif"
                             onChange={handleImageUpload}
                             className="hidden"
                             data-testid="image-upload-input"
