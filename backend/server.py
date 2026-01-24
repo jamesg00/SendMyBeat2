@@ -1350,6 +1350,7 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
 
         # Generate tags (avoid tag stuffing; focus on relevance + search intent)
         base_tag_count = 60 if llm_provider == "grok" else 80
+        candidate_tags = ", ".join(youtube_type_beat_tags[:40]) if youtube_type_beat_tags else "None"
         prompt = f"""Generate exactly {base_tag_count} YouTube tags for: "{request.query}"
 
 CRITICAL RULES:
@@ -1397,6 +1398,13 @@ REQUIRED TAG CATEGORIES:
 
 7. COMPETITIVE TAGS (5-8 tags):
    - ONLY if directly relevant to the artist's niche
+
+SELECTION CONSTRAINTS:
+- You must stay within {base_tag_count} tags total (never exceed this).
+- Use the candidate tag list below as inspiration and pick ONLY the strongest, most relevant options (do NOT include all of them).
+
+Candidate tags from top YouTube results (select the best 8-15 if relevant):
+{candidate_tags}
 
 FORMAT: Return ONLY the tags separated by commas. NO explanations, NO generic filler tags. Keep tags short (2-5 words max).
 
