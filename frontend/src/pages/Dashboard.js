@@ -29,6 +29,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [generatedTags, setGeneratedTags] = useState([]);
   const [loadingTags, setLoadingTags] = useState(false);
   const [tagHistory, setTagHistory] = useState([]);
+  const [selectedTagHistoryIds, setSelectedTagHistoryIds] = useState([]);
   const [descriptions, setDescriptions] = useState([]);
   const [loadingDescriptions, setLoadingDescriptions] = useState(false);
   const [newDescription, setNewDescription] = useState({ title: "", content: "" });
@@ -466,6 +467,43 @@ const Dashboard = ({ setIsAuthenticated }) => {
     setGeneratedTags(uniqueTags);
     setAdditionalTags(""); // Clear input
     toast.success(`Added ${newTags.length} tags! Total: ${uniqueTags.length}/${TAG_LIMIT}`);
+  };
+
+  const toggleTagHistorySelection = (id) => {
+    setSelectedTagHistoryIds((prev) => (
+      prev.includes(id) ? prev.filter((itemId) => itemId !== id) : [...prev, id]
+    ));
+  };
+
+  const handleJoinSelectedTagHistory = () => {
+    const selectedItems = tagHistory.filter((item) => selectedTagHistoryIds.includes(item.id));
+    if (selectedItems.length < 2) {
+      toast.error("Select at least two generations to join");
+      return;
+    }
+
+    const mergedTags = selectedItems.flatMap((item) => item.tags || []);
+    const combinedTags = [...generatedTags, ...mergedTags];
+
+    const seen = new Set();
+    const uniqueTags = [];
+    for (const tag of combinedTags) {
+      const tagLower = tag.toLowerCase();
+      if (!seen.has(tagLower)) {
+        seen.add(tagLower);
+        uniqueTags.push(tag);
+      }
+    }
+
+    if (uniqueTags.length > TAG_LIMIT) {
+      const excess = uniqueTags.length - TAG_LIMIT;
+      toast.error(`Joined tags exceed ${TAG_LIMIT} limit by ${excess}. Remove some tags first.`);
+      return;
+    }
+
+    setGeneratedTags(uniqueTags);
+    setSelectedTagHistoryIds([]);
+    toast.success(`Joined ${selectedItems.length} generations! Total: ${uniqueTags.length}/${TAG_LIMIT}`);
   };
 
   const copyDescription = (content) => {
@@ -1377,7 +1415,33 @@ const Dashboard = ({ setIsAuthenticated }) => {
                 {tagHistory.length > 0 && (
                   <Card className="dashboard-card-muted">
                     <CardHeader className="px-4 sm:px-6 py-4 sm:py-5">
-                      <CardTitle className="text-sm sm:text-base">Recent Generations</CardTitle>
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                        <CardTitle className="text-sm sm:text-base">Recent Generations</CardTitle>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-xs sm:text-sm" style={{ color: "var(--text-secondary)" }}>
+                            {selectedTagHistoryIds.length} selected
+                          </span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleJoinSelectedTagHistory}
+                            disabled={selectedTagHistoryIds.length < 2}
+                            className="text-xs sm:text-sm"
+                          >
+                            Join Selected
+                          </Button>
+                          {selectedTagHistoryIds.length > 0 && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setSelectedTagHistoryIds([])}
+                              className="text-xs sm:text-sm"
+                            >
+                              Clear
+                            </Button>
+                          )}
+                        </div>
+                      </div>
                     </CardHeader>
                     <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
                       <div className="space-y-3">
@@ -1387,7 +1451,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                             className="p-4 rounded-lg border-2 transition-all hover:border-purple-500 cursor-pointer relative group"
                             style={{
                               backgroundColor: 'var(--bg-secondary)',
-                              borderColor: 'var(--border-color)'
+                              borderColor: selectedTagHistoryIds.includes(item.id) ? 'var(--accent-primary)' : 'var(--border-color)'
                             }}
                             onClick={() => {
                               setGeneratedTags(item.tags);
@@ -1397,9 +1461,19 @@ const Dashboard = ({ setIsAuthenticated }) => {
                             data-testid="tag-history-item"
                           >
                             <div className="flex justify-between items-start">
-                              <div className="flex-1">
-                                <p className="font-medium mb-1" style={{color: 'var(--text-primary)'}}>{item.query}</p>
-                                <p className="text-sm" style={{color: 'var(--text-secondary)'}}>{item.tags.length} tags generated</p>
+                              <div className="flex items-start gap-3 flex-1">
+                                <input
+                                  type="checkbox"
+                                  className="mt-1 h-4 w-4 accent-green-500"
+                                  checked={selectedTagHistoryIds.includes(item.id)}
+                                  onChange={() => toggleTagHistorySelection(item.id)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  aria-label={`Select ${item.query}`}
+                                />
+                                <div className="flex-1">
+                                  <p className="font-medium mb-1" style={{color: 'var(--text-primary)'}}>{item.query}</p>
+                                  <p className="text-sm" style={{color: 'var(--text-secondary)'}}>{item.tags.length} tags generated</p>
+                                </div>
                               </div>
                               <Button
                                 variant="ghost"
