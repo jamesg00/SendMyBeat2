@@ -2242,9 +2242,14 @@ async def upload_to_youtube(
         if background_color not in ("black", "white"):
             raise HTTPException(status_code=400, detail="background_color must be black or white.")
 
+        # Always fit inside the target frame to avoid pad errors
+        scale_x = min(scale_x, 1.0)
+        scale_y = min(scale_y, 1.0)
+        fit_expr = f"min({target_w}/iw\\,{target_h}/ih)"
+
         # Build video filter - add watermark for non-pro users OR pro users who didn't uncheck it
         video_filter = (
-            f"scale=iw*{scale_x}:ih*{scale_y},"
+            f"scale=iw*{fit_expr}*{scale_x}:ih*{fit_expr}*{scale_y},"
             f"pad={target_w}:{target_h}:(ow-iw)/2+(ow-iw)/2*{image_pos_x}:(oh-ih)/2+(oh-ih)/2*{image_pos_y}:{background_color}"
         )
         
