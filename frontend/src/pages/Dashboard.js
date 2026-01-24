@@ -19,6 +19,28 @@ import AdBanner from "@/components/AdBanner";
 import ProgressBar from "@/components/ProgressBar";
 
 const TAG_LIMIT = 120;
+const TAG_HISTORY_LIMIT = 100;
+
+const formatTagHistoryLabel = (query = "") => {
+  if (!query) return "Untitled";
+  const cleaned = query
+    .replace(/\([^)]*\)/g, "")
+    .replace(/\btype beat\b/gi, "")
+    .replace(/\btype\b/gi, "")
+    .replace(/\bbeat\b/gi, "")
+    .replace(/\binstrumental\b/gi, "")
+    .replace(/\bfree\b/gi, "")
+    .replace(/\bfor profit\b/gi, "")
+    .replace(/\bnon profit\b/gi, "")
+    .replace(/\bprod\.?\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const parts = cleaned.split(/\s+x\s+/i).map((part) => part.trim()).filter(Boolean);
+  if (parts.length >= 2) {
+    return `${parts[0]} x ${parts[1]}`;
+  }
+  return cleaned || query;
+};
 
 const Dashboard = ({ setIsAuthenticated }) => {
   const [user, setUser] = useState(null);
@@ -1444,8 +1466,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
                       </div>
                     </CardHeader>
                     <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
-                      <div className="space-y-3">
-                        {tagHistory.slice(0, 5).map((item) => (
+                      <div className="space-y-3 tag-history-scroll">
+                        {tagHistory.slice(0, TAG_HISTORY_LIMIT).map((item) => {
+                          const displayLabel = formatTagHistoryLabel(item.query);
+                          return (
                           <div
                             key={item.id}
                             className="p-4 rounded-lg border-2 transition-all hover:border-purple-500 cursor-pointer relative group"
@@ -1468,10 +1492,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                   checked={selectedTagHistoryIds.includes(item.id)}
                                   onChange={() => toggleTagHistorySelection(item.id)}
                                   onClick={(e) => e.stopPropagation()}
-                                  aria-label={`Select ${item.query}`}
+                                  aria-label={`Select ${displayLabel}`}
                                 />
                                 <div className="flex-1">
-                                  <p className="font-medium mb-1" style={{color: 'var(--text-primary)'}}>{item.query}</p>
+                                  <p className="font-medium mb-1" style={{color: 'var(--text-primary)'}}>{displayLabel}</p>
                                   <p className="text-sm" style={{color: 'var(--text-secondary)'}}>{item.tags.length} tags generated</p>
                                 </div>
                               </div>
@@ -1495,7 +1519,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
                               </Button>
                             </div>
                           </div>
-                        ))}
+                        );
+                        })}
                       </div>
                     </CardContent>
                   </Card>
@@ -2153,7 +2178,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                           <SelectContent>
                             {tagHistory.map((tag) => (
                               <SelectItem key={tag.id} value={tag.id}>
-                                {tag.query} ({tag.tags.length} tags)
+                                {formatTagHistoryLabel(tag.query)} ({tag.tags.length} tags)
                               </SelectItem>
                             ))}
                           </SelectContent>
