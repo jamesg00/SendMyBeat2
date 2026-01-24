@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -771,7 +772,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
       clearInterval(thumbnailProgressIntervalRef.current);
     }
     thumbnailProgressIntervalRef.current = setInterval(() => {
-      setThumbnailProgress((prev) => (prev < 95 - prev + 5 : prev));
+      setThumbnailProgress((prev) => (prev < 95 ? prev + 5 : prev));
     }, 500);
     try {
       const formData = new FormData();
@@ -1091,7 +1092,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
     setImagePreviewUrl(url);
     const img = new Image();
     img.onload = () => {
-      const ratio = img.width && img.height - img.width / img.height : 1;
+      const ratio = img.width && img.height ? img.width / img.height : 1;
       setImageMeta({ width: img.width, height: img.height, ratio });
     };
     img.src = url;
@@ -1129,8 +1130,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
       const rect = previewContainerRef.current.getBoundingClientRect();
       const deltaX = event.clientX - resizeState.startX;
       const deltaY = event.clientY - resizeState.startY;
-      const xSign = resizeState.corner.includes("l") - -1 : 1;
-      const ySign = resizeState.corner.includes("t") - -1 : 1;
+      const xSign = resizeState.corner.includes("l") ? -1 : 1;
+      const ySign = resizeState.corner.includes("t") ? -1 : 1;
       const nextX = clamp(resizeState.originX + xSign * deltaX / (rect.width / 2), 0.5, 1);
       const nextY = clamp(resizeState.originY + ySign * deltaY / (rect.height / 2), 0.5, 1);
 
@@ -1272,8 +1273,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
           message={progressMessage}
           duration={progressDuration}
           onCancel={
-            loadingTags - handleCancelTagGeneration : 
-            uploadingToYouTube - handleCancelUpload : 
+            loadingTags ? handleCancelTagGeneration : 
+            uploadingToYouTube ? handleCancelUpload : 
             null
           }
         />
@@ -1352,7 +1353,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                       disabled={loadingTags}
                       data-testid="generate-tags-btn"
                     >
-                      {loadingTags - "Generating Tags..." : "Generate 60-80 Tags (AI + YouTube + Custom)"}
+                      {loadingTags ? "Generating Tags..." : "Generate 60-80 Tags (AI + YouTube + Custom)"}
                     </Button>
                   </form>
                 </CardContent>
@@ -1444,7 +1445,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                             className="w-full gap-1 sm:gap-2 bg-green-600 hover:bg-green-700 text-sm py-2.5"
                           >
                             <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
-                            {generatedTags.length >= TAG_LIMIT - `Limit Reached (${TAG_LIMIT})` : "Add Tags"}
+                            {generatedTags.length >= TAG_LIMIT ? `Limit Reached (${TAG_LIMIT})` : "Add Tags"}
                           </Button>
                         </div>
                       </div>
@@ -1494,7 +1495,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                             className="p-4 rounded-lg border-2 transition-all hover:border-purple-500 cursor-pointer relative group"
                             style={{
                               backgroundColor: 'var(--bg-secondary)',
-                              borderColor: selectedTagHistoryIds.includes(item.id) - 'var(--accent-primary)' : 'var(--border-color)'
+                              borderColor: selectedTagHistoryIds.includes(item.id) ? 'var(--accent-primary)' : 'var(--border-color)'
                             }}
                             onClick={() => {
                               setGeneratedTags(item.tags);
@@ -1632,7 +1633,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                       disabled={loadingRefine}
                       data-testid="refine-btn"
                     >
-                      {loadingRefine - "Refining..." : "Refine with AI"}
+                      {loadingRefine ? "Refining..." : "Refine with AI"}
                     </Button>
                   </CardContent>
                 </Card>
@@ -1692,7 +1693,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                       disabled={loadingGenerate}
                       data-testid="generate-desc-btn"
                     >
-                      {loadingGenerate - "Generating..." : "Generate with AI"}
+                      {loadingGenerate ? "Generating..." : "Generate with AI"}
                     </Button>
                   </CardContent>
                 </Card>
@@ -1705,7 +1706,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                 <CardTitle>Saved Descriptions ({descriptions.length})</CardTitle>
               </CardHeader>
               <CardContent>
-                {descriptions.length === 0 - (
+                {descriptions.length === 0 ? (
                   <p className="text-center py-8" style={{color: 'var(--text-secondary)'}} data-testid="no-descriptions-msg">No saved descriptions yet. Create one above!</p>
                 ) : (
                   <div className="space-y-3" data-testid="descriptions-list">
@@ -1778,7 +1779,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                             className="text-sm text-slate-600 whitespace-pre-wrap cursor-pointer"
                             onClick={() => toggleDescriptionExpand(desc.id)}
                           >
-                            {showPreview - (
+                            {showPreview ? (
                               <>
                                 {preview}...
                                 <span className="text-blue-600 font-medium ml-2">Click to expand</span>
@@ -1814,7 +1815,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
               <CardContent className="space-y-4 sm:space-y-6">
                 {/* YouTube Connection Status */}
                 <div className="p-4 sm:p-5 md:p-6 rounded-lg dashboard-card-muted">
-                  {youtubeConnected - (
+                  {youtubeConnected ? (
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
                       <div className="flex items-center gap-3 sm:gap-4 flex-1">
                         {youtubeProfilePicture && (
@@ -2126,7 +2127,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                           />
                           <label htmlFor="audio-upload" className="cursor-pointer">
                             <Upload className="h-8 w-8 mx-auto mb-2 text-slate-400" />
-                            {uploadingAudio - (
+                            {uploadingAudio ? (
                               <div>
                                 <p className="text-sm text-slate-600 mb-2">Uploading... {uploadProgress}%</p>
                                 <div className="w-full bg-gray-200 rounded-full h-2">
@@ -2136,7 +2137,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                   />
                                 </div>
                               </div>
-                            ) : audioFile - (
+                            ) : audioFile ? (
                               <p className="text-sm text-green-600 font-medium">{audioFile.name}</p>
                             ) : (
                               <p className="text-sm text-slate-600">Click to upload audio</p>
@@ -2158,9 +2159,9 @@ const Dashboard = ({ setIsAuthenticated }) => {
                           />
                           <label htmlFor="image-upload" className="cursor-pointer">
                             <Upload className="h-8 w-8 mx-auto mb-2 text-slate-400" />
-                            {uploadingImage - (
+                            {uploadingImage ? (
                               <p className="text-sm text-slate-600">Uploading...</p>
-                            ) : imageFile - (
+                            ) : imageFile ? (
                               <p className="text-sm text-green-600 font-medium">{imageFile.name}</p>
                             ) : (
                               <p className="text-sm text-slate-600">Click to upload image</p>
@@ -2254,7 +2255,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                             variant="outline"
                             onClick={() => setShowImageSettings((prev) => !prev)}
                           >
-                            {showImageSettings - "Hide" : "Show"}
+                            {showImageSettings ? "Hide" : "Show"}
                           </Button>
                         </div>
 
@@ -2264,7 +2265,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         <div className="flex flex-wrap items-center gap-2">
                           <Button
                             type="button"
-                            variant={backgroundColor === "black" - "default" : "outline"}
+                            variant={backgroundColor === "black" ? "default" : "outline"}
                             onClick={() => setBackgroundColor("black")}
                             className="text-xs sm:text-sm"
                           >
@@ -2272,7 +2273,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                           </Button>
                           <Button
                             type="button"
-                            variant={backgroundColor === "white" - "default" : "outline"}
+                            variant={backgroundColor === "white" ? "default" : "outline"}
                             onClick={() => setBackgroundColor("white")}
                             className="text-xs sm:text-sm"
                           >
@@ -2427,7 +2428,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
 
                       {/* Watermark Removal Option */}
                       <div className="space-y-2 p-4 rounded-lg border-2" style={{
-                        borderColor: subscriptionStatus?.is_subscribed - 'var(--accent-primary)' : 'var(--border-color)',
+                        borderColor: subscriptionStatus?.is_subscribed ? 'var(--accent-primary)' : 'var(--border-color)',
                         backgroundColor: 'var(--bg-secondary)'
                       }}>
                         <div className="flex items-center justify-between">
@@ -2481,7 +2482,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                               className="relative rounded-lg overflow-hidden"
                               ref={previewContainerRef}
                               style={{
-                                backgroundColor: backgroundColor === "white" - "#ffffff" : "#000000",
+                                backgroundColor: backgroundColor === "white" ? "#ffffff" : "#000000",
                                 overflow: 'hidden',
                                 width: `${frameWidth}px`,
                                 height: `${frameHeight}px`,
@@ -2569,7 +2570,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                           <div className="flex items-center gap-2">
                             <div
                               className="rounded overflow-hidden"
-                              style={{ width: 72, height: 72, backgroundColor: backgroundColor === "white" - "#ffffff" : "#000000" }}
+                              style={{ width: 72, height: 72, backgroundColor: backgroundColor === "white" ? "#ffffff" : "#000000" }}
                             >
                               <img
                                 src={imagePreviewUrl}
@@ -2595,7 +2596,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         disabled={uploadingToYouTube || !audioFileId || !imageFileId}
                         data-testid="youtube-upload-btn"
                       >
-                        {uploadingToYouTube - "Uploading to YouTube..." : "Upload to YouTube"}
+                        {uploadingToYouTube ? "Uploading to YouTube..." : "Upload to YouTube"}
                       </Button>
                     </div>
                   </div>
@@ -2619,7 +2620,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
               <CardContent className="space-y-6">
                 {isPro && (
                   <div>
-                    {!youtubeConnected - (
+                    {!youtubeConnected ? (
                       <Alert>
                         <AlertCircle className="h-4 w-4" />
                         <AlertDescription>
@@ -2633,7 +2634,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         className="w-full btn-modern"
                       >
                         <Sparkles className="mr-2 h-5 w-5" />
-                        {loadingAnalytics - "Analyzing..." : "Analyze My Channel"}
+                        {loadingAnalytics ? "Analyzing..." : "Analyze My Channel"}
                       </Button>
                     )}
 
@@ -2893,11 +2894,11 @@ const Dashboard = ({ setIsAuthenticated }) => {
               <CardContent className="space-y-6 relative">
                 <div
                   style={{
-                    filter: isPro - "none" : "blur(6px)",
-                    pointerEvents: isPro - "auto" : "none"
+                    filter: isPro ? "none" : "blur(6px)",
+                    pointerEvents: isPro ? "auto" : "none"
                   }}
                 >
-                {!growthData?.challenge_start_date - (
+                {!growthData?.challenge_start_date ? (
                   // Not started
                   <div className="text-center py-12">
                     <div className="mb-6">
@@ -2912,7 +2913,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                       disabled={loadingGrowth}
                       className="btn-modern text-lg py-6 px-12"
                     >
-                      {loadingGrowth - "Starting..." : "Start My 120-Day Journey"}
+                      {loadingGrowth ? "Starting..." : "Start My 120-Day Journey"}
                     </Button>
                   </div>
                 ) : (
@@ -2980,7 +2981,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                           className="w-full btn-modern py-4"
                         >
                           <CheckCircle2 className="mr-2 h-5 w-5" />
-                          {loadingGrowth - "Checking in..." : "Check In Today"}
+                          {loadingGrowth ? "Checking in..." : "Check In Today"}
                         </Button>
                       </CardContent>
                     </Card>
@@ -3026,13 +3027,13 @@ const Dashboard = ({ setIsAuthenticated }) => {
                           <div className="grid grid-cols-5 sm:grid-cols-8 lg:grid-cols-10 gap-2 mb-4">
                             {Object.entries(calendarData.calendar || {}).slice(0, 120).map(([date, statusData], index) => {
                               const dayNumber = index + 1;
-                              const status = typeof statusData === 'string' - statusData : statusData.status;
-                              const activity = typeof statusData === 'object' - statusData.activity : null;
+                              const status = typeof statusData === 'string' ? statusData : statusData.status;
+                              const activity = typeof statusData === 'object' ? statusData.activity : null;
                               
                               const bgColor = 
-                                status === 'completed' - 'bg-green-500' :
-                                status === 'missed' - 'bg-red-500' :
-                                status === 'today' - 'bg-purple-500' :
+                                status === 'completed' ? 'bg-green-500' :
+                                status === 'missed' ? 'bg-red-500' :
+                                status === 'today' ? 'bg-purple-500' :
                                 'bg-gray-500';
                               
                               return (
@@ -3079,14 +3080,14 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                         You crushed it this day! You completed:
                                       </p>
                                       <ul className="text-sm space-y-1">
-                                        <li className={selectedDay.activity === 'tag_generation' - 'text-green-600 font-semibold' : ''} style={{color: selectedDay.activity === 'tag_generation' - undefined : 'var(--text-secondary)'}}>
-                                          {selectedDay.activity === 'tag_generation' - '✓ ' : '• '}Generated YouTube tags
+                                        <li className={selectedDay.activity === 'tag_generation' ? 'text-green-600 font-semibold' : ''} style={{color: selectedDay.activity === 'tag_generation' ? undefined : 'var(--text-secondary)'}}>
+                                          {selectedDay.activity === 'tag_generation' ? '✓ ' : '• '}Generated YouTube tags
                                         </li>
-                                        <li className={selectedDay.activity === 'youtube_upload' - 'text-green-600 font-semibold' : ''} style={{color: selectedDay.activity === 'youtube_upload' - undefined : 'var(--text-secondary)'}}>
-                                          {selectedDay.activity === 'youtube_upload' - '✓ ' : '• '}Uploaded a beat to YouTube
+                                        <li className={selectedDay.activity === 'youtube_upload' ? 'text-green-600 font-semibold' : ''} style={{color: selectedDay.activity === 'youtube_upload' ? undefined : 'var(--text-secondary)'}}>
+                                          {selectedDay.activity === 'youtube_upload' ? '✓ ' : '• '}Uploaded a beat to YouTube
                                         </li>
-                                        <li className={selectedDay.activity === 'description_work' - 'text-green-600 font-semibold' : ''} style={{color: selectedDay.activity === 'description_work' - undefined : 'var(--text-secondary)'}}>
-                                          {selectedDay.activity === 'description_work' - '✓ ' : '• '}Created/edited a description
+                                        <li className={selectedDay.activity === 'description_work' ? 'text-green-600 font-semibold' : ''} style={{color: selectedDay.activity === 'description_work' ? undefined : 'var(--text-secondary)'}}>
+                                          {selectedDay.activity === 'description_work' ? '✓ ' : '• '}Created/edited a description
                                         </li>
                                         {selectedDay.activity === 'manual_checkin' && (
                                           <li className="text-green-600 font-semibold">
