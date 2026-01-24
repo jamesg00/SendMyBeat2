@@ -209,6 +209,10 @@ class TagGenerationRequest(BaseModel):
     custom_tags: Optional[List[str]] = []  # User's custom tags
     llm_provider: Optional[str] = None  # "openai" or "grok"
 
+class TagHistorySaveRequest(BaseModel):
+    query: str
+    tags: List[str]
+
 class TagGenerationResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -1519,13 +1523,46 @@ async def get_tag_history(current_user: dict = Depends(get_current_user)):
     tag_docs = await db.tag_generations.find(
         {"user_id": current_user['id']},
         {"_id": 0}
-    ).sort("created_at", -1).limit(50).to_list(50)
+    ).sort("created_at", -1).limit(100).to_list(100)
     
     for doc in tag_docs:
         if isinstance(doc['created_at'], str):
             doc['created_at'] = datetime.fromisoformat(doc['created_at'])
     
     return [TagGenerationResponse(**doc) for doc in tag_docs]
+
+@api_router.post("/tags/history", response_model=TagGenerationResponse)
+async def save_tag_history(request: TagHistorySaveRequest, current_user: dict = Depends(get_current_user)):
+    if not request.query.strip():
+        raise HTTPException(status_code=400, detail="Query is required")
+    if not request.tags:
+        raise HTTPException(status_code=400, detail="Tags are required")
+
+    seen = set()
+    unique_tags = []
+    for tag in request.tags:
+        tag_clean = tag.strip()
+        if not tag_clean:
+            continue
+        tag_key = tag_clean.lower()
+        if tag_key in seen:
+            continue
+        seen.add(tag_key)
+        unique_tags.append(tag_clean)
+
+    if len(unique_tags) > 120:
+        raise HTTPException(status_code=400, detail="Tag limit exceeded (max 120)")
+
+    tag_gen = TagGenerationResponse(
+        user_id=current_user['id'],
+        query=request.query.strip(),
+        tags=unique_tags
+    )
+
+    tag_doc = tag_gen.model_dump()
+    tag_doc['created_at'] = tag_doc['created_at'].isoformat()
+    await db.tag_generations.insert_one(tag_doc)
+    return tag_gen
 
 
 # ============ Description Routes ============

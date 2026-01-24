@@ -21,26 +21,26 @@ import ProgressBar from "@/components/ProgressBar";
 const TAG_LIMIT = 120;
 const TAG_HISTORY_LIMIT = 100;
 
-const formatTagHistoryLabel = (query = "") => {
-  if (!query) return "Untitled";
-  const cleaned = query
-    .replace(/\([^)]*\)/g, "")
-    .replace(/\btype beat\b/gi, "")
-    .replace(/\btype\b/gi, "")
-    .replace(/\bbeat\b/gi, "")
-    .replace(/\binstrumental\b/gi, "")
-    .replace(/\bfree\b/gi, "")
-    .replace(/\bfor profit\b/gi, "")
-    .replace(/\bnon profit\b/gi, "")
-    .replace(/\bprod\.?\b/gi, "")
-    .replace(/\s+/g, " ")
-    .trim();
-  const parts = cleaned.split(/\s+x\s+/i).map((part) => part.trim()).filter(Boolean);
-  if (parts.length >= 2) {
-    return `${parts[0]} x ${parts[1]}`;
-  }
-  return cleaned || query;
-};
+  const formatTagHistoryLabel = (query = "") => {
+    if (!query) return "Untitled";
+    const cleaned = query
+      .replace(/\([^)]*\)/g, "")
+      .replace(/\btype beat\b/gi, "")
+      .replace(/\btype\b/gi, "")
+      .replace(/\bbeat\b/gi, "")
+      .replace(/\binstrumental\b/gi, "")
+      .replace(/\bfree\b/gi, "")
+      .replace(/\bfor profit\b/gi, "")
+      .replace(/\bnon profit\b/gi, "")
+      .replace(/\bprod\.?\b/gi, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    const parts = cleaned.split(/\s+x\s+/i).map((part) => part.trim()).filter(Boolean);
+    if (parts.length >= 2) {
+      return parts.join(" x ");
+    }
+    return cleaned || query;
+  };
 
 const Dashboard = ({ setIsAuthenticated }) => {
   const [user, setUser] = useState(null);
@@ -494,11 +494,11 @@ const Dashboard = ({ setIsAuthenticated }) => {
 
   const toggleTagHistorySelection = (id) => {
     setSelectedTagHistoryIds((prev) => (
-      prev.includes(id) - prev.filter((itemId) => itemId !== id) : [...prev, id]
+      prev.includes(id) ? prev.filter((itemId) => itemId !== id) : [...prev, id]
     ));
   };
 
-  const handleJoinSelectedTagHistory = () => {
+  const handleJoinSelectedTagHistory = async () => {
     const selectedItems = tagHistory.filter((item) => selectedTagHistoryIds.includes(item.id));
     if (selectedItems.length < 2) {
       toast.error("Select at least two generations to join");
@@ -524,9 +524,27 @@ const Dashboard = ({ setIsAuthenticated }) => {
       return;
     }
 
+    const joinLabel = selectedItems
+      .map((item) => formatTagHistoryLabel(item.query))
+      .filter(Boolean)
+      .join(" x ");
+
     setGeneratedTags(uniqueTags);
     setSelectedTagHistoryIds([]);
-    toast.success(`Joined ${selectedItems.length} generations! Total: ${uniqueTags.length}/${TAG_LIMIT}`);
+
+    try {
+      const saveResponse = await axios.post(`${API}/tags/history`, {
+        query: joinLabel || "Joined Tags",
+        tags: uniqueTags
+      });
+      setTagHistory((prev) => {
+        const merged = [saveResponse.data, ...prev];
+        return merged.slice(0, TAG_HISTORY_LIMIT);
+      });
+      toast.success(`Joined ${selectedItems.length} generations! Total: ${uniqueTags.length}/${TAG_LIMIT}`);
+    } catch (error) {
+      toast.error("Joined tags saved locally, but failed to save to history.");
+    }
   };
 
   const copyDescription = (content) => {
