@@ -2462,8 +2462,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         </div>
                         <p className="text-xs leading-relaxed" style={{color: 'var(--text-secondary)'}}>
                           {subscriptionStatus?.is_subscribed 
-                            - "✅ As a Pro member, you can remove the watermark from your videos"
-                            : "⚠️ Free users get a small watermark at the top: \"Upload your beats online: https://sendmybeat.com\""}
+                            ? "✅ As a Pro member, you can remove the watermark from your videos"
+                            : "⚠️ Free users get a small watermark at the top: \"Upload your beats online: https://sendmybeat.com\""}}
                         </p>
                       </div>
 
