@@ -813,6 +813,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
       });
 
       const fixed = response.data || {};
+      const applied = fixed.applied_fixes || {};
       if (fixed.title) {
         setUploadTitle(fixed.title);
       }
@@ -828,7 +829,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
         setUploadDescriptionText(fixed.description);
       }
 
-      const applied = fixed.applied_fixes || {};
       const appliedList = [
         applied.title ? "title" : null,
         applied.description ? "description" : null,
