@@ -132,6 +132,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
 
   // Beat Analyzer states
   const [beatAnalysis, setBeatAnalysis] = useState(null);
+  const [applyingBeatFixes, setApplyingBeatFixes] = useState(false);
   const [analyzingBeat, setAnalyzingBeat] = useState(false);
   const [showAiYoutubeTools, setShowAiYoutubeTools] = useState(false);
 
@@ -754,8 +755,71 @@ const Dashboard = ({ setIsAuthenticated }) => {
     }
   };
 
-  const handleThumbnailCheck = async () => {
-    if (!thumbnailCheckFile) {
+  const handleApplyBeatFixes = async () => {
+    if (!beatAnalysis) {
+      toast.error("Analyze your beat first to unlock fixes");
+      return;
+    }
+    if (!uploadTitle || generatedTags.length === 0) {
+      toast.error("Please add a title and tags first");
+      return;
+    }
+
+    setApplyingBeatFixes(true);
+    try {
+      const selectedDesc = descriptions.find(d => d.id === selectedDescriptionId);
+      const baseDescription = uploadDescriptionText?.trim()
+        ? uploadDescriptionText
+        : (selectedDesc?.content || "");
+
+      const response = await axios.post(`${API}/beat/fix`, {
+        title: uploadTitle,
+        tags: generatedTags,
+        description: baseDescription,
+        analysis: beatAnalysis
+      });
+
+      const fixed = response.data || {};
+      if (fixed.title) {
+        setUploadTitle(fixed.title);
+      }
+      if (Array.isArray(fixed.tags)) {
+        setGeneratedTags(fixed.tags);
+      }
+      if (fixed.description !== undefined) {
+        setUploadDescriptionText(fixed.description);
+      }
+
+      const applied = fixed.applied_fixes || {};
+      const appliedList = [
+        applied.title ? "title" : null,
+        applied.description ? "description" : null,
+        applied.tags ? "tags" : null
+      ].filter(Boolean);
+
+      if (appliedList.length === 0) {
+        toast.info("No fixes needed based on your analysis.");
+      } else {
+        toast.success(`Applied fixes to: ${appliedList.join(", ")}`);
+      }
+    } catch (error) {
+      if (error.response?.status === 402) {
+        setShowUpgradeModal(true);
+        toast.error("Daily limit reached! Upgrade to continue.");
+      } else {
+        toast.error("Failed to apply fixes");
+      }
+    } finally {
+      setApplyingBeatFixes(false);
+      setTimeout(() => {
+        fetchSubscriptionStatus();
+      }, 500);
+    }
+  };
+
+  const handleThumbnailCheck = async (fileOverride = null) => {
+    const fileToUse = fileOverride || thumbnailCheckFile;
+    if (!fileToUse) {
       toast.error("Please upload a thumbnail image first");
       return;
     }
@@ -765,6 +829,9 @@ const Dashboard = ({ setIsAuthenticated }) => {
     }
 
     setCheckingThumbnail(true);
+    if (fileOverride) {
+      setThumbnailCheckFile(fileOverride);
+    }
     setThumbnailProgress(5);
     const controller = new AbortController();
     thumbnailAbortRef.current = controller;
@@ -776,7 +843,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
     }, 500);
     try {
       const formData = new FormData();
-      formData.append("file", thumbnailCheckFile);
+      formData.append("file", fileToUse);
       formData.append("title", uploadTitle || "");
       formData.append("tags", generatedTags.join(", "));
       formData.append("description", uploadDescriptionText || "");
@@ -1278,6 +1345,37 @@ const Dashboard = ({ setIsAuthenticated }) => {
             null
           }
         />
+
+        {audioFile && imageFile && (
+          <div
+            className="fixed bottom-4 right-4 z-50 border rounded-lg shadow-lg p-2"
+            style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}
+          >
+            <div className="flex items-center gap-2">
+              <div
+                className="rounded overflow-hidden"
+                style={{ width: 72, height: 72, backgroundColor: backgroundColor === "white" ? "#ffffff" : "#000000" }}
+              >
+                <img
+                  src={imagePreviewUrl}
+                  alt="Mini preview"
+                  className="w-full h-full object-contain"
+                  style={{
+                    objectFit: "contain",
+                    transform: `translate(${imagePosX * 50}%, ${imagePosY * 50}%) scale(${imageScaleX}, ${imageScaleY})`,
+                    transformOrigin: 'center'
+                  }}
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <audio controls src={audioPreviewUrl} className="h-8 w-40 sm:w-56" />
+                <Button type="button" size="sm" variant="outline" onClick={scrollToPreview}>
+                  Back to preview
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <Tabs defaultValue="tags" className="space-y-4 sm:space-y-6">
           <TabsList className="grid w-full max-w-3xl mx-auto grid-cols-5 gap-1 text-xs sm:text-sm dashboard-tabs">
@@ -1978,6 +2076,19 @@ const Dashboard = ({ setIsAuthenticated }) => {
                               </div>
                             </div>
                           )}
+                          {beatAnalysis && (
+                            <div className="mt-4 flex justify-center">
+                              <Button
+                                onClick={handleApplyBeatFixes}
+                                disabled={applyingBeatFixes}
+                                variant="outline"
+                                size="default"
+                                className="border-emerald-500 text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950 px-4 sm:px-6 py-2 sm:py-2.5 text-sm sm:text-base whitespace-nowrap"
+                              >
+                                {applyingBeatFixes ? "Applying Fixes..." : "Add Fixes"}
+                              </Button>
+                            </div>
+                          )}
 
                           {!beatAnalysis && !analyzingBeat && (
                             <p className="text-xs sm:text-sm text-center leading-relaxed px-2" style={{color: 'var(--text-secondary)'}}>
@@ -2002,6 +2113,17 @@ const Dashboard = ({ setIsAuthenticated }) => {
                               >
                                 {checkingThumbnail ? "Checking..." : "Check Thumbnail"}
                               </Button>
+                              {imageFile && (
+                                <Button
+                                  onClick={() => handleThumbnailCheck(imageFile)}
+                                  disabled={checkingThumbnail || !thumbnailContextReady}
+                                  variant="outline"
+                                  size="default"
+                                  className="w-full sm:w-auto border-emerald-500/70 text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950 px-4 sm:px-6 py-2 sm:py-2.5 text-sm sm:text-base whitespace-nowrap"
+                                >
+                                  Check Uploaded Thumbnail
+                                </Button>
+                              )}
                               {checkingThumbnail && (
                                 <Button
                                   onClick={cancelThumbnailCheck}
@@ -2560,34 +2682,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
                               </p>
                           </CardContent>
                         </Card>
-                      )}
-
-                      {audioFile && imageFile && (
-                        <div
-                          className="fixed bottom-4 right-4 z-50 border rounded-lg shadow-lg p-2"
-                          style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}
-                        >
-                          <div className="flex items-center gap-2">
-                            <div
-                              className="rounded overflow-hidden"
-                              style={{ width: 72, height: 72, backgroundColor: backgroundColor === "white" ? "#ffffff" : "#000000" }}
-                            >
-                              <img
-                                src={imagePreviewUrl}
-                                alt="Mini preview"
-                                className="w-full h-full object-contain"
-                                style={{
-                                  objectFit: "contain",
-                                  transform: `translate(${imagePosX * 50}%, ${imagePosY * 50}%) scale(${imageScaleX}, ${imageScaleY})`,
-                                  transformOrigin: 'center'
-                                }}
-                              />
-                            </div>
-                            <Button type="button" size="sm" variant="outline" onClick={scrollToPreview}>
-                              Back to preview
-                            </Button>
-                          </div>
-                        </div>
                       )}
 
                       <Button

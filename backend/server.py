@@ -256,6 +256,19 @@ class BeatAnalysisResponse(BaseModel):
     suggestions: List[str]
     predicted_performance: str  # "Poor", "Average", "Good", "Excellent"
 
+class BeatFixRequest(BaseModel):
+    title: str
+    tags: List[str]
+    description: str = ""
+    analysis: BeatAnalysisResponse
+
+class BeatFixResponse(BaseModel):
+    title: str
+    tags: List[str]
+    description: str
+    applied_fixes: dict
+    notes: Optional[str] = None
+
 class ThumbnailCheckResponse(BaseModel):
     score: int  # 0-100 overall thumbnail quality
     verdict: str
@@ -1993,6 +2006,129 @@ If tags look stuffed or irrelevant, explicitly say so and recommend a smaller, h
         
     except Exception as e:
         logging.error(f"Beat analysis error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============ Beat Fixes Route ============
+@api_router.post("/beat/fix", response_model=BeatFixResponse)
+async def fix_beat(request: BeatFixRequest, current_user: dict = Depends(get_current_user)):
+    """Apply AI fixes to title/description/tags only when analysis indicates issues."""
+    try:
+        has_credit = await check_and_use_credit(current_user['id'], consume=False)
+        if not has_credit:
+            status = await get_user_subscription_status(current_user['id'])
+            raise HTTPException(
+                status_code=402,
+                detail={
+                    "message": "Daily limit reached. Upgrade to Pro for unlimited fixes!",
+                    "resets_at": status.get('resets_at')
+                }
+            )
+
+        analysis = request.analysis
+        issues_text = " ".join(analysis.weaknesses + analysis.suggestions).lower()
+
+        needs_title = analysis.title_score < 70 or "title" in issues_text
+        needs_tags = analysis.tags_score < 70 or "tag" in issues_text
+        needs_description = (not request.description.strip()) or ("description" in issues_text) or ("seo" in issues_text)
+
+        if not any([needs_title, needs_tags, needs_description]):
+            return BeatFixResponse(
+                title=request.title,
+                tags=request.tags[:120],
+                description=request.description,
+                applied_fixes={"title": False, "tags": False, "description": False},
+                notes="No critical issues detected. No fixes applied."
+            )
+
+        fix_prompt = f"""You are a YouTube beat upload editor. Apply fixes ONLY to areas flagged below.
+
+Inputs:
+TITLE: {request.title}
+TAGS ({len(request.tags)}): {", ".join(request.tags)}
+DESCRIPTION: {request.description if request.description else "No description provided"}
+
+Analysis feedback:
+Weaknesses: {analysis.weaknesses}
+Suggestions: {analysis.suggestions}
+
+Fix flags:
+- title: {"YES" if needs_title else "NO"}
+- tags: {"YES" if needs_tags else "NO"}
+- description: {"YES" if needs_description else "NO"}
+
+Rules:
+1) If a fix flag is NO, return the original value unchanged for that field.
+2) Tags must be high-intent, relevant, and NOT stuffed. Max 120 tags. Keep order sensible.
+3) Title should be YouTube-searchable with the artist x artist type beat format when relevant.
+4) Description must sound like a real producer upload (not an AI response). Keep the user's vibe.
+5) If description is fixed, add a short pricing line if missing (e.g., "Lease: $20 | Trackout: $50 | Unlimited: $100").
+6) Keep any contact/social links present in the original description.
+7) Return STRICT JSON only.
+
+Return JSON schema:
+{{
+  "title": "string",
+  "tags": ["tag1", "tag2"],
+  "description": "string",
+  "applied_fixes": {{
+    "title": true/false,
+    "tags": true/false,
+    "description": true/false
+  }},
+  "notes": "short summary"
+}}
+"""
+
+        response = await llm_chat(
+            system_message="You refine beat uploads for YouTube. Be concise, practical, and keep the creator's style.",
+            user_message=fix_prompt,
+        )
+
+        try:
+            response_text = response.strip()
+            if '```json' in response_text:
+                start = response_text.find('```json') + 7
+                end = response_text.find('```', start)
+                response_text = response_text[start:end].strip()
+            elif '```' in response_text:
+                start = response_text.find('```') + 3
+                end = response_text.find('```', start)
+                response_text = response_text[start:end].strip()
+
+            fixed = json.loads(response_text)
+
+            tags = fixed.get("tags", request.tags)
+            if not isinstance(tags, list):
+                tags = request.tags
+            tags = tags[:120]
+
+            result = BeatFixResponse(
+                title=fixed.get("title", request.title),
+                tags=tags,
+                description=fixed.get("description", request.description),
+                applied_fixes=fixed.get("applied_fixes", {
+                    "title": needs_title,
+                    "tags": needs_tags,
+                    "description": needs_description
+                }),
+                notes=fixed.get("notes")
+            )
+
+            await consume_credit(current_user['id'])
+            return result
+        except Exception as e:
+            logging.error(f"Failed to parse beat fixes: {str(e)}")
+            await consume_credit(current_user['id'])
+            return BeatFixResponse(
+                title=request.title,
+                tags=request.tags[:120],
+                description=request.description,
+                applied_fixes={"title": False, "tags": False, "description": False},
+                notes="Failed to apply fixes. Please try again."
+            )
+    except Exception as e:
+        logging.error(f"Beat fix error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
