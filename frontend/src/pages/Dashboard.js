@@ -1016,18 +1016,18 @@ const Dashboard = ({ setIsAuthenticated }) => {
   };
 
   const previewAspectRatio = videoAspectRatio === "1:1"
-    - "1 / 1"
+    ? "1 / 1"
     : videoAspectRatio === "9:16"
-    - "9 / 16"
+    ? "9 / 16"
     : videoAspectRatio === "4:5"
-    - "4 / 5"
+    ? "4 / 5"
     : "16 / 9";
   const previewRatio = videoAspectRatio === "1:1"
-    - 1
+    ? 1
     : videoAspectRatio === "9:16"
-    - 9 / 16
+    ? 9 / 16
     : videoAspectRatio === "4:5"
-    - 4 / 5
+    ? 4 / 5
     : 16 / 9;
 
   const previewSectionRef = useRef(null);
