@@ -2473,33 +2473,29 @@ const Dashboard = ({ setIsAuthenticated }) => {
                   Get AI-powered insights on your channel performance (uses 1 AI credit)
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6 relative">
-                <div
-                  style={{
-                    filter: isPro ? "none" : "blur(6px)",
-                    pointerEvents: isPro ? "auto" : "none"
-                  }}
-                >
-                  {!youtubeConnected ? (
-                    <Alert>
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertDescription>
-                        Connect your YouTube account first to analyze your channel.
-                      </AlertDescription>
-                    </Alert>
-                  ) : (
-                    <Button
-                      onClick={handleAnalyzeChannel}
-                      disabled={loadingAnalytics || !isPro}
-                      className="w-full btn-modern"
-                    >
-                      <Sparkles className="mr-2 h-5 w-5" />
-                      {loadingAnalytics ? "Analyzing..." : "Analyze My Channel"}
-                    </Button>
-                  )}
+              <CardContent className="space-y-6">
+                {isPro && (
+                  <div>
+                    {!youtubeConnected ? (
+                      <Alert>
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription>
+                          Connect your YouTube account first to analyze your channel.
+                        </AlertDescription>
+                      </Alert>
+                    ) : (
+                      <Button
+                        onClick={handleAnalyzeChannel}
+                        disabled={loadingAnalytics || !isPro}
+                        className="w-full btn-modern"
+                      >
+                        <Sparkles className="mr-2 h-5 w-5" />
+                        {loadingAnalytics ? "Analyzing..." : "Analyze My Channel"}
+                      </Button>
+                    )}
 
-                  {analyticsData && (
-                    <div className="space-y-6 mt-6">
+                    {analyticsData && (
+                      <div className="space-y-6 mt-6">
                     {/* Channel Health Score */}
                     <Card className="producer-card glass-card border-2 border-purple-500">
                       <CardContent className="p-6">
@@ -2715,16 +2711,18 @@ const Dashboard = ({ setIsAuthenticated }) => {
                       </Card>
                     )}
                   </div>
-                  )}
-                </div>
+                    )}
+                  </div>
+                )}
 
                 {!isPro && (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="text-center p-6 rounded-xl border-2 shadow-lg max-w-md"
-                      style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--accent-primary)' }}
+                  <div className="flex items-center justify-center py-8">
+                    <div
+                      className="w-full max-w-md text-center p-6 rounded-xl border-2 shadow-lg"
+                      style={{ backgroundColor: "var(--bg-secondary)", borderColor: "var(--accent-primary)" }}
                     >
                       <p className="text-lg font-semibold mb-2">Unlock Analytics</p>
-                      <p className="text-sm mb-4" style={{color: 'var(--text-secondary)'}}>
+                      <p className="text-sm mb-4" style={{ color: "var(--text-secondary)" }}>
                         Premium-only insights. Upgrade to access analytics and AI coaching.
                       </p>
                       <Button onClick={() => setShowUpgradeModal(true)} className="btn-modern">
