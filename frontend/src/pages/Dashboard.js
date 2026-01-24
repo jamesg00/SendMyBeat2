@@ -1042,8 +1042,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const frameWidth = previewSize;
   const frameHeight = previewSize / previewRatio;
   const imageRatio = imageMeta.ratio || 1;
-  const fitWidth = previewRatio > imageRatio - frameHeight * imageRatio : frameWidth;
-  const fitHeight = previewRatio > imageRatio - frameHeight : frameWidth / imageRatio;
+  const fitWidth = previewRatio > imageRatio ? frameHeight * imageRatio : frameWidth;
+  const fitHeight = previewRatio > imageRatio ? frameHeight : frameWidth / imageRatio;
   const fitLeft = (frameWidth - fitWidth) / 2;
   const fitTop = (frameHeight - fitHeight) / 2;
 
