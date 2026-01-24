@@ -930,7 +930,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
       formData.append('remove_watermark', removeWatermark);
       formData.append('description_override', uploadDescriptionText);
       formData.append('aspect_ratio', videoAspectRatio);
-      formData.append('image_scale', String(lockImageScale - imageScaleX : (imageScaleX + imageScaleY) / 2));
+      formData.append('image_scale', String(lockImageScale ? imageScaleX : (imageScaleX + imageScaleY) / 2));
       formData.append('image_scale_x', String(imageScaleX));
       formData.append('image_scale_y', String(imageScaleY));
       formData.append('image_pos_x', String(imagePosX));
