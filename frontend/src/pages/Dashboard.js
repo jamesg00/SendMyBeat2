@@ -21,6 +21,24 @@ import ProgressBar from "@/components/ProgressBar";
 
 const TAG_LIMIT = 120;
 const TAG_HISTORY_LIMIT = 100;
+const AUDIO_EXTENSIONS = [".mp3", ".wav", ".m4a", ".flac", ".ogg"];
+const AUDIO_MIME_TYPES = [
+  "audio/mpeg",
+  "audio/wav",
+  "audio/x-wav",
+  "audio/mp4",
+  "audio/flac",
+  "audio/ogg"
+];
+const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".avif", ".heic", ".heif"];
+const IMAGE_MIME_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/avif",
+  "image/heic",
+  "image/heif"
+];
 
   const formatTagHistoryLabel = (query = "") => {
     if (!query) return "Untitled";
@@ -110,6 +128,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [imageFileId, setImageFileId] = useState("");
   const [uploadingToYouTube, setUploadingToYouTube] = useState(false);
   const [expandedDescriptions, setExpandedDescriptions] = useState(new Set());
+  const [isAudioDragActive, setIsAudioDragActive] = useState(false);
+  const [isAudioDragValid, setIsAudioDragValid] = useState(false);
+  const [isImageDragActive, setIsImageDragActive] = useState(false);
+  const [isImageDragValid, setIsImageDragValid] = useState(false);
   
   // Subscription states
   const [subscriptionStatus, setSubscriptionStatus] = useState(null);
@@ -264,6 +286,35 @@ const Dashboard = ({ setIsAuthenticated }) => {
     localStorage.removeItem("token");
     setIsAuthenticated(false);
     toast.success("Logged out successfully");
+  };
+
+  const fileHasAllowedExtension = (fileName, allowedExtensions) => {
+    const lower = (fileName || "").toLowerCase();
+    return allowedExtensions.some((ext) => lower.endsWith(ext));
+  };
+
+  const isValidAudioFile = (file) => {
+    if (!file) return false;
+    if (file.type && AUDIO_MIME_TYPES.includes(file.type)) return true;
+    return fileHasAllowedExtension(file.name, AUDIO_EXTENSIONS);
+  };
+
+  const isValidImageFile = (file) => {
+    if (!file) return false;
+    if (file.type && IMAGE_MIME_TYPES.includes(file.type)) return true;
+    return fileHasAllowedExtension(file.name, IMAGE_EXTENSIONS);
+  };
+
+  const isValidDragItem = (item, type) => {
+    if (!item || item.kind !== "file") return false;
+    const mime = item.type || "";
+    if (type === "audio") {
+      return AUDIO_MIME_TYPES.includes(mime);
+    }
+    if (type === "image") {
+      return IMAGE_MIME_TYPES.includes(mime);
+    }
+    return false;
   };
 
   const handleAnalyzeChannel = async () => {
@@ -946,9 +997,13 @@ const Dashboard = ({ setIsAuthenticated }) => {
     }
   };
 
-  const handleAudioUpload = async (e) => {
-    const file = e.target.files?.[0];
+  const handleAudioUpload = async (input) => {
+    const file = input?.target?.files?.[0] || input;
     if (!file) return;
+    if (!isValidAudioFile(file)) {
+      toast.error("Invalid audio file. Please use MP3, WAV, M4A, FLAC, or OGG.");
+      return;
+    }
 
     // Warn for very large files
     const fileSizeMB = file.size / (1024 * 1024);
@@ -988,9 +1043,13 @@ const Dashboard = ({ setIsAuthenticated }) => {
     }
   };
 
-  const handleImageUpload = async (e) => {
-    const file = e.target.files?.[0];
+  const handleImageUpload = async (input) => {
+    const file = input?.target?.files?.[0] || input;
     if (!file) return;
+    if (!isValidImageFile(file)) {
+      toast.error("Invalid image file. Please use JPG, PNG, WEBP, AVIF, HEIC, or HEIF.");
+      return;
+    }
 
     setUploadingImage(true);
     const formData = new FormData();
@@ -1008,6 +1067,54 @@ const Dashboard = ({ setIsAuthenticated }) => {
     } finally {
       setUploadingImage(false);
     }
+  };
+
+  const handleAudioDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsAudioDragActive(true);
+    setIsAudioDragValid(isValidDragItem(e.dataTransfer?.items?.[0], "audio"));
+  };
+
+  const handleAudioDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsAudioDragActive(false);
+    setIsAudioDragValid(false);
+  };
+
+  const handleAudioDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsAudioDragActive(false);
+    setIsAudioDragValid(false);
+    const file = e.dataTransfer?.files?.[0];
+    if (!file) return;
+    handleAudioUpload(file);
+  };
+
+  const handleImageDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsImageDragActive(true);
+    setIsImageDragValid(isValidDragItem(e.dataTransfer?.items?.[0], "image"));
+  };
+
+  const handleImageDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsImageDragActive(false);
+    setIsImageDragValid(false);
+  };
+
+  const handleImageDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsImageDragActive(false);
+    setIsImageDragValid(false);
+    const file = e.dataTransfer?.files?.[0];
+    if (!file) return;
+    handleImageUpload(file);
   };
 
   const handleYouTubeUpload = async () => {
@@ -2279,7 +2386,17 @@ const Dashboard = ({ setIsAuthenticated }) => {
                     <div className="grid md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="audio-upload">Audio File (MP3, WAV)</Label>
-                        <div className="border-2 border-dashed border-slate-300 rounded-lg p-4 text-center">
+                        <div
+                          className={`border-2 border-dashed rounded-lg p-4 text-center transition-shadow ${
+                            isAudioDragActive && isAudioDragValid
+                              ? "border-white shadow-[0_0_24px_rgba(255,255,255,0.9)]"
+                              : "border-slate-300"
+                          }`}
+                          onDragOver={handleAudioDragOver}
+                          onDragEnter={handleAudioDragOver}
+                          onDragLeave={handleAudioDragLeave}
+                          onDrop={handleAudioDrop}
+                        >
                           <Input
                             id="audio-upload"
                             type="file"
@@ -2311,7 +2428,17 @@ const Dashboard = ({ setIsAuthenticated }) => {
 
                       <div className="space-y-2">
                         <Label htmlFor="image-upload">Thumbnail Image (JPG, PNG)</Label>
-                        <div className="border-2 border-dashed border-slate-300 rounded-lg p-4 text-center">
+                        <div
+                          className={`border-2 border-dashed rounded-lg p-4 text-center transition-shadow ${
+                            isImageDragActive && isImageDragValid
+                              ? "border-white shadow-[0_0_24px_rgba(255,255,255,0.9)]"
+                              : "border-slate-300"
+                          }`}
+                          onDragOver={handleImageDragOver}
+                          onDragEnter={handleImageDragOver}
+                          onDragLeave={handleImageDragLeave}
+                          onDrop={handleImageDrop}
+                        >
                           <Input
                             id="image-upload"
                             type="file"
