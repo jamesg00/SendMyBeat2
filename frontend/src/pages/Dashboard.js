@@ -184,14 +184,24 @@ const Dashboard = ({ setIsAuthenticated }) => {
     uploadDescriptionText?.trim() &&
     hasEffectiveTags
   );
+  const adEligibleTabs = activeTab === "tags" || activeTab === "descriptions";
+  const adTagContentReady =
+    generatedTags.length >= 20 ||
+    tagHistory.some((tag) => (tag.tags || []).length >= 20);
+  const adDescriptionContentReady =
+    descriptions.some((desc) => (desc.content || "").trim().length >= 200);
+  const adContentReady =
+    (activeTab === "tags" && adTagContentReady) ||
+    (activeTab === "descriptions" && adDescriptionContentReady);
   const canShowAds = Boolean(
     subscriptionStatus &&
     !subscriptionStatus.is_subscribed &&
     userLoaded &&
     descriptionsLoaded &&
-    tagHistoryLoaded
+    tagHistoryLoaded &&
+    adEligibleTabs &&
+    adContentReady
   );
-  const adsUnlocked = generatedTags.length > 0 || (tagHistory?.length || 0) > 0;
 
   useEffect(() => {
     fetchUser();
@@ -1474,14 +1484,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
           />
         )}
 
-        {/* Advertisement Banner - Only for free users */}
-        {canShowAds && adsUnlocked && (
-          <AdBanner 
-            isSubscribed={subscriptionStatus.is_subscribed}
-            style={{ marginBottom: '24px' }}
-          />
-        )}
-
         {/* Progress Bar */}
         <ProgressBar
           isActive={progressActive}
@@ -1536,6 +1538,13 @@ const Dashboard = ({ setIsAuthenticated }) => {
 
           {/* Tag Generator Tab */}
           <TabsContent value="tags" className="space-y-4 sm:space-y-6 dashboard-section">
+          {canShowAds && activeTab === "tags" && (
+            <AdBanner
+              isSubscribed={subscriptionStatus.is_subscribed}
+              style={{ marginBottom: '24px' }}
+            />
+          )}
+
             <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] gap-4 sm:gap-6">
               <Card className="dashboard-card">
                 <CardHeader className="px-4 sm:px-6 py-4 sm:py-6">
@@ -1797,6 +1806,13 @@ const Dashboard = ({ setIsAuthenticated }) => {
 
           {/* Descriptions Tab */}
           <TabsContent value="descriptions" className="space-y-4 sm:space-y-6 dashboard-section">
+          {canShowAds && activeTab === "descriptions" && (
+            <AdBanner
+              isSubscribed={subscriptionStatus.is_subscribed}
+              style={{ marginBottom: '24px' }}
+            />
+          )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
               {/* Create/Save Description */}
               <Card className="dashboard-card">
