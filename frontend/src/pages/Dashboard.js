@@ -1,5 +1,5 @@
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -71,6 +71,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [loadingTags, setLoadingTags] = useState(false);
   const [tagHistory, setTagHistory] = useState([]);
   const [selectedTagHistoryIds, setSelectedTagHistoryIds] = useState([]);
+  const [activeTab, setActiveTab] = useState("tags");
   const [descriptions, setDescriptions] = useState([]);
   const [loadingDescriptions, setLoadingDescriptions] = useState(false);
   const [newDescription, setNewDescription] = useState({ title: "", content: "" });
@@ -109,8 +110,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [selectedDescriptionId, setSelectedDescriptionId] = useState("");
   const [uploadDescriptionText, setUploadDescriptionText] = useState("");
   const [selectedTagsId, setSelectedTagsId] = useState("");
-  const [refinedTags, setRefinedTags] = useState([]);
-  const [refinedTagsLabel, setRefinedTagsLabel] = useState("");
   const [privacyStatus, setPrivacyStatus] = useState("public");
   const [videoAspectRatio, setVideoAspectRatio] = useState("16:9");
   const [imageScaleX, setImageScaleX] = useState(1);
@@ -144,7 +143,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
   // Analytics states
   const [loadingAnalytics, setLoadingAnalytics] = useState(false);
   const [analyticsData, setAnalyticsData] = useState(null);
-  const [joiningTagHistory, setJoiningTagHistory] = useState(false);
 
   // Grow in 120 states
   const [growthData, setGrowthData] = useState(null);
@@ -154,11 +152,9 @@ const Dashboard = ({ setIsAuthenticated }) => {
 
   // Check-in prompt state
   const [showCheckinPrompt, setShowCheckinPrompt] = useState(false);
-  const [activeTab, setActiveTab] = useState("tags");
 
   // Beat Analyzer states
   const [beatAnalysis, setBeatAnalysis] = useState(null);
-  const [applyingBeatFixes, setApplyingBeatFixes] = useState(false);
   const [analyzingBeat, setAnalyzingBeat] = useState(false);
   const [showAiYoutubeTools, setShowAiYoutubeTools] = useState(false);
 
@@ -171,28 +167,11 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const thumbnailProgressIntervalRef = useRef(null);
 
   const isPro = !!subscriptionStatus?.is_subscribed;
-  const selectedTagRecord = useMemo(
-    () => tagHistory.find((tag) => tag.id === selectedTagsId),
-    [tagHistory, selectedTagsId]
-  );
-  const effectiveTags = selectedTagsId === "refined"
-    ? refinedTags
-    : (generatedTags.length ? generatedTags : (selectedTagRecord?.tags || []));
-  const hasEffectiveTags = effectiveTags.length > 0;
   const thumbnailContextReady = Boolean(
     uploadTitle?.trim() &&
     uploadDescriptionText?.trim() &&
-    hasEffectiveTags
+    generatedTags?.length
   );
-  const adEligibleTabs = activeTab === "tags" || activeTab === "descriptions";
-  const adTagContentReady =
-    generatedTags.length >= 20 ||
-    tagHistory.some((tag) => (tag.tags || []).length >= 20);
-  const adDescriptionContentReady =
-    descriptions.some((desc) => (desc.content || "").trim().length >= 200);
-  const adContentReady =
-    (activeTab === "tags" && adTagContentReady) ||
-    (activeTab === "descriptions" && adDescriptionContentReady);
   const canShowAds = Boolean(
     subscriptionStatus &&
     !subscriptionStatus.is_subscribed &&
@@ -202,6 +181,15 @@ const Dashboard = ({ setIsAuthenticated }) => {
     adEligibleTabs &&
     adContentReady
   );
+  const adsUnlocked = generatedTags.length > 0 || (tagHistory?.length || 0) > 0;
+
+  const formatTime = (seconds = 0) => {
+    if (!Number.isFinite(seconds)) return "0:00";
+    const totalSeconds = Math.floor(seconds);
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
 
   useEffect(() => {
     fetchUser();
@@ -211,6 +199,43 @@ const Dashboard = ({ setIsAuthenticated }) => {
     fetchSubscriptionStatus();
     fetchGrowthStatus();
   }, []);
+
+  useEffect(() => {
+    const audioEl = audioPlayerRef.current;
+    if (!audioEl) return;
+
+    const handleTimeUpdate = () => setAudioCurrentTime(audioEl.currentTime || 0);
+    const handleLoadedMetadata = () => setAudioDuration(audioEl.duration || 0);
+    const handlePlay = () => setIsAudioPlaying(true);
+    const handlePause = () => setIsAudioPlaying(false);
+    const handleEnded = () => setIsAudioPlaying(false);
+
+    audioEl.addEventListener("timeupdate", handleTimeUpdate);
+    audioEl.addEventListener("loadedmetadata", handleLoadedMetadata);
+    audioEl.addEventListener("play", handlePlay);
+    audioEl.addEventListener("pause", handlePause);
+    audioEl.addEventListener("ended", handleEnded);
+
+    return () => {
+      audioEl.removeEventListener("timeupdate", handleTimeUpdate);
+      audioEl.removeEventListener("loadedmetadata", handleLoadedMetadata);
+      audioEl.removeEventListener("play", handlePlay);
+      audioEl.removeEventListener("pause", handlePause);
+      audioEl.removeEventListener("ended", handleEnded);
+    };
+  }, [audioPreviewUrl]);
+
+  useEffect(() => {
+    if (!audioPlayerRef.current) return;
+    if (!audioPreviewUrl) {
+      setAudioCurrentTime(0);
+      setAudioDuration(0);
+      setIsAudioPlaying(false);
+      return;
+    }
+    audioPlayerRef.current.currentTime = 0;
+    setAudioCurrentTime(0);
+  }, [audioPreviewUrl]);
 
   useEffect(() => {
     if (!selectedDescriptionId) {
@@ -406,6 +431,25 @@ const Dashboard = ({ setIsAuthenticated }) => {
     }
   };
 
+  const toggleAudioPlayback = () => {
+    const audioEl = audioPlayerRef.current;
+    if (!audioEl) return;
+    if (audioEl.paused) {
+      audioEl.play();
+    } else {
+      audioEl.pause();
+    }
+  };
+
+  const handleAudioSeek = (event) => {
+    const nextTime = Number(event.target.value);
+    const audioEl = audioPlayerRef.current;
+    if (audioEl) {
+      audioEl.currentTime = nextTime;
+    }
+    setAudioCurrentTime(nextTime);
+  };
+
   const promptCheckin = () => {
     // Only show if user has started the challenge and hasn't checked in today
     if (growthData && growthData.challenge_start_date) {
@@ -579,21 +623,24 @@ const Dashboard = ({ setIsAuthenticated }) => {
       toast.error("Select at least two generations to join");
       return;
     }
-    if (selectedItems.length > 3) {
-      toast.error("You can join up to 3 generations at once.");
-      return;
-    }
 
-    setJoiningTagHistory(true);
     const mergedTags = selectedItems.flatMap((item) => item.tags || []);
+    const combinedTags = [...generatedTags, ...mergedTags];
+
     const seen = new Set();
-    const candidateTags = [];
-    for (const tag of mergedTags) {
+    const uniqueTags = [];
+    for (const tag of combinedTags) {
       const tagLower = tag.toLowerCase();
       if (!seen.has(tagLower)) {
         seen.add(tagLower);
-        candidateTags.push(tag);
+        uniqueTags.push(tag);
       }
+    }
+
+    if (uniqueTags.length > TAG_LIMIT) {
+      const excess = uniqueTags.length - TAG_LIMIT;
+      toast.error(`Joined tags exceed ${TAG_LIMIT} limit by ${excess}. Remove some tags first.`);
+      return;
     }
 
     const joinLabel = selectedItems
@@ -601,42 +648,21 @@ const Dashboard = ({ setIsAuthenticated }) => {
       .filter(Boolean)
       .join(" x ");
 
+    setGeneratedTags(uniqueTags);
+    setSelectedTagHistoryIds([]);
+
     try {
-      const response = await axios.post(`${API}/tags/join-ai`, {
-        queries: selectedItems.map((item) => item.query),
-        candidate_tags: candidateTags,
-        max_tags: TAG_LIMIT
-      });
-
-      const aiTags = response.data?.tags || [];
-      if (!aiTags.length) {
-        throw new Error("No tags returned");
-      }
-
-      setGeneratedTags(aiTags);
-      setSelectedTagHistoryIds([]);
-
       const saveResponse = await axios.post(`${API}/tags/history`, {
         query: joinLabel || "Joined Tags",
-        tags: aiTags
+        tags: uniqueTags
       });
       setTagHistory((prev) => {
         const merged = [saveResponse.data, ...prev];
         return merged.slice(0, TAG_HISTORY_LIMIT);
       });
-      toast.success(`Joined ${selectedItems.length} generations! Total: ${aiTags.length}/${TAG_LIMIT}`);
+      toast.success(`Joined ${selectedItems.length} generations! Total: ${uniqueTags.length}/${TAG_LIMIT}`);
     } catch (error) {
-      if (error.response?.status === 402) {
-        setShowUpgradeModal(true);
-        toast.error("Daily limit reached! Upgrade to continue.");
-      } else {
-        toast.error("Failed to join tags with AI. Try again.");
-      }
-    } finally {
-      setJoiningTagHistory(false);
-      setTimeout(() => {
-        fetchSubscriptionStatus();
-      }, 500);
+      toast.error("Joined tags saved locally, but failed to save to history.");
     }
   };
 
@@ -821,22 +847,19 @@ const Dashboard = ({ setIsAuthenticated }) => {
   };
 
   const handleAnalyzeBeat = async () => {
-    if (!uploadTitle || !hasEffectiveTags) {
-      toast.error("Please add a title and tags first");
+    if (!uploadTitle || generatedTags.length === 0) {
+      toast.error("Please add a title and generate tags first");
       return;
     }
 
     setAnalyzingBeat(true);
     try {
       const selectedDesc = descriptions.find(d => d.id === selectedDescriptionId);
-      const descriptionText = uploadDescriptionText?.trim()
-        ? uploadDescriptionText
-        : (selectedDesc?.content || "");
       
       const response = await axios.post(`${API}/beat/analyze`, {
         title: uploadTitle,
-        tags: effectiveTags,
-        description: descriptionText
+        tags: generatedTags,
+        description: selectedDesc?.content || ""
       });
       
       setBeatAnalysis(response.data);
@@ -849,76 +872,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
     }
   };
 
-  const handleApplyBeatFixes = async () => {
-    if (!beatAnalysis) {
-      toast.error("Analyze your beat first to unlock fixes");
-      return;
-    }
-    if (!uploadTitle || !hasEffectiveTags) {
-      toast.error("Please add a title and tags first");
-      return;
-    }
-
-    setApplyingBeatFixes(true);
-    try {
-      const selectedDesc = descriptions.find(d => d.id === selectedDescriptionId);
-      const baseDescription = uploadDescriptionText?.trim()
-        ? uploadDescriptionText
-        : (selectedDesc?.content || "");
-
-      const response = await axios.post(`${API}/beat/fix`, {
-        title: uploadTitle,
-        tags: effectiveTags,
-        description: baseDescription,
-        analysis: beatAnalysis
-      });
-
-      const fixed = response.data || {};
-      const applied = fixed.applied_fixes || {};
-      if (fixed.title) {
-        setUploadTitle(fixed.title);
-      }
-      if (applied.tags && Array.isArray(fixed.tags) && fixed.tags.length) {
-        setRefinedTags(fixed.tags);
-        const baseLabel = formatTagHistoryLabel(
-          selectedTagRecord?.query || tagQuery || uploadTitle || "Tag list"
-        );
-        setRefinedTagsLabel(`${baseLabel} (refined)`);
-        setSelectedTagsId("refined");
-      }
-      if (fixed.description !== undefined) {
-        setUploadDescriptionText(fixed.description);
-      }
-
-      const appliedList = [
-        applied.title ? "title" : null,
-        applied.description ? "description" : null,
-        applied.tags ? "tags" : null
-      ].filter(Boolean);
-
-      if (appliedList.length === 0) {
-        toast.info("No fixes needed based on your analysis.");
-      } else {
-        toast.success(`Applied fixes to: ${appliedList.join(", ")}`);
-      }
-    } catch (error) {
-      if (error.response?.status === 402) {
-        setShowUpgradeModal(true);
-        toast.error("Daily limit reached! Upgrade to continue.");
-      } else {
-        toast.error("Failed to apply fixes");
-      }
-    } finally {
-      setApplyingBeatFixes(false);
-      setTimeout(() => {
-        fetchSubscriptionStatus();
-      }, 500);
-    }
-  };
-
-  const handleThumbnailCheck = async (fileOverride = null) => {
-    const fileToUse = fileOverride || thumbnailCheckFile;
-    if (!fileToUse) {
+  const handleThumbnailCheck = async () => {
+    if (!thumbnailCheckFile) {
       toast.error("Please upload a thumbnail image first");
       return;
     }
@@ -928,9 +883,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
     }
 
     setCheckingThumbnail(true);
-    if (fileOverride) {
-      setThumbnailCheckFile(fileOverride);
-    }
     setThumbnailProgress(5);
     const controller = new AbortController();
     thumbnailAbortRef.current = controller;
@@ -942,9 +894,9 @@ const Dashboard = ({ setIsAuthenticated }) => {
     }, 500);
     try {
       const formData = new FormData();
-      formData.append("file", fileToUse);
+      formData.append("file", thumbnailCheckFile);
       formData.append("title", uploadTitle || "");
-      formData.append("tags", effectiveTags.join(", "));
+      formData.append("tags", generatedTags.join(", "));
       formData.append("description", uploadDescriptionText || "");
       formData.append("llm_provider", "grok");
 
@@ -1261,6 +1213,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [imageMeta, setImageMeta] = useState({ width: 0, height: 0, ratio: 1 });
   const [imagePreviewUrl, setImagePreviewUrl] = useState("");
   const [audioPreviewUrl, setAudioPreviewUrl] = useState("");
+  const audioPlayerRef = useRef(null);
+  const [audioDuration, setAudioDuration] = useState(0);
+  const [audioCurrentTime, setAudioCurrentTime] = useState(0);
+  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
 
   const frameWidth = previewSize;
   const frameHeight = previewSize / previewRatio;
@@ -1404,7 +1360,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
     setActiveTab("upload");
     setTimeout(() => {
       previewSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 200);
+    }, 100);
   };
 
   return (
@@ -1495,37 +1451,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
             null
           }
         />
-
-        {audioFile && imageFile && (
-          <div
-            className="fixed bottom-4 right-4 z-50 border rounded-lg shadow-lg p-2"
-            style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}
-          >
-            <div className="flex items-center gap-2">
-              <div
-                className="rounded overflow-hidden"
-                style={{ width: 72, height: 72, backgroundColor: backgroundColor === "white" ? "#ffffff" : "#000000" }}
-              >
-                <img
-                  src={imagePreviewUrl}
-                  alt="Mini preview"
-                  className="w-full h-full object-contain"
-                  style={{
-                    objectFit: "contain",
-                    transform: `translate(${imagePosX * 50}%, ${imagePosY * 50}%) scale(${imageScaleX}, ${imageScaleY})`,
-                    transformOrigin: 'center'
-                  }}
-                />
-              </div>
-              <div className="flex flex-col gap-2">
-                <audio controls src={audioPreviewUrl} className="h-8 w-40 sm:w-56" />
-                <Button type="button" size="sm" variant="outline" onClick={scrollToPreview}>
-                  Back to preview
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 sm:space-y-6">
           <TabsList className="grid w-full max-w-3xl mx-auto grid-cols-5 gap-1 text-xs sm:text-sm dashboard-tabs">
@@ -1722,10 +1647,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
                             variant="outline"
                             size="sm"
                             onClick={handleJoinSelectedTagHistory}
-                            disabled={selectedTagHistoryIds.length < 2 || joiningTagHistory}
+                            disabled={selectedTagHistoryIds.length < 2}
                             className="text-xs sm:text-sm"
                           >
-                            {joiningTagHistory ? "Joining..." : "Join Selected"}
+                            Join Selected
                           </Button>
                           {selectedTagHistoryIds.length > 0 && (
                             <Button
@@ -2162,26 +2087,26 @@ const Dashboard = ({ setIsAuthenticated }) => {
                             </p>
                             <Button
                               onClick={handleAnalyzeBeat}
-                              disabled={analyzingBeat || !uploadTitle || !hasEffectiveTags}
+                              disabled={analyzingBeat || !uploadTitle || generatedTags.length === 0}
                               variant="outline"
                               size="default"
                               className="w-full sm:w-auto border-yellow-500 text-yellow-600 hover:bg-yellow-50 dark:text-yellow-400 dark:hover:bg-yellow-950 px-4 sm:px-6 py-2 sm:py-2.5 text-sm sm:text-base whitespace-nowrap"
-                              title={!uploadTitle ? "Please add a title first" : !hasEffectiveTags ? "Please select or generate tags first" : "Analyze your beat"}
+                              title={!uploadTitle ? "Please add a title first" : generatedTags.length === 0 ? "Please generate tags in the Tags tab first" : "Analyze your beat"}
                             >
                               {analyzingBeat ? "Analyzing..." : "Analyze Beat"}
                             </Button>
                           </div>
 
-                          {(!uploadTitle || !hasEffectiveTags) && !beatAnalysis && !analyzingBeat && (
+                          {(!uploadTitle || generatedTags.length === 0) && !beatAnalysis && !analyzingBeat && (
                             <Alert className="mb-4 p-3 sm:p-4">
                               <AlertCircle className="h-4 w-4 sm:h-5 sm:w-5" />
                               <AlertDescription className="text-xs sm:text-sm leading-relaxed">
-                                {!uploadTitle && !hasEffectiveTags ? (
-                                  <>First, add a title and either generate tags in <strong>Tags</strong> or select tags in <strong>Upload</strong>.</>
+                                {!uploadTitle && generatedTags.length === 0 ? (
+                                  <>First, go to the <strong>Tags</strong> tab to generate tags, then come back here and add a title to analyze your beat.</>
                                 ) : !uploadTitle ? (
                                   <>Add a title below to analyze your beat.</>
                                 ) : (
-                                  <>Select tags in <strong>Upload</strong> or generate them in <strong>Tags</strong> first, then analyze.</>
+                                  <>Go to the <strong>Tags</strong> tab to generate tags first, then come back here to analyze.</>
                                 )}
                               </AlertDescription>
                             </Alert>
@@ -2240,19 +2165,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
                               </div>
                             </div>
                           )}
-                          {beatAnalysis && (
-                            <div className="mt-4 flex justify-center">
-                              <Button
-                                onClick={handleApplyBeatFixes}
-                                disabled={applyingBeatFixes}
-                                variant="outline"
-                                size="default"
-                                className="border-emerald-500 text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950 px-4 sm:px-6 py-2 sm:py-2.5 text-sm sm:text-base whitespace-nowrap"
-                              >
-                                {applyingBeatFixes ? "Applying Fixes..." : "Add Fixes"}
-                              </Button>
-                            </div>
-                          )}
 
                           {!beatAnalysis && !analyzingBeat && (
                             <p className="text-xs sm:text-sm text-center leading-relaxed px-2" style={{color: 'var(--text-secondary)'}}>
@@ -2277,17 +2189,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
                               >
                                 {checkingThumbnail ? "Checking..." : "Check Thumbnail"}
                               </Button>
-                              {imageFile && (
-                                <Button
-                                  onClick={() => handleThumbnailCheck(imageFile)}
-                                  disabled={checkingThumbnail || !thumbnailContextReady}
-                                  variant="outline"
-                                  size="default"
-                                  className="w-full sm:w-auto border-emerald-500/70 text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950 px-4 sm:px-6 py-2 sm:py-2.5 text-sm sm:text-base whitespace-nowrap"
-                                >
-                                  Check Uploaded Thumbnail
-                                </Button>
-                              )}
                               {checkingThumbnail && (
                                 <Button
                                   onClick={cancelThumbnailCheck}
@@ -2527,11 +2428,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
                             <SelectValue placeholder="Choose tags" />
                           </SelectTrigger>
                           <SelectContent>
-                            {refinedTags.length > 0 && (
-                              <SelectItem value="refined">
-                                {refinedTagsLabel || "Refined Tags"} ({refinedTags.length} tags)
-                              </SelectItem>
-                            )}
                             {tagHistory.map((tag) => (
                               <SelectItem key={tag.id} value={tag.id}>
                                 {formatTagHistoryLabel(tag.query)} ({tag.tags.length} tags)
@@ -2539,11 +2435,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
                             ))}
                           </SelectContent>
                         </Select>
-                        {hasEffectiveTags && (
-                          <p className="text-xs" style={{color: 'var(--text-secondary)'}}>
-                            Using {effectiveTags.length} tags
-                          </p>
-                        )}
                       </div>
 
                       <div className="space-y-2">
@@ -2779,7 +2670,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         <p className="text-xs leading-relaxed" style={{color: 'var(--text-secondary)'}}>
                           {subscriptionStatus?.is_subscribed 
                             ? "✅ As a Pro member, you can remove the watermark from your videos"
-                            : "⚠️ Free users get a small watermark at the top: \"Upload your beats online: https://sendmybeat.com\""}}
+                            : "⚠️ Free users get a small watermark at the top: \"Upload your beats online: https://sendmybeat.com\""}
                         </p>
                       </div>
 
@@ -2834,42 +2725,56 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                   <button
                                     type="button"
                                     onMouseDown={handleResizeStart("tl")}
-                                    className="absolute -top-3 -left-3 h-6 w-6 rounded-full aspect-square border-2 border-white/80 bg-black/80 shadow-md pointer-events-auto"
+                                    className="absolute -top-2.5 -left-2.5 h-5 w-5 rounded-full border-2 border-white/80 bg-black/80 shadow-md pointer-events-auto"
                                     aria-label="Resize top left"
                                   />
                                   <button
                                     type="button"
                                     onMouseDown={handleResizeStart("tr")}
-                                    className="absolute -top-3 -right-3 h-6 w-6 rounded-full aspect-square border-2 border-white/80 bg-black/80 shadow-md pointer-events-auto"
+                                    className="absolute -top-2.5 -right-2.5 h-5 w-5 rounded-full border-2 border-white/80 bg-black/80 shadow-md pointer-events-auto"
                                     aria-label="Resize top right"
                                   />
                                   <button
                                     type="button"
                                     onMouseDown={handleResizeStart("bl")}
-                                    className="absolute -bottom-3 -left-3 h-6 w-6 rounded-full aspect-square border-2 border-white/80 bg-black/80 shadow-md pointer-events-auto"
+                                    className="absolute -bottom-2.5 -left-2.5 h-5 w-5 rounded-full border-2 border-white/80 bg-black/80 shadow-md pointer-events-auto"
                                     aria-label="Resize bottom left"
                                   />
                                   <button
                                     type="button"
                                     onMouseDown={handleResizeStart("br")}
-                                    className="absolute -bottom-3 -right-3 h-6 w-6 rounded-full aspect-square border-2 border-white/80 bg-black/80 shadow-md pointer-events-auto"
+                                    className="absolute -bottom-2.5 -right-2.5 h-5 w-5 rounded-full border-2 border-white/80 bg-black/80 shadow-md pointer-events-auto"
                                     aria-label="Resize bottom right"
                                   />
                                 </div>
                               </div>
                             </div>
-                            <div className="mt-3 rounded-lg p-2" style={{ backgroundColor: 'var(--bg-secondary)' }}>
-                              <audio 
-                                controls 
-                                className="w-full"
-                                src={audioPreviewUrl}
-                                style={{
-                                  height: '40px',
-                                  filter: 'invert(1) hue-rotate(180deg)'
-                                }}
-                              >
-                                Your browser doesn't support audio
-                              </audio>
+                            <div className="mt-3 rounded-lg p-3" style={{ backgroundColor: 'var(--bg-secondary)' }}>
+                              <div className="flex flex-wrap items-center gap-3">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={toggleAudioPlayback}
+                                >
+                                  {isAudioPlaying ? "Pause" : "Play"}
+                                </Button>
+                                <span className="text-xs" style={{color: 'var(--text-secondary)'}}>
+                                  {formatTime(audioCurrentTime)}
+                                </span>
+                                <input
+                                  type="range"
+                                  min={0}
+                                  max={audioDuration || 0}
+                                  step={0.1}
+                                  value={Math.min(audioCurrentTime, audioDuration || 0)}
+                                  onChange={handleAudioSeek}
+                                  className="flex-1"
+                                />
+                                <span className="text-xs" style={{color: 'var(--text-secondary)'}}>
+                                  {formatTime(audioDuration)}
+                                </span>
+                              </div>
                             </div>
                               <p className="text-sm mt-3 text-center" style={{color: 'var(--text-secondary)'}}>
                                 Drag to reposition. Scale down only. Use "Fit image" to lock. Aspect ratio: {videoAspectRatio}
@@ -2877,6 +2782,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                           </CardContent>
                         </Card>
                       )}
+
 
                       <Button
                         onClick={handleYouTubeUpload}
@@ -3470,6 +3376,59 @@ const Dashboard = ({ setIsAuthenticated }) => {
           </TabsContent>
         </Tabs>
       </div>
+
+      {audioFile && imageFile && (
+        <div
+          className="fixed bottom-4 right-4 z-50 border rounded-lg shadow-lg p-3"
+          style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}
+        >
+          <div className="flex items-center gap-3">
+            <div
+              className="rounded overflow-hidden"
+              style={{ width: 88, height: 88, backgroundColor: backgroundColor === "white" ? "#ffffff" : "#000000" }}
+            >
+              <img
+                src={imagePreviewUrl}
+                alt="Mini preview"
+                className="w-full h-full object-contain"
+                style={{
+                  objectFit: "contain",
+                  transform: `translate(${imagePosX * 50}%, ${imagePosY * 50}%) scale(${imageScaleX}, ${imageScaleY})`,
+                  transformOrigin: 'center'
+                }}
+              />
+            </div>
+            <div className="flex flex-col gap-2 min-w-[220px]">
+              <div className="flex items-center gap-2">
+                <Button type="button" size="sm" variant="outline" onClick={toggleAudioPlayback}>
+                  {isAudioPlaying ? "Pause" : "Play"}
+                </Button>
+                <Button type="button" size="sm" variant="outline" onClick={scrollToPreview}>
+                  Back to preview
+                </Button>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs" style={{color: 'var(--text-secondary)'}}>
+                  {formatTime(audioCurrentTime)}
+                </span>
+                <input
+                  type="range"
+                  min={0}
+                  max={audioDuration || 0}
+                  step={0.1}
+                  value={Math.min(audioCurrentTime, audioDuration || 0)}
+                  onChange={handleAudioSeek}
+                  className="flex-1"
+                />
+                <span className="text-xs" style={{color: 'var(--text-secondary)'}}>
+                  {formatTime(audioDuration)}
+                </span>
+              </div>
+            </div>
+          </div>
+          <audio ref={audioPlayerRef} src={audioPreviewUrl} preload="metadata" className="hidden" />
+        </div>
+      )}
 
       {/* Save Refined Text Dialog */}
       <Dialog open={showSaveRefinedDialog} onOpenChange={setShowSaveRefinedDialog}>

@@ -6,6 +6,8 @@ from starlette.middleware.sessions import SessionMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
+import asyncio
+import random
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional
@@ -25,6 +27,9 @@ import json
 import base64
 import shutil
 import stripe
+import requests
+import pytz
+from itsdangerous import URLSafeSerializer, BadSignature
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -41,6 +46,14 @@ db = client[os.environ['DB_NAME']]
 JWT_SECRET = os.environ['JWT_SECRET_KEY']
 JWT_ALGORITHM = os.environ['JWT_ALGORITHM']
 JWT_EXPIRATION = int(os.environ['JWT_EXPIRATION_MINUTES'])
+
+# Reminder configuration
+REMINDER_SECRET = os.environ.get('REMINDER_SECRET', JWT_SECRET)
+BACKEND_URL = os.environ.get('BACKEND_URL', 'https://api.sendmybeat.com')
+SENDGRID_API_KEY = os.environ.get('SENDGRID_API_KEY')
+SENDGRID_FROM_EMAIL = os.environ.get('SENDGRID_FROM_EMAIL')
+TEXTBELT_API_KEY = os.environ.get('TEXTBELT_API_KEY')
+REMINDER_SERIALIZER = URLSafeSerializer(REMINDER_SECRET)
 
 # Google OAuth Configuration
 GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', 'your_google_client_id_here')
@@ -159,6 +172,13 @@ class User(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     username: str
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    reminder_email_enabled: bool = False
+    reminder_sms_enabled: bool = False
+    reminder_time: str = "12:00"
+    reminder_tz: str = "America/Los_Angeles"
+    reminder_last_sent: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class UserRegister(BaseModel):
@@ -168,6 +188,12 @@ class UserRegister(BaseModel):
 class UserLogin(BaseModel):
     username: str
     password: str
+
+class ReminderSettingsRequest(BaseModel):
+    email_enabled: bool = False
+    sms_enabled: bool = False
+    email: Optional[str] = None
+    phone: Optional[str] = None
 
 class TokenResponse(BaseModel):
     access_token: str
