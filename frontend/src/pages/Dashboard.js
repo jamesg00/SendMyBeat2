@@ -166,6 +166,20 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const thumbnailAbortRef = useRef(null);
   const thumbnailProgressIntervalRef = useRef(null);
 
+  // Preview (shared) states
+  const previewSectionRef = useRef(null);
+  const previewContainerRef = useRef(null);
+  const [dragState, setDragState] = useState(null);
+  const [resizeState, setResizeState] = useState(null);
+  const [previewSize, setPreviewSize] = useState(720);
+  const [imageMeta, setImageMeta] = useState({ width: 0, height: 0, ratio: 1 });
+  const [imagePreviewUrl, setImagePreviewUrl] = useState("");
+  const [audioPreviewUrl, setAudioPreviewUrl] = useState("");
+  const audioPlayerRef = useRef(null);
+  const [audioDuration, setAudioDuration] = useState(0);
+  const [audioCurrentTime, setAudioCurrentTime] = useState(0);
+  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
+
   const isPro = !!subscriptionStatus?.is_subscribed;
   const thumbnailContextReady = Boolean(
     uploadTitle?.trim() &&
@@ -1205,18 +1219,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
     ? 4 / 5
     : 16 / 9;
 
-  const previewSectionRef = useRef(null);
-  const previewContainerRef = useRef(null);
-  const [dragState, setDragState] = useState(null);
-  const [resizeState, setResizeState] = useState(null);
-  const [previewSize, setPreviewSize] = useState(720);
-  const [imageMeta, setImageMeta] = useState({ width: 0, height: 0, ratio: 1 });
-  const [imagePreviewUrl, setImagePreviewUrl] = useState("");
-  const [audioPreviewUrl, setAudioPreviewUrl] = useState("");
-  const audioPlayerRef = useRef(null);
-  const [audioDuration, setAudioDuration] = useState(0);
-  const [audioCurrentTime, setAudioCurrentTime] = useState(0);
-  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
 
   const frameWidth = previewSize;
   const frameHeight = previewSize / previewRatio;
