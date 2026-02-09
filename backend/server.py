@@ -2188,6 +2188,10 @@ async def check_thumbnail(
                 detail="Title, tags, and description are required for thumbnail checks."
             )
 
+        llm_provider = llm_provider.lower() if llm_provider else None
+        if llm_provider not in (None, "openai", "grok"):
+            raise HTTPException(status_code=400, detail="Invalid llm_provider. Use 'openai' or 'grok'.")
+
         allowed_types = {"image/jpeg", "image/png", "image/webp"}
         if file.content_type not in allowed_types:
             raise HTTPException(status_code=400, detail="Invalid image type. Use JPG, PNG, or WEBP.")
