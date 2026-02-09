@@ -29,6 +29,7 @@ import stripe
 import requests
 import pytz
 from itsdangerous import URLSafeSerializer, BadSignature
+from auth_utils import create_access_token_internal
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -359,10 +360,7 @@ async def check_and_use_upload_credit(user_id: str) -> bool:
 
 # ============ Auth Helper Functions ============
 def create_access_token(user_id: str, username: str) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(minutes=JWT_EXPIRATION)
-    to_encode = {"sub": user_id, "username": username, "exp": expire}
-    encoded_jwt = jwt.encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)
-    return encoded_jwt
+    return create_access_token_internal(user_id, username, JWT_SECRET, JWT_ALGORITHM, JWT_EXPIRATION)
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
     try:
