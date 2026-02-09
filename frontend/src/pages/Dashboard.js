@@ -12,7 +12,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import axios from "axios";
 import { API } from "@/App";
 import { toast } from "sonner";
-import { Music, Sparkles, Save, LogOut, Copy, Trash2, Edit, Plus, Upload, Youtube, Link, CheckCircle2, AlertCircle, Target, Wand2, ChevronDown, ChevronUp } from "lucide-react";
+import { Music, Sparkles, Save, LogOut, Copy, Trash2, Edit, Plus, Upload, Youtube, Link, CheckCircle2, AlertCircle, Target, Wand2, ChevronDown, ChevronUp, DollarSign } from "lucide-react";
 import DarkModeToggle from "@/components/DarkModeToggle";
 import SubscriptionBanner from "@/components/SubscriptionBanner";
 import UpgradeModal from "@/components/UpgradeModal";
@@ -1414,6 +1414,15 @@ const Dashboard = ({ setIsAuthenticated }) => {
                 </div>
               )}
               
+              <Button
+                variant="outline"
+                onClick={() => window.location.href = '/admin/costs'}
+                className="gap-1 sm:gap-2 border-[var(--border-color)] text-xs sm:text-sm px-3 sm:px-4 py-2"
+                title="View Backend Costs"
+              >
+                <DollarSign className="h-3 w-3 sm:h-4 sm:w-4" />
+                <span className="hidden sm:inline">Costs</span>
+              </Button>
               <Button
                 variant="outline"
                 onClick={handleLogout}
