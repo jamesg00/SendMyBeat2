@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import axios from "axios";
 import LandingPage from "@/pages/LandingPage";
 import Dashboard from "@/pages/Dashboard";
+import AdminCosts from "@/pages/AdminCosts";
 import YouTubeCallback from "@/pages/YouTubeCallback";
 import PrivacyPolicy from "@/pages/PrivacyPolicy";
 import TermsAndConditions from "@/pages/TermsAndConditions";
@@ -70,6 +71,16 @@ function App() {
                   <Navigate to="/dashboard" replace />
                 ) : (
                   <LandingPage setIsAuthenticated={setIsAuthenticated} />
+                )
+              }
+            />
+            <Route
+              path="/admin/costs"
+              element={
+                isAuthenticated ? (
+                  <AdminCosts />
+                ) : (
+                  <Navigate to="/" replace />
                 )
               }
             />

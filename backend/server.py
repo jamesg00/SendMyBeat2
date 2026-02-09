@@ -81,13 +81,43 @@ api_router = APIRouter(prefix="/api")
 UPLOADS_DIR = Path("/app/uploads")
 UPLOADS_DIR.mkdir(exist_ok=True)
 
+# ============ Cost Tracking Constants ============
+HOSTING_COST = float(os.environ.get("HOSTING_COST_USD", 3.50))
+# Grok-2 pricing (approximate): $2.00/M input, $10.00/M output
+GROK_INPUT_COST = 2.0 / 1_000_000
+GROK_OUTPUT_COST = 10.0 / 1_000_000
+
 # ============ LLM Helper ============
 _llm_client = None
 _llm_config = None
 
 
+async def track_llm_usage(user_id: str | None, usage_type: str, prompt_tokens: int, completion_tokens: int):
+    cost = (prompt_tokens * GROK_INPUT_COST) + (completion_tokens * GROK_OUTPUT_COST)
+
+    log = {
+        "user_id": user_id or "system",
+        "usage_type": usage_type,
+        "tokens_in": prompt_tokens,
+        "tokens_out": completion_tokens,
+        "cost": cost,
+        "timestamp": datetime.now(timezone.utc)
+    }
+
+    try:
+        await db.usage_logs.insert_one(log)
+    except Exception as e:
+        logging.error(f"Failed to log usage: {str(e)}")
+
+
 def _get_llm_settings(provider_override: str | None = None, model_override: str | None = None) -> dict:
-    provider = (provider_override or os.environ.get("LLM_PROVIDER", "openai")).lower()
+    # Default to Grok to save costs
+    provider = (provider_override or os.environ.get("LLM_PROVIDER", "grok")).lower()
+
+    api_key = None
+    base_url = None
+    model = None
+
     if provider == "grok":
         api_key = os.environ.get("GROK_API_KEY") or os.environ.get("XAI_API_KEY")
         base_url = os.environ.get("GROK_BASE_URL", "https://api.x.ai/v1")
@@ -96,11 +126,22 @@ def _get_llm_settings(provider_override: str | None = None, model_override: str 
         api_key = os.environ.get("OPENAI_API_KEY")
         base_url = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
         model = model_override or os.environ.get("OPENAI_MODEL") or os.environ.get("LLM_MODEL", "gpt-4o")
-    else:
-        raise RuntimeError(f"Unsupported LLM_PROVIDER: {provider}")
+
+    # Fallback to Grok defaults if provider is unknown or keys missing (attempt to use Grok env vars)
+    if not api_key and provider != "grok":
+         # If OpenAI requested but no key, try Grok
+         provider = "grok"
+         api_key = os.environ.get("GROK_API_KEY")
+         base_url = "https://api.x.ai/v1"
+         model = "grok-2-latest"
 
     if not api_key:
-        raise RuntimeError(f"Missing API key for LLM_PROVIDER={provider}")
+        # Don't crash immediately, let the client fail naturally or return a mock in development?
+        # Better to raise error so they know to configure it
+        if provider == "grok":
+            raise RuntimeError("Missing GROK_API_KEY. Please set it in backend/.env")
+        else:
+            raise RuntimeError(f"Missing API key for LLM_PROVIDER={provider}")
 
     return {"provider": provider, "api_key": api_key, "base_url": base_url, "model": model}
 
@@ -122,6 +163,7 @@ async def llm_chat(
     max_tokens: int | None = None,
     provider: str | None = None,
     model: str | None = None,
+    user_id: str | None = None,  # For cost tracking
 ) -> str:
     client, settings = _get_llm_client(provider_override=provider, model_override=model)
     response = await client.chat.completions.create(
@@ -133,6 +175,16 @@ async def llm_chat(
         temperature=temperature,
         max_tokens=max_tokens,
     )
+
+    # Track usage
+    if response.usage:
+        await track_llm_usage(
+            user_id=user_id,
+            usage_type="chat",
+            prompt_tokens=response.usage.prompt_tokens,
+            completion_tokens=response.usage.completion_tokens
+        )
+
     return (response.choices[0].message.content or "").strip()
 
 
@@ -145,6 +197,7 @@ async def llm_chat_with_image(
     max_tokens: int | None = None,
     provider: str | None = None,
     model: str | None = None,
+    user_id: str | None = None,  # For cost tracking
 ) -> str:
     client, settings = _get_llm_client(provider_override=provider, model_override=model)
     image_b64 = base64.b64encode(image_bytes).decode("utf-8")
@@ -164,6 +217,16 @@ async def llm_chat_with_image(
         temperature=temperature,
         max_tokens=max_tokens,
     )
+
+    # Track usage
+    if response.usage:
+        await track_llm_usage(
+            user_id=user_id,
+            usage_type="vision",
+            prompt_tokens=response.usage.prompt_tokens,
+            completion_tokens=response.usage.completion_tokens
+        )
+
     return (response.choices[0].message.content or "").strip()
 
 
@@ -2762,6 +2825,47 @@ async def upload_to_youtube(
     except Exception as e:
         logging.error(f"YouTube upload error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to prepare YouTube upload: {str(e)}")
+
+
+# ============ Admin Routes ============
+@api_router.get("/admin/costs")
+async def get_admin_costs(current_user: dict = Depends(get_current_user)):
+    """Get estimated backend costs for the current month"""
+    # Calculate start of current month
+    now = datetime.now(timezone.utc)
+    start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    # Aggregate usage logs
+    pipeline = [
+        {
+            "$match": {
+                "timestamp": {"$gte": start_of_month}
+            }
+        },
+        {
+            "$group": {
+                "_id": "$usage_type",
+                "total_tokens_in": {"$sum": "$tokens_in"},
+                "total_tokens_out": {"$sum": "$tokens_out"},
+                "total_cost": {"$sum": "$cost"},
+                "count": {"$sum": 1}
+            }
+        }
+    ]
+
+    usage_stats = await db.usage_logs.aggregate(pipeline).to_list(None)
+
+    llm_total = sum(stat["total_cost"] for stat in usage_stats)
+
+    return {
+        "month": now.strftime("%B %Y"),
+        "hosting_cost": HOSTING_COST,
+        "llm_cost": round(llm_total, 4),
+        "total_estimated_cost": round(HOSTING_COST + llm_total, 4),
+        "details": usage_stats,
+        "currency": "USD",
+        "note": "Estimates based on usage. Hosting cost is fixed."
+    }
 
 
 # Include the router in the main app
