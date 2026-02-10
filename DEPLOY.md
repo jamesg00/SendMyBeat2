@@ -53,12 +53,18 @@ sudo usermod -aG docker $USER
 3. **Important:** Log out and log back in for the group changes to take effect.
    - Or run: `newgrp docker`
 
-## Step 4: Clone Your Code
+## Step 4: Clone Your Code & Setup Swap
 
 1. Clone your repository (replace with your actual repo URL):
    ```bash
    git clone https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git app
    cd app
+   ```
+
+2. **Crucial:** Run the swap setup script to prevent out-of-memory errors during build:
+   ```bash
+   sudo chmod +x scripts/setup_swap.sh
+   sudo ./scripts/setup_swap.sh
    ```
 
 ## Step 5: Configure Environment Variables
@@ -98,14 +104,24 @@ You need to set up the configuration files.
 
 ## Step 6: Launch Everything!
 
-Run this single command to build and start all services (Backend, Frontend, Database):
+Since we are on a low-memory instance, we should build services one by one to avoid crashing the server.
 
-```bash
-docker compose up -d --build
-```
+1. Build the Backend:
+   ```bash
+   docker compose build backend
+   ```
 
-- This will download MongoDB, build your backend, build your frontend, and start them all.
-- It might take 5-10 minutes the first time.
+2. Build the Frontend (this takes the longest):
+   ```bash
+   docker compose build frontend
+   ```
+
+3. Start everything:
+   ```bash
+   docker compose up -d
+   ```
+
+- This process might take 10-15 minutes the first time.
 
 ## Step 7: Access Your Site
 
@@ -148,7 +164,10 @@ If you want the secure lock icon (`https://`), you can use **Caddy** to automati
 - **Update Code:**
   ```bash
   git pull
-  docker compose up -d --build
+  # Build individually again
+  docker compose build backend
+  docker compose build frontend
+  docker compose up -d
   ```
 
 ## Cost Savings
