@@ -153,6 +153,12 @@ If you want the secure lock icon (`https://`), you can use **Caddy** to automati
 
 ## Troubleshooting & Maintenance
 
+- **Build Fails / "Connection Reset" / "Killed":**
+  - This means your server ran out of memory.
+  - **Ensure you ran the swap script** (Step 4.2).
+  - **Ensure you are building sequentially** (Step 6).
+  - Try restarting Docker: `sudo systemctl restart docker`.
+
 - **View Logs:**
   ```bash
   docker compose logs -f
