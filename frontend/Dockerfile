@@ -6,8 +6,6 @@ COPY package*.json ./
 RUN npm ci --silent
 COPY . .
 # Build the app
-ENV GENERATE_SOURCEMAP=false
-ENV NODE_OPTIONS="--max-old-space-size=2048"
 RUN npm run build
 
 # Production Stage
