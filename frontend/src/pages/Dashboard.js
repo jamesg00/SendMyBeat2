@@ -18,6 +18,7 @@ import SubscriptionBanner from "@/components/SubscriptionBanner";
 import UpgradeModal from "@/components/UpgradeModal";
 import AdBanner from "@/components/AdBanner";
 import ProgressBar from "@/components/ProgressBar";
+import ThemeCustomizer from "@/components/ThemeCustomizer";
 
 const TAG_LIMIT = 120;
 const TAG_HISTORY_LIMIT = 100;
@@ -1416,6 +1417,14 @@ const Dashboard = ({ setIsAuthenticated }) => {
               
               <Button
                 variant="outline"
+                onClick={() => window.location.href = '/spotlight'}
+                className="gap-1 sm:gap-2 border-[var(--border-color)] text-xs sm:text-sm px-3 sm:px-4 py-2 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border-yellow-500/50 hover:bg-yellow-500/30"
+              >
+                <Target className="h-3 w-3 sm:h-4 sm:w-4 text-yellow-500" />
+                <span className="hidden sm:inline font-bold text-yellow-500">Spotlight</span>
+              </Button>
+              <Button
+                variant="outline"
                 onClick={() => window.location.href = '/admin/costs'}
                 className="gap-1 sm:gap-2 border-[var(--border-color)] text-xs sm:text-sm px-3 sm:px-4 py-2"
                 title="View Backend Costs"
@@ -1470,7 +1479,13 @@ const Dashboard = ({ setIsAuthenticated }) => {
             <TabsTrigger value="upload" data-testid="upload-tab" className="px-1 sm:px-3 py-1.5 sm:py-2 truncate">Upload</TabsTrigger>
             <TabsTrigger value="analytics" data-testid="analytics-tab" className="px-1 sm:px-3 py-1.5 sm:py-2 truncate">Analytics</TabsTrigger>
             <TabsTrigger value="grow" data-testid="grow-tab" className="px-1 sm:px-3 py-1.5 sm:py-2 truncate">Grow in 120</TabsTrigger>
+            <TabsTrigger value="settings" data-testid="settings-tab" className="px-1 sm:px-3 py-1.5 sm:py-2 truncate">Settings</TabsTrigger>
           </TabsList>
+
+          {/* Settings Tab */}
+          <TabsContent value="settings" className="space-y-6 dashboard-section">
+            <ThemeCustomizer />
+          </TabsContent>
 
           {/* Tag Generator Tab */}
           <TabsContent value="tags" className="space-y-4 sm:space-y-6 dashboard-section">
