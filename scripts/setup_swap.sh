@@ -1,23 +1,20 @@
 #!/bin/bash
 
-# Define swap file location and size (2G)
-SWAPFILE=/swapfile
-SIZE=2G
-
-echo "Checking for existing swap..."
-if [ -f "$SWAPFILE" ]; then
-    echo "Swap file $SWAPFILE already exists."
+# Check if swap file already exists
+if [ -f /swapfile ]; then
+    echo "Swap file already exists."
 else
-    echo "Creating $SIZE swap file at $SWAPFILE..."
-    sudo fallocate -l $SIZE $SWAPFILE
-    sudo chmod 600 $SWAPFILE
-    sudo mkswap $SWAPFILE
-    sudo swapon $SWAPFILE
-    echo "$SWAPFILE none swap sw 0 0" | sudo tee -a /etc/fstab
-    echo "Swap enabled and persisted in /etc/fstab."
+    echo "Creating 2GB swap file..."
+    sudo fallocate -l 2G /swapfile
+    sudo chmod 600 /swapfile
+    sudo mkswap /swapfile
+    sudo swapon /swapfile
 
-    # Verify
-    echo "Current swap status:"
-    sudo swapon --show
-    free -h
+    # Make permanent
+    echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+
+    echo "Swap created successfully!"
 fi
+
+# Show memory status
+free -h
