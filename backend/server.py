@@ -30,6 +30,7 @@ import stripe
 import requests
 import pytz
 from itsdangerous import URLSafeSerializer, BadSignature
+from backend.models_spotlight import ProducerProfile, ProducerProfileUpdate, SpotlightResponse
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -2211,6 +2212,73 @@ If tags look stuffed or irrelevant, explicitly say so and recommend a smaller, h
         logging.error(f"Beat analysis error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# ============ Producer Spotlight Routes ============
+@api_router.get("/producers/spotlight", response_model=SpotlightResponse)
+async def get_producer_spotlight():
+    """Get featured, trending, and new producers for the spotlight page"""
+
+    # Get featured producers (manually selected by admin or algorithm)
+    featured = await db.producer_profiles.find({"featured": True}).limit(3).to_list(3)
+
+    # Get trending (most likes/views)
+    trending = await db.producer_profiles.find().sort("likes", -1).limit(6).to_list(6)
+
+    # Get new
+    new_producers = await db.producer_profiles.find().sort("created_at", -1).limit(6).to_list(6)
+
+    return SpotlightResponse(
+        featured_producers=[ProducerProfile(**p) for p in featured],
+        trending_producers=[ProducerProfile(**p) for p in trending],
+        new_producers=[ProducerProfile(**p) for p in new_producers]
+    )
+
+@api_router.get("/producers/me", response_model=ProducerProfile)
+async def get_my_producer_profile(current_user: dict = Depends(get_current_user)):
+    """Get current user's producer profile"""
+    profile = await db.producer_profiles.find_one({"user_id": current_user['id']})
+
+    if not profile:
+        # Create default profile if not exists
+        user = await db.users.find_one({"id": current_user['id']})
+        profile = ProducerProfile(
+            user_id=current_user['id'],
+            username=user['username']
+        )
+        await db.producer_profiles.insert_one(profile.model_dump())
+        return profile
+
+    return ProducerProfile(**profile)
+
+@api_router.put("/producers/me", response_model=ProducerProfile)
+async def update_my_producer_profile(
+    update_data: ProducerProfileUpdate,
+    current_user: dict = Depends(get_current_user)
+):
+    """Update current user's producer profile"""
+    # Build update dict
+    update_fields = {}
+    if update_data.bio is not None:
+        update_fields['bio'] = update_data.bio
+    if update_data.top_beat_url is not None:
+        update_fields['top_beat_url'] = update_data.top_beat_url
+    if update_data.social_links is not None:
+        update_fields['social_links'] = update_data.social_links
+    if update_data.tags is not None:
+        update_fields['tags'] = update_data.tags
+
+    update_fields['updated_at'] = datetime.now(timezone.utc)
+
+    # Update DB
+    await db.producer_profiles.update_one(
+        {"user_id": current_user['id']},
+        {"$set": update_fields},
+        upsert=True
+    )
+
+    # Return updated
+    updated = await db.producer_profiles.find_one({"user_id": current_user['id']})
+    return ProducerProfile(**updated)
 
 # ============ Beat Fixes Route ============
 @api_router.post("/beat/fix", response_model=BeatFixResponse)

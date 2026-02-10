@@ -1,392 +1,284 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import axios from "axios";
 import { API } from "@/App";
 import { toast } from "sonner";
-import { Music, Sparkles, Save, Zap, TrendingUp, Target, Rocket } from "lucide-react";
-import DarkModeToggle from "@/components/DarkModeToggle";
+import { Music, Upload, Users, Zap, Globe, Shield, ArrowRight, Play, Star } from "lucide-react";
 
 const LandingPage = ({ setIsAuthenticated }) => {
-  const [showAuth, setShowAuth] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({
-    username: "",
-    password: "",
-  });
+  const [isLoginOpen, setIsLoginOpen] = useState(false);
+  const [authMode, setAuthMode] = useState("login"); // login or register
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleInputChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
-
-  const handleRegister = async (e) => {
+  const handleAuth = async (e) => {
     e.preventDefault();
-    setLoading(true);
+    setIsLoading(true);
     try {
-      const response = await axios.post(`${API}/auth/register`, formData);
+      const endpoint = authMode === "login" ? "/auth/login" : "/auth/register";
+      const response = await axios.post(`${API}${endpoint}`, {
+        username,
+        password
+      });
+
       localStorage.setItem("token", response.data.access_token);
-      toast.success("Account created successfully!");
       setIsAuthenticated(true);
+      toast.success(`Welcome ${authMode === "login" ? "back" : ""}!`);
     } catch (error) {
-      toast.error(error.response?.data?.detail || "Registration failed");
+      toast.error(error.response?.data?.detail || "Authentication failed");
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
-
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      const response = await axios.post(`${API}/auth/login`, formData);
-      localStorage.setItem("token", response.data.access_token);
-      toast.success("Welcome back!");
-      setIsAuthenticated(true);
-    } catch (error) {
-      toast.error(error.response?.data?.detail || "Login failed");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (showAuth) {
-    return (
-      <div className="min-h-screen mesh-gradient flex items-center justify-center p-4 relative">
-        <DarkModeToggle />
-        <Card className="w-full max-w-md glass-card animate-slide-in border-0">
-          <CardHeader className="space-y-1">
-            <div className="flex items-center justify-center mb-6 animate-float">
-              <img src="/sendmybeat.png" alt="SendMyBeat" className="h-20 w-20 object-contain" />
-            </div>
-            <CardTitle className="text-xl sm:text-2xl text-center font-bold matrix-glow rgb-hover brand-text">
-              SendMyBeat
-            </CardTitle>
-            <CardDescription className="text-center text-sm sm:text-base matrix-glow">
-              ENTER THE BEAT DIMENSION
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Tabs defaultValue="login" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 mb-6 bg-[var(--bg-secondary)] p-1">
-                <TabsTrigger value="login" data-testid="login-tab" className="data-[state=active]:bg-[var(--card-bg)]">Login</TabsTrigger>
-                <TabsTrigger value="register" data-testid="register-tab" className="data-[state=active]:bg-[var(--card-bg)]">Register</TabsTrigger>
-              </TabsList>
-              <TabsContent value="login">
-                <form onSubmit={handleLogin} className="space-y-4" data-testid="login-form">
-                  <div className="space-y-2">
-                    <Label htmlFor="login-username" style={{color: 'var(--text-primary)'}}>Username</Label>
-                    <Input
-                      id="login-username"
-                      name="username"
-                      placeholder="Enter your username"
-                      value={formData.username}
-                      onChange={handleInputChange}
-                      required
-                      data-testid="login-username-input"
-                      className="bg-[var(--bg-secondary)] border-[var(--border-color)]"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="login-password" style={{color: 'var(--text-primary)'}}>Password</Label>
-                    <Input
-                      id="login-password"
-                      name="password"
-                      type="password"
-                      placeholder="Enter your password"
-                      value={formData.password}
-                      onChange={handleInputChange}
-                      required
-                      data-testid="login-password-input"
-                      className="bg-[var(--bg-secondary)] border-[var(--border-color)]"
-                    />
-                  </div>
-                  <Button
-                    type="submit"
-                    className="w-full btn-modern"
-                    disabled={loading}
-                    data-testid="login-submit-btn"
-                  >
-                    {loading ? "Signing in..." : "Sign In"}
-                  </Button>
-                </form>
-              </TabsContent>
-              <TabsContent value="register">
-                <form onSubmit={handleRegister} className="space-y-4" data-testid="register-form">
-                  <div className="space-y-2">
-                    <Label htmlFor="register-username" style={{color: 'var(--text-primary)'}}>Username</Label>
-                    <Input
-                      id="register-username"
-                      name="username"
-                      placeholder="Choose a username"
-                      value={formData.username}
-                      onChange={handleInputChange}
-                      required
-                      data-testid="register-username-input"
-                      className="bg-[var(--bg-secondary)] border-[var(--border-color)]"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="register-password" style={{color: 'var(--text-primary)'}}>Password</Label>
-                    <Input
-                      id="register-password"
-                      name="password"
-                      type="password"
-                      placeholder="Create a password"
-                      value={formData.password}
-                      onChange={handleInputChange}
-                      required
-                      data-testid="register-password-input"
-                      className="bg-[var(--bg-secondary)] border-[var(--border-color)]"
-                    />
-                  </div>
-                  <Button
-                    type="submit"
-                    className="w-full btn-modern"
-                    disabled={loading}
-                    data-testid="register-submit-btn"
-                  >
-                    {loading ? "Creating account..." : "Create Account"}
-                  </Button>
-                </form>
-              </TabsContent>
-            </Tabs>
-            <Button
-              variant="ghost"
-              className="w-full mt-4"
-              onClick={() => setShowAuth(false)}
-              data-testid="back-btn"
-              style={{color: 'var(--text-secondary)'}}
-            >
-              Back to Home
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
 
   return (
-    <div className="min-h-screen matrix-bg cyber-grid relative scanline-effect">
-      <DarkModeToggle />
-      
-      {/* Hero Section */}
-      <div className="relative overflow-hidden">
-        <div className="container mx-auto px-4 sm:px-6 pt-16 sm:pt-24 pb-20 sm:pb-32 relative z-10">
-          <div className="max-w-5xl mx-auto text-center">
-            <div className="inline-block mb-6 sm:mb-8 pulse-glow">
-              <img src="/sendmybeat.png" alt="SendMyBeat" className="h-20 w-20 sm:h-24 sm:w-24 md:h-32 md:w-32 mx-auto object-contain" />
+    <div className="min-h-screen bg-black text-white selection:bg-green-500/30">
+
+      {/* Navigation */}
+      <nav className="fixed w-full z-50 bg-black/50 backdrop-blur-md border-b border-white/10">
+        <div className="container mx-auto px-6 h-20 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 bg-gradient-to-br from-green-400 to-emerald-600 rounded-xl flex items-center justify-center shadow-[0_0_20px_rgba(34,197,94,0.3)]">
+              <Music className="h-6 w-6 text-black fill-current" />
             </div>
-            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-7xl font-bold mb-4 sm:mb-6 leading-tight matrix-glow rgb-hover brand-text px-2">
-              SendMyBeat
-            </h1>
-            <p className="text-base sm:text-lg md:text-xl lg:text-2xl mb-8 sm:mb-12 max-w-3xl mx-auto leading-relaxed matrix-glow px-4">
-              <span className="rgb-hover inline-block">LEVEL UP YOUR YOUTUBE GAME</span>
-              <br className="hidden sm:block" />
-              <span className="block sm:inline mt-2 sm:mt-0">500+ AI TAGS • FREE YOUTUBE UPLOAD • AI DESCRIPTIONS</span>
-            </p>
-            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center items-center mb-8 px-4">
-              <Button
-                size="lg"
-                className="matrix-btn w-full sm:w-auto text-sm sm:text-base md:text-lg px-6 sm:px-8 md:px-10 py-5 sm:py-6 md:py-7 glitch-effect"
-                onClick={() => setShowAuth(true)}
-                data-testid="get-started-btn"
-              >
-                <Rocket className="mr-2 h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6" />
-                TRY FOR FREE
-              </Button>
-              <p className="text-xs sm:text-sm matrix-glow text-center">
-                ✅ 3 FREE DAILY USES • NO CREDIT CARD
-              </p>
-            </div>
-            
-            {/* Stats */}
-            <div className="grid grid-cols-3 gap-2 sm:gap-3 md:gap-4 max-w-2xl mx-auto mt-12 sm:mt-16 px-2">
-              <div className="game-card p-2 sm:p-3 md:p-4 pulse-glow">
-                <div className="text-xl sm:text-2xl md:text-3xl font-bold matrix-glow">500+</div>
-                <div className="text-xs sm:text-sm matrix-glow">TAGS</div>
-              </div>
-              <div className="game-card p-2 sm:p-3 md:p-4 pulse-glow">
-                <div className="text-xl sm:text-2xl md:text-3xl font-bold matrix-glow">FREE</div>
-                <div className="text-xs sm:text-sm matrix-glow">YOUTUBE</div>
-              </div>
-              <div className="game-card p-2 sm:p-3 md:p-4 pulse-glow">
-                <div className="text-xl sm:text-2xl md:text-3xl font-bold matrix-glow">AI</div>
-                <div className="text-xs sm:text-sm matrix-glow">DESCRIPTIONS</div>
-              </div>
-            </div>
+            <span className="text-xl font-bold tracking-tight">SendMyBeat</span>
           </div>
-        </div>
-      </div>
 
-      {/* Features Section */}
-      <div className="container mx-auto px-4 sm:px-6 py-12 sm:py-16 md:py-24 relative z-10">
-        <div className="max-w-6xl mx-auto">
-          <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-center mb-3 sm:mb-4 matrix-glow rgb-hover px-2">
-            POWER-UPS FOR PRODUCERS
-          </h2>
-          <p className="text-center text-sm sm:text-base md:text-lg lg:text-xl mb-8 sm:mb-12 md:mb-20 matrix-glow px-4">
-            NEXT-GEN TOOLS FOR BEAT MAKERS
-          </p>
-          
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6 md:gap-8 px-2">
-            <div className="game-card p-4 sm:p-5 md:p-6" data-testid="feature-ai-tags">
-              <div className="mb-3 sm:mb-4 md:mb-6">
-                <div className="h-10 w-10 sm:h-12 sm:w-12 md:h-16 md:w-16 rounded-2xl neon-border flex items-center justify-center pulse-glow" style={{background: 'rgba(0, 255, 65, 0.1)'}}>
-                  <Target className="h-5 w-5 sm:h-6 sm:w-6 md:h-8 md:w-8 matrix-glow" />
-                </div>
-              </div>
-              <h3 className="text-lg sm:text-xl md:text-2xl font-bold mb-2 sm:mb-3 md:mb-4 matrix-glow rgb-hover">
-                AI TAG GENERATOR
-              </h3>
-              <p className="text-sm sm:text-base md:text-lg leading-relaxed matrix-glow">
-                Generate 500 YouTube tags instantly with GPT-4o. Type beat variations, trending keywords, SEO-optimized phrases.
-              </p>
-            </div>
-
-            <div className="game-card p-4 sm:p-5 md:p-6" data-testid="feature-descriptions">
-              <div className="mb-3 sm:mb-4 md:mb-6">
-                <div className="h-10 w-10 sm:h-12 sm:w-12 md:h-16 md:w-16 rounded-2xl neon-border flex items-center justify-center pulse-glow" style={{background: 'rgba(0, 255, 65, 0.1)'}}>
-                  <Save className="h-5 w-5 sm:h-6 sm:w-6 md:h-8 md:w-8 matrix-glow" />
-                </div>
-              </div>
-              <h3 className="text-lg sm:text-xl md:text-2xl font-bold mb-2 sm:mb-3 md:mb-4 matrix-glow rgb-hover">
-                SAVE TEMPLATES
-              </h3>
-              <p className="text-sm sm:text-base md:text-lg leading-relaxed matrix-glow">
-                Create unlimited description templates. One-click copy for consistent branding across your beat catalog.
-              </p>
-            </div>
-
-            <div className="game-card p-4 sm:p-5 md:p-6" data-testid="feature-ai-refine">
-              <div className="mb-3 sm:mb-4 md:mb-6">
-                <div className="h-10 w-10 sm:h-12 sm:w-12 md:h-16 md:w-16 rounded-2xl neon-border flex items-center justify-center pulse-glow" style={{background: 'rgba(0, 255, 65, 0.1)'}}>
-                  <TrendingUp className="h-5 w-5 sm:h-6 sm:w-6 md:h-8 md:w-8 matrix-glow" />
-                </div>
-              </div>
-              <h3 className="text-lg sm:text-xl md:text-2xl font-bold mb-2 sm:mb-3 md:mb-4 matrix-glow rgb-hover">
-                YOUTUBE ANALYTICS
-              </h3>
-              <p className="text-sm sm:text-base md:text-lg leading-relaxed matrix-glow">
-                AI growth coach analyzes your channel. Learn what works and dominate the algorithm.
-              </p>
-            </div>
-
-            <div className="game-card p-4 sm:p-5 md:p-6">
-              <div className="mb-3 sm:mb-4 md:mb-6">
-                <div className="h-10 w-10 sm:h-12 sm:w-12 md:h-16 md:w-16 rounded-2xl neon-border flex items-center justify-center pulse-glow" style={{background: 'rgba(0, 255, 65, 0.1)'}}>
-                  <Zap className="h-5 w-5 sm:h-6 sm:w-6 md:h-8 md:w-8 matrix-glow" />
-                </div>
-              </div>
-              <h3 className="text-lg sm:text-xl md:text-2xl font-bold mb-2 sm:mb-3 md:mb-4 matrix-glow rgb-hover">
-                AI DESCRIPTIONS
-              </h3>
-              <p className="text-sm sm:text-base md:text-lg leading-relaxed matrix-glow">
-                Generate and save video descriptions. Create templates for faster uploads.
-              </p>
-            </div>
-
-            <div className="game-card p-4 sm:p-5 md:p-6">
-              <div className="mb-3 sm:mb-4 md:mb-6">
-                <div className="h-10 w-10 sm:h-12 sm:w-12 md:h-16 md:w-16 rounded-2xl neon-border flex items-center justify-center pulse-glow" style={{background: 'rgba(0, 255, 65, 0.1)'}}>
-                  <Rocket className="h-5 w-5 sm:h-6 sm:w-6 md:h-8 md:w-8 matrix-glow" />
-                </div>
-              </div>
-              <h3 className="text-lg sm:text-xl md:text-2xl font-bold mb-2 sm:mb-3 md:mb-4 matrix-glow rgb-hover">
-                FREE YOUTUBE UPLOAD
-              </h3>
-              <p className="text-sm sm:text-base md:text-lg leading-relaxed matrix-glow">
-                Upload beats directly to YouTube for free. Audio + image = video. No credit card required.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* CTA Section */}
-      <div className="container mx-auto px-4 sm:px-6 py-12 sm:py-16 md:py-24">
-        <div className="max-w-4xl mx-auto px-2">
-          <div className="game-card text-center p-6 sm:p-8 md:p-12 lg:p-16 pulse-glow">
-            <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold matrix-glow mb-3 sm:mb-4 md:mb-6 rgb-hover px-2">
-              READY TO LEVEL UP?
-            </h2>
-            <p className="text-sm sm:text-base md:text-lg lg:text-xl mb-6 sm:mb-8 md:mb-10 max-w-2xl mx-auto matrix-glow px-4">
-              Join 1000+ producers growing their channels with AI-powered YouTube optimization
-            </p>
+          <div className="flex items-center gap-4">
             <Button
-              size="lg"
-              className="matrix-btn w-full sm:w-auto text-sm sm:text-base md:text-lg px-6 sm:px-8 md:px-10 py-5 sm:py-6 md:py-7 glitch-effect"
-              onClick={() => setShowAuth(true)}
-              data-testid="cta-signup-btn"
+              variant="ghost"
+              onClick={() => { setAuthMode("login"); setIsLoginOpen(true); }}
+              className="hidden md:flex hover:bg-white/5"
             >
-              <Sparkles className="mr-2 h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6" />
-              Start Free Now
+              Log In
+            </Button>
+            <Button
+              onClick={() => { setAuthMode("register"); setIsLoginOpen(true); }}
+              className="bg-white text-black hover:bg-gray-200 font-semibold rounded-full px-6 transition-all hover:scale-105"
+            >
+              Get Started
             </Button>
           </div>
         </div>
-      </div>
+      </nav>
 
-      {/* Google API Integration Explanation */}
-      <div className="container mx-auto px-4 sm:px-6 py-12 sm:py-16 border-t" style={{borderColor: 'var(--border-color)'}}>
-        <div className="max-w-4xl mx-auto px-2">
-          <div className="glass-card p-4 sm:p-6 md:p-8">
-            <h2 className="text-xl sm:text-2xl md:text-3xl font-bold gradient-text mb-4 sm:mb-6 text-center px-2">
-              About SendMyBeat & Google Integration
-            </h2>
-            
-            <div className="space-y-4 sm:space-y-6" style={{color: 'var(--text-secondary)'}}>
-              <p className="text-sm sm:text-base md:text-lg leading-relaxed px-2">
-                <strong className="gradient-text">SendMyBeat</strong> helps artists, producers, and music creators upload, manage, and share their beats directly to YouTube with ease. Using Google's YouTube Data API, SendMyBeat allows users to securely connect their YouTube accounts and upload beats or videos directly from our platform — saving time and simplifying content management.
-              </p>
+      {/* Hero Section */}
+      <section className="pt-32 pb-20 md:pt-48 md:pb-32 relative overflow-hidden">
+        {/* Background Gradients */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[600px] bg-green-500/20 rounded-full blur-[120px] pointer-events-none" />
+        <div className="absolute bottom-0 right-0 w-[800px] h-[600px] bg-purple-500/10 rounded-full blur-[120px] pointer-events-none" />
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 my-6 sm:my-8">
-                <div className="producer-card p-4 sm:p-5 md:p-6">
-                  <h3 className="text-lg sm:text-xl font-semibold mb-2 sm:mb-3 gradient-text">Key Features</h3>
-                  <ul className="space-y-1.5 sm:space-y-2 text-xs sm:text-sm">
-                    <li className="flex items-start gap-2">
-                      <span className="text-green-500 mt-1 flex-shrink-0">✓</span>
-                      <span>Upload beats and videos directly to your YouTube channel</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-green-500 mt-1 flex-shrink-0">✓</span>
-                      <span>Manage video titles, descriptions, and visibility settings</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-green-500 mt-1 flex-shrink-0">✓</span>
-                      <span>AI-powered tag generation for maximum discoverability</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-green-500 mt-1 flex-shrink-0">✓</span>
-                      <span>Stay in full control of your YouTube account and data</span>
-                    </li>
-                  </ul>
-                </div>
+        <div className="container mx-auto px-6 relative z-10 text-center">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 mb-8 animate-fade-in-up">
+            <span className="flex h-2 w-2 rounded-full bg-green-500 animate-pulse"></span>
+            <span className="text-sm font-medium text-gray-300">New: Producer Spotlight & AI Tools</span>
+          </div>
 
-                <div className="producer-card p-4 sm:p-5 md:p-6">
-                  <h3 className="text-lg sm:text-xl font-semibold mb-2 sm:mb-3 gradient-text">Google API Usage</h3>
-                  <p className="text-xs sm:text-sm mb-2 sm:mb-3">
-                    SendMyBeat uses the YouTube Data API to publish videos to your YouTube channel <strong>only with your explicit permission</strong>.
+          <h1 className="text-5xl md:text-7xl lg:text-8xl font-bold tracking-tight mb-8 leading-tight">
+            The Future of <br />
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-emerald-400 to-teal-400">
+              Beat Distribution
+            </span>
+          </h1>
+
+          <p className="text-xl md:text-2xl text-gray-400 mb-12 max-w-3xl mx-auto leading-relaxed">
+            Upload to YouTube in seconds. Generate viral tags with AI. <br className="hidden md:block" />
+            Join a global community of 100k+ producers.
+          </p>
+          
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Button
+              size="lg"
+              onClick={() => { setAuthMode("register"); setIsLoginOpen(true); }}
+              className="h-14 px-8 rounded-full bg-green-500 hover:bg-green-400 text-black font-bold text-lg w-full sm:w-auto shadow-[0_0_30px_rgba(34,197,94,0.4)] transition-all hover:shadow-[0_0_50px_rgba(34,197,94,0.6)]"
+            >
+              Start Uploading Free
+              <ArrowRight className="ml-2 h-5 w-5" />
+            </Button>
+            <Button
+              size="lg"
+              variant="outline"
+              className="h-14 px-8 rounded-full border-white/20 hover:bg-white/10 text-lg w-full sm:w-auto backdrop-blur-sm"
+            >
+              <Play className="mr-2 h-5 w-5 fill-current" />
+              Watch Demo
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      {/* Bento Grid Features */}
+      <section className="py-20 md:py-32 relative">
+        <div className="container mx-auto px-6">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl md:text-5xl font-bold mb-6">Everything You Need to Blow Up</h2>
+            <p className="text-gray-400 text-lg">Powerful tools designed for the modern producer workflow.</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 max-w-6xl mx-auto">
+
+            {/* Feature 1: YouTube Uploads (Large Card) */}
+            <div className="md:col-span-2 row-span-2 rounded-3xl bg-zinc-900/50 border border-white/10 p-8 md:p-12 relative overflow-hidden group hover:border-green-500/30 transition-colors">
+              <div className="absolute top-0 right-0 w-64 h-64 bg-green-500/10 rounded-full blur-[80px] group-hover:bg-green-500/20 transition-all" />
+              <div className="relative z-10 h-full flex flex-col justify-between">
+                <div>
+                  <div className="h-12 w-12 rounded-2xl bg-red-500/20 flex items-center justify-center mb-6 text-red-500">
+                    <Youtube className="h-6 w-6 fill-current" />
+                  </div>
+                  <h3 className="text-3xl font-bold mb-4">Instant YouTube Uploads</h3>
+                  <p className="text-gray-400 text-lg leading-relaxed max-w-md">
+                    Drag, drop, done. We render your audio and artwork into a 1080p video and upload it directly to your channel. No video editing software required.
                   </p>
-                  <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-2.5 sm:p-3 text-xs sm:text-sm">
-                    <p className="font-semibold text-blue-400 mb-1.5 sm:mb-2">Privacy Guarantee:</p>
-                    <p>We never store or share your Google data with third parties. Your credentials are encrypted and used solely for uploading content to YOUR channel.</p>
+                </div>
+                <div className="mt-8 bg-black/40 rounded-xl p-4 border border-white/5 backdrop-blur-sm">
+                  <div className="flex items-center gap-4 mb-3">
+                    <div className="h-2 w-full bg-zinc-800 rounded-full overflow-hidden">
+                      <div className="h-full w-[75%] bg-gradient-to-r from-green-500 to-emerald-400 rounded-full" />
+                    </div>
+                    <span className="text-sm font-mono text-green-400">75%</span>
+                  </div>
+                  <div className="flex justify-between text-sm text-gray-500 font-mono">
+                    <span>Rendering Video...</span>
+                    <span>~12s remaining</span>
                   </div>
                 </div>
               </div>
+            </div>
 
-              <div className="text-center pt-3 sm:pt-4 px-2">
-                <p className="text-xs sm:text-sm italic" style={{color: 'var(--text-secondary)'}}>
-                  By connecting your YouTube account, you authorize SendMyBeat to upload videos on your behalf using the YouTube Data API v3.
+            {/* Feature 2: AI Tags */}
+            <div className="rounded-3xl bg-zinc-900/50 border border-white/10 p-8 relative overflow-hidden group hover:border-purple-500/30 transition-colors">
+              <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-purple-500/10 rounded-full blur-[60px]" />
+              <div className="h-10 w-10 rounded-xl bg-purple-500/20 flex items-center justify-center mb-4 text-purple-400">
+                <Zap className="h-5 w-5 fill-current" />
+              </div>
+              <h3 className="text-xl font-bold mb-2">AI Tag Generator</h3>
+              <p className="text-gray-400 text-sm">
+                Get high-ranking tags instantly. Our AI analyzes your beat's genre and mood to find viral keywords.
+              </p>
+            </div>
+
+            {/* Feature 3: Spotlight */}
+            <div className="rounded-3xl bg-zinc-900/50 border border-white/10 p-8 relative overflow-hidden group hover:border-yellow-500/30 transition-colors">
+              <div className="absolute top-10 right-10 w-20 h-20 bg-yellow-500/10 rounded-full blur-[40px]" />
+              <div className="h-10 w-10 rounded-xl bg-yellow-500/20 flex items-center justify-center mb-4 text-yellow-400">
+                <Trophy className="h-5 w-5 fill-current" />
+              </div>
+              <h3 className="text-xl font-bold mb-2">Producer Spotlight</h3>
+              <p className="text-gray-400 text-sm">
+                Get discovered. We feature top producers on our homepage, driving traffic to your beat store.
+              </p>
+            </div>
+
+            {/* Feature 4: Theme Maker */}
+            <div className="md:col-span-3 rounded-3xl bg-zinc-900/50 border border-white/10 p-8 md:p-10 flex flex-col md:flex-row items-center gap-8 group hover:border-blue-500/30 transition-colors">
+              <div className="flex-1">
+                <div className="h-10 w-10 rounded-xl bg-blue-500/20 flex items-center justify-center mb-4 text-blue-400">
+                  <Users className="h-5 w-5 fill-current" />
+                </div>
+                <h3 className="text-2xl font-bold mb-3">Your Studio, Your Vibe</h3>
+                <p className="text-gray-400">
+                  Customize your dashboard with our new Theme Maker. Choose from Matrix, Glassmorphism, Neubrutalism, or Minimal styles.
                 </p>
               </div>
+              <div className="flex gap-3">
+                <div className="h-20 w-32 rounded-lg bg-[#00ff41]/20 border border-[#00ff41] p-2">
+                  <div className="text-[#00ff41] text-xs font-mono">Matrix</div>
+                </div>
+                <div className="h-20 w-32 rounded-lg bg-white/10 border border-white/20 backdrop-blur-md p-2">
+                  <div className="text-white text-xs font-sans">Glass</div>
+                </div>
+                <div className="h-20 w-32 rounded-none bg-[#fff1f2] border-2 border-black p-2 shadow-[4px_4px_0px_0px_black]">
+                  <div className="text-black text-xs font-mono font-bold">Neo</div>
+                </div>
+              </div>
             </div>
+
           </div>
         </div>
-      </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="border-t border-white/10 bg-black py-12">
+        <div className="container mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6">
+          <div className="flex items-center gap-2">
+            <Music className="h-5 w-5 text-green-500" />
+            <span className="font-bold">SendMyBeat © 2026</span>
+          </div>
+          <div className="flex gap-6 text-sm text-gray-400">
+            <a href="/terms" className="hover:text-white transition-colors">Terms</a>
+            <a href="/privacy-policy" className="hover:text-white transition-colors">Privacy</a>
+            <a href="/about" className="hover:text-white transition-colors">About</a>
+          </div>
+        </div>
+      </footer>
+
+      {/* Auth Dialog */}
+      <Dialog open={isLoginOpen} onOpenChange={setIsLoginOpen}>
+        <DialogContent className="sm:max-w-md bg-zinc-950 border-white/10 text-white">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-bold text-center">
+              {authMode === "login" ? "Welcome Back" : "Join the Movement"}
+            </DialogTitle>
+            <DialogDescription className="text-center text-gray-400">
+              {authMode === "login" ? "Enter your details to access your studio." : "Start your journey to 100k streams today."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleAuth} className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label className="text-gray-300">Username</Label>
+              <Input
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="bg-black/50 border-white/10 focus:border-green-500/50 focus:ring-green-500/20"
+                placeholder="ProducerName"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-gray-300">Password</Label>
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="bg-black/50 border-white/10 focus:border-green-500/50 focus:ring-green-500/20"
+                required
+              />
+            </div>
+
+            <Button
+              type="submit"
+              className="w-full bg-white text-black hover:bg-gray-200 font-bold h-11"
+              disabled={isLoading}
+            >
+              {isLoading ? "Processing..." : (authMode === "login" ? "Log In" : "Create Account")}
+            </Button>
+          </form>
+
+          <div className="text-center text-sm text-gray-500">
+            {authMode === "login" ? (
+              <>Don't have an account? <button onClick={() => setAuthMode("register")} className="text-green-400 hover:underline">Sign up</button></>
+            ) : (
+              <>Already have an account? <button onClick={() => setAuthMode("login")} className="text-green-400 hover:underline">Log in</button></>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 };
+
+// Helper components for icons
+function Trophy(props) {
+  return (
+    <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+  )
+}
 
 export default LandingPage;

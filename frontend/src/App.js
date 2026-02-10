@@ -5,12 +5,14 @@ import axios from "axios";
 import LandingPage from "@/pages/LandingPage";
 import Dashboard from "@/pages/Dashboard";
 import AdminCosts from "@/pages/AdminCosts";
+import ProducerSpotlight from "@/pages/ProducerSpotlight";
 import YouTubeCallback from "@/pages/YouTubeCallback";
 import PrivacyPolicy from "@/pages/PrivacyPolicy";
 import TermsAndConditions from "@/pages/TermsAndConditions";
 import About from "@/pages/About";
 import Footer from "@/components/Footer";
 import { Toaster } from "@/components/ui/sonner";
+import { ThemeProvider } from "@/lib/ThemeContext";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 export const API = `${BACKEND_URL}/api`;
@@ -59,9 +61,10 @@ function App() {
   }
 
   return (
-    <div className="App flex flex-col min-h-screen">
-      <Toaster position="top-right" richColors />
-      <BrowserRouter>
+    <ThemeProvider>
+      <div className="App flex flex-col min-h-screen transition-colors duration-500">
+        <Toaster position="top-right" richColors />
+        <BrowserRouter>
         <div className="flex-grow">
           <Routes>
             <Route
@@ -71,6 +74,16 @@ function App() {
                   <Navigate to="/dashboard" replace />
                 ) : (
                   <LandingPage setIsAuthenticated={setIsAuthenticated} />
+                )
+              }
+            />
+            <Route
+              path="/spotlight"
+              element={
+                isAuthenticated ? (
+                  <ProducerSpotlight />
+                ) : (
+                  <Navigate to="/" replace />
                 )
               }
             />
@@ -109,9 +122,10 @@ function App() {
             <Route path="/about" element={<About />} />
           </Routes>
         </div>
-        <Footer />
-      </BrowserRouter>
-    </div>
+          <Footer />
+        </BrowserRouter>
+      </div>
+    </ThemeProvider>
   );
 }
 

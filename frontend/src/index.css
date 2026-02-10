@@ -4,6 +4,8 @@
 
 /* Import Matrix Theme */
 @import './matrix-theme.css';
+/* Import Other Themes */
+@import './themes.css';
 
 body {
     margin: 0;
