@@ -17,7 +17,7 @@ This guide will help you deploy your entire application (Frontend + Backend + Da
 4. Select **OS Only** -> **Ubuntu 22.04 LTS**.
 5. Scroll down to "Choose your instance plan".
 6. Select the **$3.50 USD/month** plan (512 MB RAM, 1 vCPU, 20 GB SSD).
-7. Name your instance (e.g., `my-beat-website`) and create it.
+7. Name your instance (e.g., `sendmybeat-server`) and create it.
 
 ## Step 2: Configure Networking (Open Ports)
 
@@ -74,12 +74,13 @@ You need to set up the configuration files.
    ```bash
    nano backend/.env
    ```
-3. Fill in your keys:
+3. Fill in your keys (use the ones you saved!):
    - `GROK_API_KEY`: Paste your xAI API key here.
    - `LLM_PROVIDER`: Ensure it is set to `grok`.
-   - `MONGO_URL`: Leave as `mongodb://mongo:27017` (this points to the internal free DB).
-   - `BACKEND_URL`: Set to `http://YOUR_SERVER_IP:8000`.
-   - `FRONTEND_URL`: Set to `http://YOUR_SERVER_IP:3000`.
+   - `MONGO_URL`: **Set this to `mongodb://mongo:27017`** (this is CRITICAL for the free DB to work).
+   - `BACKEND_URL`: Set to `https://api.sendmybeat.com` (or your backend domain).
+   - `FRONTEND_URL`: Set to `https://sendmybeat.com` (or your frontend domain).
+   - `CORS_ORIGINS`: Set to `*` (or your frontend domain).
    - Save and exit (Ctrl+X, Y, Enter).
 
 ### Frontend Configuration
@@ -87,10 +88,12 @@ You need to set up the configuration files.
    ```bash
    nano frontend/.env
    ```
-2. Add the backend URL (replace with your server's public IP):
+2. Add the backend URL (replace with your server's domain/IP):
    ```
-   REACT_APP_BACKEND_URL=http://YOUR_SERVER_IP:8000
+   REACT_APP_BACKEND_URL=https://api.sendmybeat.com
    ```
+   *(Note: If you haven't set up a custom domain for the backend yet, use `http://YOUR_STATIC_IP:8000`)*
+
 3. Save and exit.
 
 ## Step 6: Launch Everything!
@@ -106,9 +109,31 @@ docker compose up -d --build
 
 ## Step 7: Access Your Site
 
-- **Frontend:** `http://YOUR_SERVER_IP:3000`
-- **Backend API:** `http://YOUR_SERVER_IP:8000`
-- **Admin Cost Tracker:** Go to `http://YOUR_SERVER_IP:3000/admin/costs` (login required).
+- **Frontend:** `http://YOUR_STATIC_IP:3000` (or `https://sendmybeat.com` if configured)
+- **Backend API:** `http://YOUR_STATIC_IP:8000` (or `https://api.sendmybeat.com` if configured)
+- **Admin Cost Tracker:** Go to `/admin/costs` on your site (login required).
+
+## HTTPS Setup (Optional but Recommended)
+If you want the secure lock icon (`https://`), you can use **Caddy** to automatically handle SSL certificates.
+
+1. Create a `Caddyfile` in your project root:
+   ```bash
+   nano Caddyfile
+   ```
+2. Paste this configuration (replace with your actual domains):
+   ```
+   sendmybeat.com {
+       reverse_proxy frontend:3000
+   }
+
+   api.sendmybeat.com {
+       reverse_proxy backend:8000
+   }
+   ```
+3. Run Caddy with Docker:
+   ```bash
+   docker run -d --name caddy --network app_default -p 80:80 -p 443:443 -v $PWD/Caddyfile:/etc/caddy/Caddyfile -v caddy_data:/data caddy:alpine
+   ```
 
 ## Troubleshooting & Maintenance
 
