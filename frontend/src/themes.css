@@ -197,6 +197,58 @@ body[data-theme="glass"] .text-emerald-400 {
     color: #60a5fa !important;
 }
 
+/* Force-convert remaining Tailwind green utilities to glass blue */
+body[data-theme="glass"] [class*="text-green-"],
+body[data-theme="glass"] [class*="text-emerald-"] {
+    color: #60a5fa !important;
+}
+
+body[data-theme="glass"] [class*="border-green-"],
+body[data-theme="glass"] [class*="border-emerald-"] {
+    border-color: rgba(96, 165, 250, 0.7) !important;
+}
+
+body[data-theme="glass"] [class*="bg-green-"],
+body[data-theme="glass"] [class*="bg-emerald-"] {
+    background-color: rgba(59, 130, 246, 0.78) !important;
+    color: #eaf2ff !important;
+}
+
+/* Keep tab labels blue in glass mode (non-active), white when active */
+body[data-theme="glass"] .dashboard-tabs [role="tab"] {
+    color: #93c5fd !important;
+}
+
+body[data-theme="glass"] .dashboard-tabs [role="tab"][data-state="active"] {
+    color: #ffffff !important;
+}
+
+body[data-theme="glass"] .dashboard-tabs [role="tab"]:not([data-state="active"]):hover {
+    color: #bfdbfe !important;
+}
+
+/* Neutralize matrix helper classes when glass theme is active */
+body[data-theme="glass"] .matrix-glow {
+    color: #93c5fd !important;
+    text-shadow:
+        0 0 6px rgba(96, 165, 250, 0.32),
+        0 0 14px rgba(96, 165, 250, 0.2) !important;
+}
+
+body[data-theme="glass"] .neon-border {
+    border-color: rgba(96, 165, 250, 0.62) !important;
+    box-shadow:
+        0 0 6px rgba(96, 165, 250, 0.26),
+        inset 0 0 5px rgba(96, 165, 250, 0.16) !important;
+}
+
+body[data-theme="glass"] .pulse-glow {
+    animation: none !important;
+    box-shadow:
+        0 0 8px rgba(96, 165, 250, 0.3),
+        0 0 16px rgba(96, 165, 250, 0.18) !important;
+}
+
 body[data-theme="glass"] .dashboard-card:hover,
 body[data-theme="glass"] .dashboard-card-muted:hover,
 body[data-theme="glass"] .producer-card:hover {
