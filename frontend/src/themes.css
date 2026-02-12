@@ -46,7 +46,8 @@ body[data-theme="glass"] {
     position: relative;
 }
 
-body[data-theme="glass"].dark {
+html.dark body[data-theme="glass"],
+body.dark[data-theme="glass"] {
     --bg-primary: #070b15 !important;
     --bg-secondary: rgba(10, 16, 29, 0.88) !important;
     --bg-tertiary: rgba(13, 20, 35, 0.9) !important;
@@ -139,11 +140,16 @@ body[data-theme="glass"] .dashboard-tabs::before {
     opacity: 0.56;
 }
 
-body[data-theme="glass"].dark .dashboard-card::before,
-body[data-theme="glass"].dark .dashboard-card-muted::before,
-body[data-theme="glass"].dark .glass-card::before,
-body[data-theme="glass"].dark .producer-card::before,
-body[data-theme="glass"].dark .dashboard-tabs::before {
+html.dark body[data-theme="glass"] .dashboard-card::before,
+html.dark body[data-theme="glass"] .dashboard-card-muted::before,
+html.dark body[data-theme="glass"] .glass-card::before,
+html.dark body[data-theme="glass"] .producer-card::before,
+html.dark body[data-theme="glass"] .dashboard-tabs::before,
+body.dark[data-theme="glass"] .dashboard-card::before,
+body.dark[data-theme="glass"] .dashboard-card-muted::before,
+body.dark[data-theme="glass"] .glass-card::before,
+body.dark[data-theme="glass"] .producer-card::before,
+body.dark[data-theme="glass"] .dashboard-tabs::before {
     background:
         linear-gradient(130deg,
             rgba(156, 188, 255, 0.16) 0%,
@@ -171,29 +177,38 @@ body[data-theme="glass"] .btn-modern:hover {
     transform: translateY(-1px);
 }
 
-body[data-theme="glass"].dark .dashboard-tabs {
+html.dark body[data-theme="glass"] .dashboard-tabs,
+body.dark[data-theme="glass"] .dashboard-tabs {
     background: rgba(6, 12, 24, 0.84) !important;
     border-color: rgba(129, 154, 204, 0.32) !important;
     box-shadow: 0 16px 36px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(212, 226, 255, 0.12) !important;
 }
 
-body[data-theme="glass"].dark .dashboard-card,
-body[data-theme="glass"].dark .dashboard-card-muted,
-body[data-theme="glass"].dark .glass-card,
-body[data-theme="glass"].dark .producer-card {
+html.dark body[data-theme="glass"] .dashboard-card,
+html.dark body[data-theme="glass"] .dashboard-card-muted,
+html.dark body[data-theme="glass"] .glass-card,
+html.dark body[data-theme="glass"] .producer-card,
+body.dark[data-theme="glass"] .dashboard-card,
+body.dark[data-theme="glass"] .dashboard-card-muted,
+body.dark[data-theme="glass"] .glass-card,
+body.dark[data-theme="glass"] .producer-card {
     background: var(--glass-tint), rgba(5, 10, 20, 0.8) !important;
     border-color: rgba(129, 154, 204, 0.28) !important;
 }
 
-body[data-theme="glass"].dark input,
-body[data-theme="glass"].dark textarea,
-body[data-theme="glass"].dark select {
+html.dark body[data-theme="glass"] input,
+html.dark body[data-theme="glass"] textarea,
+html.dark body[data-theme="glass"] select,
+body.dark[data-theme="glass"] input,
+body.dark[data-theme="glass"] textarea,
+body.dark[data-theme="glass"] select {
     background: rgba(17, 27, 46, 0.6) !important;
     border: 1px solid rgba(155, 182, 230, 0.28) !important;
     box-shadow: inset 0 1px 0 rgba(208, 222, 255, 0.12) !important;
 }
 
-body[data-theme="glass"].dark .btn-modern {
+html.dark body[data-theme="glass"] .btn-modern,
+body.dark[data-theme="glass"] .btn-modern {
     background: linear-gradient(135deg, #4e8dff 0%, #8bb8ff 100%) !important;
     box-shadow: 0 12px 34px rgba(40, 86, 184, 0.42) !important;
 }
@@ -269,7 +284,8 @@ body[data-theme="minimal"] {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
-body[data-theme="minimal"].dark {
+html.dark body[data-theme="minimal"],
+body.dark[data-theme="minimal"] {
     --background: #09090b;
     --foreground: #fafafa;
     --card: #09090b;
