@@ -187,6 +187,9 @@ const Dashboard = ({ setIsAuthenticated }) => {
     uploadDescriptionText?.trim() &&
     generatedTags?.length
   );
+  const adsUnlocked = generatedTags.length > 0 || (tagHistory?.length || 0) > 0;
+  const adEligibleTabs = ["tags", "descriptions"].includes(activeTab);
+  const adContentReady = adsUnlocked;
   const canShowAds = Boolean(
     subscriptionStatus &&
     !subscriptionStatus.is_subscribed &&
@@ -196,7 +199,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
     adEligibleTabs &&
     adContentReady
   );
-  const adsUnlocked = generatedTags.length > 0 || (tagHistory?.length || 0) > 0;
 
   const formatTime = (seconds = 0) => {
     if (!Number.isFinite(seconds)) return "0:00";
