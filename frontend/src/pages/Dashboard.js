@@ -202,6 +202,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
     maxBarLength: 0.18,
     trailsEnabled: true,
     particleEnabled: true,
+    mode: "circle", // "circle" or "monstercat"
+    shakeIntensity: 1,
   });
 
   const isPro = !!subscriptionStatus?.is_subscribed;
@@ -262,6 +264,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
     maxSpawnRate: Math.round(120 * visualizerSettings.particleIntensity),
     baseSpawnRate: Math.round(10 * Math.max(0.5, visualizerSettings.particleIntensity)),
     particleSpeed: 72 * visualizerSettings.particleIntensity,
+    mode: visualizerSettings.mode,
+    shakeIntensity: visualizerSettings.shakeIntensity,
   });
 
   useEffect(() => {
@@ -2906,9 +2910,9 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         <div className="space-y-3 p-4 rounded-lg border" style={{ borderColor: "var(--border-color)", backgroundColor: "var(--bg-secondary)" }}>
                           <div className="flex items-center justify-between gap-2">
                             <div>
-                              <p className="text-sm font-semibold">Audio Reactive Spectrum (Beta)</p>
+                              <p className="text-sm font-semibold">Audio Visualizer</p>
                               <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                                Circle bars + particles over your uploaded image
+                                Reacts to your beat
                               </p>
                             </div>
                             <Button
@@ -2924,6 +2928,22 @@ const Dashboard = ({ setIsAuthenticated }) => {
                           {visualizerEnabled && (
                             <>
                               <div className="space-y-2">
+                                <Label htmlFor="viz-mode" className="text-sm">Visualizer Style</Label>
+                                <Select
+                                  value={visualizerSettings.mode}
+                                  onValueChange={(val) => updateVisualizerSetting("mode", val)}
+                                >
+                                  <SelectTrigger id="viz-mode">
+                                    <SelectValue placeholder="Select style" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="circle">Circle Spectrum (Trap Nation)</SelectItem>
+                                    <SelectItem value="monstercat">Linear Bars (Monstercat)</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+
+                              <div className="space-y-2">
                                 <div className="flex items-center justify-between">
                                   <Label htmlFor="viz-bars" className="text-sm">Bars</Label>
                                   <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
@@ -2933,7 +2953,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                 <Input
                                   id="viz-bars"
                                   type="range"
-                                  min="48"
+                                  min="32"
                                   max="196"
                                   step="4"
                                   value={visualizerSettings.bars}
@@ -2959,42 +2979,64 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                 />
                               </div>
 
-                              <div className="space-y-2">
-                                <div className="flex items-center justify-between">
-                                  <Label htmlFor="viz-particles" className="text-sm">Particle Intensity</Label>
-                                  <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                                    {visualizerSettings.particleIntensity.toFixed(2)}x
-                                  </span>
-                                </div>
-                                <Input
-                                  id="viz-particles"
-                                  type="range"
-                                  min="0.3"
-                                  max="2"
-                                  step="0.05"
-                                  value={visualizerSettings.particleIntensity}
-                                  onChange={(e) => updateVisualizerSetting("particleIntensity", Number(e.target.value))}
-                                />
-                              </div>
+                              {visualizerSettings.mode === 'circle' && (
+                                <>
+                                  <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                      <Label htmlFor="viz-shake" className="text-sm">Shake Intensity</Label>
+                                      <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                                        {visualizerSettings.shakeIntensity.toFixed(1)}x
+                                      </span>
+                                    </div>
+                                    <Input
+                                      id="viz-shake"
+                                      type="range"
+                                      min="0"
+                                      max="3"
+                                      step="0.1"
+                                      value={visualizerSettings.shakeIntensity}
+                                      onChange={(e) => updateVisualizerSetting("shakeIntensity", Number(e.target.value))}
+                                    />
+                                  </div>
 
-                              <div className="grid grid-cols-2 gap-2">
-                                <Button
-                                  type="button"
-                                  variant={visualizerSettings.particleEnabled ? "default" : "outline"}
-                                  size="sm"
-                                  onClick={() => updateVisualizerSetting("particleEnabled", !visualizerSettings.particleEnabled)}
-                                >
-                                  {visualizerSettings.particleEnabled ? "Particles ON" : "Particles OFF"}
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant={visualizerSettings.trailsEnabled ? "default" : "outline"}
-                                  size="sm"
-                                  onClick={() => updateVisualizerSetting("trailsEnabled", !visualizerSettings.trailsEnabled)}
-                                >
-                                  {visualizerSettings.trailsEnabled ? "Trails ON" : "Trails OFF"}
-                                </Button>
-                              </div>
+                                  <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                      <Label htmlFor="viz-particles" className="text-sm">Particle Intensity</Label>
+                                      <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                                        {visualizerSettings.particleIntensity.toFixed(2)}x
+                                      </span>
+                                    </div>
+                                    <Input
+                                      id="viz-particles"
+                                      type="range"
+                                      min="0.3"
+                                      max="2"
+                                      step="0.05"
+                                      value={visualizerSettings.particleIntensity}
+                                      onChange={(e) => updateVisualizerSetting("particleIntensity", Number(e.target.value))}
+                                    />
+                                  </div>
+
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <Button
+                                      type="button"
+                                      variant={visualizerSettings.particleEnabled ? "default" : "outline"}
+                                      size="sm"
+                                      onClick={() => updateVisualizerSetting("particleEnabled", !visualizerSettings.particleEnabled)}
+                                    >
+                                      {visualizerSettings.particleEnabled ? "Particles ON" : "Particles OFF"}
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      variant={visualizerSettings.trailsEnabled ? "default" : "outline"}
+                                      size="sm"
+                                      onClick={() => updateVisualizerSetting("trailsEnabled", !visualizerSettings.trailsEnabled)}
+                                    >
+                                      {visualizerSettings.trailsEnabled ? "Trails ON" : "Trails OFF"}
+                                    </Button>
+                                  </div>
+                                </>
+                              )}
                             </>
                           )}
                         </div>
