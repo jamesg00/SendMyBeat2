@@ -15,7 +15,7 @@
   --matrix-black: #0d0208;
   --matrix-dark: #1a1a1a;
   --matrix-darker: #0a0a0a;
-  --matrix-white: #ffffff;
+  --matrix-white: #eef4ef;
 }
 
 /* Karmatic Arcade font ONLY for SendMyBeat brand */
@@ -33,15 +33,15 @@ body, h1, h2, h3, h4, h5, h6, p, div, span, button {
 /* Light Mode - White & Green */
 :root, body {
   --bg-primary: var(--matrix-white) !important;
-  --bg-secondary: #f5f5f5 !important;
-  --bg-tertiary: #e8e8e8 !important;
-  --text-primary: #1a1a1a !important;
+  --bg-secondary: #e3ebe3 !important;
+  --bg-tertiary: #d6e1d6 !important;
+  --text-primary: #102015 !important;
   --text-secondary: #00cc33 !important;
   --accent: var(--matrix-green-dark) !important;
   --accent-primary: var(--matrix-green-dark) !important;
   --accent-secondary: var(--matrix-green) !important;
   background-color: var(--matrix-white) !important;
-  color: #1a1a1a !important;
+  color: #102015 !important;
 }
 
 /* Dark Mode - Black & Green */

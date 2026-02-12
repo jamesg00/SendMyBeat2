@@ -1394,21 +1394,21 @@ const Dashboard = ({ setIsAuthenticated }) => {
       
       {/* Header */}
       <div className="glass-card mx-2 sm:mx-4 mt-2 sm:mt-4 rounded-xl sm:rounded-2xl border-0 dashboard-card">
-        <div className="container mx-auto px-3 sm:px-4 md:px-6 py-3 sm:py-4 dashboard-shell">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
-            <div className="flex items-center gap-2 sm:gap-3 md:gap-4">
+        <div className="container mx-auto px-3 sm:px-4 md:px-6 pr-16 sm:pr-20 lg:pr-6 py-3 sm:py-4 dashboard-shell">
+          <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 lg:gap-4">
+            <div className="flex items-center gap-2 sm:gap-3 md:gap-4 min-w-0">
               <img src="/sendmybeat.png" alt="SendMyBeat" className="h-10 w-10 sm:h-12 sm:w-12 object-contain" />
-              <div>
+              <div className="min-w-0">
                 <h1 className="text-lg sm:text-xl md:text-2xl font-bold gradient-text">SendMyBeat</h1>
                 {user && <p className="text-xs sm:text-sm" style={{color: 'var(--text-secondary)'}}>Welcome back, {user.username}</p>}
               </div>
             </div>
-            <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto flex-wrap">
+            <div className="flex items-center gap-2 sm:gap-3 w-full lg:w-auto flex-wrap lg:flex-nowrap lg:justify-end">
               {/* Show Upgrade button for free users */}
               {subscriptionStatus && !subscriptionStatus.is_subscribed && (
                 <Button
                   onClick={() => setShowUpgradeModal(true)}
-                  className="btn-modern text-xs sm:text-sm px-3 sm:px-4 py-2"
+                  className="btn-modern text-xs sm:text-sm px-3 sm:px-4 py-2 whitespace-nowrap"
                   data-testid="header-upgrade-btn"
                 >
                   <Sparkles className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
@@ -1419,19 +1419,19 @@ const Dashboard = ({ setIsAuthenticated }) => {
               {/* Show Pro badge for subscribed users */}
               {subscriptionStatus && subscriptionStatus.is_subscribed && (
                 <div className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-gradient-to-r from-[var(--accent-primary)] to-[var(--accent-secondary)] text-white font-semibold text-xs sm:text-sm whitespace-nowrap">
-                  ✨ Pro Member
+                  Pro Member
                 </div>
               )}
               
               {/* YouTube Profile Picture */}
               {youtubeConnected && youtubeProfilePicture && (
-                <div className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-full" style={{backgroundColor: 'var(--bg-secondary)'}}>
+                <div className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-full min-w-0 max-w-full xl:max-w-[340px]" style={{backgroundColor: 'var(--bg-secondary)'}}>
                   <img 
                     src={youtubeProfilePicture} 
                     alt={youtubeName || youtubeEmail}
                     className="h-6 w-6 sm:h-8 sm:w-8 rounded-full border-2 border-[var(--accent-primary)]"
                   />
-                  <span className="text-xs sm:text-sm font-medium hidden sm:block" style={{color: 'var(--text-primary)'}}>
+                  <span className="text-xs sm:text-sm font-medium hidden xl:block truncate max-w-[250px]" style={{color: 'var(--text-primary)'}}>
                     {youtubeName || youtubeEmail}
                   </span>
                 </div>
@@ -1443,7 +1443,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                 className="gap-1 sm:gap-2 border-[var(--border-color)] text-xs sm:text-sm px-3 sm:px-4 py-2 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border-yellow-500/50 hover:bg-yellow-500/30"
               >
                 <Target className="h-3 w-3 sm:h-4 sm:w-4 text-yellow-500" />
-                <span className="hidden sm:inline font-bold text-yellow-500">Spotlight</span>
+                <span className="hidden xl:inline font-bold text-yellow-500">Spotlight</span>
               </Button>
               <Button
                 variant="outline"
@@ -1452,7 +1452,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                 title="View Backend Costs"
               >
                 <DollarSign className="h-3 w-3 sm:h-4 sm:w-4" />
-                <span className="hidden sm:inline">Costs</span>
+                <span className="hidden xl:inline">Costs</span>
               </Button>
               <Button
                 variant="outline"
@@ -1461,8 +1461,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
                 data-testid="logout-btn"
               >
                 <LogOut className="h-3 w-3 sm:h-4 sm:w-4" />
-                <span className="hidden sm:inline">Logout</span>
-                <span className="sm:hidden">Exit</span>
+                <span className="hidden xl:inline">Logout</span>
+                <span className="xl:hidden">Exit</span>
               </Button>
             </div>
           </div>
