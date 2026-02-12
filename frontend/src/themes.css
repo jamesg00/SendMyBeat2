@@ -61,21 +61,21 @@ body[data-theme="glass"].dark {
 
     --background: #070b15;
     --foreground: #eaf1ff;
-    --card: rgba(15, 21, 35, 0.42);
+    --card: rgba(8, 13, 24, 0.78);
     --card-foreground: #eff5ff;
     --primary: #76a9ff;
     --primary-foreground: #0b1428;
-    --secondary: rgba(18, 26, 44, 0.35);
+    --secondary: rgba(12, 19, 34, 0.74);
     --secondary-foreground: #d2ddf6;
-    --muted: rgba(18, 26, 44, 0.64);
+    --muted: rgba(11, 18, 32, 0.78);
     --muted-foreground: #96a3be;
-    --accent: rgba(28, 38, 64, 0.7);
+    --accent: rgba(18, 28, 48, 0.8);
     --accent-foreground: #9cc0ff;
     --border: rgba(166, 191, 234, 0.22);
-    --input: rgba(22, 32, 52, 0.5);
+    --input: rgba(13, 21, 38, 0.75);
     --glass-shadow: 0 20px 58px rgba(0, 0, 0, 0.42);
     --glass-border-soft: rgba(168, 188, 230, 0.25);
-    --glass-highlight: rgba(219, 229, 255, 0.14);
+    --glass-highlight: rgba(154, 184, 242, 0.08);
     --glass-tint: linear-gradient(135deg, rgba(31, 44, 71, 0.4), rgba(9, 15, 27, 0.1));
 
     background:
@@ -144,7 +144,12 @@ body[data-theme="glass"].dark .dashboard-card-muted::before,
 body[data-theme="glass"].dark .glass-card::before,
 body[data-theme="glass"].dark .producer-card::before,
 body[data-theme="glass"].dark .dashboard-tabs::before {
-    opacity: 0.3;
+    background:
+        linear-gradient(130deg,
+            rgba(156, 188, 255, 0.16) 0%,
+            rgba(32, 46, 74, 0.06) 34%,
+            rgba(18, 28, 48, 0.04) 100%);
+    opacity: 0.16;
 }
 
 body[data-theme="glass"] input,
@@ -176,7 +181,7 @@ body[data-theme="glass"].dark .dashboard-card,
 body[data-theme="glass"].dark .dashboard-card-muted,
 body[data-theme="glass"].dark .glass-card,
 body[data-theme="glass"].dark .producer-card {
-    background: var(--glass-tint), rgba(7, 13, 25, 0.66) !important;
+    background: var(--glass-tint), rgba(5, 10, 20, 0.8) !important;
     border-color: rgba(129, 154, 204, 0.28) !important;
 }
 
