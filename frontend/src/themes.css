@@ -1,5 +1,5 @@
 /* ========= THEME VARIABLES ========= */
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Orbitron:wght@500;700&display=swap');
 
 /* === GLASSMORPHISM THEME === */
 body[data-theme="glass"] {
@@ -143,14 +143,17 @@ body[data-theme="glass"] .btn-modern:hover {
 }
 
 body[data-theme="glass"].dark .dashboard-tabs {
-    background: rgba(11, 18, 33, 0.44) !important;
+    background: rgba(6, 12, 24, 0.72) !important;
+    border-color: rgba(129, 154, 204, 0.32) !important;
+    box-shadow: 0 16px 36px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(212, 226, 255, 0.12) !important;
 }
 
 body[data-theme="glass"].dark .dashboard-card,
 body[data-theme="glass"].dark .dashboard-card-muted,
 body[data-theme="glass"].dark .glass-card,
 body[data-theme="glass"].dark .producer-card {
-    background: var(--glass-tint), rgba(11, 18, 33, 0.34) !important;
+    background: var(--glass-tint), rgba(7, 13, 25, 0.52) !important;
+    border-color: rgba(129, 154, 204, 0.28) !important;
 }
 
 body[data-theme="glass"].dark input,
@@ -187,8 +190,18 @@ body[data-theme="neubrutalism"] {
     background-color: #fff1f2;
     background-image: radial-gradient(#000 1px, transparent 0);
     background-size: 20px 20px;
-    font-family: 'Space Mono', monospace;
+    font-family: 'Orbitron', 'Space Mono', monospace;
     letter-spacing: -0.5px;
+}
+
+body[data-theme="neubrutalism"] h1,
+body[data-theme="neubrutalism"] h2,
+body[data-theme="neubrutalism"] h3,
+body[data-theme="neubrutalism"] h4,
+body[data-theme="neubrutalism"] .dashboard-tabs [role="tab"],
+body[data-theme="neubrutalism"] button {
+    font-family: 'Orbitron', 'Space Mono', monospace !important;
+    letter-spacing: 0.4px !important;
 }
 
 body[data-theme="neubrutalism"] .dashboard-card,
