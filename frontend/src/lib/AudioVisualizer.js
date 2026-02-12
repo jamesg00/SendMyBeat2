@@ -28,6 +28,10 @@ const DEFAULT_OPTIONS = {
   spectrumColor: "90, 160, 255",
   glowColor: "125, 185, 255",
   particleColor: "140, 200, 255",
+  mode: "circle", // "circle" or "monstercat"
+  monstercatBarWidth: 10,
+  monstercatSpacing: 2,
+  shakeIntensity: 1.0,
 };
 
 const IS_MOBILE = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(max-width: 768px)").matches;
@@ -72,6 +76,10 @@ export default class AudioVisualizer {
 
     this.energy = 0;
     this.bassEnergy = 0;
+
+    // Shake state
+    this.shakeOffsetX = 0;
+    this.shakeOffsetY = 0;
 
     this.resize = this.resize.bind(this);
     this.loop = this.loop.bind(this);
@@ -290,7 +298,7 @@ export default class AudioVisualizer {
   }
 
   spawnParticles(dt, cx, cy, radius) {
-    if (!this.options.particleEnabled) return;
+    if (!this.options.particleEnabled || this.options.mode !== 'circle') return;
     const minRate = this.runtime.baseSpawnRate;
     const maxRate = this.runtime.maxSpawnRate;
     const rate = minRate + (maxRate - minRate) * Math.min(1, this.energy * 1.25);
@@ -334,7 +342,7 @@ export default class AudioVisualizer {
   }
 
   drawParticles() {
-    if (!this.options.particleEnabled) return;
+    if (!this.options.particleEnabled || this.options.mode !== 'circle') return;
     const c = this.ctx;
     const [r, g, b] = this.options.particleColor.split(",").map((v) => Number(v.trim()));
 
@@ -370,6 +378,38 @@ export default class AudioVisualizer {
     c.rotate(this.rotation);
     c.globalCompositeOperation = "lighter";
 
+    // Draw main spectrum path
+    c.beginPath();
+    c.strokeStyle = `rgba(${sr}, ${sg}, ${sb}, 0.9)`;
+    c.lineWidth = this.options.lineWidth;
+
+    // Create points for smooth curve
+    const points = [];
+    for (let i = 0; i < count; i++) {
+        const a = i * step;
+        const amp = Math.max(0, bars[i]);
+        const len = amp * maxBarPx;
+        const x = Math.cos(a) * (radius + len);
+        const y = Math.sin(a) * (radius + len);
+        points.push({x, y});
+    }
+
+    // Connect last point to first for closed loop
+    points.push(points[0]);
+    points.push(points[1]);
+
+    c.moveTo(points[0].x, points[0].y);
+    for (let i = 0; i < points.length - 1; i++) {
+        const p0 = points[i];
+        const p1 = points[i + 1];
+        const midX = (p0.x + p1.x) / 2;
+        const midY = (p0.y + p1.y) / 2;
+        c.quadraticCurveTo(p0.x, p0.y, midX, midY);
+    }
+    c.closePath();
+    c.stroke();
+
+    // Draw bars (classic style) inside
     for (let i = 0; i < count; i += 1) {
       const a = i * step;
       const amp = Math.max(0, bars[i]);
@@ -385,15 +425,34 @@ export default class AudioVisualizer {
       c.moveTo(x0, y0);
       c.lineTo(x1, y1);
       c.stroke();
-
-      c.beginPath();
-      c.strokeStyle = `rgba(${sr}, ${sg}, ${sb}, 0.9)`;
-      c.lineWidth = this.options.lineWidth;
-      c.moveTo(x0, y0);
-      c.lineTo(x1, y1);
-      c.stroke();
     }
     c.restore();
+  }
+
+  drawMonstercat(bars, w, h) {
+    const c = this.ctx;
+    const count = Math.min(bars.length, 63); // Limit bars for cleaner look
+    const [sr, sg, sb] = this.options.spectrumColor.split(",").map((v) => Number(v.trim()));
+
+    const barWidth = this.options.monstercatBarWidth || (w / count * 0.6);
+    const spacing = this.options.monstercatSpacing || (w / count * 0.2);
+    const totalWidth = count * (barWidth + spacing);
+    const startX = (w - totalWidth) / 2;
+    const maxHeight = h * 0.4;
+
+    c.fillStyle = `rgba(${sr}, ${sg}, ${sb}, 0.9)`;
+    c.shadowBlur = 15;
+    c.shadowColor = `rgba(${sr}, ${sg}, ${sb}, 0.5)`;
+
+    for (let i = 0; i < count; i++) {
+      const barHeight = Math.max(2, bars[i] * maxHeight * 1.5);
+      const x = startX + i * (barWidth + spacing);
+      const y = h - barHeight - 20; // 20px padding from bottom
+
+      c.fillRect(x, y, barWidth, barHeight);
+    }
+
+    c.shadowBlur = 0;
   }
 
   drawVignette() {
@@ -405,6 +464,17 @@ export default class AudioVisualizer {
     grad.addColorStop(1, "rgba(0,0,0,0.26)");
     c.fillStyle = grad;
     c.fillRect(0, 0, w, h);
+  }
+
+  calculateShake() {
+    if (this.bassEnergy > 0.4 && this.options.shakeIntensity > 0) {
+        const shakeAmt = (this.bassEnergy - 0.4) * 15 * this.options.shakeIntensity;
+        this.shakeOffsetX = (Math.random() - 0.5) * shakeAmt;
+        this.shakeOffsetY = (Math.random() - 0.5) * shakeAmt;
+    } else {
+        this.shakeOffsetX *= 0.9;
+        this.shakeOffsetY *= 0.9;
+    }
   }
 
   loop(ts) {
@@ -427,8 +497,13 @@ export default class AudioVisualizer {
     c.fillRect(0, 0, w, h);
 
     const bars = this.computeBars();
-    const cx = w / 2;
-    const cy = h / 2;
+
+    // Update Shake
+    this.calculateShake();
+
+    const cx = w / 2 + this.shakeOffsetX;
+    const cy = h / 2 + this.shakeOffsetY;
+
     this.runtime.gain = this.lerp(this.runtime.gain, this.options.gain, 8.5, dt);
     this.runtime.rotateSpeed = this.lerp(this.runtime.rotateSpeed, this.options.rotateSpeed, 9, dt);
     this.runtime.maxBarLength = this.lerp(this.runtime.maxBarLength, this.options.maxBarLength, 8.5, dt);
@@ -437,14 +512,19 @@ export default class AudioVisualizer {
     this.runtime.maxSpawnRate = this.lerp(this.runtime.maxSpawnRate, this.options.maxSpawnRate, 10, dt);
     this.runtime.particleSpeed = this.lerp(this.runtime.particleSpeed, this.options.particleSpeed, 10, dt);
 
-    const radius = Math.min(w, h) * this.runtime.radius;
-    const displayBars = this.getDisplayBars(bars);
+    if (this.options.mode === 'circle') {
+        const radius = Math.min(w, h) * this.runtime.radius;
+        const displayBars = this.getDisplayBars(bars);
 
-    this.rotation += this.runtime.rotateSpeed + this.energy * 0.0008;
-    this.spawnParticles(dt, cx, cy, radius);
-    this.updateParticles(dt);
-    this.drawParticles();
-    this.drawSpectrum(displayBars, cx, cy, radius);
+        this.rotation += this.runtime.rotateSpeed + this.energy * 0.0008;
+        this.spawnParticles(dt, cx, cy, radius);
+        this.updateParticles(dt);
+        this.drawParticles();
+        this.drawSpectrum(displayBars, cx, cy, radius);
+    } else if (this.options.mode === 'monstercat') {
+        this.drawMonstercat(this.getDisplayBars(bars), w, h);
+    }
+
     this.drawVignette();
 
     if (this.barTransition > 0) {
