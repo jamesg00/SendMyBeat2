@@ -241,7 +241,11 @@ export default function ProducerSpotlight() {
           <div>
             <div className="flex items-center gap-2">
               <h3 className="font-bold text-lg">{producer.username}</h3>
-              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-semibold ${getRoleTagClass(producer.role_tag)}`}>
+              <span
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-semibold ${getRoleTagClass(producer.role_tag)} ${
+                  producer.role_tag === "Creator" ? "creator-badge-epic" : ""
+                }`}
+              >
                 {getRoleTagIcon(producer.role_tag)}
                 {producer.role_tag || "Newbie"}
               </span>
@@ -407,7 +411,11 @@ export default function ProducerSpotlight() {
               <div className="grid gap-2 border rounded-xl p-3 border-[var(--border-color)] bg-[var(--bg-secondary)]">
                 <div className="flex items-center justify-between">
                   <label className="font-semibold">Verification</label>
-                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-semibold ${getRoleTagClass(myProfile?.role_tag || "Newbie")}`}>
+                  <span
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-semibold ${getRoleTagClass(myProfile?.role_tag || "Newbie")} ${
+                      (myProfile?.role_tag || "Newbie") === "Creator" ? "creator-badge-epic" : ""
+                    }`}
+                  >
                     {getRoleTagIcon(myProfile?.role_tag)}
                     {myProfile?.role_tag || "Newbie"}
                   </span>

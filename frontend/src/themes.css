@@ -6,8 +6,8 @@ body[data-theme="glass"] {
     --bg-primary: #edf7ff !important;
     --bg-secondary: rgba(236, 245, 255, 0.82) !important;
     --bg-tertiary: rgba(226, 239, 255, 0.86) !important;
-    --text-primary: #0b1220 !important;
-    --text-secondary: #2a3f5f !important;
+    --text-primary: #1d4ed8 !important;
+    --text-secondary: #60a5fa !important;
     --accent-primary: #2f74ff !important;
     --accent-secondary: #68a7ff !important;
     --border-color: rgba(255, 255, 255, 0.56) !important;
@@ -16,15 +16,15 @@ body[data-theme="glass"] {
     --glow: rgba(98, 154, 255, 0.32) !important;
 
     --background: #edf7ff;
-    --foreground: #0b1220;
+    --foreground: #1d4ed8;
     --card: rgba(255, 255, 255, 0.36);
-    --card-foreground: #0b1220;
+    --card-foreground: #1d4ed8;
     --primary: #2f74ff;
     --primary-foreground: #ffffff;
     --secondary: rgba(255, 255, 255, 0.28);
-    --secondary-foreground: #162236;
+    --secondary-foreground: #2563eb;
     --muted: rgba(235, 244, 255, 0.8);
-    --muted-foreground: #56637a;
+    --muted-foreground: #60a5fa;
     --accent: rgba(226, 238, 255, 0.8);
     --accent-foreground: #1f4bcc;
     --border: rgba(255, 255, 255, 0.56);
@@ -51,8 +51,8 @@ body.dark[data-theme="glass"] {
     --bg-primary: #070b15 !important;
     --bg-secondary: rgba(10, 16, 29, 0.88) !important;
     --bg-tertiary: rgba(13, 20, 35, 0.9) !important;
-    --text-primary: #eaf1ff !important;
-    --text-secondary: #b2c3e3 !important;
+    --text-primary: #bfdbfe !important;
+    --text-secondary: #93c5fd !important;
     --accent-primary: #76a9ff !important;
     --accent-secondary: #9bc2ff !important;
     --border-color: rgba(166, 191, 234, 0.28) !important;
@@ -61,15 +61,15 @@ body.dark[data-theme="glass"] {
     --glow: rgba(100, 152, 255, 0.28) !important;
 
     --background: #070b15;
-    --foreground: #eaf1ff;
+    --foreground: #bfdbfe;
     --card: rgba(8, 13, 24, 0.78);
-    --card-foreground: #eff5ff;
+    --card-foreground: #bfdbfe;
     --primary: #76a9ff;
     --primary-foreground: #0b1428;
     --secondary: rgba(12, 19, 34, 0.74);
-    --secondary-foreground: #d2ddf6;
+    --secondary-foreground: #93c5fd;
     --muted: rgba(11, 18, 32, 0.78);
-    --muted-foreground: #96a3be;
+    --muted-foreground: #93c5fd;
     --accent: rgba(18, 28, 48, 0.8);
     --accent-foreground: #9cc0ff;
     --border: rgba(166, 191, 234, 0.22);
@@ -300,23 +300,23 @@ body[data-theme="neubrutalism"] .btn-modern:active {
 
 /* === MINIMAL THEME === */
 body[data-theme="minimal"] {
-    --background: #ffffff;
-    --foreground: #18181b;
-    --card: #ffffff;
-    --card-foreground: #18181b;
-    --primary: #18181b;
-    --primary-foreground: #ffffff;
-    --secondary: #f4f4f5;
-    --secondary-foreground: #18181b;
-    --muted: #f4f4f5;
-    --muted-foreground: #71717a;
-    --accent: #f4f4f5;
-    --accent-foreground: #18181b;
-    --border: #e4e4e7;
-    --input: #ffffff;
+    --background: #09090b;
+    --foreground: #fafafa;
+    --card: #0f0f12;
+    --card-foreground: #fafafa;
+    --primary: #fafafa;
+    --primary-foreground: #18181b;
+    --secondary: #18181b;
+    --secondary-foreground: #fafafa;
+    --muted: #18181b;
+    --muted-foreground: #a1a1aa;
+    --accent: #27272a;
+    --accent-foreground: #fafafa;
+    --border: #27272a;
+    --input: #121215;
     --radius: 0.5rem;
 
-    background: #ffffff;
+    background: radial-gradient(circle at 15% 10%, rgba(255, 255, 255, 0.06), transparent 35%), #09090b;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
@@ -336,6 +336,90 @@ body.dark[data-theme="minimal"] {
     --accent-foreground: #fafafa;
     --border: #27272a;
     --input: #09090b;
+}
+
+/* Matrix footer */
+body[data-theme="matrix"] .app-footer {
+    border-top-color: #00ff41 !important;
+    background: #050505 !important;
+    box-shadow: 0 -10px 30px rgba(0, 255, 65, 0.08), inset 0 1px 0 rgba(0, 255, 65, 0.12) !important;
+}
+
+body[data-theme="matrix"] .app-footer-title,
+body[data-theme="matrix"] .app-footer-heading {
+    color: #00ff41 !important;
+    text-shadow: 0 0 12px rgba(0, 255, 65, 0.55) !important;
+}
+
+body[data-theme="matrix"] .app-footer-text,
+body[data-theme="matrix"] .app-footer-link {
+    color: #00ff41 !important;
+}
+
+body[data-theme="matrix"] .app-footer-logo,
+body[data-theme="matrix"] .app-footer-icon {
+    border-color: #00ff41 !important;
+    color: #00ff41 !important;
+    background: rgba(0, 255, 65, 0.1) !important;
+    box-shadow: 0 0 12px rgba(0, 255, 65, 0.35) !important;
+}
+
+/* Glass footer */
+body[data-theme="glass"] .app-footer {
+    border-top: 1px solid var(--glass-border-soft) !important;
+    background: var(--glass-tint), rgba(255, 255, 255, 0.22) !important;
+    backdrop-filter: blur(16px) saturate(160%) !important;
+    -webkit-backdrop-filter: blur(16px) saturate(160%) !important;
+}
+
+html.dark body[data-theme="glass"] .app-footer,
+body.dark[data-theme="glass"] .app-footer {
+    background: var(--glass-tint), rgba(5, 10, 20, 0.76) !important;
+}
+
+/* Neubrutalism footer */
+body[data-theme="neubrutalism"] .app-footer {
+    border-top: 3px solid #000 !important;
+    background: #fff1f2 !important;
+}
+
+body[data-theme="neubrutalism"] .app-footer-logo,
+body[data-theme="neubrutalism"] .app-footer-icon,
+body[data-theme="neubrutalism"] .app-footer-bottom {
+    border: 2px solid #000 !important;
+    box-shadow: 3px 3px 0 #000 !important;
+    background: #fff !important;
+    color: #000 !important;
+}
+
+/* Clean Minimal footer (landing-style) */
+body[data-theme="minimal"] .app-footer {
+    border-top: 1px solid rgba(255, 255, 255, 0.12) !important;
+    background: #09090b !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+}
+
+body[data-theme="minimal"] .app-footer-title,
+body[data-theme="minimal"] .app-footer-heading,
+body[data-theme="minimal"] .app-footer-text,
+body[data-theme="minimal"] .app-footer-link {
+    color: #e4e4e7 !important;
+}
+
+body[data-theme="minimal"] .app-footer-link:hover {
+    color: #ffffff !important;
+}
+
+body[data-theme="minimal"] .app-footer-logo {
+    background: rgba(34, 197, 94, 0.15) !important;
+    border-color: rgba(34, 197, 94, 0.45) !important;
+    color: #22c55e !important;
+}
+
+body[data-theme="minimal"] .app-footer-icon {
+    background: rgba(255, 255, 255, 0.04) !important;
+    border-color: rgba(255, 255, 255, 0.16) !important;
+    color: #fafafa !important;
 }
 
 /* === OVERRIDES FOR MATRIX THEME TO LIMIT SCOPE === */

@@ -532,6 +532,35 @@ button span,
   word-break: break-word;
 }
 
+/* Shared footer styles (theme-specific overrides in themes.css) */
+.app-footer {
+  border-top: 2px solid var(--accent-primary);
+  background-color: var(--bg-primary);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.app-footer-logo,
+.app-footer-icon {
+  border: 1px solid var(--accent-primary);
+  color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
+}
+
+.app-footer-title,
+.app-footer-heading,
+.app-footer-text,
+.app-footer-link {
+  color: var(--text-primary);
+}
+
+.app-footer-link:hover {
+  color: var(--accent-primary);
+}
+
+.app-footer-bottom {
+  border-top: 1px solid color-mix(in srgb, var(--accent-primary) 55%, transparent);
+}
+
 /* Spotlight grid parallax */
 @keyframes spotlightGridDriftUp {
   0% {
@@ -566,4 +595,83 @@ html.dark .spotlight-grid-layer {
   background-image:
     linear-gradient(rgba(0, 255, 65, 0.14) 1px, transparent 1px),
     linear-gradient(90deg, rgba(0, 255, 65, 0.14) 1px, transparent 1px);
+}
+
+/* Creator badge hover FX */
+.creator-badge-epic {
+  position: relative;
+  overflow: hidden;
+  transition: transform 180ms ease, box-shadow 220ms ease, filter 220ms ease;
+}
+
+.creator-badge-epic::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(
+    120deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.65) 45%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  transform: translateX(-120%);
+}
+
+.creator-badge-epic::after {
+  content: "";
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  top: 30%;
+  right: 14%;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(circle, #fde68a 0%, rgba(253, 230, 138, 0) 70%);
+}
+
+.creator-badge-epic:hover {
+  transform: translateY(-1px) scale(1.03);
+  filter: saturate(1.12);
+  box-shadow:
+    0 0 12px rgba(251, 191, 36, 0.55),
+    0 0 24px rgba(250, 204, 21, 0.35),
+    inset 0 0 10px rgba(255, 255, 255, 0.22);
+}
+
+.creator-badge-epic:hover::before {
+  opacity: 1;
+  animation: creatorBadgeSweep 800ms ease-out 1;
+}
+
+.creator-badge-epic:hover::after {
+  opacity: 1;
+  animation: creatorBadgeSparkle 900ms ease-out 1;
+}
+
+@keyframes creatorBadgeSweep {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(120%);
+  }
+}
+
+@keyframes creatorBadgeSparkle {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  35% {
+    transform: scale(1.05);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.7);
+    opacity: 0;
+  }
 }

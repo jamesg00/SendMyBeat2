@@ -202,21 +202,6 @@ const LandingPage = ({ setIsAuthenticated }) => {
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="border-t border-white/10 bg-black py-12">
-        <div className="container mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6">
-          <div className="flex items-center gap-2">
-            <Music className="h-5 w-5 text-green-500" />
-            <span className="font-bold">SendMyBeat © 2026</span>
-          </div>
-          <div className="flex gap-6 text-sm text-gray-400">
-            <a href="/terms" className="hover:text-white transition-colors">Terms</a>
-            <a href="/privacy-policy" className="hover:text-white transition-colors">Privacy</a>
-            <a href="/about" className="hover:text-white transition-colors">About</a>
-          </div>
-        </div>
-      </footer>
-
       {/* Auth Dialog */}
       <Dialog open={isLoginOpen} onOpenChange={setIsLoginOpen}>
         <DialogContent className="sm:max-w-md bg-zinc-950 border-white/10 text-white">

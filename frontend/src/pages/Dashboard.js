@@ -688,46 +688,49 @@ const Dashboard = ({ setIsAuthenticated }) => {
       return;
     }
 
-    const mergedTags = selectedItems.flatMap((item) => item.tags || []);
-    const combinedTags = [...generatedTags, ...mergedTags];
-
-    const seen = new Set();
-    const uniqueTags = [];
-    for (const tag of combinedTags) {
-      const tagLower = tag.toLowerCase();
-      if (!seen.has(tagLower)) {
-        seen.add(tagLower);
-        uniqueTags.push(tag);
-      }
-    }
-
-    if (uniqueTags.length > TAG_LIMIT) {
-      const excess = uniqueTags.length - TAG_LIMIT;
-      toast.error(`Joined tags exceed ${TAG_LIMIT} limit by ${excess}. Remove some tags first.`);
-      return;
-    }
-
     const joinLabel = selectedItems
       .map((item) => formatTagHistoryLabel(item.query))
       .filter(Boolean)
       .join(" x ");
 
-    setGeneratedTags(uniqueTags);
-    setSelectedTagHistoryIds([]);
-    setActiveTagHistoryId(null);
-
     try {
+      const candidateTags = selectedItems.flatMap((item) => item.tags || []);
+      const joinResponse = await axios.post(`${API}/tags/join-ai`, {
+        queries: selectedItems.map((item) => item.query || formatTagHistoryLabel(item.query || "")),
+        candidate_tags: candidateTags,
+        max_tags: 70,
+        llm_provider: tagProvider
+      });
+
+      const optimizedTags = Array.isArray(joinResponse?.data?.tags) ? joinResponse.data.tags : [];
+      if (!optimizedTags.length) {
+        toast.error("AI join returned no tags. Please try again.");
+        return;
+      }
+
+      setGeneratedTags(optimizedTags);
+      setTagQuery(joinLabel || "Joined Tags");
+      setSelectedTagHistoryIds([]);
+      setActiveTagHistoryId(null);
+
       const saveResponse = await axios.post(`${API}/tags/history`, {
         query: joinLabel || "Joined Tags",
-        tags: uniqueTags
+        tags: optimizedTags
       });
       setTagHistory((prev) => {
         const merged = [saveResponse.data, ...prev];
         return merged.slice(0, TAG_HISTORY_LIMIT);
       });
-      toast.success(`Joined ${selectedItems.length} generations! Total: ${uniqueTags.length}/${TAG_LIMIT}`);
+      toast.success(
+        `AI joined ${selectedItems.length} generations! Optimized to ${optimizedTags.length} SEO tags.`
+      );
     } catch (error) {
-      toast.error("Joined tags saved locally, but failed to save to history.");
+      if (error.response?.status === 402) {
+        setShowUpgradeModal(true);
+        toast.error("Daily limit reached! Upgrade to continue.");
+      } else {
+        toast.error("Failed to join with AI. Please try again.");
+      }
     }
   };
 
