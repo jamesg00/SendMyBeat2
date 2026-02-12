@@ -7,21 +7,25 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
-import { Trophy, Star, TrendingUp, Music, User, Globe, Youtube, Instagram, Twitter, ArrowLeft } from "lucide-react";
+import { Trophy, Star, TrendingUp, Music, User, Globe, Youtube, Instagram, Twitter, ArrowLeft, Crown, BadgeCheck, Shield } from "lucide-react";
 import DarkModeToggle from "@/components/DarkModeToggle";
 import { toast } from "sonner";
 
 const AVATAR_CHOICES = [
-  { id: "1", label: "Classic", url: "https://api.dicebear.com/9.x/adventurer-neutral/svg?seed=sendmybeat-1" },
-  { id: "2", label: "Wave", url: "https://api.dicebear.com/9.x/adventurer-neutral/svg?seed=sendmybeat-2" },
-  { id: "3", label: "Neo", url: "https://api.dicebear.com/9.x/adventurer-neutral/svg?seed=sendmybeat-3" },
-  { id: "4", label: "Glow", url: "https://api.dicebear.com/9.x/adventurer-neutral/svg?seed=sendmybeat-4" },
-  { id: "5", label: "Pixel", url: "https://api.dicebear.com/9.x/pixel-art/svg?seed=sendmybeat-5" },
-  { id: "6", label: "Retro", url: "https://api.dicebear.com/9.x/pixel-art/svg?seed=sendmybeat-6" }
+  { id: "1", label: "VHS Kid", url: "https://api.dicebear.com/9.x/pixel-art/svg?seed=vhs-kid-2010" },
+  { id: "2", label: "Neon Coder", url: "https://api.dicebear.com/9.x/pixel-art/svg?seed=neon-coder-arcade" },
+  { id: "3", label: "Skater", url: "https://api.dicebear.com/9.x/pixel-art/svg?seed=retro-skater-808" },
+  { id: "4", label: "Glitch", url: "https://api.dicebear.com/9.x/pixel-art/svg?seed=glitchboy-oldweb" },
+  { id: "5", label: "Cyber DJ", url: "https://api.dicebear.com/9.x/pixel-art/svg?seed=cyber-dj-mixtape" },
+  { id: "6", label: "Arcade Pro", url: "https://api.dicebear.com/9.x/pixel-art/svg?seed=arcade-producer-2012" },
+  { id: "7", label: "Lowpoly", url: "https://api.dicebear.com/9.x/pixel-art/svg?seed=lowpoly-hero-green" },
+  { id: "8", label: "CRT Wave", url: "https://api.dicebear.com/9.x/pixel-art/svg?seed=crt-wave-vibes" },
+  { id: "9", label: "Bit Boss", url: "https://api.dicebear.com/9.x/pixel-art/svg?seed=bit-boss-producer" }
 ];
 
 export default function ProducerSpotlight() {
   const navigate = useNavigate();
+  const [parallaxOffset, setParallaxOffset] = useState({ x: 0, y: 0 });
   const [spotlightData, setSpotlightData] = useState(null);
   const [myProfile, setMyProfile] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -30,6 +34,13 @@ export default function ProducerSpotlight() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [spotlightApiMissing, setSpotlightApiMissing] = useState(false);
   const [profileApiMissing, setProfileApiMissing] = useState(false);
+  const [applyingVerification, setApplyingVerification] = useState(false);
+  const [verificationForm, setVerificationForm] = useState({
+    stage_name: "",
+    main_platform_url: "",
+    notable_work: "",
+    reason: ""
+  });
   const [editForm, setEditForm] = useState({
     avatar_url: AVATAR_CHOICES[0].url,
     bio: "",
@@ -44,6 +55,14 @@ export default function ProducerSpotlight() {
     fetchSpotlight();
     fetchMyProfile();
   }, []);
+
+  const handleSpotlightMouseMove = (e) => {
+    const centerX = window.innerWidth / 2;
+    const centerY = window.innerHeight / 2;
+    const x = ((e.clientX - centerX) / centerX) * 14;
+    const y = ((e.clientY - centerY) / centerY) * 10;
+    setParallaxOffset({ x, y });
+  };
 
   const fetchSpotlight = async () => {
     try {
@@ -145,6 +164,45 @@ export default function ProducerSpotlight() {
     }
   };
 
+  const handleVerificationApply = async () => {
+    const reason = (verificationForm.reason || "").trim();
+    if (reason.length < 20) {
+      toast.error("Please add a stronger reason (at least 20 characters).");
+      return;
+    }
+
+    setApplyingVerification(true);
+    try {
+      await axios.post(`${API}/producers/verification/apply`, {
+        stage_name: verificationForm.stage_name,
+        main_platform_url: verificationForm.main_platform_url,
+        notable_work: verificationForm.notable_work,
+        reason
+      });
+      toast.success("Verification application submitted.");
+      await fetchMyProfile();
+      await fetchSpotlight();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Failed to submit verification.");
+    } finally {
+      setApplyingVerification(false);
+    }
+  };
+
+  const getRoleTagClass = (roleTag) => {
+    if (roleTag === "Creator") return "bg-amber-500/20 text-amber-300 border-amber-400";
+    if (roleTag === "Verified") return "bg-sky-500/20 text-sky-300 border-sky-400";
+    if (roleTag === "Pro") return "bg-violet-500/20 text-violet-300 border-violet-400";
+    return "bg-zinc-500/20 text-zinc-300 border-zinc-500";
+  };
+
+  const getRoleTagIcon = (roleTag) => {
+    if (roleTag === "Creator") return <Crown className="h-3 w-3" />;
+    if (roleTag === "Verified") return <BadgeCheck className="h-3 w-3" />;
+    if (roleTag === "Pro") return <Shield className="h-3 w-3" />;
+    return <User className="h-3 w-3" />;
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -190,7 +248,13 @@ export default function ProducerSpotlight() {
 
         <div className="space-y-2">
           <div>
-            <h3 className="font-bold text-lg">{producer.username}</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="font-bold text-lg">{producer.username}</h3>
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-semibold ${getRoleTagClass(producer.role_tag)}`}>
+                {getRoleTagIcon(producer.role_tag)}
+                {producer.role_tag || "Newbie"}
+              </span>
+            </div>
             <p className="text-xs text-muted-foreground">{producer.tags.slice(0, 3).join(" • ")}</p>
           </div>
 
@@ -199,7 +263,16 @@ export default function ProducerSpotlight() {
           </p>
 
           {producer.top_beat_url && (
-            <Button variant="outline" className="w-full mt-2 gap-2 group hover:border-primary">
+            <Button
+              variant="outline"
+              className="w-full mt-2 gap-2 group hover:border-primary"
+              onClick={() => {
+                const raw = (producer.top_beat_url || "").trim();
+                if (!raw) return;
+                const url = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+                window.open(url, "_blank", "noopener,noreferrer");
+              }}
+            >
               <Music className="h-4 w-4 text-primary group-hover:animate-bounce" />
               Listen to Top Beat
             </Button>
@@ -210,9 +283,18 @@ export default function ProducerSpotlight() {
   );
 
   return (
-    <div className="container mx-auto px-4 py-8 space-y-12 text-[var(--text-primary)]">
-      <DarkModeToggle />
-      <div className="flex items-center justify-start">
+    <div
+      className="spotlight-parallax-bg relative min-h-screen overflow-hidden"
+      onMouseMove={handleSpotlightMouseMove}
+    >
+      <div
+        className="spotlight-grid-layer"
+        style={{ transform: `translate3d(${parallaxOffset.x}px, ${parallaxOffset.y}px, 0)` }}
+        aria-hidden="true"
+      />
+      <div className="relative z-10 container mx-auto px-4 py-8 space-y-12 text-[var(--text-primary)]">
+        <DarkModeToggle />
+        <div className="flex items-center justify-start">
         <Button
           variant="outline"
           className="gap-2"
@@ -335,6 +417,55 @@ export default function ProducerSpotlight() {
                   </div>
                 </div>
               </div>
+              <div className="grid gap-2 border rounded-xl p-3 border-[var(--border-color)] bg-[var(--bg-secondary)]">
+                <div className="flex items-center justify-between">
+                  <label className="font-semibold">Verification</label>
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-semibold ${getRoleTagClass(myProfile?.role_tag || "Newbie")}`}>
+                    {getRoleTagIcon(myProfile?.role_tag)}
+                    {myProfile?.role_tag || "Newbie"}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Verification is manual and reserved for notable producers. Pro status does not auto-grant verification.
+                </p>
+                <p className="text-xs">
+                  Status: <span className="font-semibold">{(myProfile?.verification_status || "none").toUpperCase()}</span>
+                </p>
+                {myProfile?.verification_status !== "approved" && myProfile?.verification_status !== "pending" && (
+                  <>
+                    <div className="grid md:grid-cols-2 gap-2">
+                      <Input
+                        placeholder="Stage name"
+                        value={verificationForm.stage_name}
+                        onChange={(e) => setVerificationForm((prev) => ({ ...prev, stage_name: e.target.value }))}
+                      />
+                      <Input
+                        placeholder="Main platform URL"
+                        value={verificationForm.main_platform_url}
+                        onChange={(e) => setVerificationForm((prev) => ({ ...prev, main_platform_url: e.target.value }))}
+                      />
+                    </div>
+                    <Input
+                      placeholder="Notable work / placements (optional)"
+                      value={verificationForm.notable_work}
+                      onChange={(e) => setVerificationForm((prev) => ({ ...prev, notable_work: e.target.value }))}
+                    />
+                    <Textarea
+                      placeholder="Why should you be verified? (minimum 20 chars)"
+                      value={verificationForm.reason}
+                      onChange={(e) => setVerificationForm((prev) => ({ ...prev, reason: e.target.value }))}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleVerificationApply}
+                      disabled={applyingVerification}
+                    >
+                      {applyingVerification ? "Submitting..." : "Apply for Verification"}
+                    </Button>
+                  </>
+                )}
+              </div>
               <div className="sticky bottom-0 pt-3 pb-1 bg-[var(--card-bg)]">
                 <Button onClick={handleUpdateProfile} className="w-full" disabled={savingProfile}>
                   {savingProfile ? "Saving..." : "Save Profile"}
@@ -397,7 +528,7 @@ export default function ProducerSpotlight() {
           ))}
         </div>
       </section>
-
+      </div>
     </div>
   );
 }

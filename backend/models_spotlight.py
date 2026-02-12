@@ -10,10 +10,16 @@ class ProducerProfile(BaseModel):
     user_id: str
     username: str
     avatar_url: Optional[str] = None
+    role_tag: Optional[str] = None
     bio: str = ""
     top_beat_url: Optional[str] = None
     social_links: dict = {} # { "instagram": "url", "youtube": "url" }
     tags: List[str] = []
+    verification_status: str = "none"  # none | pending | approved | rejected
+    verification_note: Optional[str] = None
+    verification_applied_at: Optional[datetime] = None
+    verified_at: Optional[datetime] = None
+    verification_application: Optional[dict] = None
     likes: int = 0
     views: int = 0
     featured: bool = False
@@ -26,6 +32,19 @@ class ProducerProfileUpdate(BaseModel):
     top_beat_url: Optional[str] = None
     social_links: Optional[dict] = None
     tags: Optional[List[str]] = None
+
+
+class VerificationApplicationRequest(BaseModel):
+    stage_name: Optional[str] = None
+    main_platform_url: Optional[str] = None
+    notable_work: Optional[str] = None
+    reason: str
+
+
+class VerificationReviewRequest(BaseModel):
+    user_id: str
+    action: str  # approve | reject
+    note: Optional[str] = None
 
 class SpotlightResponse(BaseModel):
     featured_producers: List[ProducerProfile]

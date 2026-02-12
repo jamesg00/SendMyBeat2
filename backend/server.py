@@ -30,7 +30,13 @@ import stripe
 import requests
 import pytz
 from itsdangerous import URLSafeSerializer, BadSignature
-from models_spotlight import ProducerProfile, ProducerProfileUpdate, SpotlightResponse
+from models_spotlight import (
+    ProducerProfile,
+    ProducerProfileUpdate,
+    SpotlightResponse,
+    VerificationApplicationRequest,
+    VerificationReviewRequest,
+)
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -60,6 +66,8 @@ JWT_EXPIRATION = int(os.environ['JWT_EXPIRATION_MINUTES'])
 # Reminder configuration
 REMINDER_SECRET = os.environ.get('REMINDER_SECRET', JWT_SECRET)
 BACKEND_URL = os.environ.get('BACKEND_URL', 'https://api.sendmybeat.com')
+CREATOR_USER_ID = os.environ.get("CREATOR_USER_ID", "").strip()
+CREATOR_USERNAME = os.environ.get("CREATOR_USERNAME", "deadat18").strip().lower()
 SENDGRID_API_KEY = os.environ.get('SENDGRID_API_KEY')
 SENDGRID_FROM_EMAIL = os.environ.get('SENDGRID_FROM_EMAIL')
 TEXTBELT_API_KEY = os.environ.get('TEXTBELT_API_KEY')
@@ -2223,6 +2231,32 @@ If tags look stuffed or irrelevant, explicitly say so and recommend a smaller, h
 
 
 # ============ Producer Spotlight Routes ============
+async def _profile_with_role_tag(profile_doc: dict) -> ProducerProfile:
+    user_doc = await db.users.find_one({"id": profile_doc.get("user_id")}) or {}
+    username = (profile_doc.get("username") or user_doc.get("username") or "").strip()
+    username_lc = username.lower()
+
+    role_tag = "Newbie"
+    is_creator = (
+        (CREATOR_USER_ID and profile_doc.get("user_id") == CREATOR_USER_ID)
+        or (CREATOR_USERNAME and username_lc == CREATOR_USERNAME)
+    )
+
+    if is_creator:
+        role_tag = "Creator"
+    elif profile_doc.get("verification_status") == "approved":
+        role_tag = "Verified"
+    elif user_doc.get("stripe_subscription_id") and user_doc.get("subscription_status") == "active":
+        role_tag = "Pro"
+
+    payload = dict(profile_doc)
+    payload["username"] = username or profile_doc.get("username") or "producer"
+    payload["role_tag"] = role_tag
+    if not payload.get("verification_status"):
+        payload["verification_status"] = "none"
+    return ProducerProfile(**payload)
+
+
 @api_router.get("/producers/spotlight", response_model=SpotlightResponse)
 async def get_producer_spotlight():
     """Get featured, trending, and new producers for the spotlight page"""
@@ -2236,10 +2270,14 @@ async def get_producer_spotlight():
     # Get new
     new_producers = await db.producer_profiles.find().sort("created_at", -1).limit(6).to_list(6)
 
+    featured_profiles = [await _profile_with_role_tag(p) for p in featured]
+    trending_profiles = [await _profile_with_role_tag(p) for p in trending]
+    new_profiles = [await _profile_with_role_tag(p) for p in new_producers]
+
     return SpotlightResponse(
-        featured_producers=[ProducerProfile(**p) for p in featured],
-        trending_producers=[ProducerProfile(**p) for p in trending],
-        new_producers=[ProducerProfile(**p) for p in new_producers]
+        featured_producers=featured_profiles,
+        trending_producers=trending_profiles,
+        new_producers=new_profiles
     )
 
 @api_router.get("/producers/me", response_model=ProducerProfile)
@@ -2255,9 +2293,9 @@ async def get_my_producer_profile(current_user: dict = Depends(get_current_user)
             username=user['username']
         )
         await db.producer_profiles.insert_one(profile.model_dump())
-        return profile
+        return await _profile_with_role_tag(profile.model_dump())
 
-    return ProducerProfile(**profile)
+    return await _profile_with_role_tag(profile)
 
 @api_router.put("/producers/me", response_model=ProducerProfile)
 async def update_my_producer_profile(
@@ -2289,7 +2327,7 @@ async def update_my_producer_profile(
 
     # Return updated
     updated = await db.producer_profiles.find_one({"user_id": current_user['id']})
-    return ProducerProfile(**updated)
+    return await _profile_with_role_tag(updated)
 
 
 @api_router.post("/producers/avatar")
@@ -2317,6 +2355,87 @@ async def upload_producer_avatar(
     )
 
     return {"avatar_url": avatar_data_url}
+
+
+@api_router.post("/producers/verification/apply", response_model=ProducerProfile)
+async def apply_for_verification(
+    request: VerificationApplicationRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Submit verification application. Pro does not auto-grant verification."""
+    reason = (request.reason or "").strip()
+    if len(reason) < 20:
+        raise HTTPException(status_code=400, detail="Please provide a longer verification reason (20+ chars).")
+
+    existing = await db.producer_profiles.find_one({"user_id": current_user["id"]}) or {}
+    if existing.get("verification_status") == "approved":
+        raise HTTPException(status_code=400, detail="You are already verified.")
+    if existing.get("verification_status") == "pending":
+        raise HTTPException(status_code=400, detail="Verification application already pending review.")
+
+    user_doc = await db.users.find_one({"id": current_user["id"]}) or {}
+    now = datetime.now(timezone.utc)
+    username = existing.get("username") or user_doc.get("username") or current_user.get("username") or "producer"
+
+    update_fields = {
+        "username": username,
+        "verification_status": "pending",
+        "verification_note": "Application submitted and awaiting review.",
+        "verification_applied_at": now,
+        "updated_at": now,
+        "verification_application": {
+            "stage_name": (request.stage_name or "").strip(),
+            "main_platform_url": (request.main_platform_url or "").strip(),
+            "notable_work": (request.notable_work or "").strip(),
+            "reason": reason,
+            "submitted_at": now,
+        },
+    }
+
+    await db.producer_profiles.update_one(
+        {"user_id": current_user["id"]},
+        {"$set": update_fields, "$setOnInsert": {"user_id": current_user["id"], "created_at": now}},
+        upsert=True,
+    )
+
+    updated = await db.producer_profiles.find_one({"user_id": current_user["id"]})
+    return await _profile_with_role_tag(updated)
+
+
+@api_router.post("/producers/verification/review", response_model=ProducerProfile)
+async def review_verification_application(
+    request: VerificationReviewRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Creator/admin-only endpoint to approve or reject verification."""
+    actor_username = (current_user.get("username") or "").lower()
+    is_creator = (
+        (CREATOR_USER_ID and current_user["id"] == CREATOR_USER_ID)
+        or (CREATOR_USERNAME and actor_username == CREATOR_USERNAME)
+    )
+    if not is_creator:
+        raise HTTPException(status_code=403, detail="Only creator/admin can review verification applications.")
+
+    action = (request.action or "").strip().lower()
+    if action not in {"approve", "reject"}:
+        raise HTTPException(status_code=400, detail="Action must be 'approve' or 'reject'.")
+
+    profile = await db.producer_profiles.find_one({"user_id": request.user_id})
+    if not profile:
+        raise HTTPException(status_code=404, detail="Producer profile not found.")
+
+    now = datetime.now(timezone.utc)
+    update_fields = {
+        "verification_status": "approved" if action == "approve" else "rejected",
+        "verification_note": (request.note or "").strip() or ("Approved by creator" if action == "approve" else "Rejected by creator"),
+        "updated_at": now,
+    }
+    if action == "approve":
+        update_fields["verified_at"] = now
+
+    await db.producer_profiles.update_one({"user_id": request.user_id}, {"$set": update_fields})
+    updated = await db.producer_profiles.find_one({"user_id": request.user_id})
+    return await _profile_with_role_tag(updated)
 
 # ============ Beat Fixes Route ============
 @api_router.post("/beat/fix", response_model=BeatFixResponse)
