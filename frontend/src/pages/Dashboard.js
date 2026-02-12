@@ -200,6 +200,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const adContentReady = adsUnlocked;
   const activeTabIndex = Math.max(0, DASHBOARD_TABS.findIndex((tab) => tab.value === activeTab));
   const activeTabLabel = DASHBOARD_TABS[activeTabIndex]?.label || "Tags";
+  const desktopTabHighlightStyle = {
+    width: `${100 / DASHBOARD_TABS.length}%`,
+    transform: `translateX(${activeTabIndex * 100}%)`,
+  };
   const canShowAds = Boolean(
     subscriptionStatus &&
     !subscriptionStatus.is_subscribed &&
@@ -1577,46 +1581,51 @@ const Dashboard = ({ setIsAuthenticated }) => {
             </Button>
           </div>
 
-          <TabsList className="hidden sm:grid w-full max-w-4xl mx-auto grid-cols-6 gap-1 text-xs sm:text-sm dashboard-tabs">
+          <TabsList className="hidden sm:grid w-full max-w-4xl mx-auto grid-cols-6 gap-1 text-xs sm:text-sm dashboard-tabs relative overflow-hidden">
+            <div
+              className="absolute left-0 top-0 h-full rounded-xl bg-gradient-to-r from-[var(--accent-primary)] to-[var(--accent-secondary)] shadow-md border border-[var(--border-color)] transition-transform duration-300 ease-out"
+              style={desktopTabHighlightStyle}
+              aria-hidden="true"
+            />
             <TabsTrigger
               value="tags"
               data-testid="tags-tab"
-              className="px-1 sm:px-3 py-1.5 sm:py-2 truncate transition-colors data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--accent-primary)] data-[state=active]:to-[var(--accent-secondary)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=active]:border data-[state=active]:border-[var(--border-color)]"
+              className="relative z-10 px-1 sm:px-3 py-1.5 sm:py-2 truncate transition-colors data-[state=active]:bg-transparent data-[state=active]:text-white"
             >
               Tags
             </TabsTrigger>
             <TabsTrigger
               value="descriptions"
               data-testid="descriptions-tab"
-              className="px-1 sm:px-3 py-1.5 sm:py-2 truncate transition-colors data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--accent-primary)] data-[state=active]:to-[var(--accent-secondary)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=active]:border data-[state=active]:border-[var(--border-color)]"
+              className="relative z-10 px-1 sm:px-3 py-1.5 sm:py-2 truncate transition-colors data-[state=active]:bg-transparent data-[state=active]:text-white"
             >
               Descriptions
             </TabsTrigger>
             <TabsTrigger
               value="upload"
               data-testid="upload-tab"
-              className="px-1 sm:px-3 py-1.5 sm:py-2 truncate transition-colors data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--accent-primary)] data-[state=active]:to-[var(--accent-secondary)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=active]:border data-[state=active]:border-[var(--border-color)]"
+              className="relative z-10 px-1 sm:px-3 py-1.5 sm:py-2 truncate transition-colors data-[state=active]:bg-transparent data-[state=active]:text-white"
             >
               Upload
             </TabsTrigger>
             <TabsTrigger
               value="analytics"
               data-testid="analytics-tab"
-              className="px-1 sm:px-3 py-1.5 sm:py-2 truncate transition-colors data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--accent-primary)] data-[state=active]:to-[var(--accent-secondary)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=active]:border data-[state=active]:border-[var(--border-color)]"
+              className="relative z-10 px-1 sm:px-3 py-1.5 sm:py-2 truncate transition-colors data-[state=active]:bg-transparent data-[state=active]:text-white"
             >
               Analytics
             </TabsTrigger>
             <TabsTrigger
               value="grow"
               data-testid="grow-tab"
-              className="px-1 sm:px-3 py-1.5 sm:py-2 truncate transition-colors data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--accent-primary)] data-[state=active]:to-[var(--accent-secondary)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=active]:border data-[state=active]:border-[var(--border-color)]"
+              className="relative z-10 px-1 sm:px-3 py-1.5 sm:py-2 truncate transition-colors data-[state=active]:bg-transparent data-[state=active]:text-white"
             >
               Grow in 120
             </TabsTrigger>
             <TabsTrigger
               value="settings"
               data-testid="settings-tab"
-              className="px-1 sm:px-3 py-1.5 sm:py-2 truncate transition-colors data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--accent-primary)] data-[state=active]:to-[var(--accent-secondary)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=active]:border data-[state=active]:border-[var(--border-color)]"
+              className="relative z-10 px-1 sm:px-3 py-1.5 sm:py-2 truncate transition-colors data-[state=active]:bg-transparent data-[state=active]:text-white"
             >
               Settings
             </TabsTrigger>
