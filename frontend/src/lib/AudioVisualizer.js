@@ -76,6 +76,12 @@ export default class AudioVisualizer {
 
     this.energy = 0;
     this.bassEnergy = 0;
+    this.energySlew = 0;
+    this.bassSlew = 0;
+    this.lastBassEnergy = 0;
+    this.beatPulse = 0;
+    this.silenceSeconds = 0;
+    this.hasAudioSignal = false;
 
     // Shake state
     this.shakeOffsetX = 0;
@@ -299,21 +305,26 @@ export default class AudioVisualizer {
 
   spawnParticles(dt, cx, cy, radius) {
     if (!this.options.particleEnabled || this.options.mode !== 'circle') return;
+    if (!this.hasAudioSignal) return;
     const minRate = this.runtime.baseSpawnRate;
     const maxRate = this.runtime.maxSpawnRate;
-    const rate = minRate + (maxRate - minRate) * Math.min(1, this.energy * 1.25);
+    const energyDrive = Math.min(1, this.energySlew * 0.9 + this.bassSlew * 0.9);
+    const burstBoost = this.beatPulse * 0.45;
+    const rateMix = Math.min(1, energyDrive + burstBoost);
+    const rate = minRate + (maxRate - minRate) * rateMix;
     const toSpawnFloat = rate * dt + this.spawnRemainder;
-    const toSpawn = Math.floor(toSpawnFloat);
-    this.spawnRemainder = toSpawnFloat - toSpawn;
+    const burstCount = this.beatPulse > 0.7 ? Math.floor(this.beatPulse * 4) : 0;
+    const toSpawn = Math.floor(toSpawnFloat) + burstCount;
+    this.spawnRemainder = toSpawnFloat - Math.floor(toSpawnFloat);
 
     for (let i = 0; i < toSpawn; i += 1) {
       const angle = Math.random() * Math.PI * 2 + this.rotation;
       const px = cx + Math.cos(angle) * radius;
       const py = cy + Math.sin(angle) * radius;
-      const outward = this.runtime.particleSpeed * (0.45 + Math.random() * 0.9);
+      const baseSpeed = this.runtime.particleSpeed * (0.35 + Math.random() * 1.15);
       const tangent = (Math.random() - 0.5) * this.options.particleJitter;
-      const vx = Math.cos(angle) * outward + -Math.sin(angle) * tangent;
-      const vy = Math.sin(angle) * outward + Math.cos(angle) * tangent;
+      const vx = Math.cos(angle) * baseSpeed + -Math.sin(angle) * tangent;
+      const vy = Math.sin(angle) * baseSpeed + Math.cos(angle) * tangent;
       const life = this.options.particleLifeMin + Math.random() * (this.options.particleLifeMax - this.options.particleLifeMin);
       this.particles.push({
         x: px,
@@ -322,25 +333,65 @@ export default class AudioVisualizer {
         vy,
         life,
         maxLife: life,
+        baseSpeed,
+        spin: (Math.random() - 0.5) * (0.85 + Math.random() * 0.75),
+        seed: Math.random() * Math.PI * 2,
+        age: 0,
       });
     }
   }
 
-  updateParticles(dt) {
+  updateParticles(dt, cx, cy) {
     const keep = [];
+    const drive = Math.max(0, Math.min(2.2, this.energySlew * 0.75 + this.bassSlew * 1.2 + this.beatPulse * 0.8));
+    const accel = 16 + drive * 46;
+    const silentFade = this.silenceSeconds > 0.2;
+
     for (let i = 0; i < this.particles.length; i += 1) {
       const p = this.particles[i];
       p.life -= dt;
+      p.age += dt;
+      if (silentFade) {
+        p.life -= dt * (2.2 + this.silenceSeconds * 2.8);
+      }
       if (p.life <= 0) continue;
+
+      const dx = p.x - cx;
+      const dy = p.y - cy;
+      const dist = Math.max(0.0001, Math.hypot(dx, dy));
+      const nx = dx / dist;
+      const ny = dy / dist;
+      const tx = -ny;
+      const ty = nx;
+
+      const speedNow = Math.hypot(p.vx, p.vy);
+      const targetSpeed = p.baseSpeed * (0.58 + drive * 0.95);
+      const speedAdjust = (targetSpeed - speedNow) * 0.22;
+
+      const wobble = (Math.sin(p.age * 8.5 + p.seed) + Math.cos(p.age * 5.7 + p.seed * 0.67)) * 0.5;
+      const turbulence = this.options.particleJitter * (0.012 + drive * 0.018) * wobble;
+      const swirl = (this.options.particleJitter * 0.006) * p.spin * (0.6 + drive);
+
+      p.vx += nx * (accel + speedAdjust) * dt + tx * (swirl + turbulence) * dt;
+      p.vy += ny * (accel + speedAdjust) * dt + ty * (swirl + turbulence) * dt;
+
+      const drag = silentFade
+        ? Math.max(0.88, 0.95 - this.silenceSeconds * 0.08)
+        : Math.max(0.942, 0.986 - drive * 0.012);
+      p.vx *= drag;
+      p.vy *= drag;
+
       p.x += p.vx * dt;
       p.y += p.vy * dt;
-      p.vx *= 0.985;
-      p.vy *= 0.985;
       keep.push(p);
     }
-    this.particles = keep.slice(-700);
-  }
 
+    this.particles = keep.slice(-900);
+    if (this.silenceSeconds > 1.2) {
+      this.particles = [];
+      this.spawnRemainder = 0;
+    }
+  }
   drawParticles() {
     if (!this.options.particleEnabled || this.options.mode !== 'circle') return;
     const c = this.ctx;
@@ -498,6 +549,23 @@ export default class AudioVisualizer {
 
     const bars = this.computeBars();
 
+    // Smooth global energy and detect beat pulses for audio-reactive particles
+    this.energySlew = this.lerp(this.energySlew, this.energy, 10, dt);
+    this.bassSlew = this.lerp(this.bassSlew, this.bassEnergy, 14, dt);
+    const bassDelta = this.bassSlew - this.lastBassEnergy;
+    if (bassDelta > 0.04 && this.bassSlew > 0.16) {
+      this.beatPulse = Math.min(1, this.beatPulse + bassDelta * 5.2);
+    } else {
+      this.beatPulse *= Math.exp(-6.5 * dt);
+    }
+    this.lastBassEnergy = this.bassSlew;
+    this.hasAudioSignal = this.energySlew > 0.02 || this.bassSlew > 0.015 || this.beatPulse > 0.08;
+    if (this.hasAudioSignal) {
+      this.silenceSeconds = 0;
+    } else {
+      this.silenceSeconds += dt;
+    }
+
     // Update Shake
     this.calculateShake();
 
@@ -518,7 +586,7 @@ export default class AudioVisualizer {
 
         this.rotation += this.runtime.rotateSpeed + this.energy * 0.0008;
         this.spawnParticles(dt, cx, cy, radius);
-        this.updateParticles(dt);
+        this.updateParticles(dt, cx, cy);
         this.drawParticles();
         this.drawSpectrum(displayBars, cx, cy, radius);
     } else if (this.options.mode === 'monstercat') {
