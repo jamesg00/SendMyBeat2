@@ -3,6 +3,18 @@
 
 /* === GLASSMORPHISM THEME === */
 body[data-theme="glass"] {
+    --bg-primary: #edf7ff !important;
+    --bg-secondary: rgba(236, 245, 255, 0.82) !important;
+    --bg-tertiary: rgba(226, 239, 255, 0.86) !important;
+    --text-primary: #0b1220 !important;
+    --text-secondary: #2a3f5f !important;
+    --accent-primary: #2f74ff !important;
+    --accent-secondary: #68a7ff !important;
+    --border-color: rgba(255, 255, 255, 0.56) !important;
+    --card-bg: rgba(255, 255, 255, 0.34) !important;
+    --shadow: rgba(28, 42, 79, 0.12) !important;
+    --glow: rgba(98, 154, 255, 0.32) !important;
+
     --background: #edf7ff;
     --foreground: #0b1220;
     --card: rgba(255, 255, 255, 0.36);
@@ -35,6 +47,18 @@ body[data-theme="glass"] {
 }
 
 body[data-theme="glass"].dark {
+    --bg-primary: #070b15 !important;
+    --bg-secondary: rgba(10, 16, 29, 0.88) !important;
+    --bg-tertiary: rgba(13, 20, 35, 0.9) !important;
+    --text-primary: #eaf1ff !important;
+    --text-secondary: #b2c3e3 !important;
+    --accent-primary: #76a9ff !important;
+    --accent-secondary: #9bc2ff !important;
+    --border-color: rgba(166, 191, 234, 0.28) !important;
+    --card-bg: rgba(8, 13, 24, 0.62) !important;
+    --shadow: rgba(0, 0, 0, 0.48) !important;
+    --glow: rgba(100, 152, 255, 0.28) !important;
+
     --background: #070b15;
     --foreground: #eaf1ff;
     --card: rgba(15, 21, 35, 0.42);
@@ -52,7 +76,7 @@ body[data-theme="glass"].dark {
     --glass-shadow: 0 20px 58px rgba(0, 0, 0, 0.42);
     --glass-border-soft: rgba(168, 188, 230, 0.25);
     --glass-highlight: rgba(219, 229, 255, 0.14);
-    --glass-tint: linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.02));
+    --glass-tint: linear-gradient(135deg, rgba(31, 44, 71, 0.4), rgba(9, 15, 27, 0.1));
 
     background:
         radial-gradient(circle at 10% 12%, rgba(61, 121, 255, 0.26), transparent 34%),
@@ -143,7 +167,7 @@ body[data-theme="glass"] .btn-modern:hover {
 }
 
 body[data-theme="glass"].dark .dashboard-tabs {
-    background: rgba(6, 12, 24, 0.72) !important;
+    background: rgba(6, 12, 24, 0.84) !important;
     border-color: rgba(129, 154, 204, 0.32) !important;
     box-shadow: 0 16px 36px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(212, 226, 255, 0.12) !important;
 }
@@ -152,7 +176,7 @@ body[data-theme="glass"].dark .dashboard-card,
 body[data-theme="glass"].dark .dashboard-card-muted,
 body[data-theme="glass"].dark .glass-card,
 body[data-theme="glass"].dark .producer-card {
-    background: var(--glass-tint), rgba(7, 13, 25, 0.52) !important;
+    background: var(--glass-tint), rgba(7, 13, 25, 0.66) !important;
     border-color: rgba(129, 154, 204, 0.28) !important;
 }
 
