@@ -251,6 +251,19 @@ const Dashboard = ({ setIsAuthenticated }) => {
     setVisualizerSettings((prev) => ({ ...prev, [key]: value }));
   };
 
+  const getVisualizerOptions = () => ({
+    bars: visualizerSettings.bars,
+    gain: visualizerSettings.intensity,
+    maxBarLength: visualizerSettings.maxBarLength,
+    radius: visualizerSettings.radius,
+    rotateSpeed: visualizerSettings.rotateSpeed,
+    trailsEnabled: visualizerSettings.trailsEnabled,
+    particleEnabled: visualizerSettings.particleEnabled,
+    maxSpawnRate: Math.round(120 * visualizerSettings.particleIntensity),
+    baseSpawnRate: Math.round(10 * Math.max(0.5, visualizerSettings.particleIntensity)),
+    particleSpeed: 72 * visualizerSettings.particleIntensity,
+  });
+
   useEffect(() => {
     fetchUser();
     fetchDescriptions();
@@ -300,7 +313,13 @@ const Dashboard = ({ setIsAuthenticated }) => {
   useEffect(() => {
     const canvas = visualizerCanvasRef.current;
     const audioEl = audioPlayerRef.current;
-    if (!canvas || !audioEl) return;
+    if (!canvas || !audioEl) {
+      if (visualizerRef.current) {
+        visualizerRef.current.destroy();
+        visualizerRef.current = null;
+      }
+      return;
+    }
 
     if (!visualizerEnabled) {
       if (visualizerRef.current) {
@@ -313,51 +332,47 @@ const Dashboard = ({ setIsAuthenticated }) => {
       return;
     }
 
-    const visualizer = new AudioVisualizer(canvas, {
-      bars: visualizerSettings.bars,
-      gain: visualizerSettings.intensity,
-      maxBarLength: visualizerSettings.maxBarLength,
-      radius: visualizerSettings.radius,
-      rotateSpeed: visualizerSettings.rotateSpeed,
-      trailsEnabled: visualizerSettings.trailsEnabled,
-      particleEnabled: visualizerSettings.particleEnabled,
-      maxSpawnRate: Math.round(120 * visualizerSettings.particleIntensity),
-      baseSpawnRate: Math.round(10 * Math.max(0.5, visualizerSettings.particleIntensity)),
-      particleSpeed: 72 * visualizerSettings.particleIntensity,
-    });
-    visualizerRef.current = visualizer;
+    if (!visualizerRef.current) {
+      visualizerRef.current = new AudioVisualizer(canvas, getVisualizerOptions());
+    } else {
+      visualizerRef.current.setOptions(getVisualizerOptions());
+    }
 
     const startVisualizer = async () => {
       try {
-        await visualizer.connectMediaElement(audioEl);
-        await visualizer.resumeAudioContext();
-        visualizer.start();
+        await visualizerRef.current.connectMediaElement(audioEl);
+        await visualizerRef.current.resumeAudioContext();
+        visualizerRef.current.start();
       } catch (err) {
         console.error("Visualizer init failed:", err);
       }
     };
 
     startVisualizer();
-
-    return () => {
-      visualizer.destroy();
-      if (visualizerRef.current === visualizer) {
-        visualizerRef.current = null;
-      }
-    };
   }, [
     visualizerEnabled,
     audioPreviewUrl,
     imagePreviewUrl,
-    visualizerSettings.bars,
-    visualizerSettings.intensity,
-    visualizerSettings.maxBarLength,
-    visualizerSettings.radius,
-    visualizerSettings.rotateSpeed,
-    visualizerSettings.trailsEnabled,
-    visualizerSettings.particleEnabled,
-    visualizerSettings.particleIntensity,
+    audioFile,
+    imageFile,
   ]);
+
+  useEffect(() => {
+    if (!visualizerRef.current) return;
+    visualizerRef.current.setOptions(getVisualizerOptions());
+    if (visualizerEnabled) {
+      visualizerRef.current.start();
+    }
+  }, [visualizerSettings, visualizerEnabled]);
+
+  useEffect(() => {
+    return () => {
+      if (visualizerRef.current) {
+        visualizerRef.current.destroy();
+        visualizerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!selectedDescriptionId) {
