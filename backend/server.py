@@ -39,9 +39,18 @@ load_dotenv(ROOT_DIR / '.env')
 stripe.api_key = os.environ.get('STRIPE_SECRET_KEY')
 
 # MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+# Prefer self-hosted compatibility by accepting common env var names.
+mongo_url = (
+    os.environ.get("MONGO_URL")
+    or os.environ.get("MONGODB_URI")
+    or os.environ.get("DATABASE_URL")
+)
+if not mongo_url:
+    raise RuntimeError("Missing MongoDB URL. Set MONGO_URL (or MONGODB_URI / DATABASE_URL).")
+
+db_name = os.environ.get("DB_NAME", "sendmybeat")
+client = AsyncIOMotorClient(mongo_url, serverSelectionTimeoutMS=5000)
+db = client[db_name]
 
 # JWT Configuration
 JWT_SECRET = os.environ['JWT_SECRET_KEY']

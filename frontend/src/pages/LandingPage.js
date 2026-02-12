@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import axios from "axios";
 import { API } from "@/App";
 import { toast } from "sonner";
-import { Music, Upload, Users, Zap, Globe, Shield, ArrowRight, Play, Star } from "lucide-react";
+import { Music, Upload, Users, Zap, Globe, Shield, ArrowRight, Play, Star, Youtube, Trophy } from "lucide-react";
 
 const LandingPage = ({ setIsAuthenticated }) => {
   const [isLoginOpen, setIsLoginOpen] = useState(false);
