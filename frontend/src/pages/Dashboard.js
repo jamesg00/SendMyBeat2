@@ -287,55 +287,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
     setUploadDescriptionText(selectedDesc?.content || "");
   }, [selectedDescriptionId, descriptions]);
 
-  useEffect(() => {
-    const body = document.body;
-    let rafId = null;
-
-    const applyGlassParallax = (clientX, clientY) => {
-      if (body.dataset.theme !== "glass") return;
-      const x = (clientX / window.innerWidth - 0.5) * 2;
-      const y = (clientY / window.innerHeight - 0.5) * 2;
-
-      body.style.setProperty("--glass-shift-x", `${x * 8}px`);
-      body.style.setProperty("--glass-shift-y", `${y * 6}px`);
-      body.style.setProperty("--glass-prism-x", `${x * 5}px`);
-      body.style.setProperty("--glass-prism-y", `${y * 4}px`);
-    };
-
-    const resetGlassParallax = () => {
-      body.style.setProperty("--glass-shift-x", "0px");
-      body.style.setProperty("--glass-shift-y", "0px");
-      body.style.setProperty("--glass-prism-x", "0px");
-      body.style.setProperty("--glass-prism-y", "0px");
-    };
-
-    const onPointerMove = (event) => {
-      if (rafId) cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(() => applyGlassParallax(event.clientX, event.clientY));
-    };
-
-    const onTouchMove = (event) => {
-      const touch = event.touches?.[0];
-      if (!touch) return;
-      if (rafId) cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(() => applyGlassParallax(touch.clientX, touch.clientY));
-    };
-
-    window.addEventListener("pointermove", onPointerMove, { passive: true });
-    window.addEventListener("touchmove", onTouchMove, { passive: true });
-    window.addEventListener("pointerleave", resetGlassParallax);
-    window.addEventListener("blur", resetGlassParallax);
-
-    return () => {
-      if (rafId) cancelAnimationFrame(rafId);
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("touchmove", onTouchMove);
-      window.removeEventListener("pointerleave", resetGlassParallax);
-      window.removeEventListener("blur", resetGlassParallax);
-      resetGlassParallax();
-    };
-  }, []);
-
   const fetchUser = async () => {
     try {
       const response = await axios.get(`${API}/auth/me`);
