@@ -80,6 +80,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [loadingTags, setLoadingTags] = useState(false);
   const [tagHistory, setTagHistory] = useState([]);
   const [selectedTagHistoryIds, setSelectedTagHistoryIds] = useState([]);
+  const [activeTagHistoryId, setActiveTagHistoryId] = useState(null);
   const [activeTab, setActiveTab] = useState("tags");
   const [descriptions, setDescriptions] = useState([]);
   const [loadingDescriptions, setLoadingDescriptions] = useState(false);
@@ -652,10 +653,32 @@ const Dashboard = ({ setIsAuthenticated }) => {
     toast.success(`Added ${newTags.length} tags! Total: ${uniqueTags.length}/${TAG_LIMIT}`);
   };
 
-  const toggleTagHistorySelection = (id) => {
-    setSelectedTagHistoryIds((prev) => (
-      prev.includes(id) ? prev.filter((itemId) => itemId !== id) : [...prev, id]
-    ));
+  const handleTagHistoryTileClick = (item) => {
+    const alreadySelected = selectedTagHistoryIds.includes(item.id);
+    const nextSelected = alreadySelected
+      ? selectedTagHistoryIds.filter((itemId) => itemId !== item.id)
+      : [...selectedTagHistoryIds, item.id];
+
+    setSelectedTagHistoryIds(nextSelected);
+
+    const nextActiveId = alreadySelected
+      ? (nextSelected[nextSelected.length - 1] || null)
+      : item.id;
+
+    setActiveTagHistoryId(nextActiveId);
+
+    if (nextActiveId) {
+      const nextActiveItem =
+        nextActiveId === item.id ? item : tagHistory.find((entry) => entry.id === nextActiveId);
+      if (nextActiveItem) {
+        setGeneratedTags(nextActiveItem.tags || []);
+        setTagQuery(nextActiveItem.query || "");
+        toast.success("Tags loaded!");
+      }
+    } else {
+      setGeneratedTags([]);
+      setTagQuery("");
+    }
   };
 
   const handleJoinSelectedTagHistory = async () => {
@@ -691,6 +714,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
 
     setGeneratedTags(uniqueTags);
     setSelectedTagHistoryIds([]);
+    setActiveTagHistoryId(null);
 
     try {
       const saveResponse = await axios.post(`${API}/tags/history`, {
@@ -1783,7 +1807,12 @@ const Dashboard = ({ setIsAuthenticated }) => {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => setSelectedTagHistoryIds([])}
+                              onClick={() => {
+                                setSelectedTagHistoryIds([]);
+                                setActiveTagHistoryId(null);
+                                setGeneratedTags([]);
+                                setTagQuery("");
+                              }}
                               className="text-xs sm:text-sm"
                             >
                               Clear
@@ -1793,38 +1822,35 @@ const Dashboard = ({ setIsAuthenticated }) => {
                       </div>
                     </CardHeader>
                     <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
-                      <div className="space-y-3 tag-history-scroll">
+                      <div className="tag-history-scroll">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                         {tagHistory.slice(0, TAG_HISTORY_LIMIT).map((item) => {
                           const displayLabel = formatTagHistoryLabel(item.query);
+                          const isSelected = selectedTagHistoryIds.includes(item.id);
+                          const isActive = activeTagHistoryId === item.id;
                           return (
                           <div
                             key={item.id}
-                            className="p-4 rounded-lg border-2 transition-all hover:border-purple-500 cursor-pointer relative group"
+                            className="aspect-square p-4 rounded-lg border-2 transition-all hover:border-purple-500 cursor-pointer relative group flex flex-col justify-between overflow-hidden"
                             style={{
                               backgroundColor: 'var(--bg-secondary)',
-                              borderColor: selectedTagHistoryIds.includes(item.id) ? 'var(--accent-primary)' : 'var(--border-color)'
+                              borderColor: isActive ? 'var(--accent-primary)' : isSelected ? 'var(--accent-secondary)' : 'var(--border-color)'
                             }}
-                            onClick={() => {
-                              setGeneratedTags(item.tags);
-                              setTagQuery(item.query);
-                              toast.success("Tags loaded!");
-                            }}
+                            onClick={() => handleTagHistoryTileClick(item)}
                             data-testid="tag-history-item"
                           >
-                            <div className="flex justify-between items-start">
-                              <div className="flex items-start gap-3 flex-1">
-                                <input
-                                  type="checkbox"
-                                  className="mt-1 h-4 w-4 accent-green-500"
-                                  checked={selectedTagHistoryIds.includes(item.id)}
-                                  onChange={() => toggleTagHistorySelection(item.id)}
-                                  onClick={(e) => e.stopPropagation()}
-                                  aria-label={`Select ${displayLabel}`}
-                                />
-                                <div className="flex-1">
-                                  <p className="font-medium mb-1" style={{color: 'var(--text-primary)'}}>{displayLabel}</p>
-                                  <p className="text-sm" style={{color: 'var(--text-secondary)'}}>{item.tags.length} tags generated</p>
-                                </div>
+                            <div className="flex justify-between items-start gap-2">
+                              <div className="min-w-0">
+                                <p
+                                  className="font-medium mb-1 leading-snug break-words"
+                                  style={{color: 'var(--text-primary)'}}
+                                  title={displayLabel}
+                                >
+                                  {displayLabel}
+                                </p>
+                                <p className="text-xs sm:text-sm break-words" style={{color: 'var(--text-secondary)'}}>
+                                  {item.tags.length} tags
+                                </p>
                               </div>
                               <Button
                                 variant="ghost"
@@ -1836,6 +1862,25 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                     // Delete from tag history
                                     const updatedHistory = tagHistory.filter(t => t.id !== item.id);
                                     setTagHistory(updatedHistory);
+                                    setSelectedTagHistoryIds((prev) => {
+                                      const nextSelected = prev.filter((entryId) => entryId !== item.id);
+                                      if (activeTagHistoryId === item.id) {
+                                        const nextActiveId = nextSelected[nextSelected.length - 1] || null;
+                                        if (nextActiveId) {
+                                          const nextActiveItem = updatedHistory.find((entry) => entry.id === nextActiveId);
+                                          if (nextActiveItem) {
+                                            setActiveTagHistoryId(nextActiveId);
+                                            setGeneratedTags(nextActiveItem.tags || []);
+                                            setTagQuery(nextActiveItem.query || "");
+                                          }
+                                        } else {
+                                          setActiveTagHistoryId(null);
+                                          setGeneratedTags([]);
+                                          setTagQuery("");
+                                        }
+                                      }
+                                      return nextSelected;
+                                    });
                                     toast.success("Generation deleted");
                                   } catch (error) {
                                     toast.error("Failed to delete");
@@ -1845,9 +1890,13 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                 <Trash2 className="h-4 w-4" />
                               </Button>
                             </div>
+                            <div className="mt-2 text-[11px] sm:text-xs break-words" style={{ color: 'var(--text-secondary)' }}>
+                              {isActive ? "Showing tags" : isSelected ? "Selected for join" : "Click to select"}
+                            </div>
                           </div>
                         );
                         })}
+                        </div>
                       </div>
                     </CardContent>
                   </Card>

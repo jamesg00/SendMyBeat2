@@ -25,7 +25,6 @@ const AVATAR_CHOICES = [
 
 export default function ProducerSpotlight() {
   const navigate = useNavigate();
-  const [parallaxOffset, setParallaxOffset] = useState({ x: 0, y: 0 });
   const [spotlightData, setSpotlightData] = useState(null);
   const [myProfile, setMyProfile] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -55,14 +54,6 @@ export default function ProducerSpotlight() {
     fetchSpotlight();
     fetchMyProfile();
   }, []);
-
-  const handleSpotlightMouseMove = (e) => {
-    const centerX = window.innerWidth / 2;
-    const centerY = window.innerHeight / 2;
-    const x = ((e.clientX - centerX) / centerX) * 14;
-    const y = ((e.clientY - centerY) / centerY) * 10;
-    setParallaxOffset({ x, y });
-  };
 
   const fetchSpotlight = async () => {
     try {
@@ -283,13 +274,9 @@ export default function ProducerSpotlight() {
   );
 
   return (
-    <div
-      className="spotlight-parallax-bg relative min-h-screen overflow-hidden"
-      onMouseMove={handleSpotlightMouseMove}
-    >
+    <div className="spotlight-parallax-bg relative min-h-screen overflow-hidden">
       <div
         className="spotlight-grid-layer"
-        style={{ transform: `translate3d(${parallaxOffset.x}px, ${parallaxOffset.y}px, 0)` }}
         aria-hidden="true"
       />
       <div className="relative z-10 container mx-auto px-4 py-8 space-y-12 text-[var(--text-primary)]">
