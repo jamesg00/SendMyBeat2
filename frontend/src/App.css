@@ -675,3 +675,42 @@ html.dark .spotlight-grid-layer {
     opacity: 0;
   }
 }
+
+/* Glass Theme hard override: remove remaining green utility colors */
+body[data-theme="glass"] {
+  --text-primary: #bfdbfe !important;
+  --text-secondary: #93c5fd !important;
+  --accent-primary: #60a5fa !important;
+  --accent-secondary: #93c5fd !important;
+}
+
+body[data-theme="glass"] [class*="text-green-"],
+body[data-theme="glass"] [class*="text-emerald-"],
+body[data-theme="glass"] [class*="text-lime-"] {
+  color: var(--text-primary) !important;
+}
+
+body[data-theme="glass"] [class*="border-green-"],
+body[data-theme="glass"] [class*="border-emerald-"],
+body[data-theme="glass"] [class*="border-lime-"] {
+  border-color: color-mix(in srgb, var(--accent-primary) 70%, transparent) !important;
+}
+
+body[data-theme="glass"] [class*="bg-green-"],
+body[data-theme="glass"] [class*="bg-emerald-"],
+body[data-theme="glass"] [class*="bg-lime-"] {
+  background-color: color-mix(in srgb, var(--accent-primary) 75%, transparent) !important;
+  color: #eaf2ff !important;
+}
+
+body[data-theme="glass"] .dashboard-tabs [role="tab"] {
+  color: #93c5fd !important;
+}
+
+body[data-theme="glass"] .dashboard-tabs [role="tab"][data-state="active"] {
+  color: #ffffff !important;
+}
+
+body[data-theme="glass"] .dashboard-tabs [role="tab"]:not([data-state="active"]):hover {
+  color: #dbeafe !important;
+}
