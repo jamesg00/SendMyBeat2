@@ -1,0 +1,394 @@
+const DEFAULT_OPTIONS = {
+  fftSize: 16384,
+  minHz: 20,
+  maxHz: 18000,
+  bars: 128,
+  noiseFloor: 0.06,
+  curvePower: 0.6,
+  attack: 0.72,
+  release: 0.16,
+  gain: 1.35,
+  radius: 0.23,
+  maxBarLength: 0.18,
+  rotateSpeed: 0.002,
+  lineWidth: 2,
+  glowWidth: 5,
+  backgroundFade: 0.16,
+  baseSpawnRate: 10,
+  maxSpawnRate: 120,
+  particleLifeMin: 0.8,
+  particleLifeMax: 2.2,
+  particleSpeed: 72,
+  particleJitter: 26,
+  particleSize: 1.8,
+  particleGlowSize: 5,
+  particleAlpha: 0.65,
+  particleEnabled: true,
+  trailsEnabled: true,
+  spectrumColor: "90, 160, 255",
+  glowColor: "125, 185, 255",
+  particleColor: "140, 200, 255",
+};
+
+const IS_MOBILE = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(max-width: 768px)").matches;
+
+export default class AudioVisualizer {
+  constructor(canvas, options = {}) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext("2d", { alpha: true });
+    this.options = {
+      ...DEFAULT_OPTIONS,
+      ...(IS_MOBILE ? { bars: 72, maxSpawnRate: 48, glowWidth: 4, fftSize: 8192 } : {}),
+      ...options,
+    };
+
+    this.audioContext = null;
+    this.analyser = null;
+    this.sourceNode = null;
+    this.connectedElement = null;
+    this.dataArray = null;
+    this.frequencyBins = [];
+    this.smoothedBars = [];
+
+    this.animationFrame = null;
+    this.lastTs = 0;
+    this.rotation = 0;
+    this.running = false;
+
+    this.particles = [];
+    this.spawnRemainder = 0;
+
+    this.energy = 0;
+    this.bassEnergy = 0;
+
+    this.resize = this.resize.bind(this);
+    this.loop = this.loop.bind(this);
+    this.buildBinMap();
+    this.resize();
+    window.addEventListener("resize", this.resize);
+  }
+
+  setOptions(next = {}) {
+    this.options = { ...this.options, ...next };
+    if (typeof next.bars === "number" || typeof next.minHz === "number" || typeof next.maxHz === "number") {
+      this.buildBinMap();
+    }
+  }
+
+  async connectMediaElement(audioEl) {
+    if (!audioEl) return;
+
+    if (!this.audioContext) {
+      this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    }
+
+    if (!this.analyser) {
+      this.analyser = this.audioContext.createAnalyser();
+      this.analyser.fftSize = this.closestFftSize(this.options.fftSize);
+      this.analyser.smoothingTimeConstant = 0.05;
+      this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+      this.buildBinMap();
+    }
+
+    if (this.connectedElement !== audioEl) {
+      if (this.sourceNode) {
+        try {
+          this.sourceNode.disconnect();
+        } catch (_) {
+          // no-op
+        }
+      }
+      this.sourceNode = this.audioContext.createMediaElementSource(audioEl);
+      this.sourceNode.connect(this.analyser);
+      this.analyser.connect(this.audioContext.destination);
+      this.connectedElement = audioEl;
+    }
+  }
+
+  async connectMicrophone() {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error("Microphone input not supported");
+    }
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    if (!this.audioContext) {
+      this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (!this.analyser) {
+      this.analyser = this.audioContext.createAnalyser();
+      this.analyser.fftSize = this.closestFftSize(this.options.fftSize);
+      this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+    }
+    const mic = this.audioContext.createMediaStreamSource(stream);
+    mic.connect(this.analyser);
+    this.sourceNode = mic;
+    this.connectedElement = null;
+    this.buildBinMap();
+    return stream;
+  }
+
+  async resumeAudioContext() {
+    if (this.audioContext && this.audioContext.state === "suspended") {
+      await this.audioContext.resume();
+    }
+  }
+
+  start() {
+    if (this.running) return;
+    this.running = true;
+    this.lastTs = 0;
+    this.animationFrame = requestAnimationFrame(this.loop);
+  }
+
+  stop() {
+    this.running = false;
+    if (this.animationFrame) {
+      cancelAnimationFrame(this.animationFrame);
+      this.animationFrame = null;
+    }
+  }
+
+  destroy() {
+    this.stop();
+    window.removeEventListener("resize", this.resize);
+    if (this.sourceNode) {
+      try {
+        this.sourceNode.disconnect();
+      } catch (_) {
+        // no-op
+      }
+    }
+    if (this.analyser) {
+      try {
+        this.analyser.disconnect();
+      } catch (_) {
+        // no-op
+      }
+    }
+  }
+
+  closestFftSize(size) {
+    const allowed = [32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768];
+    return allowed.includes(size) ? size : 16384;
+  }
+
+  buildBinMap() {
+    const bars = Math.max(8, this.options.bars | 0);
+    this.frequencyBins = new Array(bars);
+    this.smoothedBars = new Array(bars).fill(0);
+
+    const sampleRate = this.audioContext?.sampleRate || 48000;
+    const fftSize = this.analyser?.fftSize || this.closestFftSize(this.options.fftSize);
+    const nyquist = sampleRate / 2;
+    const minHz = Math.max(10, this.options.minHz);
+    const maxHz = Math.min(nyquist, this.options.maxHz);
+
+    const logMin = Math.log10(minHz);
+    const logMax = Math.log10(maxHz);
+    for (let i = 0; i < bars; i += 1) {
+      const t0 = i / bars;
+      const t1 = (i + 1) / bars;
+      const f0 = 10 ** (logMin + (logMax - logMin) * t0);
+      const f1 = 10 ** (logMin + (logMax - logMin) * t1);
+      const b0 = Math.max(0, Math.floor((f0 / nyquist) * (fftSize / 2)));
+      const b1 = Math.max(b0 + 1, Math.floor((f1 / nyquist) * (fftSize / 2)));
+      this.frequencyBins[i] = [b0, b1];
+    }
+  }
+
+  resize() {
+    const rect = this.canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    this.canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+    this.canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  computeBars() {
+    if (!this.analyser || !this.dataArray) {
+      return this.smoothedBars.map(() => 0);
+    }
+    this.analyser.getByteFrequencyData(this.dataArray);
+
+    const bars = new Array(this.frequencyBins.length).fill(0);
+    for (let i = 0; i < this.frequencyBins.length; i += 1) {
+      const [b0, b1] = this.frequencyBins[i];
+      let sum = 0;
+      let count = 0;
+      for (let b = b0; b < b1; b += 1) {
+        sum += this.dataArray[b] || 0;
+        count += 1;
+      }
+      let v = count ? sum / (count * 255) : 0;
+      v = Math.max(0, v - this.options.noiseFloor);
+      v = Math.pow(v, this.options.curvePower) * this.options.gain;
+      v = Math.max(0, Math.min(1.6, v));
+
+      const prev = this.smoothedBars[i] || 0;
+      const smoothed = v > prev
+        ? prev + (v - prev) * this.options.attack
+        : prev + (v - prev) * this.options.release;
+      this.smoothedBars[i] = smoothed;
+      bars[i] = smoothed;
+    }
+
+    const total = bars.reduce((acc, n) => acc + n, 0);
+    this.energy = total / Math.max(1, bars.length);
+    const bassCount = Math.max(1, Math.floor(bars.length * 0.2));
+    this.bassEnergy = bars.slice(0, bassCount).reduce((acc, n) => acc + n, 0) / bassCount;
+
+    return bars;
+  }
+
+  spawnParticles(dt, cx, cy, radius) {
+    if (!this.options.particleEnabled) return;
+    const minRate = this.options.baseSpawnRate;
+    const maxRate = this.options.maxSpawnRate;
+    const rate = minRate + (maxRate - minRate) * Math.min(1, this.energy * 1.25);
+    const toSpawnFloat = rate * dt + this.spawnRemainder;
+    const toSpawn = Math.floor(toSpawnFloat);
+    this.spawnRemainder = toSpawnFloat - toSpawn;
+
+    for (let i = 0; i < toSpawn; i += 1) {
+      const angle = Math.random() * Math.PI * 2 + this.rotation;
+      const px = cx + Math.cos(angle) * radius;
+      const py = cy + Math.sin(angle) * radius;
+      const outward = this.options.particleSpeed * (0.45 + Math.random() * 0.9);
+      const tangent = (Math.random() - 0.5) * this.options.particleJitter;
+      const vx = Math.cos(angle) * outward + -Math.sin(angle) * tangent;
+      const vy = Math.sin(angle) * outward + Math.cos(angle) * tangent;
+      const life = this.options.particleLifeMin + Math.random() * (this.options.particleLifeMax - this.options.particleLifeMin);
+      this.particles.push({
+        x: px,
+        y: py,
+        vx,
+        vy,
+        life,
+        maxLife: life,
+      });
+    }
+  }
+
+  updateParticles(dt) {
+    const keep = [];
+    for (let i = 0; i < this.particles.length; i += 1) {
+      const p = this.particles[i];
+      p.life -= dt;
+      if (p.life <= 0) continue;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vx *= 0.985;
+      p.vy *= 0.985;
+      keep.push(p);
+    }
+    this.particles = keep.slice(-700);
+  }
+
+  drawParticles() {
+    if (!this.options.particleEnabled) return;
+    const c = this.ctx;
+    const [r, g, b] = this.options.particleColor.split(",").map((v) => Number(v.trim()));
+
+    for (let i = 0; i < this.particles.length; i += 1) {
+      const p = this.particles[i];
+      const t = p.life / p.maxLife;
+      const fade = t < 0.85 ? t : (1 - t) * 6;
+      const alpha = Math.max(0, Math.min(1, fade * this.options.particleAlpha));
+      if (alpha <= 0) continue;
+
+      c.beginPath();
+      c.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha * 0.22})`;
+      c.arc(p.x, p.y, this.options.particleGlowSize, 0, Math.PI * 2);
+      c.fill();
+
+      c.beginPath();
+      c.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+      c.arc(p.x, p.y, this.options.particleSize, 0, Math.PI * 2);
+      c.fill();
+    }
+  }
+
+  drawSpectrum(bars, cx, cy, radius) {
+    const c = this.ctx;
+    const count = bars.length;
+    const [sr, sg, sb] = this.options.spectrumColor.split(",").map((v) => Number(v.trim()));
+    const [gr, gg, gb] = this.options.glowColor.split(",").map((v) => Number(v.trim()));
+    const step = (Math.PI * 2) / count;
+    const maxBarPx = Math.min(this.canvas.clientWidth, this.canvas.clientHeight) * this.options.maxBarLength;
+
+    c.save();
+    c.translate(cx, cy);
+    c.rotate(this.rotation);
+    c.globalCompositeOperation = "lighter";
+
+    for (let i = 0; i < count; i += 1) {
+      const a = i * step;
+      const amp = Math.max(0, bars[i]);
+      const len = amp * maxBarPx;
+      const x0 = Math.cos(a) * radius;
+      const y0 = Math.sin(a) * radius;
+      const x1 = Math.cos(a) * (radius + len);
+      const y1 = Math.sin(a) * (radius + len);
+
+      c.beginPath();
+      c.strokeStyle = `rgba(${gr}, ${gg}, ${gb}, 0.16)`;
+      c.lineWidth = this.options.glowWidth;
+      c.moveTo(x0, y0);
+      c.lineTo(x1, y1);
+      c.stroke();
+
+      c.beginPath();
+      c.strokeStyle = `rgba(${sr}, ${sg}, ${sb}, 0.9)`;
+      c.lineWidth = this.options.lineWidth;
+      c.moveTo(x0, y0);
+      c.lineTo(x1, y1);
+      c.stroke();
+    }
+    c.restore();
+  }
+
+  drawVignette() {
+    const c = this.ctx;
+    const w = this.canvas.clientWidth;
+    const h = this.canvas.clientHeight;
+    const grad = c.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.2, w / 2, h / 2, Math.max(w, h) * 0.7);
+    grad.addColorStop(0, "rgba(0,0,0,0)");
+    grad.addColorStop(1, "rgba(0,0,0,0.26)");
+    c.fillStyle = grad;
+    c.fillRect(0, 0, w, h);
+  }
+
+  loop(ts) {
+    if (!this.running) return;
+    const dt = this.lastTs ? Math.min(0.06, (ts - this.lastTs) / 1000) : 0.016;
+    this.lastTs = ts;
+
+    const c = this.ctx;
+    const w = this.canvas.clientWidth;
+    const h = this.canvas.clientHeight;
+    if (!w || !h) {
+      this.animationFrame = requestAnimationFrame(this.loop);
+      return;
+    }
+
+    c.globalCompositeOperation = "source-over";
+    c.fillStyle = this.options.trailsEnabled
+      ? `rgba(2, 6, 17, ${this.options.backgroundFade})`
+      : "rgba(2, 6, 17, 1)";
+    c.fillRect(0, 0, w, h);
+
+    const bars = this.computeBars();
+    const cx = w / 2;
+    const cy = h / 2;
+    const radius = Math.min(w, h) * this.options.radius;
+
+    this.rotation += this.options.rotateSpeed + this.energy * 0.0008;
+    this.spawnParticles(dt, cx, cy, radius);
+    this.updateParticles(dt);
+    this.drawParticles();
+    this.drawSpectrum(bars, cx, cy, radius);
+    this.drawVignette();
+
+    this.animationFrame = requestAnimationFrame(this.loop);
+  }
+}
+

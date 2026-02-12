@@ -19,6 +19,7 @@ import UpgradeModal from "@/components/UpgradeModal";
 import AdBanner from "@/components/AdBanner";
 import ProgressBar from "@/components/ProgressBar";
 import ThemeCustomizer from "@/components/ThemeCustomizer";
+import AudioVisualizer from "@/lib/AudioVisualizer";
 
 const TAG_LIMIT = 120;
 const TAG_HISTORY_LIMIT = 100;
@@ -186,9 +187,22 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [imagePreviewUrl, setImagePreviewUrl] = useState("");
   const [audioPreviewUrl, setAudioPreviewUrl] = useState("");
   const audioPlayerRef = useRef(null);
+  const visualizerCanvasRef = useRef(null);
+  const visualizerRef = useRef(null);
   const [audioDuration, setAudioDuration] = useState(0);
   const [audioCurrentTime, setAudioCurrentTime] = useState(0);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
+  const [visualizerEnabled, setVisualizerEnabled] = useState(false);
+  const [visualizerSettings, setVisualizerSettings] = useState({
+    bars: 128,
+    intensity: 1.35,
+    particleIntensity: 1,
+    rotateSpeed: 0.002,
+    radius: 0.23,
+    maxBarLength: 0.18,
+    trailsEnabled: true,
+    particleEnabled: true,
+  });
 
   const isPro = !!subscriptionStatus?.is_subscribed;
   const thumbnailContextReady = Boolean(
@@ -231,6 +245,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const goToNextTab = () => {
     const nextIndex = (activeTabIndex + 1) % DASHBOARD_TABS.length;
     setActiveTab(DASHBOARD_TABS[nextIndex].value);
+  };
+
+  const updateVisualizerSetting = (key, value) => {
+    setVisualizerSettings((prev) => ({ ...prev, [key]: value }));
   };
 
   useEffect(() => {
@@ -278,6 +296,68 @@ const Dashboard = ({ setIsAuthenticated }) => {
     audioPlayerRef.current.currentTime = 0;
     setAudioCurrentTime(0);
   }, [audioPreviewUrl]);
+
+  useEffect(() => {
+    const canvas = visualizerCanvasRef.current;
+    const audioEl = audioPlayerRef.current;
+    if (!canvas || !audioEl) return;
+
+    if (!visualizerEnabled) {
+      if (visualizerRef.current) {
+        visualizerRef.current.stop();
+      }
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+      return;
+    }
+
+    const visualizer = new AudioVisualizer(canvas, {
+      bars: visualizerSettings.bars,
+      gain: visualizerSettings.intensity,
+      maxBarLength: visualizerSettings.maxBarLength,
+      radius: visualizerSettings.radius,
+      rotateSpeed: visualizerSettings.rotateSpeed,
+      trailsEnabled: visualizerSettings.trailsEnabled,
+      particleEnabled: visualizerSettings.particleEnabled,
+      maxSpawnRate: Math.round(120 * visualizerSettings.particleIntensity),
+      baseSpawnRate: Math.round(10 * Math.max(0.5, visualizerSettings.particleIntensity)),
+      particleSpeed: 72 * visualizerSettings.particleIntensity,
+    });
+    visualizerRef.current = visualizer;
+
+    const startVisualizer = async () => {
+      try {
+        await visualizer.connectMediaElement(audioEl);
+        await visualizer.resumeAudioContext();
+        visualizer.start();
+      } catch (err) {
+        console.error("Visualizer init failed:", err);
+      }
+    };
+
+    startVisualizer();
+
+    return () => {
+      visualizer.destroy();
+      if (visualizerRef.current === visualizer) {
+        visualizerRef.current = null;
+      }
+    };
+  }, [
+    visualizerEnabled,
+    audioPreviewUrl,
+    imagePreviewUrl,
+    visualizerSettings.bars,
+    visualizerSettings.intensity,
+    visualizerSettings.maxBarLength,
+    visualizerSettings.radius,
+    visualizerSettings.rotateSpeed,
+    visualizerSettings.trailsEnabled,
+    visualizerSettings.particleEnabled,
+    visualizerSettings.particleIntensity,
+  ]);
 
   useEffect(() => {
     if (!selectedDescriptionId) {
@@ -481,6 +561,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
       return;
     }
     try {
+      if (visualizerEnabled && visualizerRef.current) {
+        await visualizerRef.current.resumeAudioContext();
+        visualizerRef.current.start();
+      }
       await audioEl.play();
     } catch (error) {
       console.error("Audio play failed", error);
@@ -2803,6 +2887,104 @@ const Dashboard = ({ setIsAuthenticated }) => {
                       </div>
                       )}
 
+                      {audioFile && imageFile && (
+                        <div className="space-y-3 p-4 rounded-lg border" style={{ borderColor: "var(--border-color)", backgroundColor: "var(--bg-secondary)" }}>
+                          <div className="flex items-center justify-between gap-2">
+                            <div>
+                              <p className="text-sm font-semibold">Audio Reactive Spectrum (Beta)</p>
+                              <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                                Circle bars + particles over your uploaded image
+                              </p>
+                            </div>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={visualizerEnabled ? "default" : "outline"}
+                              onClick={() => setVisualizerEnabled((prev) => !prev)}
+                            >
+                              {visualizerEnabled ? "Visualizer ON" : "Visualizer OFF"}
+                            </Button>
+                          </div>
+
+                          {visualizerEnabled && (
+                            <>
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <Label htmlFor="viz-bars" className="text-sm">Bars</Label>
+                                  <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                                    {visualizerSettings.bars}
+                                  </span>
+                                </div>
+                                <Input
+                                  id="viz-bars"
+                                  type="range"
+                                  min="48"
+                                  max="196"
+                                  step="4"
+                                  value={visualizerSettings.bars}
+                                  onChange={(e) => updateVisualizerSetting("bars", Number(e.target.value))}
+                                />
+                              </div>
+
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <Label htmlFor="viz-intensity" className="text-sm">Spectrum Intensity</Label>
+                                  <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                                    {visualizerSettings.intensity.toFixed(2)}x
+                                  </span>
+                                </div>
+                                <Input
+                                  id="viz-intensity"
+                                  type="range"
+                                  min="0.5"
+                                  max="3"
+                                  step="0.05"
+                                  value={visualizerSettings.intensity}
+                                  onChange={(e) => updateVisualizerSetting("intensity", Number(e.target.value))}
+                                />
+                              </div>
+
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <Label htmlFor="viz-particles" className="text-sm">Particle Intensity</Label>
+                                  <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                                    {visualizerSettings.particleIntensity.toFixed(2)}x
+                                  </span>
+                                </div>
+                                <Input
+                                  id="viz-particles"
+                                  type="range"
+                                  min="0.3"
+                                  max="2"
+                                  step="0.05"
+                                  value={visualizerSettings.particleIntensity}
+                                  onChange={(e) => updateVisualizerSetting("particleIntensity", Number(e.target.value))}
+                                />
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-2">
+                                <Button
+                                  type="button"
+                                  variant={visualizerSettings.particleEnabled ? "default" : "outline"}
+                                  size="sm"
+                                  onClick={() => updateVisualizerSetting("particleEnabled", !visualizerSettings.particleEnabled)}
+                                >
+                                  {visualizerSettings.particleEnabled ? "Particles ON" : "Particles OFF"}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant={visualizerSettings.trailsEnabled ? "default" : "outline"}
+                                  size="sm"
+                                  onClick={() => updateVisualizerSetting("trailsEnabled", !visualizerSettings.trailsEnabled)}
+                                >
+                                  {visualizerSettings.trailsEnabled ? "Trails ON" : "Trails OFF"}
+                                </Button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
+
                       <div className="space-y-2">
                         <Label htmlFor="privacy-status">Privacy Status</Label>
                         <Select value={privacyStatus} onValueChange={setPrivacyStatus}>
@@ -2932,6 +3114,14 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                   />
                                 </div>
                               </div>
+
+                              {visualizerEnabled && (
+                                <canvas
+                                  ref={visualizerCanvasRef}
+                                  className="absolute inset-0 pointer-events-none"
+                                  style={{ width: "100%", height: "100%", opacity: 0.95 }}
+                                />
+                              )}
                             </div>
                             <div className="mt-3 rounded-lg p-3" style={{ backgroundColor: 'var(--bg-secondary)' }}>
                               <div className="flex flex-wrap items-center gap-3">
