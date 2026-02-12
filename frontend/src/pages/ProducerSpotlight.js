@@ -1,19 +1,24 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { API } from "@/App";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
-import { Trophy, Star, TrendingUp, Music, User, Globe, Youtube, Instagram, Twitter } from "lucide-react";
+import { Trophy, Star, TrendingUp, Music, User, Globe, Youtube, Instagram, Twitter, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 
 export default function ProducerSpotlight() {
+  const navigate = useNavigate();
   const [spotlightData, setSpotlightData] = useState(null);
   const [myProfile, setMyProfile] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [spotlightApiMissing, setSpotlightApiMissing] = useState(false);
+  const [profileApiMissing, setProfileApiMissing] = useState(false);
   const [editForm, setEditForm] = useState({
     bio: "",
     top_beat_url: "",
@@ -32,8 +37,12 @@ export default function ProducerSpotlight() {
     try {
       const response = await axios.get(`${API}/producers/spotlight`);
       setSpotlightData(response.data);
+      setSpotlightApiMissing(false);
     } catch (error) {
       console.error("Failed to fetch spotlight", error);
+      if (error?.response?.status === 404) {
+        setSpotlightApiMissing(true);
+      }
     } finally {
       setLoading(false);
     }
@@ -43,6 +52,7 @@ export default function ProducerSpotlight() {
     try {
       const response = await axios.get(`${API}/producers/me`);
       setMyProfile(response.data);
+      setProfileApiMissing(false);
       setEditForm({
         bio: response.data.bio || "",
         top_beat_url: response.data.top_beat_url || "",
@@ -53,10 +63,14 @@ export default function ProducerSpotlight() {
       });
     } catch (error) {
       console.error("Failed to fetch profile", error);
+      if (error?.response?.status === 404) {
+        setProfileApiMissing(true);
+      }
     }
   };
 
   const handleUpdateProfile = async () => {
+    setSavingProfile(true);
     try {
       const updateData = {
         bio: editForm.bio,
@@ -75,7 +89,13 @@ export default function ProducerSpotlight() {
       fetchMyProfile();
       fetchSpotlight(); // Refresh list to see if we appear (if algorithm picks us)
     } catch (error) {
-      toast.error("Failed to update profile");
+      if (error?.response?.status === 404) {
+        toast.error("Spotlight backend routes are not deployed yet (404).");
+      } else {
+        toast.error("Failed to update profile");
+      }
+    } finally {
+      setSavingProfile(false);
     }
   };
 
@@ -142,6 +162,16 @@ export default function ProducerSpotlight() {
 
   return (
     <div className="container mx-auto px-4 py-8 space-y-12">
+      <div className="flex items-center justify-start">
+        <Button
+          variant="outline"
+          className="gap-2"
+          onClick={() => navigate("/dashboard")}
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Dashboard
+        </Button>
+      </div>
 
       {/* Hero Section */}
       <div className="text-center space-y-4">
@@ -156,7 +186,7 @@ export default function ProducerSpotlight() {
               {myProfile?.bio ? "Edit My Profile" : "Join the Spotlight"}
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto bg-[var(--card-bg)] border border-[var(--border-color)]">
             <DialogHeader>
               <DialogTitle>Your Producer Profile</DialogTitle>
               <DialogDescription>
@@ -219,12 +249,20 @@ export default function ProducerSpotlight() {
                   </div>
                 </div>
               </div>
-              <Button onClick={handleUpdateProfile} className="mt-4 w-full">
-                Save Profile
-              </Button>
+              <div className="sticky bottom-0 pt-3 pb-1 bg-[var(--card-bg)]">
+                <Button onClick={handleUpdateProfile} className="w-full" disabled={savingProfile}>
+                  {savingProfile ? "Saving..." : "Save Profile"}
+                </Button>
+              </div>
             </div>
           </DialogContent>
         </Dialog>
+
+        {(spotlightApiMissing || profileApiMissing) && (
+          <p className="text-sm text-red-500 max-w-3xl mx-auto">
+            Spotlight API returned 404. Backend is running an older version. Deploy/restart backend with latest `server.py` routes.
+          </p>
+        )}
       </div>
 
       {/* Featured Producers */}
