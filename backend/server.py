@@ -30,7 +30,7 @@ import stripe
 import requests
 import pytz
 from itsdangerous import URLSafeSerializer, BadSignature
-from backend.models_spotlight import ProducerProfile, ProducerProfileUpdate, SpotlightResponse
+from models_spotlight import ProducerProfile, ProducerProfileUpdate, SpotlightResponse
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -2269,6 +2269,8 @@ async def update_my_producer_profile(
     update_fields = {}
     if update_data.bio is not None:
         update_fields['bio'] = update_data.bio
+    if update_data.avatar_url is not None:
+        update_fields['avatar_url'] = update_data.avatar_url
     if update_data.top_beat_url is not None:
         update_fields['top_beat_url'] = update_data.top_beat_url
     if update_data.social_links is not None:
@@ -2288,6 +2290,33 @@ async def update_my_producer_profile(
     # Return updated
     updated = await db.producer_profiles.find_one({"user_id": current_user['id']})
     return ProducerProfile(**updated)
+
+
+@api_router.post("/producers/avatar")
+async def upload_producer_avatar(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """Upload a profile avatar and return a data URL that can be saved in profile."""
+    allowed_types = {"image/jpeg", "image/png", "image/webp"}
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Invalid image type. Use JPG, PNG, or WEBP.")
+
+    image_bytes = await file.read()
+    if not image_bytes:
+        raise HTTPException(status_code=400, detail="Empty image file.")
+    if len(image_bytes) > 2 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Image too large. Max size is 2MB.")
+
+    avatar_data_url = f"data:{file.content_type};base64,{base64.b64encode(image_bytes).decode('utf-8')}"
+
+    await db.producer_profiles.update_one(
+        {"user_id": current_user["id"]},
+        {"$set": {"avatar_url": avatar_data_url, "updated_at": datetime.now(timezone.utc)}},
+        upsert=True
+    )
+
+    return {"avatar_url": avatar_data_url}
 
 # ============ Beat Fixes Route ============
 @api_router.post("/beat/fix", response_model=BeatFixResponse)

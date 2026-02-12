@@ -1,12 +1,34 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Zap, Sparkles, Upload, Settings } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'sonner';
 
-const SubscriptionBanner = ({ creditsRemaining, uploadCreditsRemaining, isSubscribed, onUpgrade, API }) => {
+const SubscriptionBanner = ({ creditsRemaining, uploadCreditsRemaining, resetsAt, isSubscribed, onUpgrade, API }) => {
   const [loadingPortal, setLoadingPortal] = useState(false);
+  const [nowMs, setNowMs] = useState(Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const getResetMessage = () => {
+    if (!resetsAt) return "Credits reset at midnight UTC";
+    const resetDate = new Date(resetsAt);
+    if (Number.isNaN(resetDate.getTime())) return "Credits reset at midnight UTC";
+
+    const diffMs = resetDate.getTime() - nowMs;
+    if (diffMs <= 0) {
+      return `Credits reset at ${resetDate.toLocaleString()} (${Intl.DateTimeFormat().resolvedOptions().timeZone})`;
+    }
+
+    const totalSec = Math.floor(diffMs / 1000);
+    const hours = Math.floor(totalSec / 3600);
+    const minutes = Math.floor((totalSec % 3600) / 60);
+    return `Resets in ${hours}h ${minutes}m`;
+  };
   
   console.log('📊 Banner Credits:', { 
     creditsRemaining, 
@@ -161,6 +183,9 @@ const SubscriptionBanner = ({ creditsRemaining, uploadCreditsRemaining, isSubscr
                 : isAiLow 
                 ? "🚫 No AI generations left for today"
                 : "🚫 No uploads left for today"}
+            </p>
+            <p className="text-[11px] sm:text-xs mb-3 text-center" style={{color: 'var(--text-secondary)'}}>
+              {getResetMessage()}
             </p>
             <Button 
               onClick={onUpgrade}

@@ -8,7 +8,17 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
 import { Trophy, Star, TrendingUp, Music, User, Globe, Youtube, Instagram, Twitter, ArrowLeft } from "lucide-react";
+import DarkModeToggle from "@/components/DarkModeToggle";
 import { toast } from "sonner";
+
+const AVATAR_CHOICES = [
+  { id: "1", label: "Classic", url: "https://api.dicebear.com/9.x/adventurer-neutral/svg?seed=sendmybeat-1" },
+  { id: "2", label: "Wave", url: "https://api.dicebear.com/9.x/adventurer-neutral/svg?seed=sendmybeat-2" },
+  { id: "3", label: "Neo", url: "https://api.dicebear.com/9.x/adventurer-neutral/svg?seed=sendmybeat-3" },
+  { id: "4", label: "Glow", url: "https://api.dicebear.com/9.x/adventurer-neutral/svg?seed=sendmybeat-4" },
+  { id: "5", label: "Pixel", url: "https://api.dicebear.com/9.x/pixel-art/svg?seed=sendmybeat-5" },
+  { id: "6", label: "Retro", url: "https://api.dicebear.com/9.x/pixel-art/svg?seed=sendmybeat-6" }
+];
 
 export default function ProducerSpotlight() {
   const navigate = useNavigate();
@@ -17,9 +27,11 @@ export default function ProducerSpotlight() {
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [spotlightApiMissing, setSpotlightApiMissing] = useState(false);
   const [profileApiMissing, setProfileApiMissing] = useState(false);
   const [editForm, setEditForm] = useState({
+    avatar_url: AVATAR_CHOICES[0].url,
     bio: "",
     top_beat_url: "",
     tags: "",
@@ -54,6 +66,7 @@ export default function ProducerSpotlight() {
       setMyProfile(response.data);
       setProfileApiMissing(false);
       setEditForm({
+        avatar_url: response.data.avatar_url || AVATAR_CHOICES[0].url,
         bio: response.data.bio || "",
         top_beat_url: response.data.top_beat_url || "",
         tags: response.data.tags ? response.data.tags.join(", ") : "",
@@ -73,6 +86,7 @@ export default function ProducerSpotlight() {
     setSavingProfile(true);
     try {
       const updateData = {
+        avatar_url: editForm.avatar_url,
         bio: editForm.bio,
         top_beat_url: editForm.top_beat_url,
         tags: editForm.tags.split(",").map(t => t.trim()).filter(Boolean),
@@ -99,6 +113,38 @@ export default function ProducerSpotlight() {
     }
   };
 
+  const handleAvatarUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const allowed = ["image/jpeg", "image/png", "image/webp"];
+    if (!allowed.includes(file.type)) {
+      toast.error("Use JPG, PNG, or WEBP for avatar.");
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("Avatar must be under 2MB.");
+      return;
+    }
+
+    setUploadingAvatar(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const response = await axios.post(`${API}/producers/avatar`, formData, {
+        headers: { "Content-Type": "multipart/form-data" }
+      });
+      setEditForm((prev) => ({ ...prev, avatar_url: response.data.avatar_url }));
+      toast.success("Avatar uploaded.");
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Failed to upload avatar.");
+    } finally {
+      setUploadingAvatar(false);
+      e.target.value = "";
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -122,8 +168,11 @@ export default function ProducerSpotlight() {
       <CardContent className="pt-0 relative">
         <div className="flex justify-between items-end -mt-10 mb-4 px-2">
           <div className="h-20 w-20 rounded-full border-4 border-background bg-slate-200 flex items-center justify-center overflow-hidden">
-             {/* Placeholder Avatar */}
-             <User className="h-10 w-10 text-slate-400" />
+             {producer.avatar_url ? (
+               <img src={producer.avatar_url} alt={`${producer.username} avatar`} className="h-full w-full object-cover" />
+             ) : (
+               <User className="h-10 w-10 text-slate-400" />
+             )}
           </div>
           <div className="flex gap-2 mb-1">
             {producer.social_links?.youtube && (
@@ -161,7 +210,8 @@ export default function ProducerSpotlight() {
   );
 
   return (
-    <div className="container mx-auto px-4 py-8 space-y-12">
+    <div className="container mx-auto px-4 py-8 space-y-12 text-[var(--text-primary)]">
+      <DarkModeToggle />
       <div className="flex items-center justify-start">
         <Button
           variant="outline"
@@ -194,6 +244,42 @@ export default function ProducerSpotlight() {
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <label>Profile Picture</label>
+                <div className="flex items-center gap-3">
+                  <Input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={handleAvatarUpload}
+                    disabled={uploadingAvatar}
+                    className="max-w-sm"
+                  />
+                  <span className="text-xs text-muted-foreground">
+                    {uploadingAvatar ? "Uploading..." : "Upload your own (max 2MB)"}
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+                  {AVATAR_CHOICES.map((avatar) => (
+                    <button
+                      key={avatar.id}
+                      type="button"
+                      onClick={() => setEditForm({ ...editForm, avatar_url: avatar.url })}
+                      className={`rounded-xl border p-2 transition-all ${
+                        editForm.avatar_url === avatar.url
+                          ? "border-emerald-500 ring-2 ring-emerald-500/30"
+                          : "border-[var(--border-color)] hover:border-emerald-400"
+                      }`}
+                    >
+                      <img
+                        src={avatar.url}
+                        alt={avatar.label}
+                        className="h-12 w-12 rounded-full object-cover mx-auto"
+                      />
+                      <p className="text-xs mt-1">{avatar.label}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div className="grid gap-2">
                 <label>Bio (Short & Sweet)</label>
                 <Textarea

@@ -9,6 +9,7 @@ class ProducerProfile(BaseModel):
     model_config = ConfigDict(extra="ignore")
     user_id: str
     username: str
+    avatar_url: Optional[str] = None
     bio: str = ""
     top_beat_url: Optional[str] = None
     social_links: dict = {} # { "instagram": "url", "youtube": "url" }
@@ -20,6 +21,7 @@ class ProducerProfile(BaseModel):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class ProducerProfileUpdate(BaseModel):
+    avatar_url: Optional[str] = None
     bio: Optional[str] = None
     top_beat_url: Optional[str] = None
     social_links: Optional[dict] = None

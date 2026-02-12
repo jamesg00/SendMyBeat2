@@ -1480,6 +1480,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
           <SubscriptionBanner
             creditsRemaining={subscriptionStatus.daily_credits_remaining}
             uploadCreditsRemaining={subscriptionStatus.upload_credits_remaining}
+            resetsAt={subscriptionStatus.resets_at}
             isSubscribed={subscriptionStatus.is_subscribed}
             onUpgrade={() => setShowUpgradeModal(true)}
             API={API}
