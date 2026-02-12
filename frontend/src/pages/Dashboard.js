@@ -283,6 +283,55 @@ const Dashboard = ({ setIsAuthenticated }) => {
     setUploadDescriptionText(selectedDesc?.content || "");
   }, [selectedDescriptionId, descriptions]);
 
+  useEffect(() => {
+    const body = document.body;
+    let rafId = null;
+
+    const applyGlassParallax = (clientX, clientY) => {
+      if (body.dataset.theme !== "glass") return;
+      const x = (clientX / window.innerWidth - 0.5) * 2;
+      const y = (clientY / window.innerHeight - 0.5) * 2;
+
+      body.style.setProperty("--glass-shift-x", `${x * 8}px`);
+      body.style.setProperty("--glass-shift-y", `${y * 6}px`);
+      body.style.setProperty("--glass-prism-x", `${x * 5}px`);
+      body.style.setProperty("--glass-prism-y", `${y * 4}px`);
+    };
+
+    const resetGlassParallax = () => {
+      body.style.setProperty("--glass-shift-x", "0px");
+      body.style.setProperty("--glass-shift-y", "0px");
+      body.style.setProperty("--glass-prism-x", "0px");
+      body.style.setProperty("--glass-prism-y", "0px");
+    };
+
+    const onPointerMove = (event) => {
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => applyGlassParallax(event.clientX, event.clientY));
+    };
+
+    const onTouchMove = (event) => {
+      const touch = event.touches?.[0];
+      if (!touch) return;
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => applyGlassParallax(touch.clientX, touch.clientY));
+    };
+
+    window.addEventListener("pointermove", onPointerMove, { passive: true });
+    window.addEventListener("touchmove", onTouchMove, { passive: true });
+    window.addEventListener("pointerleave", resetGlassParallax);
+    window.addEventListener("blur", resetGlassParallax);
+
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("touchmove", onTouchMove);
+      window.removeEventListener("pointerleave", resetGlassParallax);
+      window.removeEventListener("blur", resetGlassParallax);
+      resetGlassParallax();
+    };
+  }, []);
+
   const fetchUser = async () => {
     try {
       const response = await axios.get(`${API}/auth/me`);
@@ -1506,7 +1555,14 @@ const Dashboard = ({ setIsAuthenticated }) => {
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <div className="flex-1 text-center text-sm font-medium truncate px-2" style={{ color: "var(--text-primary)" }}>
+            <div
+              className="flex-1 text-center text-sm font-semibold truncate px-2 py-1 rounded-md"
+              style={{
+                color: "var(--text-primary)",
+                background: "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))",
+                boxShadow: "0 0 0 1px var(--border-color) inset",
+              }}
+            >
               {activeTabLabel}
             </div>
             <Button
@@ -1522,12 +1578,48 @@ const Dashboard = ({ setIsAuthenticated }) => {
           </div>
 
           <TabsList className="hidden sm:grid w-full max-w-4xl mx-auto grid-cols-6 gap-1 text-xs sm:text-sm dashboard-tabs">
-            <TabsTrigger value="tags" data-testid="tags-tab" className="px-1 sm:px-3 py-1.5 sm:py-2 truncate">Tags</TabsTrigger>
-            <TabsTrigger value="descriptions" data-testid="descriptions-tab" className="px-1 sm:px-3 py-1.5 sm:py-2 truncate">Descriptions</TabsTrigger>
-            <TabsTrigger value="upload" data-testid="upload-tab" className="px-1 sm:px-3 py-1.5 sm:py-2 truncate">Upload</TabsTrigger>
-            <TabsTrigger value="analytics" data-testid="analytics-tab" className="px-1 sm:px-3 py-1.5 sm:py-2 truncate">Analytics</TabsTrigger>
-            <TabsTrigger value="grow" data-testid="grow-tab" className="px-1 sm:px-3 py-1.5 sm:py-2 truncate">Grow in 120</TabsTrigger>
-            <TabsTrigger value="settings" data-testid="settings-tab" className="px-1 sm:px-3 py-1.5 sm:py-2 truncate">Settings</TabsTrigger>
+            <TabsTrigger
+              value="tags"
+              data-testid="tags-tab"
+              className="px-1 sm:px-3 py-1.5 sm:py-2 truncate transition-colors data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--accent-primary)] data-[state=active]:to-[var(--accent-secondary)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=active]:border data-[state=active]:border-[var(--border-color)]"
+            >
+              Tags
+            </TabsTrigger>
+            <TabsTrigger
+              value="descriptions"
+              data-testid="descriptions-tab"
+              className="px-1 sm:px-3 py-1.5 sm:py-2 truncate transition-colors data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--accent-primary)] data-[state=active]:to-[var(--accent-secondary)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=active]:border data-[state=active]:border-[var(--border-color)]"
+            >
+              Descriptions
+            </TabsTrigger>
+            <TabsTrigger
+              value="upload"
+              data-testid="upload-tab"
+              className="px-1 sm:px-3 py-1.5 sm:py-2 truncate transition-colors data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--accent-primary)] data-[state=active]:to-[var(--accent-secondary)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=active]:border data-[state=active]:border-[var(--border-color)]"
+            >
+              Upload
+            </TabsTrigger>
+            <TabsTrigger
+              value="analytics"
+              data-testid="analytics-tab"
+              className="px-1 sm:px-3 py-1.5 sm:py-2 truncate transition-colors data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--accent-primary)] data-[state=active]:to-[var(--accent-secondary)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=active]:border data-[state=active]:border-[var(--border-color)]"
+            >
+              Analytics
+            </TabsTrigger>
+            <TabsTrigger
+              value="grow"
+              data-testid="grow-tab"
+              className="px-1 sm:px-3 py-1.5 sm:py-2 truncate transition-colors data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--accent-primary)] data-[state=active]:to-[var(--accent-secondary)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=active]:border data-[state=active]:border-[var(--border-color)]"
+            >
+              Grow in 120
+            </TabsTrigger>
+            <TabsTrigger
+              value="settings"
+              data-testid="settings-tab"
+              className="px-1 sm:px-3 py-1.5 sm:py-2 truncate transition-colors data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--accent-primary)] data-[state=active]:to-[var(--accent-secondary)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=active]:border data-[state=active]:border-[var(--border-color)]"
+            >
+              Settings
+            </TabsTrigger>
           </TabsList>
 
           {/* Settings Tab */}

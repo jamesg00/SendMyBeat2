@@ -22,6 +22,10 @@ body[data-theme="glass"] {
     --glass-border-soft: rgba(255, 255, 255, 0.45);
     --glass-highlight: rgba(255, 255, 255, 0.72);
     --glass-tint: linear-gradient(135deg, rgba(255, 255, 255, 0.48), rgba(255, 255, 255, 0.1));
+    --glass-shift-x: 0px;
+    --glass-shift-y: 0px;
+    --glass-prism-x: 0px;
+    --glass-prism-y: 0px;
 
     background:
         radial-gradient(circle at 12% 15%, rgba(82, 175, 255, 0.38), transparent 34%),
@@ -77,21 +81,21 @@ body[data-theme="glass"] .dashboard-card,
 body[data-theme="glass"] .dashboard-card-muted,
 body[data-theme="glass"] .glass-card,
 body[data-theme="glass"] .producer-card {
-    background: var(--glass-tint), var(--card) !important;
+    background: var(--glass-tint), rgba(255, 255, 255, 0.24) !important;
     border: 1px solid var(--glass-border-soft) !important;
     box-shadow: var(--glass-shadow), inset 0 1px 0 var(--glass-highlight) !important;
-    backdrop-filter: blur(26px) saturate(175%) contrast(106%) !important;
-    -webkit-backdrop-filter: blur(26px) saturate(175%) contrast(106%) !important;
+    backdrop-filter: blur(18px) saturate(170%) contrast(106%) !important;
+    -webkit-backdrop-filter: blur(18px) saturate(170%) contrast(106%) !important;
     position: relative;
     overflow: hidden;
     isolation: isolate;
 }
 
 body[data-theme="glass"] .dashboard-tabs {
-    background: rgba(255, 255, 255, 0.24) !important;
+    background: rgba(255, 255, 255, 0.18) !important;
     border: 1px solid var(--glass-border-soft) !important;
-    backdrop-filter: blur(24px) saturate(170%) contrast(106%) !important;
-    -webkit-backdrop-filter: blur(24px) saturate(170%) contrast(106%) !important;
+    backdrop-filter: blur(16px) saturate(165%) contrast(106%) !important;
+    -webkit-backdrop-filter: blur(16px) saturate(165%) contrast(106%) !important;
     position: relative;
     overflow: hidden;
     isolation: isolate;
@@ -114,8 +118,8 @@ body[data-theme="glass"] .dashboard-tabs::before {
             rgba(255, 255, 255, 0.06) 66%,
             rgba(255, 255, 255, 0.26) 100%);
     opacity: 0.62;
-    transform: translateX(-6%);
-    animation: glass-reflect-shift 13s ease-in-out infinite;
+    transform: translate3d(calc(-7% + var(--glass-shift-x)), var(--glass-shift-y), 0);
+    transition: transform 150ms linear;
 }
 
 body[data-theme="glass"] .dashboard-card::after,
@@ -133,6 +137,8 @@ body[data-theme="glass"] .dashboard-tabs::after {
         radial-gradient(circle at 64% 82%, rgba(87, 229, 255, 0.1), transparent 35%);
     mix-blend-mode: screen;
     opacity: 0.72;
+    transform: translate3d(var(--glass-prism-x), var(--glass-prism-y), 0);
+    transition: transform 220ms ease-out;
 }
 
 body[data-theme="glass"].dark .dashboard-card::before,
@@ -149,12 +155,6 @@ body[data-theme="glass"].dark .glass-card::after,
 body[data-theme="glass"].dark .producer-card::after,
 body[data-theme="glass"].dark .dashboard-tabs::after {
     opacity: 0.44;
-}
-
-@keyframes glass-reflect-shift {
-    0% { transform: translateX(-7%); }
-    50% { transform: translateX(6%); }
-    100% { transform: translateX(-7%); }
 }
 
 body[data-theme="glass"] input,
@@ -178,6 +178,13 @@ body[data-theme="glass"] .btn-modern:hover {
 
 body[data-theme="glass"].dark .dashboard-tabs {
     background: rgba(11, 18, 33, 0.44) !important;
+}
+
+body[data-theme="glass"].dark .dashboard-card,
+body[data-theme="glass"].dark .dashboard-card-muted,
+body[data-theme="glass"].dark .glass-card,
+body[data-theme="glass"].dark .producer-card {
+    background: var(--glass-tint), rgba(11, 18, 33, 0.34) !important;
 }
 
 body[data-theme="glass"].dark input,
