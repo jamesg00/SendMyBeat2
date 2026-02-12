@@ -12,7 +12,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import axios from "axios";
 import { API } from "@/App";
 import { toast } from "sonner";
-import { Music, Sparkles, Save, LogOut, Copy, Trash2, Edit, Plus, Upload, Youtube, Link, CheckCircle2, AlertCircle, Target, Wand2, ChevronDown, ChevronUp, DollarSign } from "lucide-react";
+import { Music, Sparkles, Save, LogOut, Copy, Trash2, Edit, Plus, Upload, Youtube, Link, CheckCircle2, AlertCircle, Target, Wand2, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, DollarSign } from "lucide-react";
 import DarkModeToggle from "@/components/DarkModeToggle";
 import SubscriptionBanner from "@/components/SubscriptionBanner";
 import UpgradeModal from "@/components/UpgradeModal";
@@ -39,6 +39,14 @@ const IMAGE_MIME_TYPES = [
   "image/avif",
   "image/heic",
   "image/heif"
+];
+const DASHBOARD_TABS = [
+  { value: "tags", label: "Tags" },
+  { value: "descriptions", label: "Descriptions" },
+  { value: "upload", label: "Upload" },
+  { value: "analytics", label: "Analytics" },
+  { value: "grow", label: "Grow in 120" },
+  { value: "settings", label: "Settings" },
 ];
 
   const formatTagHistoryLabel = (query = "") => {
@@ -190,6 +198,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const adsUnlocked = generatedTags.length > 0 || (tagHistory?.length || 0) > 0;
   const adEligibleTabs = ["tags", "descriptions"].includes(activeTab);
   const adContentReady = adsUnlocked;
+  const activeTabIndex = Math.max(0, DASHBOARD_TABS.findIndex((tab) => tab.value === activeTab));
+  const activeTabLabel = DASHBOARD_TABS[activeTabIndex]?.label || "Tags";
   const canShowAds = Boolean(
     subscriptionStatus &&
     !subscriptionStatus.is_subscribed &&
@@ -206,6 +216,16 @@ const Dashboard = ({ setIsAuthenticated }) => {
     const mins = Math.floor(totalSeconds / 60);
     const secs = totalSeconds % 60;
     return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  const goToPreviousTab = () => {
+    const previousIndex = (activeTabIndex - 1 + DASHBOARD_TABS.length) % DASHBOARD_TABS.length;
+    setActiveTab(DASHBOARD_TABS[previousIndex].value);
+  };
+
+  const goToNextTab = () => {
+    const nextIndex = (activeTabIndex + 1) % DASHBOARD_TABS.length;
+    setActiveTab(DASHBOARD_TABS[nextIndex].value);
   };
 
   useEffect(() => {
@@ -1475,7 +1495,33 @@ const Dashboard = ({ setIsAuthenticated }) => {
         />
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 sm:space-y-6">
-          <TabsList className="grid w-full max-w-3xl mx-auto grid-cols-5 gap-1 text-xs sm:text-sm dashboard-tabs">
+          <div className="sm:hidden w-full max-w-xs mx-auto flex items-center justify-between gap-2 dashboard-tabs px-2 py-1.5">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={goToPreviousTab}
+              className="h-8 w-8 rounded-md"
+              aria-label="Previous tab"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <div className="flex-1 text-center text-sm font-medium truncate px-2" style={{ color: "var(--text-primary)" }}>
+              {activeTabLabel}
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={goToNextTab}
+              className="h-8 w-8 rounded-md"
+              aria-label="Next tab"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+
+          <TabsList className="hidden sm:grid w-full max-w-4xl mx-auto grid-cols-6 gap-1 text-xs sm:text-sm dashboard-tabs">
             <TabsTrigger value="tags" data-testid="tags-tab" className="px-1 sm:px-3 py-1.5 sm:py-2 truncate">Tags</TabsTrigger>
             <TabsTrigger value="descriptions" data-testid="descriptions-tab" className="px-1 sm:px-3 py-1.5 sm:py-2 truncate">Descriptions</TabsTrigger>
             <TabsTrigger value="upload" data-testid="upload-tab" className="px-1 sm:px-3 py-1.5 sm:py-2 truncate">Upload</TabsTrigger>
