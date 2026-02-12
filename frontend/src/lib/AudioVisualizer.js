@@ -41,6 +41,15 @@ export default class AudioVisualizer {
       ...(IS_MOBILE ? { bars: 72, maxSpawnRate: 48, glowWidth: 4, fftSize: 8192 } : {}),
       ...options,
     };
+    this.runtime = {
+      gain: this.options.gain,
+      rotateSpeed: this.options.rotateSpeed,
+      maxBarLength: this.options.maxBarLength,
+      radius: this.options.radius,
+      baseSpawnRate: this.options.baseSpawnRate,
+      maxSpawnRate: this.options.maxSpawnRate,
+      particleSpeed: this.options.particleSpeed,
+    };
 
     this.audioContext = null;
     this.analyser = null;
@@ -49,6 +58,9 @@ export default class AudioVisualizer {
     this.dataArray = null;
     this.frequencyBins = [];
     this.smoothedBars = [];
+    this.prevSmoothedBars = [];
+    this.barTransition = 0;
+    this.barTransitionDuration = 0.22;
 
     this.animationFrame = null;
     this.lastTs = 0;
@@ -73,6 +85,11 @@ export default class AudioVisualizer {
     if (typeof next.bars === "number" || typeof next.minHz === "number" || typeof next.maxHz === "number") {
       this.buildBinMap();
     }
+  }
+
+  lerp(current, target, speed, dt) {
+    const t = 1 - Math.exp(-speed * dt);
+    return current + (target - current) * t;
   }
 
   async connectMediaElement(audioEl) {
@@ -172,9 +189,14 @@ export default class AudioVisualizer {
   }
 
   buildBinMap() {
+    const previousBars = this.smoothedBars && this.smoothedBars.length
+      ? this.smoothedBars.slice()
+      : [];
     const bars = Math.max(8, this.options.bars | 0);
     this.frequencyBins = new Array(bars);
     this.smoothedBars = new Array(bars).fill(0);
+    this.prevSmoothedBars = previousBars;
+    this.barTransition = previousBars.length ? 1 : 0;
 
     const sampleRate = this.audioContext?.sampleRate || 48000;
     const fftSize = this.analyser?.fftSize || this.closestFftSize(this.options.fftSize);
@@ -220,7 +242,7 @@ export default class AudioVisualizer {
       }
       let v = count ? sum / (count * 255) : 0;
       v = Math.max(0, v - this.options.noiseFloor);
-      v = Math.pow(v, this.options.curvePower) * this.options.gain;
+      v = Math.pow(v, this.options.curvePower) * this.runtime.gain;
       v = Math.max(0, Math.min(1.6, v));
 
       const prev = this.smoothedBars[i] || 0;
@@ -239,10 +261,38 @@ export default class AudioVisualizer {
     return bars;
   }
 
+  sampleArrayAt(arr, pos) {
+    if (!arr || !arr.length) return 0;
+    if (arr.length === 1) return arr[0];
+    const clamped = Math.max(0, Math.min(arr.length - 1, pos));
+    const i0 = Math.floor(clamped);
+    const i1 = Math.min(arr.length - 1, i0 + 1);
+    const t = clamped - i0;
+    return arr[i0] * (1 - t) + arr[i1] * t;
+  }
+
+  getDisplayBars(currentBars) {
+    if (!this.barTransition || !this.prevSmoothedBars.length) {
+      return currentBars;
+    }
+    const count = currentBars.length;
+    const blendOld = this.barTransition;
+    const blendNew = 1 - this.barTransition;
+    const oldLen = this.prevSmoothedBars.length;
+    const out = new Array(count);
+
+    for (let i = 0; i < count; i += 1) {
+      const oldPos = oldLen === 1 ? 0 : (i * (oldLen - 1)) / Math.max(1, count - 1);
+      const oldValue = this.sampleArrayAt(this.prevSmoothedBars, oldPos);
+      out[i] = oldValue * blendOld + currentBars[i] * blendNew;
+    }
+    return out;
+  }
+
   spawnParticles(dt, cx, cy, radius) {
     if (!this.options.particleEnabled) return;
-    const minRate = this.options.baseSpawnRate;
-    const maxRate = this.options.maxSpawnRate;
+    const minRate = this.runtime.baseSpawnRate;
+    const maxRate = this.runtime.maxSpawnRate;
     const rate = minRate + (maxRate - minRate) * Math.min(1, this.energy * 1.25);
     const toSpawnFloat = rate * dt + this.spawnRemainder;
     const toSpawn = Math.floor(toSpawnFloat);
@@ -252,7 +302,7 @@ export default class AudioVisualizer {
       const angle = Math.random() * Math.PI * 2 + this.rotation;
       const px = cx + Math.cos(angle) * radius;
       const py = cy + Math.sin(angle) * radius;
-      const outward = this.options.particleSpeed * (0.45 + Math.random() * 0.9);
+      const outward = this.runtime.particleSpeed * (0.45 + Math.random() * 0.9);
       const tangent = (Math.random() - 0.5) * this.options.particleJitter;
       const vx = Math.cos(angle) * outward + -Math.sin(angle) * tangent;
       const vy = Math.sin(angle) * outward + Math.cos(angle) * tangent;
@@ -313,7 +363,7 @@ export default class AudioVisualizer {
     const [sr, sg, sb] = this.options.spectrumColor.split(",").map((v) => Number(v.trim()));
     const [gr, gg, gb] = this.options.glowColor.split(",").map((v) => Number(v.trim()));
     const step = (Math.PI * 2) / count;
-    const maxBarPx = Math.min(this.canvas.clientWidth, this.canvas.clientHeight) * this.options.maxBarLength;
+    const maxBarPx = Math.min(this.canvas.clientWidth, this.canvas.clientHeight) * this.runtime.maxBarLength;
 
     c.save();
     c.translate(cx, cy);
@@ -379,16 +429,31 @@ export default class AudioVisualizer {
     const bars = this.computeBars();
     const cx = w / 2;
     const cy = h / 2;
-    const radius = Math.min(w, h) * this.options.radius;
+    this.runtime.gain = this.lerp(this.runtime.gain, this.options.gain, 8.5, dt);
+    this.runtime.rotateSpeed = this.lerp(this.runtime.rotateSpeed, this.options.rotateSpeed, 9, dt);
+    this.runtime.maxBarLength = this.lerp(this.runtime.maxBarLength, this.options.maxBarLength, 8.5, dt);
+    this.runtime.radius = this.lerp(this.runtime.radius, this.options.radius, 8.5, dt);
+    this.runtime.baseSpawnRate = this.lerp(this.runtime.baseSpawnRate, this.options.baseSpawnRate, 10, dt);
+    this.runtime.maxSpawnRate = this.lerp(this.runtime.maxSpawnRate, this.options.maxSpawnRate, 10, dt);
+    this.runtime.particleSpeed = this.lerp(this.runtime.particleSpeed, this.options.particleSpeed, 10, dt);
 
-    this.rotation += this.options.rotateSpeed + this.energy * 0.0008;
+    const radius = Math.min(w, h) * this.runtime.radius;
+    const displayBars = this.getDisplayBars(bars);
+
+    this.rotation += this.runtime.rotateSpeed + this.energy * 0.0008;
     this.spawnParticles(dt, cx, cy, radius);
     this.updateParticles(dt);
     this.drawParticles();
-    this.drawSpectrum(bars, cx, cy, radius);
+    this.drawSpectrum(displayBars, cx, cy, radius);
     this.drawVignette();
+
+    if (this.barTransition > 0) {
+      this.barTransition = Math.max(0, this.barTransition - (dt / this.barTransitionDuration));
+      if (this.barTransition === 0) {
+        this.prevSmoothedBars = [];
+      }
+    }
 
     this.animationFrame = requestAnimationFrame(this.loop);
   }
 }
-
