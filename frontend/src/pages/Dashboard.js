@@ -244,7 +244,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
 
   useEffect(() => {
     const audioEl = audioPlayerRef.current;
-    if (!audioEl) return;
+    if (!audioEl || !audioPreviewUrl) return;
 
     const handleTimeUpdate = () => setAudioCurrentTime(audioEl.currentTime || 0);
     const handleLoadedMetadata = () => setAudioDuration(audioEl.duration || 0);
@@ -265,7 +265,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
       audioEl.removeEventListener("pause", handlePause);
       audioEl.removeEventListener("ended", handleEnded);
     };
-  }, [audioPreviewUrl]);
+  }, [audioPreviewUrl, audioFile, imageFile]);
 
   useEffect(() => {
     if (!audioPlayerRef.current) return;
@@ -473,13 +473,18 @@ const Dashboard = ({ setIsAuthenticated }) => {
     }
   };
 
-  const toggleAudioPlayback = () => {
+  const toggleAudioPlayback = async () => {
     const audioEl = audioPlayerRef.current;
     if (!audioEl) return;
-    if (audioEl.paused) {
-      audioEl.play();
-    } else {
+    if (!audioEl.paused) {
       audioEl.pause();
+      return;
+    }
+    try {
+      await audioEl.play();
+    } catch (error) {
+      console.error("Audio play failed", error);
+      toast.error("Unable to play preview audio");
     }
   };
 
@@ -3605,8 +3610,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
               </div>
             </div>
           </div>
-          <audio ref={audioPlayerRef} src={audioPreviewUrl} preload="metadata" className="hidden" />
         </div>
+      )}
+      {audioPreviewUrl && (
+        <audio ref={audioPlayerRef} src={audioPreviewUrl} preload="metadata" className="hidden" />
       )}
 
       {/* Save Refined Text Dialog */}

@@ -183,6 +183,20 @@ body[data-theme="glass"] .neon-glow {
         0 0 28px rgba(76, 136, 255, 0.26) !important;
 }
 
+body[data-theme="glass"] .gradient-text {
+    background: linear-gradient(135deg, #60a5fa, #93c5fd) !important;
+    -webkit-background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
+    background-clip: text !important;
+}
+
+body[data-theme="glass"] .text-green-500,
+body[data-theme="glass"] .text-green-400,
+body[data-theme="glass"] .text-emerald-500,
+body[data-theme="glass"] .text-emerald-400 {
+    color: #60a5fa !important;
+}
+
 body[data-theme="glass"] .dashboard-card:hover,
 body[data-theme="glass"] .dashboard-card-muted:hover,
 body[data-theme="glass"] .producer-card:hover {
@@ -390,6 +404,35 @@ body[data-theme="neubrutalism"] .app-footer-bottom {
     box-shadow: 3px 3px 0 #000 !important;
     background: #fff !important;
     color: #000 !important;
+}
+
+html.dark body[data-theme="neubrutalism"] .app-footer,
+body.dark[data-theme="neubrutalism"] .app-footer {
+    border-top: 3px solid #e5e7eb !important;
+    background: #101014 !important;
+}
+
+html.dark body[data-theme="neubrutalism"] .app-footer-title,
+html.dark body[data-theme="neubrutalism"] .app-footer-heading,
+html.dark body[data-theme="neubrutalism"] .app-footer-text,
+html.dark body[data-theme="neubrutalism"] .app-footer-link,
+body.dark[data-theme="neubrutalism"] .app-footer-title,
+body.dark[data-theme="neubrutalism"] .app-footer-heading,
+body.dark[data-theme="neubrutalism"] .app-footer-text,
+body.dark[data-theme="neubrutalism"] .app-footer-link {
+    color: #f4f4f5 !important;
+}
+
+html.dark body[data-theme="neubrutalism"] .app-footer-logo,
+html.dark body[data-theme="neubrutalism"] .app-footer-icon,
+html.dark body[data-theme="neubrutalism"] .app-footer-bottom,
+body.dark[data-theme="neubrutalism"] .app-footer-logo,
+body.dark[data-theme="neubrutalism"] .app-footer-icon,
+body.dark[data-theme="neubrutalism"] .app-footer-bottom {
+    border: 2px solid #e5e7eb !important;
+    box-shadow: 3px 3px 0 #111827 !important;
+    background: #18181b !important;
+    color: #f4f4f5 !important;
 }
 
 /* Clean Minimal footer (landing-style) */
