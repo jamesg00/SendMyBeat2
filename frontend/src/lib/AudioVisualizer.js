@@ -33,7 +33,7 @@ const DEFAULT_OPTIONS = {
   monstercatSpacing: 2,
   shakeIntensity: 1.0,
   multiColorReactive: false,
-  spectrumStyle: "transparent",
+  spectrumStyle: "fill",
   fillCenter: "white",
   centerImageUrl: "",
 };
@@ -121,9 +121,9 @@ export default class AudioVisualizer {
     return Math.max(0, Math.min(1, value));
   }
 
-  getReactiveColor(amp = 0, alpha = 1, boost = 1) {
+  getReactiveColor(amp = 0, alpha = 1, boost = 1, forceReactive = false) {
     const safeAlpha = this.clamp01(alpha);
-    if (!this.options.multiColorReactive) {
+    if (!this.options.multiColorReactive && !forceReactive) {
       const [r, g, b] = this.options.spectrumColor.split(",").map((v) => Number(v.trim()));
       return `rgba(${r}, ${g}, ${b}, ${safeAlpha})`;
     }
@@ -386,7 +386,15 @@ export default class AudioVisualizer {
       const tangent = (Math.random() - 0.5) * this.options.particleJitter;
       const vx = Math.cos(angle) * baseSpeed + -Math.sin(angle) * tangent;
       const vy = Math.sin(angle) * baseSpeed + Math.cos(angle) * tangent;
-      const life = this.options.particleLifeMin + Math.random() * (this.options.particleLifeMax - this.options.particleLifeMin);
+      const baseLife = this.options.particleLifeMin + Math.random() * (this.options.particleLifeMax - this.options.particleLifeMin);
+      const maxToEdge = Math.max(
+        Math.hypot(px, py),
+        Math.hypot((this.canvas.clientWidth || 0) - px, py),
+        Math.hypot(px, (this.canvas.clientHeight || 0) - py),
+        Math.hypot((this.canvas.clientWidth || 0) - px, (this.canvas.clientHeight || 0) - py)
+      );
+      const minLifeToEdge = maxToEdge / Math.max(1, baseSpeed * 0.92);
+      const life = Math.max(baseLife, minLifeToEdge);
       this.particles.push({
         x: px,
         y: py,
@@ -410,7 +418,7 @@ export default class AudioVisualizer {
 
     for (let i = 0; i < this.particles.length; i += 1) {
       const p = this.particles[i];
-      p.life -= dt;
+      p.life -= dt * 0.6;
       p.age += dt;
       if (silentFade) {
         p.life -= dt * (2.2 + this.silenceSeconds * 2.8);
@@ -444,6 +452,15 @@ export default class AudioVisualizer {
 
       p.x += p.vx * dt;
       p.y += p.vy * dt;
+      const margin = 40;
+      if (
+        p.x < -margin ||
+        p.x > (this.canvas.clientWidth || 0) + margin ||
+        p.y < -margin ||
+        p.y > (this.canvas.clientHeight || 0) + margin
+      ) {
+        continue;
+      }
       keep.push(p);
     }
 
@@ -599,7 +616,7 @@ export default class AudioVisualizer {
 
       c.beginPath();
       c.strokeStyle = fillMode
-        ? this.getReactiveColor(barReactive, 0.98, 1.2)
+        ? this.getReactiveColor(barReactive, 0.98, 1.2, true)
         : this.getReactiveColor(barReactive, 0.95, 1.12);
       c.lineWidth = Math.max(1, this.options.lineWidth * 0.9);
       c.moveTo(fillMode ? xTip0 : x0, fillMode ? yTip0 : y0);

@@ -176,6 +176,9 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [thumbnailProgress, setThumbnailProgress] = useState(0);
   const thumbnailAbortRef = useRef(null);
   const thumbnailProgressIntervalRef = useRef(null);
+  const [joiningTagsLoading, setJoiningTagsLoading] = useState(false);
+  const [joiningTagsProgress, setJoiningTagsProgress] = useState(0);
+  const joinProgressIntervalRef = useRef(null);
 
   // Preview (shared) states
   const previewSectionRef = useRef(null);
@@ -189,6 +192,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const audioPlayerRef = useRef(null);
   const visualizerCanvasRef = useRef(null);
   const visualizerRef = useRef(null);
+  const miniPreviewCanvasRef = useRef(null);
+  const miniMirrorFrameRef = useRef(null);
   const [audioDuration, setAudioDuration] = useState(0);
   const [audioCurrentTime, setAudioCurrentTime] = useState(0);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
@@ -206,7 +211,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
     shakeIntensity: 1,
     multiColorReactive: false,
     backgroundOpacity: 1,
-    spectrumStyle: "transparent", // "transparent" | "fill"
+    spectrumStyle: "fill", // "transparent" | "fill"
     fillCenter: "white", // "white" | "image" | "ncs"
   });
 
@@ -283,6 +288,13 @@ const Dashboard = ({ setIsAuthenticated }) => {
     checkYouTubeConnection();
     fetchSubscriptionStatus();
     fetchGrowthStatus();
+  }, []);
+
+  useEffect(() => () => {
+    if (joinProgressIntervalRef.current) {
+      clearInterval(joinProgressIntervalRef.current);
+      joinProgressIntervalRef.current = null;
+    }
   }, []);
 
   useEffect(() => {
@@ -378,10 +390,63 @@ const Dashboard = ({ setIsAuthenticated }) => {
   }, [visualizerSettings, visualizerEnabled]);
 
   useEffect(() => {
+    const miniCanvas = miniPreviewCanvasRef.current;
+    const mainCanvas = visualizerCanvasRef.current;
+    if (!miniCanvas || !mainCanvas || !visualizerEnabled) {
+      if (miniMirrorFrameRef.current) {
+        cancelAnimationFrame(miniMirrorFrameRef.current);
+        miniMirrorFrameRef.current = null;
+      }
+      const miniCtx = miniCanvas?.getContext("2d");
+      if (miniCtx) {
+        miniCtx.clearRect(0, 0, miniCanvas.width, miniCanvas.height);
+      }
+      return;
+    }
+
+    const miniCtx = miniCanvas.getContext("2d");
+    if (!miniCtx) return;
+    const dpr = window.devicePixelRatio || 1;
+    const resizeMiniCanvas = () => {
+      const rect = miniCanvas.getBoundingClientRect();
+      miniCanvas.width = Math.max(1, Math.floor(rect.width * dpr));
+      miniCanvas.height = Math.max(1, Math.floor(rect.height * dpr));
+      miniCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    resizeMiniCanvas();
+
+    const mirrorFrame = () => {
+      const w = miniCanvas.clientWidth;
+      const h = miniCanvas.clientHeight;
+      if (w > 0 && h > 0) {
+        miniCtx.clearRect(0, 0, w, h);
+        miniCtx.drawImage(mainCanvas, 0, 0, w, h);
+      }
+      miniMirrorFrameRef.current = requestAnimationFrame(mirrorFrame);
+    };
+
+    miniMirrorFrameRef.current = requestAnimationFrame(mirrorFrame);
+    window.addEventListener("resize", resizeMiniCanvas);
+
+    return () => {
+      if (miniMirrorFrameRef.current) {
+        cancelAnimationFrame(miniMirrorFrameRef.current);
+        miniMirrorFrameRef.current = null;
+      }
+      window.removeEventListener("resize", resizeMiniCanvas);
+      miniCtx.clearRect(0, 0, miniCanvas.width, miniCanvas.height);
+    };
+  }, [visualizerEnabled, audioFile, imageFile, visualizerSettings, previewSize]);
+
+  useEffect(() => {
     return () => {
       if (visualizerRef.current) {
         visualizerRef.current.destroy();
         visualizerRef.current = null;
+      }
+      if (miniMirrorFrameRef.current) {
+        cancelAnimationFrame(miniMirrorFrameRef.current);
+        miniMirrorFrameRef.current = null;
       }
     };
   }, []);
@@ -809,6 +874,15 @@ const Dashboard = ({ setIsAuthenticated }) => {
       .filter(Boolean)
       .join(" x ");
 
+    setJoiningTagsLoading(true);
+    setJoiningTagsProgress(8);
+    if (joinProgressIntervalRef.current) {
+      clearInterval(joinProgressIntervalRef.current);
+    }
+    joinProgressIntervalRef.current = setInterval(() => {
+      setJoiningTagsProgress((prev) => (prev >= 92 ? 92 : prev + 6));
+    }, 280);
+
     try {
       const candidateTags = selectedItems.flatMap((item) => item.tags || []);
       const joinResponse = await axios.post(`${API}/tags/join-ai`, {
@@ -837,6 +911,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
         const merged = [saveResponse.data, ...prev];
         return merged.slice(0, TAG_HISTORY_LIMIT);
       });
+      setJoiningTagsProgress(100);
       toast.success(
         `AI joined ${selectedItems.length} generations! Optimized to ${optimizedTags.length} SEO tags.`
       );
@@ -847,6 +922,13 @@ const Dashboard = ({ setIsAuthenticated }) => {
       } else {
         toast.error("Failed to join with AI. Please try again.");
       }
+    } finally {
+      if (joinProgressIntervalRef.current) {
+        clearInterval(joinProgressIntervalRef.current);
+        joinProgressIntervalRef.current = null;
+      }
+      setJoiningTagsLoading(false);
+      setTimeout(() => setJoiningTagsProgress(0), 500);
     }
   };
 
@@ -1917,10 +1999,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
                             variant="outline"
                             size="sm"
                             onClick={handleJoinSelectedTagHistory}
-                            disabled={selectedTagHistoryIds.length < 2}
+                            disabled={selectedTagHistoryIds.length < 2 || joiningTagsLoading}
                             className="text-xs sm:text-sm"
                           >
-                            Join Selected
+                            {joiningTagsLoading ? `Joining... ${joiningTagsProgress}%` : "Join Selected"}
                           </Button>
                           {selectedTagHistoryIds.length > 0 && (
                             <Button
@@ -1939,6 +2021,11 @@ const Dashboard = ({ setIsAuthenticated }) => {
                           )}
                         </div>
                       </div>
+                      {joiningTagsLoading && (
+                        <p className="text-xs sm:text-sm" style={{ color: "var(--text-secondary)" }}>
+                          Optimizing combined tags with AI...
+                        </p>
+                      )}
                     </CardHeader>
                     <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
                       <div className="tag-history-scroll">
@@ -2748,23 +2835,28 @@ const Dashboard = ({ setIsAuthenticated }) => {
                       </div>
 
                       {audioFile && imageFile && (
-                      <div className="space-y-3">
+                      <div className="space-y-4 rounded-xl border p-4 sm:p-5" style={{ borderColor: "var(--border-color)", backgroundColor: "var(--bg-secondary)" }}>
                         <div className="flex items-center justify-between">
-                          <Label>Image Settings</Label>
+                          <div>
+                            <p className="text-sm sm:text-base font-semibold">Image Layout</p>
+                            <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                              Position and scale your cover before upload
+                            </p>
+                          </div>
                           <Button
                             type="button"
                             size="sm"
                             variant="outline"
                             onClick={() => setShowImageSettings((prev) => !prev)}
                           >
-                            {showImageSettings ? "Hide" : "Show"}
+                            {showImageSettings ? "Hide Layout" : "Edit Layout"}
                           </Button>
                         </div>
 
                         {showImageSettings && (
                           <>
-                        <Label>Background & Image Position</Label>
-                        <div className="flex flex-wrap items-center gap-2">
+                        <Label className="text-sm">Background & Position</Label>
+                        <div className="grid grid-cols-2 gap-2">
                           <Button
                             type="button"
                             variant={backgroundColor === "black" ? "default" : "outline"}
@@ -2783,7 +2875,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                           </Button>
                         </div>
 
-                        <div className="space-y-2">
+                        <div className="space-y-2 rounded-lg border p-3" style={{ borderColor: "var(--border-color)" }}>
                           <Label className="text-sm">Quick Position</Label>
                           <div className="grid grid-cols-3 gap-2">
                             <Button type="button" variant="outline" className="text-xs" onClick={() => { setImagePosX(-1); setImagePosY(0); }}>
@@ -2803,7 +2895,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                           </div>
                         </div>
 
-                        <div className="space-y-2">
+                        <div className="space-y-2 rounded-lg border p-3" style={{ borderColor: "var(--border-color)" }}>
                           <div className="flex items-center justify-between">
                             <Label htmlFor="image-scale-x" className="text-sm">Scale X</Label>
                             <span className="text-xs" style={{color: 'var(--text-secondary)'}}>{imageScaleX.toFixed(2)}x</span>
@@ -2823,7 +2915,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                           />
                         </div>
 
-                        <div className="space-y-2">
+                        <div className="space-y-2 rounded-lg border p-3" style={{ borderColor: "var(--border-color)" }}>
                           <div className="flex items-center justify-between">
                             <Label htmlFor="image-scale-y" className="text-sm">Scale Y</Label>
                             <span className="text-xs" style={{color: 'var(--text-secondary)'}}>{imageScaleY.toFixed(2)}x</span>
@@ -2843,7 +2935,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                           />
                         </div>
 
-                        <div className="space-y-2">
+                        <div className="space-y-2 rounded-lg border p-3" style={{ borderColor: "var(--border-color)" }}>
                           <div className="flex items-center justify-between">
                             <Label htmlFor="preview-size" className="text-sm">Preview Scale</Label>
                             <span className="text-xs" style={{color: 'var(--text-secondary)'}}>{previewSize}px</span>
@@ -2859,7 +2951,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                           />
                         </div>
 
-                        <div className="space-y-2">
+                        <div className="space-y-2 rounded-lg border p-3" style={{ borderColor: "var(--border-color)" }}>
                           <div className="flex items-center gap-2">
                             <input
                               id="lock-image-scale"
@@ -2878,7 +2970,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                           </div>
                         </div>
 
-                        <div className="space-y-2">
+                        <div className="space-y-2 rounded-lg border p-3" style={{ borderColor: "var(--border-color)" }}>
                           <div className="flex items-center justify-between">
                             <Label htmlFor="image-pos-x" className="text-sm">Horizontal Position</Label>
                             <span className="text-xs" style={{color: 'var(--text-secondary)'}}>{imagePosX.toFixed(2)}</span>
@@ -2894,7 +2986,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                           />
                         </div>
 
-                        <div className="space-y-2">
+                        <div className="space-y-2 rounded-lg border p-3" style={{ borderColor: "var(--border-color)" }}>
                           <div className="flex items-center justify-between">
                             <Label htmlFor="image-pos-y" className="text-sm">Vertical Position</Label>
                             <span className="text-xs" style={{color: 'var(--text-secondary)'}}>{imagePosY.toFixed(2)}</span>
@@ -2915,12 +3007,12 @@ const Dashboard = ({ setIsAuthenticated }) => {
                       )}
 
                       {audioFile && imageFile && (
-                        <div className="space-y-3 p-4 rounded-lg border" style={{ borderColor: "var(--border-color)", backgroundColor: "var(--bg-secondary)" }}>
+                        <div className="space-y-4 rounded-xl border p-4 sm:p-5" style={{ borderColor: "var(--border-color)", backgroundColor: "var(--bg-secondary)" }}>
                           <div className="flex items-center justify-between gap-2">
                             <div>
-                              <p className="text-sm font-semibold">Audio Visualizer</p>
+                              <p className="text-sm sm:text-base font-semibold">Visualizer Controls</p>
                               <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                                Reacts to your beat
+                                Style, color, and motion settings for preview
                               </p>
                             </div>
                             <Button
@@ -2935,7 +3027,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
 
                           {visualizerEnabled && (
                             <>
-                              <div className="space-y-2">
+                              <div className="grid gap-3 sm:grid-cols-2">
+                                <div className="space-y-2">
                                 <Label htmlFor="viz-mode" className="text-sm">Visualizer Style</Label>
                                 <Select
                                   value={visualizerSettings.mode}
@@ -2949,9 +3042,9 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                     <SelectItem value="monstercat">Linear Bars (Monstercat)</SelectItem>
                                   </SelectContent>
                                 </Select>
-                              </div>
+                                </div>
 
-                              <div className="space-y-2">
+                                <div className="space-y-2">
                                 <Label htmlFor="viz-spectrum-style" className="text-sm">Spectrum Move</Label>
                                 <Select
                                   value={visualizerSettings.spectrumStyle}
@@ -2965,6 +3058,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                     <SelectItem value="fill">Fill</SelectItem>
                                   </SelectContent>
                                 </Select>
+                              </div>
                               </div>
 
                               {visualizerSettings.mode === "circle" && visualizerSettings.spectrumStyle === "fill" && (
@@ -2986,7 +3080,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                 </div>
                               )}
 
-                              <div className="space-y-2">
+                              <div className="grid gap-3 sm:grid-cols-2">
+                                <div className="space-y-2">
                                 <div className="flex items-center justify-between">
                                   <Label htmlFor="viz-bars" className="text-sm">Bars</Label>
                                   <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
@@ -3002,9 +3097,9 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                   value={visualizerSettings.bars}
                                   onChange={(e) => updateVisualizerSetting("bars", Number(e.target.value))}
                                 />
-                              </div>
+                                </div>
 
-                              <div className="space-y-2">
+                                <div className="space-y-2">
                                 <div className="flex items-center justify-between">
                                   <Label htmlFor="viz-intensity" className="text-sm">Spectrum Intensity</Label>
                                   <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
@@ -3020,6 +3115,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                   value={visualizerSettings.intensity}
                                   onChange={(e) => updateVisualizerSetting("intensity", Number(e.target.value))}
                                 />
+                                </div>
                               </div>
 
                               <div className="space-y-2">
@@ -3888,8 +3984,12 @@ const Dashboard = ({ setIsAuthenticated }) => {
         >
           <div className="flex items-center gap-3">
             <div
-              className="rounded overflow-hidden"
-              style={{ width: 88, height: 88, backgroundColor: backgroundColor === "white" ? "#ffffff" : "#000000" }}
+              className="relative rounded overflow-hidden"
+              style={{
+                width: 132,
+                aspectRatio: previewAspectRatio,
+                backgroundColor: backgroundColor === "white" ? "#ffffff" : "#000000"
+              }}
             >
               <img
                 src={imagePreviewUrl}
@@ -3897,10 +3997,18 @@ const Dashboard = ({ setIsAuthenticated }) => {
                 className="w-full h-full object-contain"
                 style={{
                   objectFit: "contain",
+                  opacity: visualizerEnabled ? visualizerSettings.backgroundOpacity : 1,
                   transform: `translate(${imagePosX * 50}%, ${imagePosY * 50}%) scale(${imageScaleX}, ${imageScaleY})`,
                   transformOrigin: 'center'
                 }}
               />
+              {visualizerEnabled && (
+                <canvas
+                  ref={miniPreviewCanvasRef}
+                  className="absolute inset-0 pointer-events-none"
+                  style={{ width: "100%", height: "100%", opacity: 1 }}
+                />
+              )}
             </div>
             <div className="flex flex-col gap-2 min-w-[220px]">
               <div className="flex items-center gap-2">
