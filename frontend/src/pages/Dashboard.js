@@ -194,6 +194,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const visualizerRef = useRef(null);
   const miniPreviewCanvasRef = useRef(null);
   const miniMirrorFrameRef = useRef(null);
+  const spectrumImageInputRef = useRef(null);
   const [audioDuration, setAudioDuration] = useState(0);
   const [audioCurrentTime, setAudioCurrentTime] = useState(0);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
@@ -213,7 +214,12 @@ const Dashboard = ({ setIsAuthenticated }) => {
     backgroundOpacity: 1,
     spectrumStyle: "fill", // "transparent" | "fill"
     fillCenter: "white", // "white" | "image" | "ncs"
+    particleColor: "#8cc8ff",
+    spectrumBorderWidth: 2,
+    spectrumBorderColor: "#ffffff",
   });
+  const [spectrumRecordImageUrl, setSpectrumRecordImageUrl] = useState("");
+  const [spectrumRecordImageName, setSpectrumRecordImageName] = useState("");
 
   const isPro = !!subscriptionStatus?.is_subscribed;
   const thumbnailContextReady = Boolean(
@@ -262,6 +268,17 @@ const Dashboard = ({ setIsAuthenticated }) => {
     setVisualizerSettings((prev) => ({ ...prev, [key]: value }));
   };
 
+  const hexToRgbString = (hex, fallback = "255, 255, 255") => {
+    const clean = (hex || "").replace("#", "");
+    if (clean.length !== 6) return fallback;
+    const value = Number.parseInt(clean, 16);
+    if (Number.isNaN(value)) return fallback;
+    const r = (value >> 16) & 255;
+    const g = (value >> 8) & 255;
+    const b = value & 255;
+    return `${r}, ${g}, ${b}`;
+  };
+
   const getVisualizerOptions = () => ({
     bars: visualizerSettings.bars,
     gain: visualizerSettings.intensity,
@@ -279,6 +296,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
     spectrumStyle: visualizerSettings.spectrumStyle,
     fillCenter: visualizerSettings.fillCenter,
     centerImageUrl: imagePreviewUrl || "",
+    particleColor: hexToRgbString(visualizerSettings.particleColor, "140, 200, 255"),
+    spectrumBorderWidth: visualizerSettings.spectrumBorderWidth,
+    spectrumBorderColor: hexToRgbString(visualizerSettings.spectrumBorderColor, "255, 255, 255"),
+    spectrumRecordImageUrl,
   });
 
   useEffect(() => {
@@ -296,6 +317,12 @@ const Dashboard = ({ setIsAuthenticated }) => {
       joinProgressIntervalRef.current = null;
     }
   }, []);
+
+  useEffect(() => () => {
+    if (spectrumRecordImageUrl) {
+      URL.revokeObjectURL(spectrumRecordImageUrl);
+    }
+  }, [spectrumRecordImageUrl]);
 
   useEffect(() => {
     const audioEl = audioPlayerRef.current;
@@ -1295,6 +1322,28 @@ const Dashboard = ({ setIsAuthenticated }) => {
     } finally {
       setUploadingImage(false);
     }
+  };
+
+  const handleSpectrumImageUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!isValidImageFile(file)) {
+      toast.error("Invalid image file. Please use JPG, PNG, WEBP, AVIF, HEIC, or HEIF.");
+      return;
+    }
+    if (spectrumRecordImageUrl) {
+      URL.revokeObjectURL(spectrumRecordImageUrl);
+    }
+    setSpectrumRecordImageUrl(URL.createObjectURL(file));
+    setSpectrumRecordImageName(file.name || "record-image");
+  };
+
+  const clearSpectrumImage = () => {
+    if (spectrumRecordImageUrl) {
+      URL.revokeObjectURL(spectrumRecordImageUrl);
+    }
+    setSpectrumRecordImageUrl("");
+    setSpectrumRecordImageName("");
   };
 
   const handleAudioDragOver = (e) => {
@@ -3135,6 +3184,90 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                   onChange={(e) => updateVisualizerSetting("backgroundOpacity", Number(e.target.value))}
                                 />
                               </div>
+
+                              <div className="grid gap-3 sm:grid-cols-2">
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <Label htmlFor="viz-particle-color" className="text-sm">Particle Color</Label>
+                                    <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                                      {visualizerSettings.particleColor}
+                                    </span>
+                                  </div>
+                                  <Input
+                                    id="viz-particle-color"
+                                    type="color"
+                                    value={visualizerSettings.particleColor}
+                                    onChange={(e) => updateVisualizerSetting("particleColor", e.target.value)}
+                                    className="h-10 cursor-pointer p-1"
+                                  />
+                                </div>
+
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <Label htmlFor="viz-border-color" className="text-sm">Spectrum Border Color</Label>
+                                    <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                                      {visualizerSettings.spectrumBorderColor}
+                                    </span>
+                                  </div>
+                                  <Input
+                                    id="viz-border-color"
+                                    type="color"
+                                    value={visualizerSettings.spectrumBorderColor}
+                                    onChange={(e) => updateVisualizerSetting("spectrumBorderColor", e.target.value)}
+                                    className="h-10 cursor-pointer p-1"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <Label htmlFor="viz-border-width" className="text-sm">Spectrum Border Width</Label>
+                                  <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                                    {visualizerSettings.spectrumBorderWidth}px
+                                  </span>
+                                </div>
+                                <Input
+                                  id="viz-border-width"
+                                  type="range"
+                                  min="0"
+                                  max="14"
+                                  step="1"
+                                  value={visualizerSettings.spectrumBorderWidth}
+                                  onChange={(e) => updateVisualizerSetting("spectrumBorderWidth", Number(e.target.value))}
+                                />
+                              </div>
+
+                              {visualizerSettings.mode === "circle" && (
+                                <div className="space-y-2 rounded-lg border p-3" style={{ borderColor: "var(--border-color)" }}>
+                                  <Label className="text-sm">Spinning Record Image</Label>
+                                  <Input
+                                    ref={spectrumImageInputRef}
+                                    id="viz-record-image-upload"
+                                    type="file"
+                                    accept=".jpg,.jpeg,.png,.webp,.avif,.heic,.heif"
+                                    onChange={handleSpectrumImageUpload}
+                                    className="hidden"
+                                  />
+                                  <div className="flex flex-wrap gap-2">
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => spectrumImageInputRef.current?.click()}
+                                    >
+                                      {spectrumRecordImageUrl ? "Change Record Image" : "Upload Record Image"}
+                                    </Button>
+                                    {spectrumRecordImageUrl && (
+                                      <Button type="button" size="sm" variant="ghost" onClick={clearSpectrumImage}>
+                                        Remove
+                                      </Button>
+                                    )}
+                                  </div>
+                                  <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                                    {spectrumRecordImageUrl ? `Loaded: ${spectrumRecordImageName}` : "Optional center image that spins like a record."}
+                                  </p>
+                                </div>
+                              )}
 
                               <Button
                                 type="button"

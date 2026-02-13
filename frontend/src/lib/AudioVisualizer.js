@@ -36,6 +36,9 @@ const DEFAULT_OPTIONS = {
   spectrumStyle: "fill",
   fillCenter: "white",
   centerImageUrl: "",
+  spectrumBorderWidth: 2,
+  spectrumBorderColor: "255, 255, 255",
+  spectrumRecordImageUrl: "",
 };
 
 const IS_MOBILE = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(max-width: 768px)").matches;
@@ -50,6 +53,7 @@ export default class AudioVisualizer {
       ...options,
     };
     this.setCenterImageUrl(this.options.centerImageUrl || "");
+    this.setRecordImageUrl(this.options.spectrumRecordImageUrl || "");
     this.runtime = {
       gain: this.options.gain,
       rotateSpeed: this.options.rotateSpeed,
@@ -94,6 +98,9 @@ export default class AudioVisualizer {
     this.shakeOffsetY = 0;
     this.centerImage = null;
     this.centerImageUrl = "";
+    this.recordImage = null;
+    this.recordImageUrl = "";
+    this.recordRotation = 0;
 
     this.resize = this.resize.bind(this);
     this.loop = this.loop.bind(this);
@@ -105,6 +112,9 @@ export default class AudioVisualizer {
   setOptions(next = {}) {
     if (Object.prototype.hasOwnProperty.call(next, "centerImageUrl")) {
       this.setCenterImageUrl(next.centerImageUrl || "");
+    }
+    if (Object.prototype.hasOwnProperty.call(next, "spectrumRecordImageUrl")) {
+      this.setRecordImageUrl(next.spectrumRecordImageUrl || "");
     }
     this.options = { ...this.options, ...next };
     if (typeof next.bars === "number" || typeof next.minHz === "number" || typeof next.maxHz === "number") {
@@ -164,6 +174,54 @@ export default class AudioVisualizer {
     img.decoding = "async";
     img.src = url;
     this.centerImage = img;
+  }
+
+  setRecordImageUrl(url = "") {
+    if (!url) {
+      this.recordImage = null;
+      this.recordImageUrl = "";
+      return;
+    }
+    if (url === this.recordImageUrl) return;
+    this.recordImageUrl = url;
+    const img = new Image();
+    img.decoding = "async";
+    img.src = url;
+    this.recordImage = img;
+  }
+
+  drawRecordDisc(radius) {
+    if (
+      !this.recordImage ||
+      !this.recordImage.complete ||
+      this.recordImage.naturalWidth <= 0
+    ) {
+      return;
+    }
+
+    const c = this.ctx;
+    const discRadius = Math.max(10, radius * 0.62);
+    const discSize = discRadius * 2;
+
+    c.save();
+    c.rotate(this.recordRotation);
+    c.beginPath();
+    c.arc(0, 0, discRadius, 0, Math.PI * 2);
+    c.closePath();
+    c.clip();
+    c.drawImage(this.recordImage, -discSize / 2, -discSize / 2, discSize, discSize);
+    c.restore();
+
+    c.beginPath();
+    c.strokeStyle = "rgba(255,255,255,0.5)";
+    c.lineWidth = 1.5;
+    c.arc(0, 0, discRadius, 0, Math.PI * 2);
+    c.stroke();
+
+    c.beginPath();
+    c.fillStyle = "rgba(255,255,255,0.95)";
+    c.arc(0, 0, Math.max(3, discRadius * 0.08), 0, Math.PI * 2);
+    c.fill();
   }
 
   async connectMediaElement(audioEl) {
@@ -592,6 +650,19 @@ export default class AudioVisualizer {
       c.stroke();
     }
 
+    if (this.options.mode === "circle" && this.options.spectrumRecordImageUrl) {
+      this.drawRecordDisc(radius);
+    }
+
+    if ((this.options.spectrumBorderWidth || 0) > 0) {
+      const [br, bg, bb] = this.options.spectrumBorderColor.split(",").map((v) => Number(v.trim()));
+      c.beginPath();
+      c.strokeStyle = `rgba(${br}, ${bg}, ${bb}, 0.92)`;
+      c.lineWidth = this.options.spectrumBorderWidth;
+      c.arc(0, 0, radius, 0, Math.PI * 2);
+      c.stroke();
+    }
+
     // Draw bars (classic style) inside
     for (let i = 0; i < count; i += 1) {
       const a = i * step;
@@ -734,6 +805,7 @@ export default class AudioVisualizer {
         const displayBars = this.getDisplayBars(bars);
 
         this.rotation += this.runtime.rotateSpeed + this.energy * 0.0008;
+        this.recordRotation += this.runtime.rotateSpeed * 2.6 + this.energy * 0.02 + this.beatPulse * 0.01;
         this.spawnParticles(dt, cx, cy, radius);
         this.updateParticles(dt, cx, cy);
         this.drawParticles();
