@@ -207,7 +207,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
     multiColorReactive: false,
     backgroundOpacity: 1,
     spectrumStyle: "transparent", // "transparent" | "fill"
-    fillCenter: "white", // "white" | "image"
+    fillCenter: "white", // "white" | "image" | "ncs"
   });
 
   const isPro = !!subscriptionStatus?.is_subscribed;
@@ -2980,6 +2980,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                     <SelectContent>
                                       <SelectItem value="white">White</SelectItem>
                                       <SelectItem value="image">Use uploaded image</SelectItem>
+                                      <SelectItem value="ncs">NCS blur image</SelectItem>
                                     </SelectContent>
                                   </Select>
                                 </div>

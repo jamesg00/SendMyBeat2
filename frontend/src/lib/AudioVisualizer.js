@@ -541,13 +541,30 @@ export default class AudioVisualizer {
       c.closePath();
       c.clip();
       if (
-        this.options.fillCenter === "image" &&
+        (this.options.fillCenter === "image" || this.options.fillCenter === "ncs") &&
         this.centerImage &&
         this.centerImage.complete &&
         this.centerImage.naturalWidth > 0
       ) {
         const drawSize = innerRadius * 2;
-        c.drawImage(this.centerImage, -drawSize / 2, -drawSize / 2, drawSize, drawSize);
+        if (this.options.fillCenter === "ncs") {
+          const intensity = Math.min(1.6, this.energySlew + this.beatPulse * 0.6 + this.impactPulse * 0.8);
+          const zoom = 1.08 + intensity * 0.12;
+          const renderSize = drawSize * zoom;
+
+          c.save();
+          c.filter = "blur(10px) saturate(1.35) contrast(1.06) brightness(1.04)";
+          c.drawImage(this.centerImage, -renderSize / 2, -renderSize / 2, renderSize, renderSize);
+          c.restore();
+
+          const ringGrad = c.createRadialGradient(0, 0, innerRadius * 0.35, 0, 0, innerRadius);
+          ringGrad.addColorStop(0, "rgba(255,255,255,0)");
+          ringGrad.addColorStop(1, this.getReactiveColor(intensity, 0.34, 1.2));
+          c.fillStyle = ringGrad;
+          c.fillRect(-innerRadius, -innerRadius, innerRadius * 2, innerRadius * 2);
+        } else {
+          c.drawImage(this.centerImage, -drawSize / 2, -drawSize / 2, drawSize, drawSize);
+        }
       } else {
         c.fillStyle = "rgba(255, 255, 255, 1)";
         c.fillRect(-innerRadius, -innerRadius, innerRadius * 2, innerRadius * 2);
