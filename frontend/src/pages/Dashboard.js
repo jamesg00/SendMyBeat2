@@ -313,6 +313,16 @@ const Dashboard = ({ setIsAuthenticated }) => {
     monstercatSmoothing: visualizerSettings.monstercatSmoothing,
   });
 
+  const clearVisualizerCanvases = () => {
+    const canvases = [visualizerCanvasRef.current, miniPreviewCanvasRef.current];
+    canvases.forEach((canvas) => {
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    });
+  };
+
   useEffect(() => {
     fetchUser();
     fetchDescriptions();
@@ -341,9 +351,30 @@ const Dashboard = ({ setIsAuthenticated }) => {
 
     const handleTimeUpdate = () => setAudioCurrentTime(audioEl.currentTime || 0);
     const handleLoadedMetadata = () => setAudioDuration(audioEl.duration || 0);
-    const handlePlay = () => setIsAudioPlaying(true);
-    const handlePause = () => setIsAudioPlaying(false);
-    const handleEnded = () => setIsAudioPlaying(false);
+    const handlePlay = async () => {
+      setIsAudioPlaying(true);
+      if (!visualizerEnabled || !visualizerRef.current) return;
+      try {
+        await visualizerRef.current.resumeAudioContext();
+        visualizerRef.current.start();
+      } catch (err) {
+        console.error("Visualizer resume failed:", err);
+      }
+    };
+    const handlePause = () => {
+      setIsAudioPlaying(false);
+      if (visualizerRef.current) {
+        visualizerRef.current.stop();
+      }
+      clearVisualizerCanvases();
+    };
+    const handleEnded = () => {
+      setIsAudioPlaying(false);
+      if (visualizerRef.current) {
+        visualizerRef.current.stop();
+      }
+      clearVisualizerCanvases();
+    };
 
     audioEl.addEventListener("timeupdate", handleTimeUpdate);
     audioEl.addEventListener("loadedmetadata", handleLoadedMetadata);
@@ -387,14 +418,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
       if (visualizerRef.current) {
         visualizerRef.current.stop();
       }
-      const mainCtx = visualizerCanvasRef.current?.getContext("2d");
-      if (mainCtx && visualizerCanvasRef.current) {
-        mainCtx.clearRect(0, 0, visualizerCanvasRef.current.width, visualizerCanvasRef.current.height);
-      }
-      const miniCtx = miniPreviewCanvasRef.current?.getContext("2d");
-      if (miniCtx && miniPreviewCanvasRef.current) {
-        miniCtx.clearRect(0, 0, miniPreviewCanvasRef.current.width, miniPreviewCanvasRef.current.height);
-      }
+      clearVisualizerCanvases();
       return;
     }
 
@@ -408,8 +432,12 @@ const Dashboard = ({ setIsAuthenticated }) => {
     const startVisualizer = async () => {
       try {
         await visualizerRef.current.connectMediaElement(audioEl);
-        await visualizerRef.current.resumeAudioContext();
-        visualizerRef.current.start();
+        if (!audioEl.paused && !audioEl.ended) {
+          await visualizerRef.current.resumeAudioContext();
+          visualizerRef.current.start();
+        } else {
+          visualizerRef.current.stop();
+        }
       } catch (err) {
         console.error("Visualizer init failed:", err);
       }
@@ -641,12 +669,15 @@ const Dashboard = ({ setIsAuthenticated }) => {
     if (!audioEl) return;
     if (!audioEl.paused) {
       audioEl.pause();
+      if (visualizerRef.current) {
+        visualizerRef.current.stop();
+      }
+      clearVisualizerCanvases();
       return;
     }
     try {
       if (visualizerEnabled && visualizerRef.current) {
         await visualizerRef.current.resumeAudioContext();
-        visualizerRef.current.start();
       }
       await audioEl.play();
     } catch (error) {
