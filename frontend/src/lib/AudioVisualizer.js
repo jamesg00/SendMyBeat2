@@ -44,6 +44,19 @@ const DEFAULT_OPTIONS = {
   spectrumBorderWidth: 2,
   spectrumBorderColor: "255, 255, 255",
   spectrumRecordImageUrl: "",
+  // FFT-to-reactivity pipeline settings (Musicvid-like behavior, custom implementation)
+  reactivity: {
+    startBin: 0,
+    endBin: null,
+    amplitudeScale: 10,
+    normalizeByWindowSize: true,
+    maxAmount: 1.6,
+    minAmount: 0,
+    minThreshold: 0.012,
+    useDeltaSmoothing: true,
+    minDeltaNeededToTrigger: 0.025,
+    deltaDecay: 0.9,
+  },
 };
 
 const IS_MOBILE = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(max-width: 768px)").matches;
@@ -56,6 +69,10 @@ export default class AudioVisualizer {
       ...DEFAULT_OPTIONS,
       ...(IS_MOBILE ? { bars: 72, maxSpawnRate: 48, glowWidth: 4, fftSize: 8192 } : {}),
       ...options,
+      reactivity: {
+        ...DEFAULT_OPTIONS.reactivity,
+        ...(options.reactivity || {}),
+      },
     };
     this.setCenterImageUrl(this.options.centerImageUrl || "");
     this.setRecordImageUrl(this.options.spectrumRecordImageUrl || "");
@@ -84,6 +101,8 @@ export default class AudioVisualizer {
     this.prevSmoothedBars = [];
     this.barTransition = 0;
     this.barTransitionDuration = 0.22;
+    this.lastPipelineBars = [];
+    this.lastGlobalImpact = 0;
 
     this.animationFrame = null;
     this.lastTs = 0;
@@ -128,7 +147,14 @@ export default class AudioVisualizer {
     if (Object.prototype.hasOwnProperty.call(next, "spectrumRecordImageUrl")) {
       this.setRecordImageUrl(next.spectrumRecordImageUrl || "");
     }
-    this.options = { ...this.options, ...next };
+    this.options = {
+      ...this.options,
+      ...next,
+      reactivity: {
+        ...this.options.reactivity,
+        ...(next.reactivity || {}),
+      },
+    };
     if (typeof next.bars === "number" || typeof next.minHz === "number" || typeof next.maxHz === "number") {
       this.buildBinMap();
     }
@@ -377,6 +403,31 @@ export default class AudioVisualizer {
     return "high";
   }
 
+  getSelectedBinRange() {
+    const totalBins = this.dataArray?.length || 0;
+    if (!totalBins) return [0, 0];
+    const cfg = this.options.reactivity || DEFAULT_OPTIONS.reactivity;
+    const start = Math.max(0, Math.min(totalBins - 1, cfg.startBin ?? 0));
+    const end = Math.max(start, Math.min(totalBins - 1, cfg.endBin ?? (totalBins - 1)));
+    return [start, end];
+  }
+
+  runReactivityPipeline(sumValue, lastValue, windowSize) {
+    const cfg = this.options.reactivity || DEFAULT_OPTIONS.reactivity;
+    // Stage 1: amplitude scaling similar to sum/1024 style pipelines.
+    let value = cfg.normalizeByWindowSize && windowSize > 0 ? sumValue / windowSize : sumValue;
+    value = (value / 1024) * cfg.amplitudeScale;
+    // Stage 2: floor tiny values to avoid noise chatter.
+    if (value < cfg.minThreshold) value = 0;
+    // Stage 3: clamp into usable range.
+    value = Math.max(cfg.minAmount, Math.min(cfg.maxAmount, value));
+    // Stage 4: optional delta gate for punchy but stable response.
+    if (cfg.useDeltaSmoothing && value - lastValue < cfg.minDeltaNeededToTrigger) {
+      value = Math.max(cfg.minAmount, lastValue * cfg.deltaDecay);
+    }
+    return value;
+  }
+
   resize() {
     const rect = this.canvas.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
@@ -390,27 +441,30 @@ export default class AudioVisualizer {
       return this.smoothedBars.map(() => 0);
     }
     this.analyser.getByteFrequencyData(this.dataArray);
+    const [selectedStart, selectedEnd] = this.getSelectedBinRange();
 
     const bars = new Array(this.frequencyBins.length).fill(0);
     for (let i = 0; i < this.frequencyBins.length; i += 1) {
       const [b0, b1] = this.frequencyBins[i];
       const hz = this.barCenterFreqs[i] || 0;
       const band = this.getFreqBand(hz);
+      const w0 = Math.max(selectedStart, b0);
+      const w1 = Math.min(selectedEnd + 1, b1);
       let sum = 0;
       let count = 0;
-      for (let b = b0; b < b1; b += 1) {
+      for (let b = w0; b < w1; b += 1) {
         sum += this.dataArray[b] || 0;
         count += 1;
       }
-      let v = count ? sum / (count * 255) : 0;
-      v = Math.max(0, v - this.options.noiseFloor);
-      v = Math.pow(v, this.options.curvePower) * this.runtime.gain;
+      const lastPipeline = this.lastPipelineBars[i] || 0;
+      let v = this.runReactivityPipeline(sum, lastPipeline, count);
       const sensitivity = band === "low"
         ? this.runtime.lowSensitivity
         : band === "mid"
           ? this.runtime.midSensitivity
           : this.runtime.highSensitivity;
       v *= sensitivity;
+      this.lastPipelineBars[i] = v;
       this.bandRefs[band] = Math.max(v, this.bandRefs[band] * 0.992);
       const regionalNorm = v / Math.max(0.19, this.bandRefs[band]);
       v = regionalNorm * 0.95;
@@ -424,8 +478,18 @@ export default class AudioVisualizer {
       bars[i] = smoothed;
     }
 
+    let globalSum = 0;
+    let globalCount = 0;
+    for (let b = selectedStart; b <= selectedEnd; b += 1) {
+      globalSum += this.dataArray[b] || 0;
+      globalCount += 1;
+    }
+    const globalImpact = this.runReactivityPipeline(globalSum, this.lastGlobalImpact, globalCount);
+    this.lastGlobalImpact = globalImpact;
+
     const total = bars.reduce((acc, n) => acc + n, 0);
-    this.energy = total / Math.max(1, bars.length);
+    const barsEnergy = total / Math.max(1, bars.length);
+    this.energy = barsEnergy * 0.7 + globalImpact * 0.3;
     const bassCount = Math.max(1, Math.floor(bars.length * 0.2));
     this.bassEnergy = bars.slice(0, bassCount).reduce((acc, n) => acc + n, 0) / bassCount;
 
