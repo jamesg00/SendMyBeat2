@@ -31,6 +31,7 @@ const DEFAULT_OPTIONS = {
   mode: "circle", // "circle" or "monstercat"
   monstercatBarWidth: 10,
   monstercatSpacing: 2,
+  monstercatYOffset: 20,
   shakeIntensity: 1.0,
   multiColorReactive: false,
   spectrumStyle: "fill",
@@ -70,6 +71,7 @@ export default class AudioVisualizer {
     this.connectedElement = null;
     this.dataArray = null;
     this.frequencyBins = [];
+    this.barCenterFreqs = [];
     this.smoothedBars = [];
     this.prevSmoothedBars = [];
     this.barTransition = 0;
@@ -101,6 +103,7 @@ export default class AudioVisualizer {
     this.recordImage = null;
     this.recordImageUrl = "";
     this.recordRotation = 0;
+    this.bandRefs = { low: 0.32, mid: 0.3, high: 0.26 };
 
     this.resize = this.resize.bind(this);
     this.loop = this.loop.bind(this);
@@ -120,6 +123,13 @@ export default class AudioVisualizer {
     if (typeof next.bars === "number" || typeof next.minHz === "number" || typeof next.maxHz === "number") {
       this.buildBinMap();
     }
+  }
+
+  attachCanvas(nextCanvas) {
+    if (!nextCanvas || this.canvas === nextCanvas) return;
+    this.canvas = nextCanvas;
+    this.ctx = nextCanvas.getContext("2d", { alpha: true });
+    this.resize();
   }
 
   lerp(current, target, speed, dt) {
@@ -326,6 +336,7 @@ export default class AudioVisualizer {
       : [];
     const bars = Math.max(8, this.options.bars | 0);
     this.frequencyBins = new Array(bars);
+    this.barCenterFreqs = new Array(bars);
     this.smoothedBars = new Array(bars).fill(0);
     this.prevSmoothedBars = previousBars;
     this.barTransition = previousBars.length ? 1 : 0;
@@ -346,7 +357,14 @@ export default class AudioVisualizer {
       const b0 = Math.max(0, Math.floor((f0 / nyquist) * (fftSize / 2)));
       const b1 = Math.max(b0 + 1, Math.floor((f1 / nyquist) * (fftSize / 2)));
       this.frequencyBins[i] = [b0, b1];
+      this.barCenterFreqs[i] = Math.sqrt(f0 * f1);
     }
+  }
+
+  getFreqBand(hz) {
+    if (hz < 220) return "low";
+    if (hz < 3200) return "mid";
+    return "high";
   }
 
   resize() {
@@ -366,6 +384,8 @@ export default class AudioVisualizer {
     const bars = new Array(this.frequencyBins.length).fill(0);
     for (let i = 0; i < this.frequencyBins.length; i += 1) {
       const [b0, b1] = this.frequencyBins[i];
+      const hz = this.barCenterFreqs[i] || 0;
+      const band = this.getFreqBand(hz);
       let sum = 0;
       let count = 0;
       for (let b = b0; b < b1; b += 1) {
@@ -375,6 +395,14 @@ export default class AudioVisualizer {
       let v = count ? sum / (count * 255) : 0;
       v = Math.max(0, v - this.options.noiseFloor);
       v = Math.pow(v, this.options.curvePower) * this.runtime.gain;
+      if (band === "low") {
+        v *= 1.1;
+      } else if (band === "high") {
+        v *= 0.96;
+      }
+      this.bandRefs[band] = Math.max(v, this.bandRefs[band] * 0.992);
+      const regionalNorm = v / Math.max(0.19, this.bandRefs[band]);
+      v = regionalNorm * 0.95;
       v = Math.max(0, Math.min(1.6, v));
 
       const prev = this.smoothedBars[i] || 0;
@@ -705,19 +733,32 @@ export default class AudioVisualizer {
     const spacing = this.options.monstercatSpacing || (w / count * 0.2);
     const totalWidth = count * (barWidth + spacing);
     const startX = (w - totalWidth) / 2;
-    const maxHeight = h * 0.4;
+    const maxHeight = h * 0.44;
+    const baselineY = h - (this.options.monstercatYOffset || 20);
+    const transparentBars = this.options.spectrumStyle === "transparent";
 
     for (let i = 0; i < count; i++) {
       const amp = Math.max(0, bars[i]);
       const barHeight = Math.max(2, amp * maxHeight * 1.5);
       const x = startX + i * (barWidth + spacing);
-      const y = h - barHeight - 20; // 20px padding from bottom
+      const y = baselineY - barHeight;
       const barReactive = Math.min(1.6, amp + this.beatPulse * 0.45 + this.impactPulse * 0.7);
-      c.fillStyle = this.getReactiveColor(barReactive, 0.92, 1.15);
-      c.shadowBlur = 15;
-      c.shadowColor = this.getReactiveColor(barReactive, 0.6, 1.1);
-
-      c.fillRect(x, y, barWidth, barHeight);
+      if (transparentBars) {
+        c.fillStyle = this.getReactiveColor(barReactive, 0.14, 1.1, true);
+        c.fillRect(x, y, barWidth, barHeight);
+        c.strokeStyle = this.getReactiveColor(barReactive, 0.96, 1.18, true);
+        c.lineWidth = Math.max(1, barWidth * 0.08);
+        c.strokeRect(x, y, barWidth, barHeight);
+        c.beginPath();
+        c.moveTo(x, y + barHeight);
+        c.lineTo(x + barWidth, y + barHeight);
+        c.stroke();
+      } else {
+        c.fillStyle = this.getReactiveColor(barReactive, 0.92, 1.15);
+        c.shadowBlur = 15;
+        c.shadowColor = this.getReactiveColor(barReactive, 0.6, 1.1);
+        c.fillRect(x, y, barWidth, barHeight);
+      }
     }
 
     c.shadowBlur = 0;

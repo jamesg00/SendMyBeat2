@@ -193,7 +193,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const visualizerCanvasRef = useRef(null);
   const visualizerRef = useRef(null);
   const miniPreviewCanvasRef = useRef(null);
-  const miniMirrorFrameRef = useRef(null);
   const spectrumImageInputRef = useRef(null);
   const [audioDuration, setAudioDuration] = useState(0);
   const [audioCurrentTime, setAudioCurrentTime] = useState(0);
@@ -217,6 +216,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
     particleColor: "#8cc8ff",
     spectrumBorderWidth: 2,
     spectrumBorderColor: "#ffffff",
+    monstercatYOffset: 20,
   });
   const [spectrumRecordImageUrl, setSpectrumRecordImageUrl] = useState("");
   const [spectrumRecordImageName, setSpectrumRecordImageName] = useState("");
@@ -300,6 +300,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
     spectrumBorderWidth: visualizerSettings.spectrumBorderWidth,
     spectrumBorderColor: hexToRgbString(visualizerSettings.spectrumBorderColor, "255, 255, 255"),
     spectrumRecordImageUrl,
+    monstercatYOffset: visualizerSettings.monstercatYOffset,
   });
 
   useEffect(() => {
@@ -362,7 +363,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
   }, [audioPreviewUrl]);
 
   useEffect(() => {
-    const canvas = visualizerCanvasRef.current;
+    const canvas = visualizerCanvasRef.current || miniPreviewCanvasRef.current;
     const audioEl = audioPlayerRef.current;
     if (!canvas || !audioEl) {
       if (visualizerRef.current) {
@@ -376,9 +377,13 @@ const Dashboard = ({ setIsAuthenticated }) => {
       if (visualizerRef.current) {
         visualizerRef.current.stop();
       }
-      const ctx = canvas.getContext("2d");
-      if (ctx) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const mainCtx = visualizerCanvasRef.current?.getContext("2d");
+      if (mainCtx && visualizerCanvasRef.current) {
+        mainCtx.clearRect(0, 0, visualizerCanvasRef.current.width, visualizerCanvasRef.current.height);
+      }
+      const miniCtx = miniPreviewCanvasRef.current?.getContext("2d");
+      if (miniCtx && miniPreviewCanvasRef.current) {
+        miniCtx.clearRect(0, 0, miniPreviewCanvasRef.current.width, miniPreviewCanvasRef.current.height);
       }
       return;
     }
@@ -386,6 +391,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
     if (!visualizerRef.current) {
       visualizerRef.current = new AudioVisualizer(canvas, getVisualizerOptions());
     } else {
+      visualizerRef.current.attachCanvas(canvas);
       visualizerRef.current.setOptions(getVisualizerOptions());
     }
 
@@ -406,6 +412,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
     imagePreviewUrl,
     audioFile,
     imageFile,
+    activeTab,
   ]);
 
   useEffect(() => {
@@ -417,63 +424,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
   }, [visualizerSettings, visualizerEnabled]);
 
   useEffect(() => {
-    const miniCanvas = miniPreviewCanvasRef.current;
-    const mainCanvas = visualizerCanvasRef.current;
-    if (!miniCanvas || !mainCanvas || !visualizerEnabled) {
-      if (miniMirrorFrameRef.current) {
-        cancelAnimationFrame(miniMirrorFrameRef.current);
-        miniMirrorFrameRef.current = null;
-      }
-      const miniCtx = miniCanvas?.getContext("2d");
-      if (miniCtx) {
-        miniCtx.clearRect(0, 0, miniCanvas.width, miniCanvas.height);
-      }
-      return;
-    }
-
-    const miniCtx = miniCanvas.getContext("2d");
-    if (!miniCtx) return;
-    const dpr = window.devicePixelRatio || 1;
-    const resizeMiniCanvas = () => {
-      const rect = miniCanvas.getBoundingClientRect();
-      miniCanvas.width = Math.max(1, Math.floor(rect.width * dpr));
-      miniCanvas.height = Math.max(1, Math.floor(rect.height * dpr));
-      miniCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    };
-    resizeMiniCanvas();
-
-    const mirrorFrame = () => {
-      const w = miniCanvas.clientWidth;
-      const h = miniCanvas.clientHeight;
-      if (w > 0 && h > 0) {
-        miniCtx.clearRect(0, 0, w, h);
-        miniCtx.drawImage(mainCanvas, 0, 0, w, h);
-      }
-      miniMirrorFrameRef.current = requestAnimationFrame(mirrorFrame);
-    };
-
-    miniMirrorFrameRef.current = requestAnimationFrame(mirrorFrame);
-    window.addEventListener("resize", resizeMiniCanvas);
-
-    return () => {
-      if (miniMirrorFrameRef.current) {
-        cancelAnimationFrame(miniMirrorFrameRef.current);
-        miniMirrorFrameRef.current = null;
-      }
-      window.removeEventListener("resize", resizeMiniCanvas);
-      miniCtx.clearRect(0, 0, miniCanvas.width, miniCanvas.height);
-    };
-  }, [visualizerEnabled, audioFile, imageFile, visualizerSettings, previewSize]);
-
-  useEffect(() => {
     return () => {
       if (visualizerRef.current) {
         visualizerRef.current.destroy();
         visualizerRef.current = null;
-      }
-      if (miniMirrorFrameRef.current) {
-        cancelAnimationFrame(miniMirrorFrameRef.current);
-        miniMirrorFrameRef.current = null;
       }
     };
   }, []);
@@ -3335,6 +3289,26 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                     </Button>
                                   </div>
                                 </>
+                              )}
+
+                              {visualizerSettings.mode === "monstercat" && (
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <Label htmlFor="viz-monstercat-y" className="text-sm">Monstercat Y Position</Label>
+                                    <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                                      {visualizerSettings.monstercatYOffset}px
+                                    </span>
+                                  </div>
+                                  <Input
+                                    id="viz-monstercat-y"
+                                    type="range"
+                                    min="0"
+                                    max="180"
+                                    step="1"
+                                    value={visualizerSettings.monstercatYOffset}
+                                    onChange={(e) => updateVisualizerSetting("monstercatYOffset", Number(e.target.value))}
+                                  />
+                                </div>
                               )}
                             </>
                           )}
