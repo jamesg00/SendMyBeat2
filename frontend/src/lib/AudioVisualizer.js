@@ -48,14 +48,14 @@ const DEFAULT_OPTIONS = {
   reactivity: {
     startBin: 0,
     endBin: null,
-    amplitudeScale: 10,
+    amplitudeScale: 4.2,
     normalizeByWindowSize: true,
-    maxAmount: 1.6,
+    maxAmount: 1.2,
     minAmount: 0,
-    minThreshold: 0.012,
+    minThreshold: 0.02,
     useDeltaSmoothing: true,
     minDeltaNeededToTrigger: 0.025,
-    deltaDecay: 0.9,
+    deltaDecay: 0.93,
   },
 };
 
@@ -463,12 +463,17 @@ export default class AudioVisualizer {
         : band === "mid"
           ? this.runtime.midSensitivity
           : this.runtime.highSensitivity;
-      v *= sensitivity;
+      v *= sensitivity * this.runtime.gain;
+      // Soft-knee compression keeps loud masters from pinning bars at max.
+      v = 1 - Math.exp(-Math.max(0, v) * 1.35);
       this.lastPipelineBars[i] = v;
-      this.bandRefs[band] = Math.max(v, this.bandRefs[band] * 0.992);
-      const regionalNorm = v / Math.max(0.19, this.bandRefs[band]);
-      v = regionalNorm * 0.95;
-      v = Math.max(0, Math.min(1.6, v));
+      const prevBandRef = this.bandRefs[band] || 0.42;
+      const bandRefFollow = v > prevBandRef ? 0.06 : 0.012;
+      const nextBandRef = prevBandRef + (v - prevBandRef) * bandRefFollow;
+      this.bandRefs[band] = Math.max(0.22, Math.min(1.2, nextBandRef));
+      const regionalNorm = v / Math.max(0.34, this.bandRefs[band] * 1.2);
+      v = Math.pow(this.clamp01(regionalNorm), 0.9) * 1.05;
+      v = Math.max(0, Math.min(1.2, v));
 
       const prev = this.smoothedBars[i] || 0;
       const smoothed = v > prev
@@ -818,7 +823,7 @@ export default class AudioVisualizer {
       const prevAmp = this.monstercatSmoothedBars[i] || 0;
       const amp = prevAmp + (rawAmp - prevAmp) * (1 - smoothing);
       this.monstercatSmoothedBars[i] = amp;
-      const barHeight = Math.max(2, amp * maxHeight * 1.5);
+      const barHeight = Math.max(2, Math.min(maxHeight, amp * maxHeight * 1.02));
       const x = startX + i * (barWidth + spacing);
       const y = baselineY - barHeight;
       const barReactive = Math.min(1.6, amp + this.beatPulse * 0.45 + this.impactPulse * 0.7);

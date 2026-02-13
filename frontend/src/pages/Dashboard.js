@@ -185,6 +185,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const previewContainerRef = useRef(null);
   const [dragState, setDragState] = useState(null);
   const [resizeState, setResizeState] = useState(null);
+  const previewClickStartRef = useRef({ x: 0, y: 0 });
+  const previewDraggedRef = useRef(false);
   const [previewSize, setPreviewSize] = useState(720);
   const [imageMeta, setImageMeta] = useState({ width: 0, height: 0, ratio: 1 });
   const [imagePreviewUrl, setImagePreviewUrl] = useState("");
@@ -200,7 +202,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [visualizerEnabled, setVisualizerEnabled] = useState(false);
   const [visualizerSettings, setVisualizerSettings] = useState({
     bars: 128,
-    intensity: 1.35,
+    intensity: 1,
     particleIntensity: 1,
     rotateSpeed: 0.002,
     radius: 0.23,
@@ -1501,6 +1503,9 @@ const Dashboard = ({ setIsAuthenticated }) => {
       const rect = previewContainerRef.current.getBoundingClientRect();
       const deltaX = event.clientX - dragState.startX;
       const deltaY = event.clientY - dragState.startY;
+      if (Math.abs(deltaX) > 4 || Math.abs(deltaY) > 4) {
+        previewDraggedRef.current = true;
+      }
       const nextX = clamp(dragState.originX + deltaX / (rect.width / 2), -1, 1);
       const nextY = clamp(dragState.originY + deltaY / (rect.height / 2), -1, 1);
       setImagePosX(nextX);
@@ -1600,6 +1605,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
 
   const handlePreviewMouseDown = (event) => {
     if (!previewContainerRef.current) return;
+    previewClickStartRef.current = { x: event.clientX, y: event.clientY };
+    previewDraggedRef.current = false;
     setLockImageScale(true);
     setDragState({
       startX: event.clientX,
@@ -1607,6 +1614,14 @@ const Dashboard = ({ setIsAuthenticated }) => {
       originX: imagePosX,
       originY: imagePosY
     });
+  };
+
+  const handlePreviewClick = (event) => {
+    const deltaX = event.clientX - previewClickStartRef.current.x;
+    const deltaY = event.clientY - previewClickStartRef.current.y;
+    const moved = Math.abs(deltaX) > 4 || Math.abs(deltaY) > 4;
+    if (previewDraggedRef.current || moved || resizeState) return;
+    toggleAudioPlayback();
   };
 
   const handleResizeStart = (corner) => (event) => {
@@ -3494,6 +3509,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                               <div
                                 className="absolute inset-0 cursor-move"
                                 onMouseDown={handlePreviewMouseDown}
+                                onClick={handlePreviewClick}
                                 aria-label="Drag image"
                               />
                               <div
@@ -3521,24 +3537,40 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                     type="button"
                                     onMouseDown={handleResizeStart("tl")}
                                     className="absolute -top-2.5 -left-2.5 h-5 w-5 rounded-full border-2 border-white/80 bg-black/80 shadow-md pointer-events-auto"
+                                    style={{
+                                      transform: `scale(${1 / Math.max(0.5, imageScaleX)}, ${1 / Math.max(0.5, imageScaleY)})`,
+                                      transformOrigin: "top left",
+                                    }}
                                     aria-label="Resize top left"
                                   />
                                   <button
                                     type="button"
                                     onMouseDown={handleResizeStart("tr")}
                                     className="absolute -top-2.5 -right-2.5 h-5 w-5 rounded-full border-2 border-white/80 bg-black/80 shadow-md pointer-events-auto"
+                                    style={{
+                                      transform: `scale(${1 / Math.max(0.5, imageScaleX)}, ${1 / Math.max(0.5, imageScaleY)})`,
+                                      transformOrigin: "top right",
+                                    }}
                                     aria-label="Resize top right"
                                   />
                                   <button
                                     type="button"
                                     onMouseDown={handleResizeStart("bl")}
                                     className="absolute -bottom-2.5 -left-2.5 h-5 w-5 rounded-full border-2 border-white/80 bg-black/80 shadow-md pointer-events-auto"
+                                    style={{
+                                      transform: `scale(${1 / Math.max(0.5, imageScaleX)}, ${1 / Math.max(0.5, imageScaleY)})`,
+                                      transformOrigin: "bottom left",
+                                    }}
                                     aria-label="Resize bottom left"
                                   />
                                   <button
                                     type="button"
                                     onMouseDown={handleResizeStart("br")}
                                     className="absolute -bottom-2.5 -right-2.5 h-5 w-5 rounded-full border-2 border-white/80 bg-black/80 shadow-md pointer-events-auto"
+                                    style={{
+                                      transform: `scale(${1 / Math.max(0.5, imageScaleX)}, ${1 / Math.max(0.5, imageScaleY)})`,
+                                      transformOrigin: "bottom right",
+                                    }}
                                     aria-label="Resize bottom right"
                                   />
                                 </div>
