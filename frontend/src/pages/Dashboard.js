@@ -209,6 +209,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
     maxBarLength: 0.18,
     trailsEnabled: true,
     particleEnabled: true,
+    monstercatParticleEnabled: false,
     mode: "circle", // "circle" or "monstercat"
     shakeIntensity: 1,
     multiColorReactive: false,
@@ -293,6 +294,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
     rotateSpeed: visualizerSettings.rotateSpeed,
     trailsEnabled: visualizerSettings.trailsEnabled,
     particleEnabled: visualizerSettings.particleEnabled,
+    particleIntensity: visualizerSettings.particleIntensity,
+    monstercatParticleEnabled: visualizerSettings.monstercatParticleEnabled,
     maxSpawnRate: Math.round(120 * visualizerSettings.particleIntensity),
     baseSpawnRate: Math.round(10 * Math.max(0.5, visualizerSettings.particleIntensity)),
     particleSpeed: 72 * visualizerSettings.particleIntensity,
@@ -370,6 +373,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
     };
     const handleEnded = () => {
       setIsAudioPlaying(false);
+      setAudioCurrentTime(audioEl.duration || 0);
       if (visualizerRef.current) {
         visualizerRef.current.stop();
       }
@@ -676,6 +680,14 @@ const Dashboard = ({ setIsAuthenticated }) => {
       return;
     }
     try {
+      const nearEnd =
+        Number.isFinite(audioEl.duration) &&
+        audioEl.duration > 0 &&
+        audioEl.currentTime >= audioEl.duration - 0.05;
+      if (audioEl.ended || nearEnd) {
+        audioEl.currentTime = 0;
+        setAudioCurrentTime(0);
+      }
       if (visualizerEnabled && visualizerRef.current) {
         await visualizerRef.current.resumeAudioContext();
       }
@@ -2860,19 +2872,21 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         </Select>
                       </div>
 
-                      <div className="space-y-2">
-                        <Label htmlFor="upload-description">Edit Description</Label>
-                        <Textarea
-                          id="upload-description"
-                          placeholder="Edit your description before upload"
-                          value={uploadDescriptionText}
-                          onChange={(e) => setUploadDescriptionText(e.target.value)}
-                          rows={6}
-                        />
-                        <p className="text-xs" style={{color: 'var(--text-secondary)'}}>
-                          A line will be added to the top: "Visit www.sendmybeat.com to upload beats for free!"
-                        </p>
-                      </div>
+                      {selectedDescriptionId && (
+                        <div className="space-y-2">
+                          <Label htmlFor="upload-description">Edit Description</Label>
+                          <Textarea
+                            id="upload-description"
+                            placeholder="Edit your description before upload"
+                            value={uploadDescriptionText}
+                            onChange={(e) => setUploadDescriptionText(e.target.value)}
+                            rows={6}
+                          />
+                          <p className="text-xs" style={{color: 'var(--text-secondary)'}}>
+                            A line will be added to the top: "Visit www.sendmybeat.com to upload beats for free!"
+                          </p>
+                        </div>
+                      )}
 
                       <div className="space-y-2">
                         <Label htmlFor="select-tags">Select Tags (Optional)</Label>
@@ -3450,6 +3464,19 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                     value={visualizerSettings.monstercatSmoothing}
                                     onChange={(e) => updateVisualizerSetting("monstercatSmoothing", Number(e.target.value))}
                                   />
+                                </div>
+                              )}
+
+                              {visualizerSettings.mode === "monstercat" && (
+                                <div className="grid grid-cols-1 gap-2">
+                                  <Button
+                                    type="button"
+                                    variant={visualizerSettings.monstercatParticleEnabled ? "default" : "outline"}
+                                    size="sm"
+                                    onClick={() => updateVisualizerSetting("monstercatParticleEnabled", !visualizerSettings.monstercatParticleEnabled)}
+                                  >
+                                    {visualizerSettings.monstercatParticleEnabled ? "Flow Particles ON" : "Flow Particles OFF"}
+                                  </Button>
                                 </div>
                               )}
                             </>

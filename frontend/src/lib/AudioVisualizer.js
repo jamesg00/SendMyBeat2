@@ -24,6 +24,7 @@ const DEFAULT_OPTIONS = {
   particleGlowSize: 5,
   particleAlpha: 0.65,
   particleEnabled: true,
+  particleIntensity: 1,
   trailsEnabled: true,
   spectrumColor: "90, 160, 255",
   glowColor: "125, 185, 255",
@@ -32,6 +33,7 @@ const DEFAULT_OPTIONS = {
   monstercatBarWidth: 10,
   monstercatSpacing: 2,
   monstercatYOffset: 20,
+  monstercatParticleEnabled: false,
   lowSensitivity: 1,
   midSensitivity: 1,
   highSensitivity: 1,
@@ -132,6 +134,7 @@ export default class AudioVisualizer {
     this.recordRotation = 0;
     this.bandRefs = { low: 0.32, mid: 0.3, high: 0.26 };
     this.monstercatSmoothedBars = [];
+    this.monstercatParticles = [];
 
     this.resize = this.resize.bind(this);
     this.loop = this.loop.bind(this);
@@ -771,11 +774,18 @@ export default class AudioVisualizer {
       c.stroke();
     }
 
+    // Keep a visible base ring so the circle style never disappears on quieter passages.
+    c.beginPath();
+    c.strokeStyle = this.getReactiveColor(Math.max(0.18, reactiveAmp * 0.7), fillMode ? 0.42 : 0.32, 1.1, true);
+    c.lineWidth = Math.max(1, this.options.lineWidth * 0.7);
+    c.arc(0, 0, radius, 0, Math.PI * 2);
+    c.stroke();
+
     // Draw bars (classic style) inside
     for (let i = 0; i < count; i += 1) {
       const a = i * step;
       const amp = Math.max(0, bars[i]);
-      const len = amp * maxBarPx;
+      const len = amp > 0.01 ? Math.max(2, amp * maxBarPx) : 0;
       const x0 = Math.cos(a) * radius;
       const y0 = Math.sin(a) * radius;
       const x1 = Math.cos(a) * (radius + len);
@@ -803,6 +813,69 @@ export default class AudioVisualizer {
       c.stroke();
     }
     c.restore();
+  }
+
+  spawnMonstercatParticles(dt, w, h) {
+    if (!this.options.monstercatParticleEnabled || this.options.mode !== "monstercat") return;
+    const intensity = Math.max(0, Math.min(1.4, this.energySlew * 0.9 + this.bassSlew * 0.7 + this.impactPulse * 0.8));
+    const rate = (8 + intensity * 48) * Math.max(0.25, this.options.particleIntensity || 1);
+    const toSpawn = Math.floor(rate * dt + Math.random() * 0.7);
+    const baselineY = h - (this.options.monstercatYOffset || 20);
+    const maxHeight = h * 0.44;
+
+    for (let i = 0; i < toSpawn; i += 1) {
+      const ySpread = maxHeight * (0.15 + Math.random() * 0.85);
+      const y = baselineY - ySpread + (Math.random() - 0.5) * 18;
+      const vx = 110 + intensity * 260 + Math.random() * 150;
+      const life = (w + 120) / Math.max(1, vx) + Math.random() * 0.9;
+      this.monstercatParticles.push({
+        x: -40 - Math.random() * 100,
+        y,
+        vx,
+        life,
+        maxLife: life,
+        size: 1.2 + Math.random() * 2.2,
+        seed: Math.random() * Math.PI * 2,
+      });
+    }
+  }
+
+  updateMonstercatParticles(dt, w, h) {
+    if (!this.monstercatParticles.length) return;
+    const keep = [];
+    for (let i = 0; i < this.monstercatParticles.length; i += 1) {
+      const p = this.monstercatParticles[i];
+      p.life -= dt;
+      if (p.life <= 0) continue;
+      p.x += p.vx * dt;
+      p.y += Math.sin((p.maxLife - p.life) * 6 + p.seed) * dt * 8;
+      if (p.x > w + 80 || p.y < -40 || p.y > h + 40) continue;
+      keep.push(p);
+    }
+    this.monstercatParticles = keep.slice(-1200);
+  }
+
+  drawMonstercatParticles() {
+    if (!this.options.monstercatParticleEnabled || this.options.mode !== "monstercat") return;
+    const c = this.ctx;
+    for (let i = 0; i < this.monstercatParticles.length; i += 1) {
+      const p = this.monstercatParticles[i];
+      const t = p.life / Math.max(0.001, p.maxLife);
+      const alpha = Math.max(0, Math.min(0.55, t * 0.55));
+      if (alpha <= 0) continue;
+      const amp = Math.min(1.35, 1 - t + this.energySlew * 0.35);
+      c.fillStyle = this.getReactiveColor(amp, alpha, 1.15, true);
+      c.beginPath();
+      c.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      c.fill();
+
+      c.strokeStyle = this.getReactiveColor(amp, alpha * 0.65, 1.2, true);
+      c.lineWidth = Math.max(1, p.size * 0.75);
+      c.beginPath();
+      c.moveTo(p.x - p.size * 4.2, p.y);
+      c.lineTo(p.x, p.y);
+      c.stroke();
+    }
   }
 
   drawMonstercat(bars, w, h) {
@@ -940,6 +1013,9 @@ export default class AudioVisualizer {
         this.drawParticles();
         this.drawSpectrum(displayBars, cx, cy, radius);
     } else if (this.options.mode === 'monstercat') {
+        this.spawnMonstercatParticles(dt, w, h);
+        this.updateMonstercatParticles(dt, w, h);
+        this.drawMonstercatParticles();
         this.drawMonstercat(this.getDisplayBars(bars), w, h);
     }
 
