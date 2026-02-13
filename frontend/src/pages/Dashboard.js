@@ -217,6 +217,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
     spectrumBorderWidth: 2,
     spectrumBorderColor: "#ffffff",
     monstercatYOffset: 20,
+    lowSensitivity: 1,
+    midSensitivity: 1,
+    highSensitivity: 1,
+    monstercatSmoothing: 0.35,
   });
   const [spectrumRecordImageUrl, setSpectrumRecordImageUrl] = useState("");
   const [spectrumRecordImageName, setSpectrumRecordImageName] = useState("");
@@ -301,6 +305,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
     spectrumBorderColor: hexToRgbString(visualizerSettings.spectrumBorderColor, "255, 255, 255"),
     spectrumRecordImageUrl,
     monstercatYOffset: visualizerSettings.monstercatYOffset,
+    lowSensitivity: visualizerSettings.lowSensitivity,
+    midSensitivity: visualizerSettings.midSensitivity,
+    highSensitivity: visualizerSettings.highSensitivity,
+    monstercatSmoothing: visualizerSettings.monstercatSmoothing,
   });
 
   useEffect(() => {
@@ -2684,6 +2692,13 @@ const Dashboard = ({ setIsAuthenticated }) => {
 
                 {youtubeConnected && (
                   <div className="space-y-6">
+                    <div className="rounded-xl border p-4 sm:p-5 space-y-4" style={{ borderColor: "var(--border-color)", backgroundColor: "var(--bg-secondary)" }}>
+                      <div>
+                        <p className="text-sm sm:text-base font-semibold">Step 1 - Upload Media</p>
+                        <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                          Add your audio + thumbnail using click or drag and drop.
+                        </p>
+                      </div>
                     {/* File Uploads */}
                     <div className="grid md:grid-cols-2 gap-4">
                       <div className="space-y-2">
@@ -2762,9 +2777,16 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         </div>
                       </div>
                     </div>
+                    </div>
 
                     {/* Upload Details */}
-                    <div className="space-y-4">
+                    <div className="rounded-xl border p-4 sm:p-5 space-y-4" style={{ borderColor: "var(--border-color)", backgroundColor: "var(--bg-secondary)" }}>
+                      <div>
+                        <p className="text-sm sm:text-base font-semibold">Step 2 - Video Details & Style</p>
+                        <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                          Set metadata, arrange image, and configure visualizer.
+                        </p>
+                      </div>
                       <div className="space-y-2">
                         <Label htmlFor="upload-title">Video Title</Label>
                         <Input
@@ -3121,6 +3143,60 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                 </div>
                               </div>
 
+                              <div className="grid gap-3 sm:grid-cols-3">
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <Label htmlFor="viz-low-sensitivity" className="text-sm">Low</Label>
+                                    <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                                      {visualizerSettings.lowSensitivity.toFixed(2)}x
+                                    </span>
+                                  </div>
+                                  <Input
+                                    id="viz-low-sensitivity"
+                                    type="range"
+                                    min="0.4"
+                                    max="2.5"
+                                    step="0.05"
+                                    value={visualizerSettings.lowSensitivity}
+                                    onChange={(e) => updateVisualizerSetting("lowSensitivity", Number(e.target.value))}
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <Label htmlFor="viz-mid-sensitivity" className="text-sm">Mid</Label>
+                                    <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                                      {visualizerSettings.midSensitivity.toFixed(2)}x
+                                    </span>
+                                  </div>
+                                  <Input
+                                    id="viz-mid-sensitivity"
+                                    type="range"
+                                    min="0.4"
+                                    max="2.5"
+                                    step="0.05"
+                                    value={visualizerSettings.midSensitivity}
+                                    onChange={(e) => updateVisualizerSetting("midSensitivity", Number(e.target.value))}
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <Label htmlFor="viz-high-sensitivity" className="text-sm">High</Label>
+                                    <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                                      {visualizerSettings.highSensitivity.toFixed(2)}x
+                                    </span>
+                                  </div>
+                                  <Input
+                                    id="viz-high-sensitivity"
+                                    type="range"
+                                    min="0.4"
+                                    max="2.5"
+                                    step="0.05"
+                                    value={visualizerSettings.highSensitivity}
+                                    onChange={(e) => updateVisualizerSetting("highSensitivity", Number(e.target.value))}
+                                  />
+                                </div>
+                              </div>
+
                               <div className="space-y-2">
                                 <div className="flex items-center justify-between">
                                   <Label htmlFor="bg-image-opacity" className="text-sm">Background Image Opacity</Label>
@@ -3307,6 +3383,26 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                     step="1"
                                     value={visualizerSettings.monstercatYOffset}
                                     onChange={(e) => updateVisualizerSetting("monstercatYOffset", Number(e.target.value))}
+                                  />
+                                </div>
+                              )}
+
+                              {visualizerSettings.mode === "monstercat" && (
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <Label htmlFor="viz-monstercat-smoothing" className="text-sm">Monstercat Smoothing</Label>
+                                    <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                                      {visualizerSettings.monstercatSmoothing.toFixed(2)}
+                                    </span>
+                                  </div>
+                                  <Input
+                                    id="viz-monstercat-smoothing"
+                                    type="range"
+                                    min="0.05"
+                                    max="0.95"
+                                    step="0.01"
+                                    value={visualizerSettings.monstercatSmoothing}
+                                    onChange={(e) => updateVisualizerSetting("monstercatSmoothing", Number(e.target.value))}
                                   />
                                 </div>
                               )}

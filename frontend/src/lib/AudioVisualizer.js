@@ -32,6 +32,10 @@ const DEFAULT_OPTIONS = {
   monstercatBarWidth: 10,
   monstercatSpacing: 2,
   monstercatYOffset: 20,
+  lowSensitivity: 1,
+  midSensitivity: 1,
+  highSensitivity: 1,
+  monstercatSmoothing: 0.35,
   shakeIntensity: 1.0,
   multiColorReactive: false,
   spectrumStyle: "fill",
@@ -63,6 +67,10 @@ export default class AudioVisualizer {
       baseSpawnRate: this.options.baseSpawnRate,
       maxSpawnRate: this.options.maxSpawnRate,
       particleSpeed: this.options.particleSpeed,
+      lowSensitivity: this.options.lowSensitivity,
+      midSensitivity: this.options.midSensitivity,
+      highSensitivity: this.options.highSensitivity,
+      monstercatSmoothing: this.options.monstercatSmoothing,
     };
 
     this.audioContext = null;
@@ -104,6 +112,7 @@ export default class AudioVisualizer {
     this.recordImageUrl = "";
     this.recordRotation = 0;
     this.bandRefs = { low: 0.32, mid: 0.3, high: 0.26 };
+    this.monstercatSmoothedBars = [];
 
     this.resize = this.resize.bind(this);
     this.loop = this.loop.bind(this);
@@ -338,6 +347,7 @@ export default class AudioVisualizer {
     this.frequencyBins = new Array(bars);
     this.barCenterFreqs = new Array(bars);
     this.smoothedBars = new Array(bars).fill(0);
+    this.monstercatSmoothedBars = new Array(bars).fill(0);
     this.prevSmoothedBars = previousBars;
     this.barTransition = previousBars.length ? 1 : 0;
 
@@ -395,11 +405,12 @@ export default class AudioVisualizer {
       let v = count ? sum / (count * 255) : 0;
       v = Math.max(0, v - this.options.noiseFloor);
       v = Math.pow(v, this.options.curvePower) * this.runtime.gain;
-      if (band === "low") {
-        v *= 1.1;
-      } else if (band === "high") {
-        v *= 0.96;
-      }
+      const sensitivity = band === "low"
+        ? this.runtime.lowSensitivity
+        : band === "mid"
+          ? this.runtime.midSensitivity
+          : this.runtime.highSensitivity;
+      v *= sensitivity;
       this.bandRefs[band] = Math.max(v, this.bandRefs[band] * 0.992);
       const regionalNorm = v / Math.max(0.19, this.bandRefs[band]);
       v = regionalNorm * 0.95;
@@ -728,6 +739,7 @@ export default class AudioVisualizer {
   drawMonstercat(bars, w, h) {
     const c = this.ctx;
     const count = Math.min(bars.length, 63); // Limit bars for cleaner look
+    const smoothing = Math.max(0.05, Math.min(0.95, this.runtime.monstercatSmoothing || 0.35));
 
     const barWidth = this.options.monstercatBarWidth || (w / count * 0.6);
     const spacing = this.options.monstercatSpacing || (w / count * 0.2);
@@ -738,7 +750,10 @@ export default class AudioVisualizer {
     const transparentBars = this.options.spectrumStyle === "transparent";
 
     for (let i = 0; i < count; i++) {
-      const amp = Math.max(0, bars[i]);
+      const rawAmp = Math.max(0, bars[i]);
+      const prevAmp = this.monstercatSmoothedBars[i] || 0;
+      const amp = prevAmp + (rawAmp - prevAmp) * (1 - smoothing);
+      this.monstercatSmoothedBars[i] = amp;
       const barHeight = Math.max(2, amp * maxHeight * 1.5);
       const x = startX + i * (barWidth + spacing);
       const y = baselineY - barHeight;
@@ -840,6 +855,10 @@ export default class AudioVisualizer {
     this.runtime.baseSpawnRate = this.lerp(this.runtime.baseSpawnRate, this.options.baseSpawnRate, 10, dt);
     this.runtime.maxSpawnRate = this.lerp(this.runtime.maxSpawnRate, this.options.maxSpawnRate, 10, dt);
     this.runtime.particleSpeed = this.lerp(this.runtime.particleSpeed, this.options.particleSpeed, 10, dt);
+    this.runtime.lowSensitivity = this.lerp(this.runtime.lowSensitivity, this.options.lowSensitivity, 9, dt);
+    this.runtime.midSensitivity = this.lerp(this.runtime.midSensitivity, this.options.midSensitivity, 9, dt);
+    this.runtime.highSensitivity = this.lerp(this.runtime.highSensitivity, this.options.highSensitivity, 9, dt);
+    this.runtime.monstercatSmoothing = this.lerp(this.runtime.monstercatSmoothing, this.options.monstercatSmoothing, 9, dt);
 
     if (this.options.mode === 'circle') {
         const radius = Math.min(w, h) * this.runtime.radius;
