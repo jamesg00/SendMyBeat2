@@ -32,6 +32,10 @@ const DEFAULT_OPTIONS = {
   monstercatBarWidth: 10,
   monstercatSpacing: 2,
   shakeIntensity: 1.0,
+  multiColorReactive: false,
+  spectrumStyle: "transparent",
+  fillCenter: "white",
+  centerImageUrl: "",
 };
 
 const IS_MOBILE = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(max-width: 768px)").matches;
@@ -45,6 +49,7 @@ export default class AudioVisualizer {
       ...(IS_MOBILE ? { bars: 72, maxSpawnRate: 48, glowWidth: 4, fftSize: 8192 } : {}),
       ...options,
     };
+    this.setCenterImageUrl(this.options.centerImageUrl || "");
     this.runtime = {
       gain: this.options.gain,
       rotateSpeed: this.options.rotateSpeed,
@@ -80,12 +85,15 @@ export default class AudioVisualizer {
     this.bassSlew = 0;
     this.lastBassEnergy = 0;
     this.beatPulse = 0;
+    this.impactPulse = 0;
     this.silenceSeconds = 0;
     this.hasAudioSignal = false;
 
     // Shake state
     this.shakeOffsetX = 0;
     this.shakeOffsetY = 0;
+    this.centerImage = null;
+    this.centerImageUrl = "";
 
     this.resize = this.resize.bind(this);
     this.loop = this.loop.bind(this);
@@ -95,6 +103,9 @@ export default class AudioVisualizer {
   }
 
   setOptions(next = {}) {
+    if (Object.prototype.hasOwnProperty.call(next, "centerImageUrl")) {
+      this.setCenterImageUrl(next.centerImageUrl || "");
+    }
     this.options = { ...this.options, ...next };
     if (typeof next.bars === "number" || typeof next.minHz === "number" || typeof next.maxHz === "number") {
       this.buildBinMap();
@@ -104,6 +115,55 @@ export default class AudioVisualizer {
   lerp(current, target, speed, dt) {
     const t = 1 - Math.exp(-speed * dt);
     return current + (target - current) * t;
+  }
+
+  clamp01(value) {
+    return Math.max(0, Math.min(1, value));
+  }
+
+  getReactiveColor(amp = 0, alpha = 1, boost = 1) {
+    const safeAlpha = this.clamp01(alpha);
+    if (!this.options.multiColorReactive) {
+      const [r, g, b] = this.options.spectrumColor.split(",").map((v) => Number(v.trim()));
+      return `rgba(${r}, ${g}, ${b}, ${safeAlpha})`;
+    }
+
+    const palette = [
+      [68, 120, 255],  // blue
+      [0, 210, 255],   // cyan
+      [50, 236, 150],  // mint
+      [165, 255, 60],  // lime
+      [255, 212, 64],  // yellow
+      [255, 126, 52],  // orange
+      [255, 62, 88],   // pink-red
+    ];
+
+    const intensity = this.clamp01(Math.pow(Math.max(0, amp) / 1.35, 0.8));
+    const scaled = intensity * (palette.length - 1);
+    const i0 = Math.floor(scaled);
+    const i1 = Math.min(palette.length - 1, i0 + 1);
+    const t = scaled - i0;
+    const p0 = palette[i0];
+    const p1 = palette[i1];
+    const rgbBoost = Math.max(0.7, boost);
+    const r = Math.round((p0[0] * (1 - t) + p1[0] * t) * rgbBoost);
+    const g = Math.round((p0[1] * (1 - t) + p1[1] * t) * rgbBoost);
+    const b = Math.round((p0[2] * (1 - t) + p1[2] * t) * rgbBoost);
+    return `rgba(${Math.min(255, r)}, ${Math.min(255, g)}, ${Math.min(255, b)}, ${safeAlpha})`;
+  }
+
+  setCenterImageUrl(url = "") {
+    if (!url) {
+      this.centerImage = null;
+      this.centerImageUrl = "";
+      return;
+    }
+    if (url === this.centerImageUrl) return;
+    this.centerImageUrl = url;
+    const img = new Image();
+    img.decoding = "async";
+    img.src = url;
+    this.centerImage = img;
   }
 
   async connectMediaElement(audioEl) {
@@ -309,7 +369,7 @@ export default class AudioVisualizer {
     const minRate = this.runtime.baseSpawnRate;
     const maxRate = this.runtime.maxSpawnRate;
     const energyDrive = Math.min(1, this.energySlew * 0.9 + this.bassSlew * 0.9);
-    const burstBoost = this.beatPulse * 0.45;
+    const burstBoost = this.beatPulse * 0.65 + this.impactPulse * 0.6;
     const rateMix = Math.min(1, energyDrive + burstBoost);
     const rate = minRate + (maxRate - minRate) * rateMix;
     const toSpawnFloat = rate * dt + this.spawnRemainder;
@@ -321,7 +381,8 @@ export default class AudioVisualizer {
       const angle = Math.random() * Math.PI * 2 + this.rotation;
       const px = cx + Math.cos(angle) * radius;
       const py = cy + Math.sin(angle) * radius;
-      const baseSpeed = this.runtime.particleSpeed * (0.35 + Math.random() * 1.15);
+      const speedBurst = 1 + this.beatPulse * 1.1 + this.impactPulse * 1.35;
+      const baseSpeed = this.runtime.particleSpeed * speedBurst * (0.4 + Math.random() * 1.25);
       const tangent = (Math.random() - 0.5) * this.options.particleJitter;
       const vx = Math.cos(angle) * baseSpeed + -Math.sin(angle) * tangent;
       const vy = Math.sin(angle) * baseSpeed + Math.cos(angle) * tangent;
@@ -343,8 +404,8 @@ export default class AudioVisualizer {
 
   updateParticles(dt, cx, cy) {
     const keep = [];
-    const drive = Math.max(0, Math.min(2.2, this.energySlew * 0.75 + this.bassSlew * 1.2 + this.beatPulse * 0.8));
-    const accel = 16 + drive * 46;
+    const drive = Math.max(0, Math.min(2.8, this.energySlew * 0.9 + this.bassSlew * 1.35 + this.beatPulse * 1.15 + this.impactPulse * 1.35));
+    const accel = 20 + drive * 72;
     const silentFade = this.silenceSeconds > 0.2;
 
     for (let i = 0; i < this.particles.length; i += 1) {
@@ -365,7 +426,7 @@ export default class AudioVisualizer {
       const ty = nx;
 
       const speedNow = Math.hypot(p.vx, p.vy);
-      const targetSpeed = p.baseSpeed * (0.58 + drive * 0.95);
+      const targetSpeed = p.baseSpeed * (0.75 + drive * 1.25);
       const speedAdjust = (targetSpeed - speedNow) * 0.22;
 
       const wobble = (Math.sin(p.age * 8.5 + p.seed) + Math.cos(p.age * 5.7 + p.seed * 0.67)) * 0.5;
@@ -377,7 +438,7 @@ export default class AudioVisualizer {
 
       const drag = silentFade
         ? Math.max(0.88, 0.95 - this.silenceSeconds * 0.08)
-        : Math.max(0.942, 0.986 - drive * 0.012);
+        : Math.max(0.93, 0.985 - drive * 0.02);
       p.vx *= drag;
       p.vy *= drag;
 
@@ -404,13 +465,22 @@ export default class AudioVisualizer {
       const alpha = Math.max(0, Math.min(1, fade * this.options.particleAlpha));
       if (alpha <= 0) continue;
 
+      const speed = Math.hypot(p.vx, p.vy);
+      const speedNorm = this.clamp01((speed / Math.max(1, this.runtime.particleSpeed * 2.2)) * 0.9 + this.beatPulse * 0.45 + this.impactPulse * 0.6);
+      const coreColor = this.options.multiColorReactive
+        ? this.getReactiveColor(speedNorm * 1.35, alpha, 1.12)
+        : `rgba(${r}, ${g}, ${b}, ${alpha})`;
+      const glowColor = this.options.multiColorReactive
+        ? this.getReactiveColor(speedNorm * 1.35, alpha * 0.25, 1.25)
+        : `rgba(${r}, ${g}, ${b}, ${alpha * 0.22})`;
+
       c.beginPath();
-      c.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha * 0.22})`;
+      c.fillStyle = glowColor;
       c.arc(p.x, p.y, this.options.particleGlowSize, 0, Math.PI * 2);
       c.fill();
 
       c.beginPath();
-      c.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+      c.fillStyle = coreColor;
       c.arc(p.x, p.y, this.options.particleSize, 0, Math.PI * 2);
       c.fill();
     }
@@ -419,19 +489,19 @@ export default class AudioVisualizer {
   drawSpectrum(bars, cx, cy, radius) {
     const c = this.ctx;
     const count = bars.length;
-    const [sr, sg, sb] = this.options.spectrumColor.split(",").map((v) => Number(v.trim()));
-    const [gr, gg, gb] = this.options.glowColor.split(",").map((v) => Number(v.trim()));
     const step = (Math.PI * 2) / count;
     const maxBarPx = Math.min(this.canvas.clientWidth, this.canvas.clientHeight) * this.runtime.maxBarLength;
+    const avgAmp = bars.reduce((acc, n) => acc + Math.max(0, n), 0) / Math.max(1, count);
+    const reactiveAmp = Math.min(1.6, avgAmp + this.beatPulse * 0.55 + this.impactPulse * 0.7);
 
     c.save();
     c.translate(cx, cy);
     c.rotate(this.rotation);
     c.globalCompositeOperation = "lighter";
+    const fillMode = this.options.spectrumStyle === "fill";
 
     // Draw main spectrum path
     c.beginPath();
-    c.strokeStyle = `rgba(${sr}, ${sg}, ${sb}, 0.9)`;
     c.lineWidth = this.options.lineWidth;
 
     // Create points for smooth curve
@@ -458,7 +528,35 @@ export default class AudioVisualizer {
         c.quadraticCurveTo(p0.x, p0.y, midX, midY);
     }
     c.closePath();
-    c.stroke();
+    if (fillMode) {
+      c.fillStyle = "rgba(255, 255, 255, 0.86)";
+      c.fill();
+      c.strokeStyle = "rgba(255, 255, 255, 0.95)";
+      c.stroke();
+
+      const innerRadius = Math.max(6, radius * 0.94);
+      c.save();
+      c.beginPath();
+      c.arc(0, 0, innerRadius, 0, Math.PI * 2);
+      c.closePath();
+      c.clip();
+      if (
+        this.options.fillCenter === "image" &&
+        this.centerImage &&
+        this.centerImage.complete &&
+        this.centerImage.naturalWidth > 0
+      ) {
+        const drawSize = innerRadius * 2;
+        c.drawImage(this.centerImage, -drawSize / 2, -drawSize / 2, drawSize, drawSize);
+      } else {
+        c.fillStyle = "rgba(255, 255, 255, 1)";
+        c.fillRect(-innerRadius, -innerRadius, innerRadius * 2, innerRadius * 2);
+      }
+      c.restore();
+    } else {
+      c.strokeStyle = this.getReactiveColor(reactiveAmp, 0.95, 1.14);
+      c.stroke();
+    }
 
     // Draw bars (classic style) inside
     for (let i = 0; i < count; i += 1) {
@@ -469,11 +567,25 @@ export default class AudioVisualizer {
       const y0 = Math.sin(a) * radius;
       const x1 = Math.cos(a) * (radius + len);
       const y1 = Math.sin(a) * (radius + len);
+      const xTip0 = Math.cos(a) * (radius + len * 0.72);
+      const yTip0 = Math.sin(a) * (radius + len * 0.72);
+      const barReactive = Math.min(1.6, amp + this.beatPulse * 0.45 + this.impactPulse * 0.7);
 
       c.beginPath();
-      c.strokeStyle = `rgba(${gr}, ${gg}, ${gb}, 0.16)`;
-      c.lineWidth = this.options.glowWidth;
+      c.strokeStyle = fillMode
+        ? "rgba(255, 255, 255, 0.88)"
+        : this.getReactiveColor(barReactive, 0.25, 1.2);
+      c.lineWidth = fillMode ? Math.max(1.5, this.options.lineWidth * 0.95) : this.options.glowWidth;
       c.moveTo(x0, y0);
+      c.lineTo(x1, y1);
+      c.stroke();
+
+      c.beginPath();
+      c.strokeStyle = fillMode
+        ? this.getReactiveColor(barReactive, 0.98, 1.2)
+        : this.getReactiveColor(barReactive, 0.95, 1.12);
+      c.lineWidth = Math.max(1, this.options.lineWidth * 0.9);
+      c.moveTo(fillMode ? xTip0 : x0, fillMode ? yTip0 : y0);
       c.lineTo(x1, y1);
       c.stroke();
     }
@@ -483,7 +595,6 @@ export default class AudioVisualizer {
   drawMonstercat(bars, w, h) {
     const c = this.ctx;
     const count = Math.min(bars.length, 63); // Limit bars for cleaner look
-    const [sr, sg, sb] = this.options.spectrumColor.split(",").map((v) => Number(v.trim()));
 
     const barWidth = this.options.monstercatBarWidth || (w / count * 0.6);
     const spacing = this.options.monstercatSpacing || (w / count * 0.2);
@@ -491,14 +602,15 @@ export default class AudioVisualizer {
     const startX = (w - totalWidth) / 2;
     const maxHeight = h * 0.4;
 
-    c.fillStyle = `rgba(${sr}, ${sg}, ${sb}, 0.9)`;
-    c.shadowBlur = 15;
-    c.shadowColor = `rgba(${sr}, ${sg}, ${sb}, 0.5)`;
-
     for (let i = 0; i < count; i++) {
-      const barHeight = Math.max(2, bars[i] * maxHeight * 1.5);
+      const amp = Math.max(0, bars[i]);
+      const barHeight = Math.max(2, amp * maxHeight * 1.5);
       const x = startX + i * (barWidth + spacing);
       const y = h - barHeight - 20; // 20px padding from bottom
+      const barReactive = Math.min(1.6, amp + this.beatPulse * 0.45 + this.impactPulse * 0.7);
+      c.fillStyle = this.getReactiveColor(barReactive, 0.92, 1.15);
+      c.shadowBlur = 15;
+      c.shadowColor = this.getReactiveColor(barReactive, 0.6, 1.1);
 
       c.fillRect(x, y, barWidth, barHeight);
     }
@@ -553,10 +665,15 @@ export default class AudioVisualizer {
     this.energySlew = this.lerp(this.energySlew, this.energy, 10, dt);
     this.bassSlew = this.lerp(this.bassSlew, this.bassEnergy, 14, dt);
     const bassDelta = this.bassSlew - this.lastBassEnergy;
-    if (bassDelta > 0.04 && this.bassSlew > 0.16) {
+    if (bassDelta > 0.035 && this.bassSlew > 0.14) {
       this.beatPulse = Math.min(1, this.beatPulse + bassDelta * 5.2);
     } else {
-      this.beatPulse *= Math.exp(-6.5 * dt);
+      this.beatPulse *= Math.exp(-6.2 * dt);
+    }
+    if (bassDelta > 0.02) {
+      this.impactPulse = Math.min(1, this.impactPulse + bassDelta * 10.5);
+    } else {
+      this.impactPulse *= Math.exp(-13.5 * dt);
     }
     this.lastBassEnergy = this.bassSlew;
     this.hasAudioSignal = this.energySlew > 0.02 || this.bassSlew > 0.015 || this.beatPulse > 0.08;

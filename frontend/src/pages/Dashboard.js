@@ -204,6 +204,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
     particleEnabled: true,
     mode: "circle", // "circle" or "monstercat"
     shakeIntensity: 1,
+    multiColorReactive: false,
+    backgroundOpacity: 1,
+    spectrumStyle: "transparent", // "transparent" | "fill"
+    fillCenter: "white", // "white" | "image"
   });
 
   const isPro = !!subscriptionStatus?.is_subscribed;
@@ -266,6 +270,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
     particleSpeed: 72 * visualizerSettings.particleIntensity,
     mode: visualizerSettings.mode,
     shakeIntensity: visualizerSettings.shakeIntensity,
+    multiColorReactive: visualizerSettings.multiColorReactive,
+    spectrumStyle: visualizerSettings.spectrumStyle,
+    fillCenter: visualizerSettings.fillCenter,
+    centerImageUrl: imagePreviewUrl || "",
   });
 
   useEffect(() => {
@@ -2944,6 +2952,40 @@ const Dashboard = ({ setIsAuthenticated }) => {
                               </div>
 
                               <div className="space-y-2">
+                                <Label htmlFor="viz-spectrum-style" className="text-sm">Spectrum Move</Label>
+                                <Select
+                                  value={visualizerSettings.spectrumStyle}
+                                  onValueChange={(val) => updateVisualizerSetting("spectrumStyle", val)}
+                                >
+                                  <SelectTrigger id="viz-spectrum-style">
+                                    <SelectValue placeholder="Select spectrum move" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="transparent">Transparent</SelectItem>
+                                    <SelectItem value="fill">Fill</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+
+                              {visualizerSettings.mode === "circle" && visualizerSettings.spectrumStyle === "fill" && (
+                                <div className="space-y-2">
+                                  <Label htmlFor="viz-fill-center" className="text-sm">Fill Center</Label>
+                                  <Select
+                                    value={visualizerSettings.fillCenter}
+                                    onValueChange={(val) => updateVisualizerSetting("fillCenter", val)}
+                                  >
+                                    <SelectTrigger id="viz-fill-center">
+                                      <SelectValue placeholder="Center fill type" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="white">White</SelectItem>
+                                      <SelectItem value="image">Use uploaded image</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              )}
+
+                              <div className="space-y-2">
                                 <div className="flex items-center justify-between">
                                   <Label htmlFor="viz-bars" className="text-sm">Bars</Label>
                                   <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
@@ -2978,6 +3020,33 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                   onChange={(e) => updateVisualizerSetting("intensity", Number(e.target.value))}
                                 />
                               </div>
+
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <Label htmlFor="bg-image-opacity" className="text-sm">Background Image Opacity</Label>
+                                  <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                                    {Math.round(visualizerSettings.backgroundOpacity * 100)}%
+                                  </span>
+                                </div>
+                                <Input
+                                  id="bg-image-opacity"
+                                  type="range"
+                                  min="0.1"
+                                  max="1"
+                                  step="0.05"
+                                  value={visualizerSettings.backgroundOpacity}
+                                  onChange={(e) => updateVisualizerSetting("backgroundOpacity", Number(e.target.value))}
+                                />
+                              </div>
+
+                              <Button
+                                type="button"
+                                variant={visualizerSettings.multiColorReactive ? "default" : "outline"}
+                                size="sm"
+                                onClick={() => updateVisualizerSetting("multiColorReactive", !visualizerSettings.multiColorReactive)}
+                              >
+                                {visualizerSettings.multiColorReactive ? "NCS Color ON" : "NCS Color OFF"}
+                              </Button>
 
                               {visualizerSettings.mode === 'circle' && (
                                 <>
@@ -3142,7 +3211,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                   src={imagePreviewUrl} 
                                   alt="Beat cover"
                                   className="w-full h-full object-contain"
-                                  style={{ objectFit: "contain" }}
+                                  style={{
+                                    objectFit: "contain",
+                                    opacity: visualizerEnabled ? visualizerSettings.backgroundOpacity : 1
+                                  }}
                                 />
                                 <div className="absolute inset-0 pointer-events-none">
                                   <button
