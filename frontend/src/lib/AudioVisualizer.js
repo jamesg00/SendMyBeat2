@@ -34,6 +34,8 @@ const DEFAULT_OPTIONS = {
   monstercatSpacing: 2,
   monstercatYOffset: 20,
   monstercatParticleEnabled: false,
+  monstercatParticleSpeed: 1,
+  monstercatParticleSize: 1,
   lowSensitivity: 1,
   midSensitivity: 1,
   highSensitivity: 1,
@@ -50,14 +52,14 @@ const DEFAULT_OPTIONS = {
   reactivity: {
     startBin: 0,
     endBin: null,
-    amplitudeScale: 4.2,
+    amplitudeScale: 2.8,
     normalizeByWindowSize: true,
-    maxAmount: 1.2,
+    maxAmount: 1.0,
     minAmount: 0,
-    minThreshold: 0.02,
+    minThreshold: 0.03,
     useDeltaSmoothing: true,
     minDeltaNeededToTrigger: 0.025,
-    deltaDecay: 0.93,
+    deltaDecay: 0.95,
   },
 };
 
@@ -133,6 +135,7 @@ export default class AudioVisualizer {
     this.recordImageUrl = "";
     this.recordRotation = 0;
     this.bandRefs = { low: 0.32, mid: 0.3, high: 0.26 };
+    this.levelRef = 0.34;
     this.monstercatSmoothedBars = [];
     this.monstercatParticles = [];
 
@@ -447,6 +450,7 @@ export default class AudioVisualizer {
     const [selectedStart, selectedEnd] = this.getSelectedBinRange();
 
     const bars = new Array(this.frequencyBins.length).fill(0);
+    const rawBars = new Array(this.frequencyBins.length).fill(0);
     for (let i = 0; i < this.frequencyBins.length; i += 1) {
       const [b0, b1] = this.frequencyBins[i];
       const hz = this.barCenterFreqs[i] || 0;
@@ -468,15 +472,20 @@ export default class AudioVisualizer {
           : this.runtime.highSensitivity;
       v *= sensitivity * this.runtime.gain;
       // Soft-knee compression keeps loud masters from pinning bars at max.
-      v = 1 - Math.exp(-Math.max(0, v) * 1.35);
+      v = 1 - Math.exp(-Math.max(0, v) * 1.05);
       this.lastPipelineBars[i] = v;
-      const prevBandRef = this.bandRefs[band] || 0.42;
-      const bandRefFollow = v > prevBandRef ? 0.06 : 0.012;
-      const nextBandRef = prevBandRef + (v - prevBandRef) * bandRefFollow;
-      this.bandRefs[band] = Math.max(0.22, Math.min(1.2, nextBandRef));
-      const regionalNorm = v / Math.max(0.34, this.bandRefs[band] * 1.2);
-      v = Math.pow(this.clamp01(regionalNorm), 0.9) * 1.05;
-      v = Math.max(0, Math.min(1.2, v));
+      rawBars[i] = v;
+    }
+
+    // Frame-level adaptive normalization keeps dynamics readable without hard pinning.
+    const rawAvg = rawBars.reduce((acc, n) => acc + n, 0) / Math.max(1, rawBars.length);
+    const levelFollow = rawAvg > this.levelRef ? 0.08 : 0.02;
+    this.levelRef += (rawAvg - this.levelRef) * levelFollow;
+    const frameNorm = 0.52 / Math.max(0.2, this.levelRef);
+
+    for (let i = 0; i < rawBars.length; i += 1) {
+      let v = Math.pow(this.clamp01(rawBars[i] * frameNorm), 0.92) * 1.05;
+      v = Math.max(0, Math.min(1.05, v));
 
       const prev = this.smoothedBars[i] || 0;
       const smoothed = v > prev
@@ -761,7 +770,7 @@ export default class AudioVisualizer {
       c.stroke();
     }
 
-    if (this.options.mode === "circle" && this.options.spectrumRecordImageUrl) {
+    if (this.options.mode === "circle" && this.recordImage) {
       this.drawRecordDisc(radius);
     }
 
@@ -820,13 +829,12 @@ export default class AudioVisualizer {
     const intensity = Math.max(0, Math.min(1.4, this.energySlew * 0.9 + this.bassSlew * 0.7 + this.impactPulse * 0.8));
     const rate = (8 + intensity * 48) * Math.max(0.25, this.options.particleIntensity || 1);
     const toSpawn = Math.floor(rate * dt + Math.random() * 0.7);
-    const baselineY = h - (this.options.monstercatYOffset || 20);
-    const maxHeight = h * 0.44;
+    const speedScale = Math.max(0.25, this.options.monstercatParticleSpeed || 1);
+    const yPad = 14;
 
     for (let i = 0; i < toSpawn; i += 1) {
-      const ySpread = maxHeight * (0.15 + Math.random() * 0.85);
-      const y = baselineY - ySpread + (Math.random() - 0.5) * 18;
-      const vx = 110 + intensity * 260 + Math.random() * 150;
+      const y = yPad + Math.random() * Math.max(1, h - yPad * 2);
+      const vx = (110 + intensity * 260 + Math.random() * 150) * speedScale;
       const life = (w + 120) / Math.max(1, vx) + Math.random() * 0.9;
       this.monstercatParticles.push({
         x: -40 - Math.random() * 100,
@@ -834,7 +842,7 @@ export default class AudioVisualizer {
         vx,
         life,
         maxLife: life,
-        size: 1.2 + Math.random() * 2.2,
+        size: (1.2 + Math.random() * 2.2) * Math.max(0.35, this.options.monstercatParticleSize || 1),
         seed: Math.random() * Math.PI * 2,
       });
     }
@@ -858,18 +866,23 @@ export default class AudioVisualizer {
   drawMonstercatParticles() {
     if (!this.options.monstercatParticleEnabled || this.options.mode !== "monstercat") return;
     const c = this.ctx;
+    const [pr, pg, pb] = this.options.particleColor.split(",").map((v) => Number(v.trim()));
     for (let i = 0; i < this.monstercatParticles.length; i += 1) {
       const p = this.monstercatParticles[i];
       const t = p.life / Math.max(0.001, p.maxLife);
       const alpha = Math.max(0, Math.min(0.55, t * 0.55));
       if (alpha <= 0) continue;
       const amp = Math.min(1.35, 1 - t + this.energySlew * 0.35);
-      c.fillStyle = this.getReactiveColor(amp, alpha, 1.15, true);
+      c.fillStyle = this.options.multiColorReactive
+        ? this.getReactiveColor(amp, alpha, 1.15, true)
+        : `rgba(${pr}, ${pg}, ${pb}, ${alpha})`;
       c.beginPath();
       c.arc(p.x, p.y, p.size, 0, Math.PI * 2);
       c.fill();
 
-      c.strokeStyle = this.getReactiveColor(amp, alpha * 0.65, 1.2, true);
+      c.strokeStyle = this.options.multiColorReactive
+        ? this.getReactiveColor(amp, alpha * 0.65, 1.2, true)
+        : `rgba(${pr}, ${pg}, ${pb}, ${alpha * 0.65})`;
       c.lineWidth = Math.max(1, p.size * 0.75);
       c.beginPath();
       c.moveTo(p.x - p.size * 4.2, p.y);

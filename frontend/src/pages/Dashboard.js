@@ -204,6 +204,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
     bars: 128,
     intensity: 1,
     particleIntensity: 1,
+    monstercatParticleSpeed: 1,
+    monstercatParticleSize: 1,
     rotateSpeed: 0.002,
     radius: 0.23,
     maxBarLength: 0.18,
@@ -310,6 +312,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
     spectrumBorderColor: hexToRgbString(visualizerSettings.spectrumBorderColor, "255, 255, 255"),
     spectrumRecordImageUrl,
     monstercatYOffset: visualizerSettings.monstercatYOffset,
+    monstercatParticleSpeed: visualizerSettings.monstercatParticleSpeed,
+    monstercatParticleSize: visualizerSettings.monstercatParticleSize,
     lowSensitivity: visualizerSettings.lowSensitivity,
     midSensitivity: visualizerSettings.midSensitivity,
     highSensitivity: visualizerSettings.highSensitivity,
@@ -3463,6 +3467,46 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                     step="0.01"
                                     value={visualizerSettings.monstercatSmoothing}
                                     onChange={(e) => updateVisualizerSetting("monstercatSmoothing", Number(e.target.value))}
+                                  />
+                                </div>
+                              )}
+
+                              {visualizerSettings.mode === "monstercat" && (
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <Label htmlFor="viz-monstercat-particle-speed" className="text-sm">Flow Particle Speed</Label>
+                                    <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                                      {visualizerSettings.monstercatParticleSpeed.toFixed(2)}x
+                                    </span>
+                                  </div>
+                                  <Input
+                                    id="viz-monstercat-particle-speed"
+                                    type="range"
+                                    min="0.3"
+                                    max="3"
+                                    step="0.05"
+                                    value={visualizerSettings.monstercatParticleSpeed}
+                                    onChange={(e) => updateVisualizerSetting("monstercatParticleSpeed", Number(e.target.value))}
+                                  />
+                                </div>
+                              )}
+
+                              {visualizerSettings.mode === "monstercat" && (
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <Label htmlFor="viz-monstercat-particle-size" className="text-sm">Flow Particle Size</Label>
+                                    <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                                      {visualizerSettings.monstercatParticleSize.toFixed(2)}x
+                                    </span>
+                                  </div>
+                                  <Input
+                                    id="viz-monstercat-particle-size"
+                                    type="range"
+                                    min="0.35"
+                                    max="3"
+                                    step="0.05"
+                                    value={visualizerSettings.monstercatParticleSize}
+                                    onChange={(e) => updateVisualizerSetting("monstercatParticleSize", Number(e.target.value))}
                                   />
                                 </div>
                               )}
