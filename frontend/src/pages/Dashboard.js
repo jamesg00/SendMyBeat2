@@ -3249,7 +3249,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                 <canvas
                                   ref={visualizerCanvasRef}
                                   className="absolute inset-0 pointer-events-none"
-                                  style={{ width: "100%", height: "100%", opacity: 0.95 }}
+                                  style={{ width: "100%", height: "100%", opacity: 1 }}
                                 />
                               )}
                             </div>

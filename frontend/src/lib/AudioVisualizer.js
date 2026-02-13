@@ -671,10 +671,8 @@ export default class AudioVisualizer {
     }
 
     c.globalCompositeOperation = "source-over";
-    c.fillStyle = this.options.trailsEnabled
-      ? `rgba(2, 6, 17, ${this.options.backgroundFade})`
-      : "rgba(2, 6, 17, 1)";
-    c.fillRect(0, 0, w, h);
+    // Keep the visualizer transparent so it does not darken the background image.
+    c.clearRect(0, 0, w, h);
 
     const bars = this.computeBars();
 
@@ -726,8 +724,6 @@ export default class AudioVisualizer {
     } else if (this.options.mode === 'monstercat') {
         this.drawMonstercat(this.getDisplayBars(bars), w, h);
     }
-
-    this.drawVignette();
 
     if (this.barTransition > 0) {
       this.barTransition = Math.max(0, this.barTransition - (dt / this.barTransitionDuration));
