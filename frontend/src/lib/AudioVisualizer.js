@@ -7,7 +7,7 @@ const DEFAULT_OPTIONS = {
   curvePower: 0.6,
   attack: 0.72,
   release: 0.16,
-  gain: 1.35,
+  gain: 1.0, // Reduced from 1.35 to prevent clipping
   radius: 0.23,
   maxBarLength: 0.18,
   rotateSpeed: 0.002,
@@ -40,7 +40,7 @@ const DEFAULT_OPTIONS = {
   midSensitivity: 1,
   highSensitivity: 1,
   monstercatSmoothing: 0.35,
-  shakeIntensity: 1.0,
+  shakeIntensity: 0.6, // Reduced from 1.0
   multiColorReactive: false,
   spectrumStyle: "fill",
   fillCenter: "white",
@@ -52,14 +52,14 @@ const DEFAULT_OPTIONS = {
   reactivity: {
     startBin: 0,
     endBin: null,
-    amplitudeScale: 2.8,
+    amplitudeScale: 2.4, // Reduced from 2.8
     normalizeByWindowSize: true,
     maxAmount: 1.0,
     minAmount: 0,
     minThreshold: 0.03,
     useDeltaSmoothing: true,
     minDeltaNeededToTrigger: 0.025,
-    deltaDecay: 0.95,
+    deltaDecay: 0.90, // Reduced from 0.95 for faster release
   },
 };
 
@@ -479,7 +479,8 @@ export default class AudioVisualizer {
 
     // Frame-level adaptive normalization keeps dynamics readable without hard pinning.
     const rawAvg = rawBars.reduce((acc, n) => acc + n, 0) / Math.max(1, rawBars.length);
-    const levelFollow = rawAvg > this.levelRef ? 0.08 : 0.02;
+    // Faster adaptation to loud volume (0.15) to prevent staying maxed
+    const levelFollow = rawAvg > this.levelRef ? 0.15 : 0.02;
     this.levelRef += (rawAvg - this.levelRef) * levelFollow;
     const frameNorm = 0.52 / Math.max(0.2, this.levelRef);
 
@@ -946,8 +947,8 @@ export default class AudioVisualizer {
   }
 
   calculateShake() {
-    if (this.bassEnergy > 0.4 && this.options.shakeIntensity > 0) {
-        const shakeAmt = (this.bassEnergy - 0.4) * 15 * this.options.shakeIntensity;
+    if (this.bassEnergy > 0.45 && this.options.shakeIntensity > 0) { // Threshhold 0.4 -> 0.45
+        const shakeAmt = (this.bassEnergy - 0.45) * 10 * this.options.shakeIntensity; // Mult 15 -> 10
         this.shakeOffsetX = (Math.random() - 0.5) * shakeAmt;
         this.shakeOffsetY = (Math.random() - 0.5) * shakeAmt;
     } else {
