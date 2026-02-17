@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,35 +11,17 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import axios from "axios";
 import { API } from "@/App";
 import { toast } from "sonner";
-import { Music, Sparkles, Save, LogOut, Copy, Trash2, Edit, Plus, Upload, Youtube, Link, CheckCircle2, AlertCircle, Target, Wand2, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, DollarSign } from "lucide-react";
+import { Music, Sparkles, Save, LogOut, Copy, Trash2, Edit, Plus, Youtube, CheckCircle2, AlertCircle, Target, ChevronLeft, ChevronRight, DollarSign } from "lucide-react";
 import DarkModeToggle from "@/components/DarkModeToggle";
 import SubscriptionBanner from "@/components/SubscriptionBanner";
 import UpgradeModal from "@/components/UpgradeModal";
 import AdBanner from "@/components/AdBanner";
 import ProgressBar from "@/components/ProgressBar";
 import ThemeCustomizer from "@/components/ThemeCustomizer";
-import AudioVisualizer from "@/lib/AudioVisualizer";
+import UploadStudio from "@/components/UploadStudio";
 
 const TAG_LIMIT = 120;
 const TAG_HISTORY_LIMIT = 100;
-const AUDIO_EXTENSIONS = [".mp3", ".wav", ".m4a", ".flac", ".ogg"];
-const AUDIO_MIME_TYPES = [
-  "audio/mpeg",
-  "audio/wav",
-  "audio/x-wav",
-  "audio/mp4",
-  "audio/flac",
-  "audio/ogg"
-];
-const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".avif", ".heic", ".heif"];
-const IMAGE_MIME_TYPES = [
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/avif",
-  "image/heic",
-  "image/heif"
-];
 const DASHBOARD_TABS = [
   { value: "tags", label: "Tags" },
   { value: "descriptions", label: "Descriptions" },
@@ -75,8 +56,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [user, setUser] = useState(null);
   const [tagQuery, setTagQuery] = useState("");
   const [tagProvider, setTagProvider] = useState("grok");
-  const [customTags, setCustomTags] = useState(""); // User's custom tags (comma-separated)
-  const [additionalTags, setAdditionalTags] = useState(""); // Add more tags to existing generation
+  const [customTags, setCustomTags] = useState("");
+  const [additionalTags, setAdditionalTags] = useState("");
   const [generatedTags, setGeneratedTags] = useState([]);
   const [loadingTags, setLoadingTags] = useState(false);
   const [tagHistory, setTagHistory] = useState([]);
@@ -100,49 +81,22 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [editingDesc, setEditingDesc] = useState(null);
   const [showSaveRefinedDialog, setShowSaveRefinedDialog] = useState(false);
   const [refinedTextToSave, setRefinedTextToSave] = useState("");
-  
+
   // Progress bar states
   const [progressActive, setProgressActive] = useState(false);
   const [progressMessage, setProgressMessage] = useState("");
   const [progressDuration, setProgressDuration] = useState(30000);
-  
+
   // Cancel operation states
   const [tagGenerationController, setTagGenerationController] = useState(null);
-  const [uploadController, setUploadController] = useState(null);
-  
+
   // YouTube upload states
   const [youtubeConnected, setYoutubeConnected] = useState(false);
   const [youtubeEmail, setYoutubeEmail] = useState("");
   const [youtubeProfilePicture, setYoutubeProfilePicture] = useState("");
   const [youtubeName, setYoutubeName] = useState("");
-  const [audioFile, setAudioFile] = useState(null);
-  const [imageFile, setImageFile] = useState(null);
-  const [uploadTitle, setUploadTitle] = useState("");
-  const [selectedDescriptionId, setSelectedDescriptionId] = useState("");
-  const [uploadDescriptionText, setUploadDescriptionText] = useState("");
-  const [selectedTagsId, setSelectedTagsId] = useState("");
-  const [privacyStatus, setPrivacyStatus] = useState("public");
-  const [videoAspectRatio, setVideoAspectRatio] = useState("16:9");
-  const [imageScaleX, setImageScaleX] = useState(1);
-  const [imageScaleY, setImageScaleY] = useState(1);
-  const [lockImageScale, setLockImageScale] = useState(true);
-  const [imagePosX, setImagePosX] = useState(0);
-  const [imagePosY, setImagePosY] = useState(0);
-  const [backgroundColor, setBackgroundColor] = useState("black");
-  const [removeWatermark, setRemoveWatermark] = useState(false);
-  const [showImageSettings, setShowImageSettings] = useState(false);
-  const [uploadingAudio, setUploadingAudio] = useState(false);
-  const [uploadingImage, setUploadingImage] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [audioFileId, setAudioFileId] = useState("");
-  const [imageFileId, setImageFileId] = useState("");
-  const [uploadingToYouTube, setUploadingToYouTube] = useState(false);
   const [expandedDescriptions, setExpandedDescriptions] = useState(new Set());
-  const [isAudioDragActive, setIsAudioDragActive] = useState(false);
-  const [isAudioDragValid, setIsAudioDragValid] = useState(false);
-  const [isImageDragActive, setIsImageDragActive] = useState(false);
-  const [isImageDragValid, setIsImageDragValid] = useState(false);
-  
+
   // Subscription states
   const [subscriptionStatus, setSubscriptionStatus] = useState(null);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
@@ -164,78 +118,11 @@ const Dashboard = ({ setIsAuthenticated }) => {
   // Check-in prompt state
   const [showCheckinPrompt, setShowCheckinPrompt] = useState(false);
 
-  // Beat Analyzer states
-  const [beatAnalysis, setBeatAnalysis] = useState(null);
-  const [analyzingBeat, setAnalyzingBeat] = useState(false);
-  const [showAiYoutubeTools, setShowAiYoutubeTools] = useState(false);
-
-  // Thumbnail Checker states
-  const [thumbnailCheckFile, setThumbnailCheckFile] = useState(null);
-  const [thumbnailCheckResult, setThumbnailCheckResult] = useState(null);
-  const [checkingThumbnail, setCheckingThumbnail] = useState(false);
-  const [thumbnailProgress, setThumbnailProgress] = useState(0);
-  const thumbnailAbortRef = useRef(null);
-  const thumbnailProgressIntervalRef = useRef(null);
   const [joiningTagsLoading, setJoiningTagsLoading] = useState(false);
   const [joiningTagsProgress, setJoiningTagsProgress] = useState(0);
   const joinProgressIntervalRef = useRef(null);
 
-  // Preview (shared) states
-  const previewSectionRef = useRef(null);
-  const previewContainerRef = useRef(null);
-  const [dragState, setDragState] = useState(null);
-  const [resizeState, setResizeState] = useState(null);
-  const previewClickStartRef = useRef({ x: 0, y: 0 });
-  const previewDraggedRef = useRef(false);
-  const [previewSize, setPreviewSize] = useState(720);
-  const [imageMeta, setImageMeta] = useState({ width: 0, height: 0, ratio: 1 });
-  const [imagePreviewUrl, setImagePreviewUrl] = useState("");
-  const [audioPreviewUrl, setAudioPreviewUrl] = useState("");
-  const audioPlayerRef = useRef(null);
-  const visualizerCanvasRef = useRef(null);
-  const visualizerRef = useRef(null);
-  const miniPreviewCanvasRef = useRef(null);
-  const spectrumImageInputRef = useRef(null);
-  const [audioDuration, setAudioDuration] = useState(0);
-  const [audioCurrentTime, setAudioCurrentTime] = useState(0);
-  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
-  const [visualizerEnabled, setVisualizerEnabled] = useState(false);
-  const [visualizerSettings, setVisualizerSettings] = useState({
-    bars: 128,
-    intensity: 1,
-    particleIntensity: 1,
-    monstercatParticleSpeed: 1,
-    monstercatParticleSize: 1,
-    rotateSpeed: 0.002,
-    radius: 0.23,
-    maxBarLength: 0.18,
-    trailsEnabled: true,
-    particleEnabled: true,
-    monstercatParticleEnabled: false,
-    mode: "circle", // "circle" or "monstercat"
-    shakeIntensity: 1,
-    multiColorReactive: false,
-    backgroundOpacity: 1,
-    spectrumStyle: "fill", // "transparent" | "fill"
-    fillCenter: "white", // "white" | "image" | "ncs"
-    particleColor: "#8cc8ff",
-    spectrumBorderWidth: 2,
-    spectrumBorderColor: "#ffffff",
-    monstercatYOffset: 20,
-    lowSensitivity: 1,
-    midSensitivity: 1,
-    highSensitivity: 1,
-    monstercatSmoothing: 0.35,
-  });
-  const [spectrumRecordImageUrl, setSpectrumRecordImageUrl] = useState("");
-  const [spectrumRecordImageName, setSpectrumRecordImageName] = useState("");
-
   const isPro = !!subscriptionStatus?.is_subscribed;
-  const thumbnailContextReady = Boolean(
-    uploadTitle?.trim() &&
-    uploadDescriptionText?.trim() &&
-    generatedTags?.length
-  );
   const adsUnlocked = generatedTags.length > 0 || (tagHistory?.length || 0) > 0;
   const adEligibleTabs = ["tags", "descriptions"].includes(activeTab);
   const adContentReady = adsUnlocked;
@@ -255,14 +142,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
     adContentReady
   );
 
-  const formatTime = (seconds = 0) => {
-    if (!Number.isFinite(seconds)) return "0:00";
-    const totalSeconds = Math.floor(seconds);
-    const mins = Math.floor(totalSeconds / 60);
-    const secs = totalSeconds % 60;
-    return `${mins}:${secs.toString().padStart(2, "0")}`;
-  };
-
   const goToPreviousTab = () => {
     const previousIndex = (activeTabIndex - 1 + DASHBOARD_TABS.length) % DASHBOARD_TABS.length;
     setActiveTab(DASHBOARD_TABS[previousIndex].value);
@@ -271,63 +150,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const goToNextTab = () => {
     const nextIndex = (activeTabIndex + 1) % DASHBOARD_TABS.length;
     setActiveTab(DASHBOARD_TABS[nextIndex].value);
-  };
-
-  const updateVisualizerSetting = (key, value) => {
-    setVisualizerSettings((prev) => ({ ...prev, [key]: value }));
-  };
-
-  const hexToRgbString = (hex, fallback = "255, 255, 255") => {
-    const clean = (hex || "").replace("#", "");
-    if (clean.length !== 6) return fallback;
-    const value = Number.parseInt(clean, 16);
-    if (Number.isNaN(value)) return fallback;
-    const r = (value >> 16) & 255;
-    const g = (value >> 8) & 255;
-    const b = value & 255;
-    return `${r}, ${g}, ${b}`;
-  };
-
-  const getVisualizerOptions = () => ({
-    bars: visualizerSettings.bars,
-    gain: visualizerSettings.intensity,
-    maxBarLength: visualizerSettings.maxBarLength,
-    radius: visualizerSettings.radius,
-    rotateSpeed: visualizerSettings.rotateSpeed,
-    trailsEnabled: visualizerSettings.trailsEnabled,
-    particleEnabled: visualizerSettings.particleEnabled,
-    particleIntensity: visualizerSettings.particleIntensity,
-    monstercatParticleEnabled: visualizerSettings.monstercatParticleEnabled,
-    maxSpawnRate: Math.round(120 * visualizerSettings.particleIntensity),
-    baseSpawnRate: Math.round(10 * Math.max(0.5, visualizerSettings.particleIntensity)),
-    particleSpeed: 72 * visualizerSettings.particleIntensity,
-    mode: visualizerSettings.mode,
-    shakeIntensity: visualizerSettings.shakeIntensity,
-    multiColorReactive: visualizerSettings.multiColorReactive,
-    spectrumStyle: visualizerSettings.spectrumStyle,
-    fillCenter: visualizerSettings.fillCenter,
-    centerImageUrl: imagePreviewUrl || "",
-    particleColor: hexToRgbString(visualizerSettings.particleColor, "140, 200, 255"),
-    spectrumBorderWidth: visualizerSettings.spectrumBorderWidth,
-    spectrumBorderColor: hexToRgbString(visualizerSettings.spectrumBorderColor, "255, 255, 255"),
-    spectrumRecordImageUrl,
-    monstercatYOffset: visualizerSettings.monstercatYOffset,
-    monstercatParticleSpeed: visualizerSettings.monstercatParticleSpeed,
-    monstercatParticleSize: visualizerSettings.monstercatParticleSize,
-    lowSensitivity: visualizerSettings.lowSensitivity,
-    midSensitivity: visualizerSettings.midSensitivity,
-    highSensitivity: visualizerSettings.highSensitivity,
-    monstercatSmoothing: visualizerSettings.monstercatSmoothing,
-  });
-
-  const clearVisualizerCanvases = () => {
-    const canvases = [visualizerCanvasRef.current, miniPreviewCanvasRef.current];
-    canvases.forEach((canvas) => {
-      if (!canvas) return;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-    });
   };
 
   useEffect(() => {
@@ -345,147 +167,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
       joinProgressIntervalRef.current = null;
     }
   }, []);
-
-  useEffect(() => () => {
-    if (spectrumRecordImageUrl) {
-      URL.revokeObjectURL(spectrumRecordImageUrl);
-    }
-  }, [spectrumRecordImageUrl]);
-
-  useEffect(() => {
-    const audioEl = audioPlayerRef.current;
-    if (!audioEl || !audioPreviewUrl) return;
-
-    const handleTimeUpdate = () => setAudioCurrentTime(audioEl.currentTime || 0);
-    const handleLoadedMetadata = () => setAudioDuration(audioEl.duration || 0);
-    const handlePlay = async () => {
-      setIsAudioPlaying(true);
-      if (!visualizerEnabled || !visualizerRef.current) return;
-      try {
-        await visualizerRef.current.resumeAudioContext();
-        visualizerRef.current.start();
-      } catch (err) {
-        console.error("Visualizer resume failed:", err);
-      }
-    };
-    const handlePause = () => {
-      setIsAudioPlaying(false);
-      if (visualizerRef.current) {
-        visualizerRef.current.stop();
-      }
-      clearVisualizerCanvases();
-    };
-    const handleEnded = () => {
-      setIsAudioPlaying(false);
-      setAudioCurrentTime(audioEl.duration || 0);
-      if (visualizerRef.current) {
-        visualizerRef.current.stop();
-      }
-      clearVisualizerCanvases();
-    };
-
-    audioEl.addEventListener("timeupdate", handleTimeUpdate);
-    audioEl.addEventListener("loadedmetadata", handleLoadedMetadata);
-    audioEl.addEventListener("play", handlePlay);
-    audioEl.addEventListener("pause", handlePause);
-    audioEl.addEventListener("ended", handleEnded);
-
-    return () => {
-      audioEl.removeEventListener("timeupdate", handleTimeUpdate);
-      audioEl.removeEventListener("loadedmetadata", handleLoadedMetadata);
-      audioEl.removeEventListener("play", handlePlay);
-      audioEl.removeEventListener("pause", handlePause);
-      audioEl.removeEventListener("ended", handleEnded);
-    };
-  }, [audioPreviewUrl, audioFile, imageFile]);
-
-  useEffect(() => {
-    if (!audioPlayerRef.current) return;
-    if (!audioPreviewUrl) {
-      setAudioCurrentTime(0);
-      setAudioDuration(0);
-      setIsAudioPlaying(false);
-      return;
-    }
-    audioPlayerRef.current.currentTime = 0;
-    setAudioCurrentTime(0);
-  }, [audioPreviewUrl]);
-
-  useEffect(() => {
-    const canvas = visualizerCanvasRef.current || miniPreviewCanvasRef.current;
-    const audioEl = audioPlayerRef.current;
-    if (!canvas || !audioEl) {
-      if (visualizerRef.current) {
-        visualizerRef.current.destroy();
-        visualizerRef.current = null;
-      }
-      return;
-    }
-
-    if (!visualizerEnabled) {
-      if (visualizerRef.current) {
-        visualizerRef.current.stop();
-      }
-      clearVisualizerCanvases();
-      return;
-    }
-
-    if (!visualizerRef.current) {
-      visualizerRef.current = new AudioVisualizer(canvas, getVisualizerOptions());
-    } else {
-      visualizerRef.current.attachCanvas(canvas);
-      visualizerRef.current.setOptions(getVisualizerOptions());
-    }
-
-    const startVisualizer = async () => {
-      try {
-        await visualizerRef.current.connectMediaElement(audioEl);
-        if (!audioEl.paused && !audioEl.ended) {
-          await visualizerRef.current.resumeAudioContext();
-          visualizerRef.current.start();
-        } else {
-          visualizerRef.current.stop();
-        }
-      } catch (err) {
-        console.error("Visualizer init failed:", err);
-      }
-    };
-
-    startVisualizer();
-  }, [
-    visualizerEnabled,
-    audioPreviewUrl,
-    imagePreviewUrl,
-    audioFile,
-    imageFile,
-    activeTab,
-  ]);
-
-  useEffect(() => {
-    if (!visualizerRef.current) return;
-    visualizerRef.current.setOptions(getVisualizerOptions());
-    if (visualizerEnabled) {
-      visualizerRef.current.start();
-    }
-  }, [visualizerSettings, visualizerEnabled]);
-
-  useEffect(() => {
-    return () => {
-      if (visualizerRef.current) {
-        visualizerRef.current.destroy();
-        visualizerRef.current = null;
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!selectedDescriptionId) {
-      setUploadDescriptionText("");
-      return;
-    }
-    const selectedDesc = descriptions.find(d => d.id === selectedDescriptionId);
-    setUploadDescriptionText(selectedDesc?.content || "");
-  }, [selectedDescriptionId, descriptions]);
 
   const fetchUser = async () => {
     try {
@@ -549,7 +230,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
         success_url: `${window.location.origin}/dashboard?upgraded=true`,
         cancel_url: `${window.location.origin}/dashboard`
       });
-      
+
       // Redirect to Stripe checkout
       window.location.href = response.data.checkout_url;
     } catch (error) {
@@ -564,42 +245,13 @@ const Dashboard = ({ setIsAuthenticated }) => {
     toast.success("Logged out successfully");
   };
 
-  const fileHasAllowedExtension = (fileName, allowedExtensions) => {
-    const lower = (fileName || "").toLowerCase();
-    return allowedExtensions.some((ext) => lower.endsWith(ext));
-  };
-
-  const isValidAudioFile = (file) => {
-    if (!file) return false;
-    if (file.type && AUDIO_MIME_TYPES.includes(file.type)) return true;
-    return fileHasAllowedExtension(file.name, AUDIO_EXTENSIONS);
-  };
-
-  const isValidImageFile = (file) => {
-    if (!file) return false;
-    if (file.type && IMAGE_MIME_TYPES.includes(file.type)) return true;
-    return fileHasAllowedExtension(file.name, IMAGE_EXTENSIONS);
-  };
-
-  const isValidDragItem = (item, type) => {
-    if (!item || item.kind !== "file") return false;
-    const mime = item.type || "";
-    if (type === "audio") {
-      return AUDIO_MIME_TYPES.includes(mime);
-    }
-    if (type === "image") {
-      return IMAGE_MIME_TYPES.includes(mime);
-    }
-    return false;
-  };
-
   const handleAnalyzeChannel = async () => {
     setLoadingAnalytics(true);
     try {
       const response = await axios.post(`${API}/youtube/analytics`);
       setAnalyticsData(response.data);
       toast.success("Channel analysis complete!");
-      
+
       // Refresh credits after analysis
       await fetchSubscriptionStatus();
     } catch (error) {
@@ -613,7 +265,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
         console.error("Analytics error:", error);
         toast.error("Failed to analyze channel");
       }
-      
+
       // Still refresh credits on error to show updated count
       await fetchSubscriptionStatus();
     } finally {
@@ -672,45 +324,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
     }
   };
 
-  const toggleAudioPlayback = async () => {
-    const audioEl = audioPlayerRef.current;
-    if (!audioEl) return;
-    if (!audioEl.paused) {
-      audioEl.pause();
-      if (visualizerRef.current) {
-        visualizerRef.current.stop();
-      }
-      clearVisualizerCanvases();
-      return;
-    }
-    try {
-      const nearEnd =
-        Number.isFinite(audioEl.duration) &&
-        audioEl.duration > 0 &&
-        audioEl.currentTime >= audioEl.duration - 0.05;
-      if (audioEl.ended || nearEnd) {
-        audioEl.currentTime = 0;
-        setAudioCurrentTime(0);
-      }
-      if (visualizerEnabled && visualizerRef.current) {
-        await visualizerRef.current.resumeAudioContext();
-      }
-      await audioEl.play();
-    } catch (error) {
-      console.error("Audio play failed", error);
-      toast.error("Unable to play preview audio");
-    }
-  };
-
-  const handleAudioSeek = (event) => {
-    const nextTime = Number(event.target.value);
-    const audioEl = audioPlayerRef.current;
-    if (audioEl) {
-      audioEl.currentTime = nextTime;
-    }
-    setAudioCurrentTime(nextTime);
-  };
-
   const promptCheckin = () => {
     // Only show if user has started the challenge and hasn't checked in today
     if (growthData && growthData.challenge_start_date) {
@@ -727,26 +340,26 @@ const Dashboard = ({ setIsAuthenticated }) => {
       toast.error("Please enter a search query");
       return;
     }
-    
+
     // Parse custom tags
     const customTagsArray = customTags
       .split(',')
       .map(tag => tag.trim())
       .filter(tag => tag.length > 0);
-    
+
     // Create abort controller for cancellation
     const controller = new AbortController();
     setTagGenerationController(controller);
-    
+
     setLoadingTags(true);
     setProgressActive(true);
     setProgressMessage("🎵 Generating optimized YouTube tags + searching artist's popular songs...");
     setProgressDuration(45000); // 45 seconds for tag generation
-    
+
     try {
       const response = await axios.post(
-        `${API}/tags/generate`, 
-        { 
+        `${API}/tags/generate`,
+        {
           query: tagQuery,
           custom_tags: customTagsArray,
           llm_provider: tagProvider
@@ -756,12 +369,12 @@ const Dashboard = ({ setIsAuthenticated }) => {
       setGeneratedTags(response.data.tags);
       toast.success(`Generated ${response.data.tags.length} tags! (AI + YouTube search + your custom tags)`);
       fetchTagHistory();
-      
+
       // Refresh credits after a short delay to ensure backend has updated
       setTimeout(() => {
         fetchSubscriptionStatus();
       }, 500);
-      
+
       // Prompt check-in after successful generation
       setTimeout(() => {
         promptCheckin();
@@ -772,7 +385,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
         toast.info("Tag generation cancelled. No credits used.");
         return;
       }
-      
+
       // Handle credit limit
       if (error.response?.status === 402) {
         setShowUpgradeModal(true);
@@ -780,7 +393,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
       } else {
         toast.error(error.response?.data?.detail?.message || error.response?.data?.detail || "Failed to generate tags");
       }
-      
+
       // Refresh credits even on error
       setTimeout(() => {
         fetchSubscriptionStatus();
@@ -815,7 +428,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
 
   const copyTags = () => {
     const text = generatedTags.join(", ");
-    
+
     // Fallback copy method for when Clipboard API is blocked
     const textArea = document.createElement('textarea');
     textArea.value = text;
@@ -823,14 +436,14 @@ const Dashboard = ({ setIsAuthenticated }) => {
     textArea.style.left = '-999999px';
     document.body.appendChild(textArea);
     textArea.select();
-    
+
     try {
       document.execCommand('copy');
       toast.success("Tags copied to clipboard!");
     } catch (err) {
       toast.error("Failed to copy tags");
     }
-    
+
     document.body.removeChild(textArea);
   };
 
@@ -987,7 +600,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
       }
       document.body.removeChild(textarea);
     };
-    
+
     // Try modern API first, fallback if blocked
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(content)
@@ -1022,11 +635,11 @@ const Dashboard = ({ setIsAuthenticated }) => {
     const confirmed = window.confirm(
       "Are you sure you want to delete this description?\n\nThis action cannot be undone. This is your last chance to save it!"
     );
-    
+
     if (!confirmed) {
       return; // User cancelled, don't delete
     }
-    
+
     try {
       await axios.delete(`${API}/descriptions/${id}`);
       toast.success("Description deleted");
@@ -1038,7 +651,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
 
   const handleUpdateDescription = async () => {
     if (!editingDesc) return;
-    
+
     try {
       await axios.put(`${API}/descriptions/${editingDesc.id}`, {
         title: editingDesc.title,
@@ -1065,7 +678,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
       setRefinedTextToSave(response.data.refined_description);
       setShowSaveRefinedDialog(true);
       toast.success("Description refined!");
-      
+
       // Refresh credits
       setTimeout(() => {
         fetchSubscriptionStatus();
@@ -1078,7 +691,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
       } else {
         toast.error("Failed to refine description");
       }
-      
+
       // Refresh credits even on error
       setTimeout(() => {
         fetchSubscriptionStatus();
@@ -1090,7 +703,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
 
   const handleSaveRefinedAsTemplate = async () => {
     if (!refinedTextToSave.trim()) return;
-    
+
     try {
       await axios.post(`${API}/descriptions`, {
         title: `Refined - ${new Date().toLocaleDateString()}`,
@@ -1109,12 +722,12 @@ const Dashboard = ({ setIsAuthenticated }) => {
     setLoadingGenerate(true);
     try {
       const response = await axios.post(`${API}/descriptions/generate`, generateForm);
-      setNewDescription({ 
+      setNewDescription({
         title: `Generated - ${generateForm.key || generateForm.bpm || 'Beat'}`,
-        content: response.data.generated_description 
+        content: response.data.generated_description
       });
       toast.success("Description generated! You can edit and save it.");
-      
+
       // Refresh credits
       setTimeout(() => {
         fetchSubscriptionStatus();
@@ -1127,7 +740,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
       } else {
         toast.error("Failed to generate description");
       }
-      
+
       // Refresh credits even on error
       setTimeout(() => {
         fetchSubscriptionStatus();
@@ -1150,108 +763,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
     }
   };
 
-  const handleAnalyzeBeat = async () => {
-    if (!uploadTitle || generatedTags.length === 0) {
-      toast.error("Please add a title and generate tags first");
-      return;
-    }
-
-    setAnalyzingBeat(true);
-    try {
-      const selectedDesc = descriptions.find(d => d.id === selectedDescriptionId);
-      
-      const response = await axios.post(`${API}/beat/analyze`, {
-        title: uploadTitle,
-        tags: generatedTags,
-        description: selectedDesc?.content || ""
-      });
-      
-      setBeatAnalysis(response.data);
-      toast.success(`Analysis complete! Score: ${response.data.overall_score}/100`);
-    } catch (error) {
-      console.error("Beat analysis failed:", error);
-      toast.error("Failed to analyze beat");
-    } finally {
-      setAnalyzingBeat(false);
-    }
-  };
-
-  const handleThumbnailCheck = async () => {
-    if (!thumbnailCheckFile) {
-      toast.error("Please upload a thumbnail image first");
-      return;
-    }
-    if (!thumbnailContextReady) {
-      toast.error("Add a title, description, and tags first");
-      return;
-    }
-
-    setCheckingThumbnail(true);
-    setThumbnailProgress(5);
-    const controller = new AbortController();
-    thumbnailAbortRef.current = controller;
-    if (thumbnailProgressIntervalRef.current) {
-      clearInterval(thumbnailProgressIntervalRef.current);
-    }
-    thumbnailProgressIntervalRef.current = setInterval(() => {
-      setThumbnailProgress((prev) => (prev < 95 ? prev + 5 : prev));
-    }, 500);
-    try {
-      const formData = new FormData();
-      formData.append("file", thumbnailCheckFile);
-      formData.append("title", uploadTitle || "");
-      formData.append("tags", generatedTags.join(", "));
-      formData.append("description", uploadDescriptionText || "");
-      formData.append("llm_provider", "grok");
-
-      const response = await axios.post(`${API}/beat/thumbnail-check`, formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-        signal: controller.signal
-      });
-      setThumbnailCheckResult(response.data);
-      setThumbnailProgress(100);
-      toast.success("Thumbnail check complete!");
-    } catch (error) {
-      if (error?.code === "ERR_CANCELED") {
-        return;
-      }
-      setThumbnailProgress(0);
-      if (error.response?.status === 402) {
-        setShowUpgradeModal(true);
-        toast.error("Daily limit reached! Upgrade to continue.");
-      } else {
-        toast.error("Failed to analyze thumbnail");
-      }
-    } finally {
-      if (thumbnailProgressIntervalRef.current) {
-        clearInterval(thumbnailProgressIntervalRef.current);
-        thumbnailProgressIntervalRef.current = null;
-      }
-      thumbnailAbortRef.current = null;
-      setCheckingThumbnail(false);
-      setTimeout(() => {
-        fetchSubscriptionStatus();
-      }, 500);
-    }
-  };
-
-  const cancelThumbnailCheck = () => {
-    if (!checkingThumbnail) {
-      return;
-    }
-    if (thumbnailAbortRef.current) {
-      thumbnailAbortRef.current.abort();
-      thumbnailAbortRef.current = null;
-    }
-    if (thumbnailProgressIntervalRef.current) {
-      clearInterval(thumbnailProgressIntervalRef.current);
-      thumbnailProgressIntervalRef.current = null;
-    }
-    setThumbnailProgress(0);
-    setCheckingThumbnail(false);
-    toast.info("Thumbnail check canceled");
-  };
-
   const disconnectYouTube = async () => {
     try {
       await axios.delete(`${API}/youtube/disconnect`);
@@ -1263,437 +774,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
     }
   };
 
-  const handleAudioUpload = async (input) => {
-    const file = input?.target?.files?.[0] || input;
-    if (!file) return;
-    if (!isValidAudioFile(file)) {
-      toast.error("Invalid audio file. Please use MP3, WAV, M4A, FLAC, or OGG.");
-      return;
-    }
-
-    // Warn for very large files
-    const fileSizeMB = file.size / (1024 * 1024);
-    if (fileSizeMB > 200) {
-      toast.error("File too large! Please use files under 200MB.");
-      return;
-    }
-    
-    if (fileSizeMB > 100) {
-      toast.warning(`${fileSizeMB.toFixed(0)}MB file detected. Processing may take 3-5 minutes...`, {duration: 5000});
-    }
-
-    setUploadingAudio(true);
-    setUploadProgress(0);
-    
-    const formData = new FormData();
-    formData.append('file', file);
-
-    try {
-      const response = await axios.post(`${API}/upload/audio`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 600000,
-        onUploadProgress: (progressEvent) => {
-          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-          setUploadProgress(percentCompleted);
-        }
-      });
-      setAudioFile(file);
-      setAudioFileId(response.data.file_id);
-      toast.success("Audio uploaded!");
-    } catch (error) {
-      console.error("Upload error:", error);
-      toast.error(error.response?.data?.detail || "Failed to upload audio");
-    } finally {
-      setUploadingAudio(false);
-      setUploadProgress(0);
-    }
-  };
-
-  const handleImageUpload = async (input) => {
-    const file = input?.target?.files?.[0] || input;
-    if (!file) return;
-    if (!isValidImageFile(file)) {
-      toast.error("Invalid image file. Please use JPG, PNG, WEBP, AVIF, HEIC, or HEIF.");
-      return;
-    }
-
-    setUploadingImage(true);
-    const formData = new FormData();
-    formData.append('file', file);
-
-    try {
-      const response = await axios.post(`${API}/upload/image`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      setImageFile(file);
-      setImageFileId(response.data.file_id);
-      toast.success("Image uploaded!");
-    } catch (error) {
-      toast.error(error.response?.data?.detail || "Failed to upload image");
-    } finally {
-      setUploadingImage(false);
-    }
-  };
-
-  const handleSpectrumImageUpload = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!isValidImageFile(file)) {
-      toast.error("Invalid image file. Please use JPG, PNG, WEBP, AVIF, HEIC, or HEIF.");
-      return;
-    }
-    if (spectrumRecordImageUrl) {
-      URL.revokeObjectURL(spectrumRecordImageUrl);
-    }
-    setSpectrumRecordImageUrl(URL.createObjectURL(file));
-    setSpectrumRecordImageName(file.name || "record-image");
-  };
-
-  const clearSpectrumImage = () => {
-    if (spectrumRecordImageUrl) {
-      URL.revokeObjectURL(spectrumRecordImageUrl);
-    }
-    setSpectrumRecordImageUrl("");
-    setSpectrumRecordImageName("");
-  };
-
-  const handleAudioDragOver = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsAudioDragActive(true);
-    setIsAudioDragValid(isValidDragItem(e.dataTransfer?.items?.[0], "audio"));
-  };
-
-  const handleAudioDragLeave = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsAudioDragActive(false);
-    setIsAudioDragValid(false);
-  };
-
-  const handleAudioDrop = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsAudioDragActive(false);
-    setIsAudioDragValid(false);
-    const file = e.dataTransfer?.files?.[0];
-    if (!file) return;
-    handleAudioUpload(file);
-  };
-
-  const handleImageDragOver = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsImageDragActive(true);
-    setIsImageDragValid(isValidDragItem(e.dataTransfer?.items?.[0], "image"));
-  };
-
-  const handleImageDragLeave = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsImageDragActive(false);
-    setIsImageDragValid(false);
-  };
-
-  const handleImageDrop = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsImageDragActive(false);
-    setIsImageDragValid(false);
-    const file = e.dataTransfer?.files?.[0];
-    if (!file) return;
-    handleImageUpload(file);
-  };
-
-  const handleYouTubeUpload = async () => {
-    if (!uploadTitle || !selectedDescriptionId || !audioFileId || !imageFileId) {
-      toast.error("Please fill all required fields and upload files");
-      return;
-    }
-
-    // Create abort controller for cancellation
-    const controller = new AbortController();
-    setUploadController(controller);
-
-    setUploadingToYouTube(true);
-    setProgressActive(true);
-    setProgressMessage("🎬 Creating video and uploading to YouTube...");
-    setProgressDuration(120000); // 2 minutes for upload
-    
-    try {
-      const formData = new FormData();
-      formData.append('title', uploadTitle);
-      formData.append('description_id', selectedDescriptionId);
-      formData.append('tags_id', selectedTagsId || '');
-      formData.append('privacy_status', privacyStatus);
-      formData.append('audio_file_id', audioFileId);
-      formData.append('image_file_id', imageFileId);
-      formData.append('remove_watermark', removeWatermark);
-      formData.append('description_override', uploadDescriptionText);
-      formData.append('aspect_ratio', videoAspectRatio);
-      formData.append('image_scale', String(lockImageScale ? imageScaleX : (imageScaleX + imageScaleY) / 2));
-      formData.append('image_scale_x', String(imageScaleX));
-      formData.append('image_scale_y', String(imageScaleY));
-      formData.append('image_pos_x', String(imagePosX));
-      formData.append('image_pos_y', String(imagePosY));
-      formData.append('background_color', backgroundColor);
-
-      const response = await axios.post(`${API}/youtube/upload`, formData, {
-        timeout: 180000, // 3 minute timeout
-        signal: controller.signal
-      });
-      
-      if (response.data.video_url) {
-        toast.success(
-          <div>
-            <p className="font-semibold">Video uploaded successfully! 🎉</p>
-            <a href={response.data.video_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-              View on YouTube
-            </a>
-          </div>,
-          { duration: 10000 }
-        );
-      } else {
-        toast.success(response.data.message || "Upload process started!");
-      }
-      
-      if (response.data.note) {
-        toast.info(response.data.note, { duration: 8000 });
-      }
-      
-      // Prompt check-in after successful upload
-      setTimeout(() => {
-        promptCheckin();
-      }, 1500);
-      
-      // Refresh credits after upload
-      setTimeout(() => {
-        fetchSubscriptionStatus();
-      }, 500);
-    } catch (error) {
-      // Check if cancelled
-      if (axios.isCancel(error)) {
-        toast.info("Upload cancelled. No credits used.");
-        return;
-      }
-      
-      // Handle credit limit and watermark removal
-      if (error.response?.status === 402) {
-        const errorDetail = error.response.data.detail;
-        if (errorDetail?.feature === 'remove_watermark') {
-          // Watermark removal requires Pro
-          setShowUpgradeModal(true);
-          setRemoveWatermark(false); // Uncheck the box
-          toast.error("Watermark removal is a Pro feature! Upgrade to remove watermarks.");
-        } else {
-          // Daily upload limit
-          setShowUpgradeModal(true);
-          toast.error("Daily upload limit reached! Upgrade to continue.");
-        }
-      } else if (error.code === 'ECONNABORTED') {
-        toast.error("Upload timed out. Your audio file might be too long. Try a shorter file.");
-      } else {
-        toast.error(error.response?.data?.detail?.message || error.response?.data?.detail || "Failed to upload to YouTube");
-      }
-      
-      // Refresh credits even on error
-      setTimeout(() => {
-        fetchSubscriptionStatus();
-      }, 500);
-    } finally {
-      setUploadingToYouTube(false);
-      setProgressActive(false);
-      setUploadController(null);
-    }
-  };
-
-  const handleCancelUpload = () => {
-    if (uploadController) {
-      uploadController.abort();
-      setUploadingToYouTube(false);
-      setProgressActive(false);
-      setUploadController(null);
-    }
-  };
-
-  const previewAspectRatio = videoAspectRatio === "1:1"
-    ? "1 / 1"
-    : videoAspectRatio === "9:16"
-    ? "9 / 16"
-    : videoAspectRatio === "4:5"
-    ? "4 / 5"
-    : "16 / 9";
-  const previewRatio = videoAspectRatio === "1:1"
-    ? 1
-    : videoAspectRatio === "9:16"
-    ? 9 / 16
-    : videoAspectRatio === "4:5"
-    ? 4 / 5
-    : 16 / 9;
-
-
-  const frameWidth = previewSize;
-  const frameHeight = previewSize / previewRatio;
-  const imageRatio = imageMeta.ratio || 1;
-  const fitWidth = previewRatio > imageRatio ? frameHeight * imageRatio : frameWidth;
-  const fitHeight = previewRatio > imageRatio ? frameHeight : frameWidth / imageRatio;
-  const fitLeft = (frameWidth - fitWidth) / 2;
-  const fitTop = (frameHeight - fitHeight) / 2;
-
-  const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
-
-  useEffect(() => {
-    if (!dragState) return;
-
-    const handleMove = (event) => {
-      if (!previewContainerRef.current) return;
-      const rect = previewContainerRef.current.getBoundingClientRect();
-      const deltaX = event.clientX - dragState.startX;
-      const deltaY = event.clientY - dragState.startY;
-      if (Math.abs(deltaX) > 4 || Math.abs(deltaY) > 4) {
-        previewDraggedRef.current = true;
-      }
-      const nextX = clamp(dragState.originX + deltaX / (rect.width / 2), -1, 1);
-      const nextY = clamp(dragState.originY + deltaY / (rect.height / 2), -1, 1);
-      setImagePosX(nextX);
-      setImagePosY(nextY);
-    };
-
-    const handleUp = () => setDragState(null);
-
-    window.addEventListener("mousemove", handleMove);
-    window.addEventListener("mouseup", handleUp);
-    return () => {
-      window.removeEventListener("mousemove", handleMove);
-      window.removeEventListener("mouseup", handleUp);
-    };
-  }, [dragState, imagePosX, imagePosY]);
-
-  const fitImageToFrame = () => {
-    setImageScaleX(1);
-    setImageScaleY(1);
-    setImagePosX(0);
-    setImagePosY(0);
-    setLockImageScale(true);
-  };
-
-  useEffect(() => {
-    if (!imageFile) {
-      setImagePreviewUrl("");
-      setImageMeta({ width: 0, height: 0, ratio: 1 });
-      return;
-    }
-    const url = URL.createObjectURL(imageFile);
-    setImagePreviewUrl(url);
-    const img = new Image();
-    img.onload = () => {
-      const ratio = img.width && img.height ? img.width / img.height : 1;
-      setImageMeta({ width: img.width, height: img.height, ratio });
-    };
-    img.src = url;
-    return () => URL.revokeObjectURL(url);
-  }, [imageFile]);
-
-  useEffect(() => {
-    if (imageFile) {
-      fitImageToFrame();
-    }
-  }, [imageFile, videoAspectRatio]);
-
-  useEffect(() => {
-    if (audioFile && imageFile) {
-      setShowImageSettings(true);
-      return;
-    }
-    setShowImageSettings(false);
-  }, [audioFile, imageFile]);
-
-  useEffect(() => {
-    if (!audioFile) {
-      setAudioPreviewUrl("");
-      return;
-    }
-    const url = URL.createObjectURL(audioFile);
-    setAudioPreviewUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [audioFile]);
-
-  useEffect(() => {
-    if (!resizeState || !previewContainerRef.current) return;
-
-    const handleMove = (event) => {
-      const rect = previewContainerRef.current.getBoundingClientRect();
-      const deltaX = event.clientX - resizeState.startX;
-      const deltaY = event.clientY - resizeState.startY;
-      const xSign = resizeState.corner.includes("l") ? -1 : 1;
-      const ySign = resizeState.corner.includes("t") ? -1 : 1;
-      const nextX = clamp(resizeState.originX + xSign * deltaX / (rect.width / 2), 0.5, 1);
-      const nextY = clamp(resizeState.originY + ySign * deltaY / (rect.height / 2), 0.5, 1);
-
-      if (lockImageScale) {
-        const locked = clamp((nextX + nextY) / 2, 0.5, 1);
-        setImageScaleX(locked);
-        setImageScaleY(locked);
-      } else {
-        setImageScaleX(nextX);
-        setImageScaleY(nextY);
-      }
-    };
-
-    const handleUp = () => setResizeState(null);
-
-    window.addEventListener("mousemove", handleMove);
-    window.addEventListener("mouseup", handleUp);
-    return () => {
-      window.removeEventListener("mousemove", handleMove);
-      window.removeEventListener("mouseup", handleUp);
-    };
-  }, [resizeState, lockImageScale]);
-
-  const handlePreviewMouseDown = (event) => {
-    if (!previewContainerRef.current) return;
-    previewClickStartRef.current = { x: event.clientX, y: event.clientY };
-    previewDraggedRef.current = false;
-    setLockImageScale(true);
-    setDragState({
-      startX: event.clientX,
-      startY: event.clientY,
-      originX: imagePosX,
-      originY: imagePosY
-    });
-  };
-
-  const handlePreviewClick = (event) => {
-    const deltaX = event.clientX - previewClickStartRef.current.x;
-    const deltaY = event.clientY - previewClickStartRef.current.y;
-    const moved = Math.abs(deltaX) > 4 || Math.abs(deltaY) > 4;
-    if (previewDraggedRef.current || moved || resizeState) return;
-    toggleAudioPlayback();
-  };
-
-  const handleResizeStart = (corner) => (event) => {
-    event.stopPropagation();
-    if (!previewContainerRef.current) return;
-    setResizeState({
-      corner,
-      startX: event.clientX,
-      startY: event.clientY,
-      originX: imageScaleX,
-      originY: imageScaleY
-    });
-  };
-
-  const scrollToPreview = () => {
-    setActiveTab("upload");
-    setTimeout(() => {
-      previewSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 100);
-  };
-
   return (
     <div className="min-h-screen mesh-gradient" data-testid="dashboard">
       <DarkModeToggle />
-      
+
       {/* Header */}
       <div className="glass-card mx-2 sm:mx-4 mt-2 sm:mt-4 rounded-xl sm:rounded-2xl border-0 dashboard-card">
         <div className="container mx-auto px-3 sm:px-4 md:px-6 pr-16 sm:pr-20 lg:pr-6 py-3 sm:py-4 dashboard-shell">
@@ -1717,19 +801,19 @@ const Dashboard = ({ setIsAuthenticated }) => {
                   Upgrade to Pro
                 </Button>
               )}
-              
+
               {/* Show Pro badge for subscribed users */}
               {subscriptionStatus && subscriptionStatus.is_subscribed && (
                 <div className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-gradient-to-r from-[var(--accent-primary)] to-[var(--accent-secondary)] text-white font-semibold text-xs sm:text-sm whitespace-nowrap">
                   Pro Member
                 </div>
               )}
-              
+
               {/* YouTube Profile Picture */}
               {youtubeConnected && youtubeProfilePicture && (
                 <div className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-full min-w-0 max-w-full xl:max-w-[340px]" style={{backgroundColor: 'var(--bg-secondary)'}}>
-                  <img 
-                    src={youtubeProfilePicture} 
+                  <img
+                    src={youtubeProfilePicture}
                     alt={youtubeName || youtubeEmail}
                     className="h-6 w-6 sm:h-8 sm:w-8 rounded-full border-2 border-[var(--accent-primary)]"
                   />
@@ -1738,7 +822,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                   </span>
                 </div>
               )}
-              
+
               <Button
                 variant="outline"
                 onClick={() => window.location.href = '/spotlight'}
@@ -1791,8 +875,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
           message={progressMessage}
           duration={progressDuration}
           onCancel={
-            loadingTags ? handleCancelTagGeneration : 
-            uploadingToYouTube ? handleCancelUpload : 
+            loadingTags ? handleCancelTagGeneration :
             null
           }
         />
@@ -1920,7 +1003,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         Tip: Include artist name for popular song "type beat" variations
                       </p>
                     </div>
-                    
+
                     <div className="space-y-1.5 sm:space-y-2">
                       <Label htmlFor="tag-provider" className="text-sm sm:text-base">AI Provider (Grok)</Label>
                       <Select value={tagProvider} onValueChange={setTagProvider}>
@@ -1935,7 +1018,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         Uses the Grok API key configured on the backend
                       </p>
                     </div>
-                    
+
                     <div className="space-y-1.5 sm:space-y-2">
                       <Label htmlFor="custom-tags" className="text-sm sm:text-base">Your Custom Tags (Optional)</Label>
                       <Textarea
@@ -1951,7 +1034,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         Add your own tags (comma-separated). Total limit: {TAG_LIMIT} tags
                       </p>
                     </div>
-                    
+
                     <Button
                       type="submit"
                       className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-sm sm:text-base py-5 sm:py-6"
@@ -2000,9 +1083,9 @@ const Dashboard = ({ setIsAuthenticated }) => {
                     <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6 space-y-4">
                       <div className="tag-cloud" data-testid="tags-list">
                         {generatedTags.map((tag, index) => (
-                          <span 
-                            key={index} 
-                            className="tag-item group relative" 
+                          <span
+                            key={index}
+                            className="tag-item group relative"
                             data-testid={`tag-${index}`}
                           >
                             {tag}
@@ -2021,7 +1104,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                           </span>
                         ))}
                       </div>
-                      
+
                       {/* Add More Tags Section */}
                       <div className="p-3 sm:p-4 rounded-lg border-2 border-green-500" style={{backgroundColor: 'var(--bg-secondary)'}}>
                         <div className="space-y-2 sm:space-y-3">
@@ -2356,7 +1439,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                       const isExpanded = expandedDescriptions.has(desc.id);
                       const preview = desc.content.substring(0, 150);
                       const showPreview = !isExpanded && desc.content.length > 150;
-                      
+
                       return (
                         <div key={desc.id} className="p-4 rounded-lg bg-black/20 dark:bg-black/40 backdrop-blur-sm" data-testid={`desc-item-${desc.id}`}>
                           <div className="flex items-start justify-between mb-2">
@@ -2417,7 +1500,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                               </Button>
                             </div>
                           </div>
-                          <div 
+                          <div
                             className="text-sm text-slate-600 whitespace-pre-wrap cursor-pointer"
                             onClick={() => toggleDescriptionExpand(desc.id)}
                           >
@@ -2444,1296 +1527,22 @@ const Dashboard = ({ setIsAuthenticated }) => {
             </Card>
           </TabsContent>
 
-          {/* YouTube Upload Tab */}
+          {/* YouTube Upload Tab (Refactored) */}
           <TabsContent value="upload" className="space-y-6 dashboard-section">
-            <Card className="dashboard-card">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Youtube className="h-5 w-5 text-red-600" />
-                  Upload Beat to YouTube
-                </CardTitle>
-                <CardDescription>Connect your YouTube account and upload beats automatically</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4 sm:space-y-6">
-                {/* YouTube Connection Status */}
-                <div className="p-4 sm:p-5 md:p-6 rounded-lg dashboard-card-muted">
-                  {youtubeConnected ? (
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
-                      <div className="flex items-center gap-3 sm:gap-4 flex-1">
-                        {youtubeProfilePicture && (
-                          <img 
-                            src={youtubeProfilePicture} 
-                            alt={youtubeName || youtubeEmail}
-                            className="h-12 w-12 sm:h-14 sm:w-14 rounded-full border-2 border-green-500 flex-shrink-0"
-                          />
-                        )}
-                        {!youtubeProfilePicture && (
-                          <CheckCircle2 className="h-6 w-6 sm:h-7 sm:w-7 text-green-600 flex-shrink-0" />
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm sm:text-base truncate" style={{color: 'var(--text-primary)'}}>
-                            {youtubeName || "YouTube Connected"}
-                          </p>
-                          <p className="text-xs sm:text-sm truncate" style={{color: 'var(--text-secondary)'}}>{youtubeEmail}</p>
-                        </div>
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="default"
-                        onClick={disconnectYouTube}
-                        data-testid="disconnect-youtube-btn"
-                        className="w-full sm:w-auto px-4 sm:px-6 py-2 sm:py-2.5 text-sm sm:text-base whitespace-nowrap"
-                      >
-                        Disconnect
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="space-y-3 sm:space-y-4">
-                      <div className="flex items-center gap-3 mb-3 sm:mb-4">
-                        <AlertCircle className="h-5 w-5 sm:h-6 sm:w-6 text-amber-600 flex-shrink-0" />
-                        <p className="font-medium text-sm sm:text-base" style={{color: 'var(--text-primary)'}}>YouTube Not Connected</p>
-                      </div>
-                      <Button
-                        onClick={connectYouTube}
-                        className="w-full bg-red-600 hover:bg-red-700 text-white py-5 sm:py-6 text-base sm:text-lg"
-                        data-testid="connect-youtube-btn"
-                      >
-                        <Link className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
-                        Login to Connect Your YouTube Account!
-                      </Button>
-                    </div>
-                  )}
-                </div>
-
-                {/* AI YouTube Tools */}
-                <Card className="producer-card border-l-4 border-emerald-500">
-                  <CardContent className="p-4 sm:p-5 md:p-6">
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                      <p className="font-semibold flex items-center gap-2 text-sm sm:text-base">
-                        <Wand2 className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-500 flex-shrink-0" />
-                        <span>AI YouTube Tools</span>
-                      </p>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setShowAiYoutubeTools((prev) => !prev)}
-                        className="w-full sm:w-auto px-4 py-2 text-xs sm:text-sm whitespace-nowrap"
-                      >
-                        {showAiYoutubeTools ? "Hide" : "Show"}
-                        {showAiYoutubeTools ? (
-                          <ChevronUp className="ml-2 h-4 w-4" />
-                        ) : (
-                          <ChevronDown className="ml-2 h-4 w-4" />
-                        )}
-                      </Button>
-                    </div>
-                    <p className="text-xs sm:text-sm mt-2" style={{color: 'var(--text-secondary)'}}>
-                      Beat Analyzer + Thumbnail Checker
-                    </p>
-
-                    {showAiYoutubeTools && (
-                      <div className="mt-4 space-y-4">
-                        <div className="rounded-lg border p-4 sm:p-5" style={{ borderColor: 'var(--border-color)', backgroundColor: 'var(--bg-secondary)' }}>
-                          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
-                            <p className="font-semibold flex items-center gap-2 text-sm sm:text-base">
-                              <Target className="h-5 w-5 sm:h-6 sm:w-6 text-yellow-500 flex-shrink-0" />
-                              <span>Check Your Beat's Potential</span>
-                            </p>
-                            <Button
-                              onClick={handleAnalyzeBeat}
-                              disabled={analyzingBeat || !uploadTitle || generatedTags.length === 0}
-                              variant="outline"
-                              size="default"
-                              className="w-full sm:w-auto border-yellow-500 text-yellow-600 hover:bg-yellow-50 dark:text-yellow-400 dark:hover:bg-yellow-950 px-4 sm:px-6 py-2 sm:py-2.5 text-sm sm:text-base whitespace-nowrap"
-                              title={!uploadTitle ? "Please add a title first" : generatedTags.length === 0 ? "Please generate tags in the Tags tab first" : "Analyze your beat"}
-                            >
-                              {analyzingBeat ? "Analyzing..." : "Analyze Beat"}
-                            </Button>
-                          </div>
-
-                          {(!uploadTitle || generatedTags.length === 0) && !beatAnalysis && !analyzingBeat && (
-                            <Alert className="mb-4 p-3 sm:p-4">
-                              <AlertCircle className="h-4 w-4 sm:h-5 sm:w-5" />
-                              <AlertDescription className="text-xs sm:text-sm leading-relaxed">
-                                {!uploadTitle && generatedTags.length === 0 ? (
-                                  <>First, go to the <strong>Tags</strong> tab to generate tags, then come back here and add a title to analyze your beat.</>
-                                ) : !uploadTitle ? (
-                                  <>Add a title below to analyze your beat.</>
-                                ) : (
-                                  <>Go to the <strong>Tags</strong> tab to generate tags first, then come back here to analyze.</>
-                                )}
-                              </AlertDescription>
-                            </Alert>
-                          )}
-                          {beatAnalysis && (
-                            <div className="space-y-3 sm:space-y-4 mt-4">
-                              <div className="text-center p-4 rounded-lg" style={{backgroundColor: 'var(--bg-tertiary)'}}>
-                                <p className="text-3xl font-bold gradient-text mb-1">{beatAnalysis.overall_score}/100</p>
-                                <p className="text-sm font-semibold" style={{color: 'var(--text-secondary)'}}>
-                                  Predicted: {beatAnalysis.predicted_performance}
-                                </p>
-                              </div>
-
-                              <div className="grid grid-cols-3 gap-2">
-                                <div className="text-center p-2 rounded" style={{backgroundColor: 'var(--bg-tertiary)'}}>
-                                  <p className="text-xl font-bold">{beatAnalysis.title_score}</p>
-                                  <p className="text-xs" style={{color: 'var(--text-secondary)'}}>Title</p>
-                                </div>
-                                <div className="text-center p-2 rounded" style={{backgroundColor: 'var(--bg-tertiary)'}}>
-                                  <p className="text-xl font-bold">{beatAnalysis.tags_score}</p>
-                                  <p className="text-xs" style={{color: 'var(--text-secondary)'}}>Tags</p>
-                                </div>
-                                <div className="text-center p-2 rounded" style={{backgroundColor: 'var(--bg-tertiary)'}}>
-                                  <p className="text-xl font-bold">{beatAnalysis.seo_score}</p>
-                                  <p className="text-xs" style={{color: 'var(--text-secondary)'}}>SEO</p>
-                                </div>
-                              </div>
-
-                              <div>
-                                <p className="font-semibold text-green-600 mb-2 text-sm">Strengths:</p>
-                                <ul className="text-sm space-y-1">
-                                  {beatAnalysis.strengths.map((s, i) => (
-                                    <li key={i} className="text-green-600">- {s}</li>
-                                  ))}
-                                </ul>
-                              </div>
-
-                              {beatAnalysis.weaknesses.length > 0 && (
-                                <div>
-                                  <p className="font-semibold text-orange-600 mb-2 text-sm">Needs Work:</p>
-                                  <ul className="text-sm space-y-1">
-                                    {beatAnalysis.weaknesses.map((w, i) => (
-                                      <li key={i} className="text-orange-600">- {w}</li>
-                                    ))}
-                                  </ul>
-                                </div>
-                              )}
-
-                              <div>
-                                <p className="font-semibold text-blue-600 mb-2 text-sm">Suggestions:</p>
-                                <ul className="text-sm space-y-1">
-                                  {beatAnalysis.suggestions.map((s, i) => (
-                                    <li key={i} style={{color: 'var(--text-primary)'}}>- {s}</li>
-                                  ))}
-                                </ul>
-                              </div>
-                            </div>
-                          )}
-
-                          {!beatAnalysis && !analyzingBeat && (
-                            <p className="text-xs sm:text-sm text-center leading-relaxed px-2" style={{color: 'var(--text-secondary)'}}>
-                              Fill in title & tags, then analyze to see how well your beat will perform!
-                            </p>
-                          )}
-                        </div>
-
-                        <div className="rounded-lg border p-4 sm:p-5" style={{ borderColor: 'var(--border-color)', backgroundColor: 'var(--bg-secondary)' }}>
-                          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-3">
-                            <p className="font-semibold flex items-center gap-2 text-sm sm:text-base">
-                              <Sparkles className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-500 flex-shrink-0" />
-                              <span>Thumbnail Checker (AI)</span>
-                            </p>
-                            <div className="flex w-full sm:w-auto gap-2">
-                              <Button
-                                onClick={handleThumbnailCheck}
-                                disabled={checkingThumbnail || !thumbnailCheckFile || !thumbnailContextReady}
-                                variant="outline"
-                                size="default"
-                                className="w-full sm:w-auto border-emerald-500 text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950 px-4 sm:px-6 py-2 sm:py-2.5 text-sm sm:text-base whitespace-nowrap"
-                              >
-                                {checkingThumbnail ? "Checking..." : "Check Thumbnail"}
-                              </Button>
-                              {checkingThumbnail && (
-                                <Button
-                                  onClick={cancelThumbnailCheck}
-                                  variant="ghost"
-                                  size="default"
-                                  className="w-full sm:w-auto text-slate-600 dark:text-slate-300"
-                                >
-                                  Cancel
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-                          {checkingThumbnail && (
-                            <div className="mb-3">
-                              <div className="w-full bg-slate-200 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
-                                <div
-                                  className="h-2 bg-emerald-500 transition-all duration-300"
-                                  style={{ width: `${thumbnailProgress}%` }}
-                                />
-                              </div>
-                              <p className="text-xs text-center mt-1" style={{ color: 'var(--text-secondary)' }}>
-                                Analyzing thumbnail... {thumbnailProgress}%
-                              </p>
-                            </div>
-                          )}
-
-                          <div className="space-y-3">
-                            <div className="border-2 border-dashed rounded-lg p-3 text-center" style={{ borderColor: 'var(--border-color)' }}>
-                              <Input
-                                id="thumbnail-check-upload"
-                                type="file"
-                                accept=".jpg,.jpeg,.png,.webp,.avif,.heic,.heif"
-                                onChange={(e) => setThumbnailCheckFile(e.target.files?.[0] || null)}
-                                className="hidden"
-                                data-testid="thumbnail-check-upload-input"
-                              />
-                              <label htmlFor="thumbnail-check-upload" className="cursor-pointer">
-                                <Upload className="h-7 w-7 mx-auto mb-2 text-slate-400" />
-                                {thumbnailCheckFile ? (
-                                  <p className="text-sm text-green-600 font-medium">{thumbnailCheckFile.name}</p>
-                                ) : (
-                                  <p className="text-sm text-slate-600">Click to upload thumbnail</p>
-                                )}
-                              </label>
-                            </div>
-
-                            {imageFile && !thumbnailCheckFile && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setThumbnailCheckFile(imageFile)}
-                                className="w-full text-xs sm:text-sm"
-                              >
-                                Use uploaded thumbnail image
-                              </Button>
-                            )}
-
-                            <p className="text-xs text-center" style={{color: 'var(--text-secondary)'}}>
-                              Requires title, description, and tags. Uses 1 AI credit.
-                            </p>
-                          </div>
-
-                          {thumbnailCheckResult && (
-                            <div className="mt-4 space-y-3">
-                              <div className="text-center p-3 rounded-lg" style={{backgroundColor: 'var(--bg-tertiary)'}}>
-                                <p className="text-2xl font-bold gradient-text mb-1">{thumbnailCheckResult.score}/100</p>
-                                <p className="text-xs sm:text-sm" style={{color: 'var(--text-secondary)'}}>
-                                  {thumbnailCheckResult.verdict}
-                                </p>
-                              </div>
-                              <div className="grid gap-3 sm:grid-cols-2">
-                                <div>
-                                  <p className="font-semibold text-emerald-600 mb-1 text-sm">Strengths</p>
-                                  <ul className="text-xs sm:text-sm space-y-1">
-                                    {thumbnailCheckResult.strengths.map((s, i) => (
-                                      <li key={i} className="text-emerald-600">- {s}</li>
-                                    ))}
-                                  </ul>
-                                </div>
-                                <div>
-                                  <p className="font-semibold text-orange-600 mb-1 text-sm">Issues</p>
-                                  <ul className="text-xs sm:text-sm space-y-1">
-                                    {thumbnailCheckResult.issues.map((s, i) => (
-                                      <li key={i} className="text-orange-600">- {s}</li>
-                                    ))}
-                                  </ul>
-                                </div>
-                              </div>
-                              <div>
-                                <p className="font-semibold text-blue-600 mb-1 text-sm">Suggestions</p>
-                                <ul className="text-xs sm:text-sm space-y-1">
-                                  {thumbnailCheckResult.suggestions.map((s, i) => (
-                                    <li key={i} style={{color: 'var(--text-primary)'}}>- {s}</li>
-                                  ))}
-                                </ul>
-                              </div>
-                              <div className="text-xs sm:text-sm rounded-lg p-3" style={{backgroundColor: 'var(--bg-secondary)'}}>
-                                <p><strong>Overlay idea:</strong> {thumbnailCheckResult.text_overlay_suggestion}</p>
-                                <p><strong>Branding:</strong> {thumbnailCheckResult.branding_suggestion}</p>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-
-                {youtubeConnected && (
-                  <div className="space-y-6">
-                    <div className="rounded-xl border p-4 sm:p-5 space-y-4" style={{ borderColor: "var(--border-color)", backgroundColor: "var(--bg-secondary)" }}>
-                      <div>
-                        <p className="text-sm sm:text-base font-semibold">Step 1 - Upload Media</p>
-                        <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                          Add your audio + thumbnail using click or drag and drop.
-                        </p>
-                      </div>
-                    {/* File Uploads */}
-                    <div className="grid md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="audio-upload">Audio File (MP3, WAV)</Label>
-                        <div
-                          className={`border-2 border-dashed rounded-lg p-4 text-center transition-shadow ${
-                            isAudioDragActive && isAudioDragValid
-                              ? "border-white shadow-[0_0_24px_rgba(255,255,255,0.9)]"
-                              : "border-slate-300"
-                          }`}
-                          onDragOver={handleAudioDragOver}
-                          onDragEnter={handleAudioDragOver}
-                          onDragLeave={handleAudioDragLeave}
-                          onDrop={handleAudioDrop}
-                        >
-                          <Input
-                            id="audio-upload"
-                            type="file"
-                            accept=".mp3,.wav,.m4a,.flac,.ogg"
-                            onChange={handleAudioUpload}
-                            className="hidden"
-                            data-testid="audio-upload-input"
-                          />
-                          <label htmlFor="audio-upload" className="cursor-pointer">
-                            <Upload className="h-8 w-8 mx-auto mb-2 text-slate-400" />
-                            {uploadingAudio ? (
-                              <div>
-                                <p className="text-sm text-slate-600 mb-2">Uploading... {uploadProgress}%</p>
-                                <div className="w-full bg-gray-200 rounded-full h-2">
-                                  <div 
-                                    className="bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full transition-all duration-300"
-                                    style={{width: `${uploadProgress}%`}}
-                                  />
-                                </div>
-                              </div>
-                            ) : audioFile ? (
-                              <p className="text-sm text-green-600 font-medium">{audioFile.name}</p>
-                            ) : (
-                              <p className="text-sm text-slate-600">Click to upload audio</p>
-                            )}
-                          </label>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="image-upload">Thumbnail Image (JPG, PNG)</Label>
-                        <div
-                          className={`border-2 border-dashed rounded-lg p-4 text-center transition-shadow ${
-                            isImageDragActive && isImageDragValid
-                              ? "border-white shadow-[0_0_24px_rgba(255,255,255,0.9)]"
-                              : "border-slate-300"
-                          }`}
-                          onDragOver={handleImageDragOver}
-                          onDragEnter={handleImageDragOver}
-                          onDragLeave={handleImageDragLeave}
-                          onDrop={handleImageDrop}
-                        >
-                          <Input
-                            id="image-upload"
-                            type="file"
-                            accept=".jpg,.jpeg,.png,.webp,.avif,.heic,.heif"
-                            onChange={handleImageUpload}
-                            className="hidden"
-                            data-testid="image-upload-input"
-                          />
-                          <label htmlFor="image-upload" className="cursor-pointer">
-                            <Upload className="h-8 w-8 mx-auto mb-2 text-slate-400" />
-                            {uploadingImage ? (
-                              <p className="text-sm text-slate-600">Uploading...</p>
-                            ) : imageFile ? (
-                              <p className="text-sm text-green-600 font-medium">{imageFile.name}</p>
-                            ) : (
-                              <p className="text-sm text-slate-600">Click to upload image</p>
-                            )}
-                          </label>
-                        </div>
-                      </div>
-                    </div>
-                    </div>
-
-                    {/* Upload Details */}
-                    <div className="rounded-xl border p-4 sm:p-5 space-y-4" style={{ borderColor: "var(--border-color)", backgroundColor: "var(--bg-secondary)" }}>
-                      <div>
-                        <p className="text-sm sm:text-base font-semibold">Step 2 - Video Details & Style</p>
-                        <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                          Set metadata, arrange image, and configure visualizer.
-                        </p>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="upload-title">Video Title</Label>
-                        <Input
-                          id="upload-title"
-                          placeholder="Your Beat Title"
-                          value={uploadTitle}
-                          onChange={(e) => setUploadTitle(e.target.value)}
-                          data-testid="upload-title-input"
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="select-description">Select Description Template</Label>
-                        <Select value={selectedDescriptionId} onValueChange={setSelectedDescriptionId}>
-                          <SelectTrigger id="select-description" data-testid="select-description">
-                            <SelectValue placeholder="Choose a description" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {descriptions.map((desc) => (
-                              <SelectItem key={desc.id} value={desc.id}>
-                                {desc.title}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {selectedDescriptionId && (
-                        <div className="space-y-2">
-                          <Label htmlFor="upload-description">Edit Description</Label>
-                          <Textarea
-                            id="upload-description"
-                            placeholder="Edit your description before upload"
-                            value={uploadDescriptionText}
-                            onChange={(e) => setUploadDescriptionText(e.target.value)}
-                            rows={6}
-                          />
-                          <p className="text-xs" style={{color: 'var(--text-secondary)'}}>
-                            A line will be added to the top: "Visit www.sendmybeat.com to upload beats for free!"
-                          </p>
-                        </div>
-                      )}
-
-                      <div className="space-y-2">
-                        <Label htmlFor="select-tags">Select Tags (Optional)</Label>
-                        <Select value={selectedTagsId} onValueChange={setSelectedTagsId}>
-                          <SelectTrigger id="select-tags" data-testid="select-tags">
-                            <SelectValue placeholder="Choose tags" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {tagHistory.map((tag) => (
-                              <SelectItem key={tag.id} value={tag.id}>
-                                {formatTagHistoryLabel(tag.query)} ({tag.tags.length} tags)
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="aspect-ratio">Video Aspect Ratio</Label>
-                        <Select value={videoAspectRatio} onValueChange={setVideoAspectRatio}>
-                          <SelectTrigger id="aspect-ratio" data-testid="aspect-ratio">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="16:9">16:9 (Wide)</SelectItem>
-                            <SelectItem value="1:1">1:1 (Square)</SelectItem>
-                            <SelectItem value="9:16">9:16 (Vertical)</SelectItem>
-                            <SelectItem value="4:5">4:5 (Portrait)</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {audioFile && imageFile && (
-                      <div className="space-y-4 rounded-xl border p-4 sm:p-5" style={{ borderColor: "var(--border-color)", backgroundColor: "var(--bg-secondary)" }}>
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm sm:text-base font-semibold">Image Layout</p>
-                            <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                              Position and scale your cover before upload
-                            </p>
-                          </div>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setShowImageSettings((prev) => !prev)}
-                          >
-                            {showImageSettings ? "Hide Layout" : "Edit Layout"}
-                          </Button>
-                        </div>
-
-                        {showImageSettings && (
-                          <>
-                        <Label className="text-sm">Background & Position</Label>
-                        <div className="grid grid-cols-2 gap-2">
-                          <Button
-                            type="button"
-                            variant={backgroundColor === "black" ? "default" : "outline"}
-                            onClick={() => setBackgroundColor("black")}
-                            className="text-xs sm:text-sm"
-                          >
-                            Black Background
-                          </Button>
-                          <Button
-                            type="button"
-                            variant={backgroundColor === "white" ? "default" : "outline"}
-                            onClick={() => setBackgroundColor("white")}
-                            className="text-xs sm:text-sm"
-                          >
-                            White Background
-                          </Button>
-                        </div>
-
-                        <div className="space-y-2 rounded-lg border p-3" style={{ borderColor: "var(--border-color)" }}>
-                          <Label className="text-sm">Quick Position</Label>
-                          <div className="grid grid-cols-3 gap-2">
-                            <Button type="button" variant="outline" className="text-xs" onClick={() => { setImagePosX(-1); setImagePosY(0); }}>
-                              Left
-                            </Button>
-                            <Button type="button" variant="outline" className="text-xs" onClick={() => { setImagePosX(0); setImagePosY(0); }}>
-                              Center
-                            </Button>
-                            <Button type="button" variant="outline" className="text-xs" onClick={() => { setImagePosX(1); setImagePosY(0); }}>
-                              Right
-                            </Button>
-                          </div>
-                          <div className="pt-2">
-                            <Button type="button" variant="outline" size="sm" onClick={fitImageToFrame}>
-                              Fit image
-                            </Button>
-                          </div>
-                        </div>
-
-                        <div className="space-y-2 rounded-lg border p-3" style={{ borderColor: "var(--border-color)" }}>
-                          <div className="flex items-center justify-between">
-                            <Label htmlFor="image-scale-x" className="text-sm">Scale X</Label>
-                            <span className="text-xs" style={{color: 'var(--text-secondary)'}}>{imageScaleX.toFixed(2)}x</span>
-                          </div>
-                          <Input
-                            id="image-scale-x"
-                            type="range"
-                            min="0.5"
-                            max="1"
-                            step="0.05"
-                            value={imageScaleX}
-                            onChange={(e) => {
-                              const value = Number(e.target.value);
-                              setImageScaleX(value);
-                              if (lockImageScale) setImageScaleY(value);
-                            }}
-                          />
-                        </div>
-
-                        <div className="space-y-2 rounded-lg border p-3" style={{ borderColor: "var(--border-color)" }}>
-                          <div className="flex items-center justify-between">
-                            <Label htmlFor="image-scale-y" className="text-sm">Scale Y</Label>
-                            <span className="text-xs" style={{color: 'var(--text-secondary)'}}>{imageScaleY.toFixed(2)}x</span>
-                          </div>
-                          <Input
-                            id="image-scale-y"
-                            type="range"
-                            min="0.5"
-                            max="1"
-                            step="0.05"
-                            value={imageScaleY}
-                            onChange={(e) => {
-                              const value = Number(e.target.value);
-                              setImageScaleY(value);
-                              if (lockImageScale) setImageScaleX(value);
-                            }}
-                          />
-                        </div>
-
-                        <div className="space-y-2 rounded-lg border p-3" style={{ borderColor: "var(--border-color)" }}>
-                          <div className="flex items-center justify-between">
-                            <Label htmlFor="preview-size" className="text-sm">Preview Scale</Label>
-                            <span className="text-xs" style={{color: 'var(--text-secondary)'}}>{previewSize}px</span>
-                          </div>
-                          <Input
-                            id="preview-size"
-                            type="range"
-                            min="280"
-                            max="720"
-                            step="10"
-                            value={previewSize}
-                            onChange={(e) => setPreviewSize(Number(e.target.value))}
-                          />
-                        </div>
-
-                        <div className="space-y-2 rounded-lg border p-3" style={{ borderColor: "var(--border-color)" }}>
-                          <div className="flex items-center gap-2">
-                            <input
-                              id="lock-image-scale"
-                              type="checkbox"
-                              checked={lockImageScale}
-                              onChange={(e) => {
-                                const locked = e.target.checked;
-                                setLockImageScale(locked);
-                                if (locked) setImageScaleY(imageScaleX);
-                              }}
-                              className="w-4 h-4 cursor-pointer"
-                            />
-                            <Label htmlFor="lock-image-scale" className="text-sm cursor-pointer">
-                              Lock X/Y scale
-                            </Label>
-                          </div>
-                        </div>
-
-                        <div className="space-y-2 rounded-lg border p-3" style={{ borderColor: "var(--border-color)" }}>
-                          <div className="flex items-center justify-between">
-                            <Label htmlFor="image-pos-x" className="text-sm">Horizontal Position</Label>
-                            <span className="text-xs" style={{color: 'var(--text-secondary)'}}>{imagePosX.toFixed(2)}</span>
-                          </div>
-                          <Input
-                            id="image-pos-x"
-                            type="range"
-                            min="-1"
-                            max="1"
-                            step="0.05"
-                            value={imagePosX}
-                            onChange={(e) => setImagePosX(Number(e.target.value))}
-                          />
-                        </div>
-
-                        <div className="space-y-2 rounded-lg border p-3" style={{ borderColor: "var(--border-color)" }}>
-                          <div className="flex items-center justify-between">
-                            <Label htmlFor="image-pos-y" className="text-sm">Vertical Position</Label>
-                            <span className="text-xs" style={{color: 'var(--text-secondary)'}}>{imagePosY.toFixed(2)}</span>
-                          </div>
-                          <Input
-                            id="image-pos-y"
-                            type="range"
-                            min="-1"
-                            max="1"
-                            step="0.05"
-                            value={imagePosY}
-                            onChange={(e) => setImagePosY(Number(e.target.value))}
-                          />
-                        </div>
-                        </>
-                        )}
-                      </div>
-                      )}
-
-                      {audioFile && imageFile && (
-                        <div className="space-y-4 rounded-xl border p-4 sm:p-5" style={{ borderColor: "var(--border-color)", backgroundColor: "var(--bg-secondary)" }}>
-                          <div className="flex items-center justify-between gap-2">
-                            <div>
-                              <p className="text-sm sm:text-base font-semibold">Visualizer Controls</p>
-                              <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                                Style, color, and motion settings for preview
-                              </p>
-                            </div>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant={visualizerEnabled ? "default" : "outline"}
-                              onClick={() => setVisualizerEnabled((prev) => !prev)}
-                            >
-                              {visualizerEnabled ? "Visualizer ON" : "Visualizer OFF"}
-                            </Button>
-                          </div>
-
-                          {visualizerEnabled && (
-                            <>
-                              <div className="grid gap-3 sm:grid-cols-2">
-                                <div className="space-y-2">
-                                <Label htmlFor="viz-mode" className="text-sm">Visualizer Style</Label>
-                                <Select
-                                  value={visualizerSettings.mode}
-                                  onValueChange={(val) => updateVisualizerSetting("mode", val)}
-                                >
-                                  <SelectTrigger id="viz-mode">
-                                    <SelectValue placeholder="Select style" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="circle">Circle Spectrum (Trap Nation)</SelectItem>
-                                    <SelectItem value="monstercat">Linear Bars (Monstercat)</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                                </div>
-
-                                <div className="space-y-2">
-                                <Label htmlFor="viz-spectrum-style" className="text-sm">Spectrum Move</Label>
-                                <Select
-                                  value={visualizerSettings.spectrumStyle}
-                                  onValueChange={(val) => updateVisualizerSetting("spectrumStyle", val)}
-                                >
-                                  <SelectTrigger id="viz-spectrum-style">
-                                    <SelectValue placeholder="Select spectrum move" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="transparent">Transparent</SelectItem>
-                                    <SelectItem value="fill">Fill</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              </div>
-
-                              {visualizerSettings.mode === "circle" && visualizerSettings.spectrumStyle === "fill" && (
-                                <div className="space-y-2">
-                                  <Label htmlFor="viz-fill-center" className="text-sm">Fill Center</Label>
-                                  <Select
-                                    value={visualizerSettings.fillCenter}
-                                    onValueChange={(val) => updateVisualizerSetting("fillCenter", val)}
-                                  >
-                                    <SelectTrigger id="viz-fill-center">
-                                      <SelectValue placeholder="Center fill type" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="white">White</SelectItem>
-                                      <SelectItem value="image">Use uploaded image</SelectItem>
-                                      <SelectItem value="ncs">NCS blur image</SelectItem>
-                                    </SelectContent>
-                                  </Select>
-                                </div>
-                              )}
-
-                              <div className="grid gap-3 sm:grid-cols-2">
-                                <div className="space-y-2">
-                                <div className="flex items-center justify-between">
-                                  <Label htmlFor="viz-bars" className="text-sm">Bars</Label>
-                                  <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                                    {visualizerSettings.bars}
-                                  </span>
-                                </div>
-                                <Input
-                                  id="viz-bars"
-                                  type="range"
-                                  min="32"
-                                  max="196"
-                                  step="4"
-                                  value={visualizerSettings.bars}
-                                  onChange={(e) => updateVisualizerSetting("bars", Number(e.target.value))}
-                                />
-                                </div>
-
-                                <div className="space-y-2">
-                                <div className="flex items-center justify-between">
-                                  <Label htmlFor="viz-intensity" className="text-sm">Spectrum Intensity</Label>
-                                  <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                                    {visualizerSettings.intensity.toFixed(2)}x
-                                  </span>
-                                </div>
-                                <Input
-                                  id="viz-intensity"
-                                  type="range"
-                                  min="0.5"
-                                  max="3"
-                                  step="0.05"
-                                  value={visualizerSettings.intensity}
-                                  onChange={(e) => updateVisualizerSetting("intensity", Number(e.target.value))}
-                                />
-                                </div>
-                              </div>
-
-                              <div className="grid gap-3 sm:grid-cols-3">
-                                <div className="space-y-2">
-                                  <div className="flex items-center justify-between">
-                                    <Label htmlFor="viz-low-sensitivity" className="text-sm">Low</Label>
-                                    <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                                      {visualizerSettings.lowSensitivity.toFixed(2)}x
-                                    </span>
-                                  </div>
-                                  <Input
-                                    id="viz-low-sensitivity"
-                                    type="range"
-                                    min="0.4"
-                                    max="2.5"
-                                    step="0.05"
-                                    value={visualizerSettings.lowSensitivity}
-                                    onChange={(e) => updateVisualizerSetting("lowSensitivity", Number(e.target.value))}
-                                  />
-                                </div>
-                                <div className="space-y-2">
-                                  <div className="flex items-center justify-between">
-                                    <Label htmlFor="viz-mid-sensitivity" className="text-sm">Mid</Label>
-                                    <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                                      {visualizerSettings.midSensitivity.toFixed(2)}x
-                                    </span>
-                                  </div>
-                                  <Input
-                                    id="viz-mid-sensitivity"
-                                    type="range"
-                                    min="0.4"
-                                    max="2.5"
-                                    step="0.05"
-                                    value={visualizerSettings.midSensitivity}
-                                    onChange={(e) => updateVisualizerSetting("midSensitivity", Number(e.target.value))}
-                                  />
-                                </div>
-                                <div className="space-y-2">
-                                  <div className="flex items-center justify-between">
-                                    <Label htmlFor="viz-high-sensitivity" className="text-sm">High</Label>
-                                    <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                                      {visualizerSettings.highSensitivity.toFixed(2)}x
-                                    </span>
-                                  </div>
-                                  <Input
-                                    id="viz-high-sensitivity"
-                                    type="range"
-                                    min="0.4"
-                                    max="2.5"
-                                    step="0.05"
-                                    value={visualizerSettings.highSensitivity}
-                                    onChange={(e) => updateVisualizerSetting("highSensitivity", Number(e.target.value))}
-                                  />
-                                </div>
-                              </div>
-
-                              <div className="space-y-2">
-                                <div className="flex items-center justify-between">
-                                  <Label htmlFor="bg-image-opacity" className="text-sm">Background Image Opacity</Label>
-                                  <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                                    {Math.round(visualizerSettings.backgroundOpacity * 100)}%
-                                  </span>
-                                </div>
-                                <Input
-                                  id="bg-image-opacity"
-                                  type="range"
-                                  min="0.1"
-                                  max="1"
-                                  step="0.05"
-                                  value={visualizerSettings.backgroundOpacity}
-                                  onChange={(e) => updateVisualizerSetting("backgroundOpacity", Number(e.target.value))}
-                                />
-                              </div>
-
-                              <div className="grid gap-3 sm:grid-cols-2">
-                                <div className="space-y-2">
-                                  <div className="flex items-center justify-between">
-                                    <Label htmlFor="viz-particle-color" className="text-sm">Particle Color</Label>
-                                    <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                                      {visualizerSettings.particleColor}
-                                    </span>
-                                  </div>
-                                  <Input
-                                    id="viz-particle-color"
-                                    type="color"
-                                    value={visualizerSettings.particleColor}
-                                    onChange={(e) => updateVisualizerSetting("particleColor", e.target.value)}
-                                    className="h-10 cursor-pointer p-1"
-                                  />
-                                </div>
-
-                                <div className="space-y-2">
-                                  <div className="flex items-center justify-between">
-                                    <Label htmlFor="viz-border-color" className="text-sm">Spectrum Border Color</Label>
-                                    <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                                      {visualizerSettings.spectrumBorderColor}
-                                    </span>
-                                  </div>
-                                  <Input
-                                    id="viz-border-color"
-                                    type="color"
-                                    value={visualizerSettings.spectrumBorderColor}
-                                    onChange={(e) => updateVisualizerSetting("spectrumBorderColor", e.target.value)}
-                                    className="h-10 cursor-pointer p-1"
-                                  />
-                                </div>
-                              </div>
-
-                              <div className="space-y-2">
-                                <div className="flex items-center justify-between">
-                                  <Label htmlFor="viz-border-width" className="text-sm">Spectrum Border Width</Label>
-                                  <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                                    {visualizerSettings.spectrumBorderWidth}px
-                                  </span>
-                                </div>
-                                <Input
-                                  id="viz-border-width"
-                                  type="range"
-                                  min="0"
-                                  max="14"
-                                  step="1"
-                                  value={visualizerSettings.spectrumBorderWidth}
-                                  onChange={(e) => updateVisualizerSetting("spectrumBorderWidth", Number(e.target.value))}
-                                />
-                              </div>
-
-                              {visualizerSettings.mode === "circle" && (
-                                <div className="space-y-2 rounded-lg border p-3" style={{ borderColor: "var(--border-color)" }}>
-                                  <Label className="text-sm">Spinning Record Image</Label>
-                                  <Input
-                                    ref={spectrumImageInputRef}
-                                    id="viz-record-image-upload"
-                                    type="file"
-                                    accept=".jpg,.jpeg,.png,.webp,.avif,.heic,.heif"
-                                    onChange={handleSpectrumImageUpload}
-                                    className="hidden"
-                                  />
-                                  <div className="flex flex-wrap gap-2">
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => spectrumImageInputRef.current?.click()}
-                                    >
-                                      {spectrumRecordImageUrl ? "Change Record Image" : "Upload Record Image"}
-                                    </Button>
-                                    {spectrumRecordImageUrl && (
-                                      <Button type="button" size="sm" variant="ghost" onClick={clearSpectrumImage}>
-                                        Remove
-                                      </Button>
-                                    )}
-                                  </div>
-                                  <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                                    {spectrumRecordImageUrl ? `Loaded: ${spectrumRecordImageName}` : "Optional center image that spins like a record."}
-                                  </p>
-                                </div>
-                              )}
-
-                              <Button
-                                type="button"
-                                variant={visualizerSettings.multiColorReactive ? "default" : "outline"}
-                                size="sm"
-                                onClick={() => updateVisualizerSetting("multiColorReactive", !visualizerSettings.multiColorReactive)}
-                              >
-                                {visualizerSettings.multiColorReactive ? "NCS Color ON" : "NCS Color OFF"}
-                              </Button>
-
-                              {visualizerSettings.mode === 'circle' && (
-                                <>
-                                  <div className="space-y-2">
-                                    <div className="flex items-center justify-between">
-                                      <Label htmlFor="viz-shake" className="text-sm">Shake Intensity</Label>
-                                      <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                                        {visualizerSettings.shakeIntensity.toFixed(1)}x
-                                      </span>
-                                    </div>
-                                    <Input
-                                      id="viz-shake"
-                                      type="range"
-                                      min="0"
-                                      max="3"
-                                      step="0.1"
-                                      value={visualizerSettings.shakeIntensity}
-                                      onChange={(e) => updateVisualizerSetting("shakeIntensity", Number(e.target.value))}
-                                    />
-                                  </div>
-
-                                  <div className="space-y-2">
-                                    <div className="flex items-center justify-between">
-                                      <Label htmlFor="viz-particles" className="text-sm">Particle Intensity</Label>
-                                      <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                                        {visualizerSettings.particleIntensity.toFixed(2)}x
-                                      </span>
-                                    </div>
-                                    <Input
-                                      id="viz-particles"
-                                      type="range"
-                                      min="0.3"
-                                      max="2"
-                                      step="0.05"
-                                      value={visualizerSettings.particleIntensity}
-                                      onChange={(e) => updateVisualizerSetting("particleIntensity", Number(e.target.value))}
-                                    />
-                                  </div>
-
-                                  <div className="grid grid-cols-2 gap-2">
-                                    <Button
-                                      type="button"
-                                      variant={visualizerSettings.particleEnabled ? "default" : "outline"}
-                                      size="sm"
-                                      onClick={() => updateVisualizerSetting("particleEnabled", !visualizerSettings.particleEnabled)}
-                                    >
-                                      {visualizerSettings.particleEnabled ? "Particles ON" : "Particles OFF"}
-                                    </Button>
-                                    <Button
-                                      type="button"
-                                      variant={visualizerSettings.trailsEnabled ? "default" : "outline"}
-                                      size="sm"
-                                      onClick={() => updateVisualizerSetting("trailsEnabled", !visualizerSettings.trailsEnabled)}
-                                    >
-                                      {visualizerSettings.trailsEnabled ? "Trails ON" : "Trails OFF"}
-                                    </Button>
-                                  </div>
-                                </>
-                              )}
-
-                              {visualizerSettings.mode === "monstercat" && (
-                                <div className="space-y-2">
-                                  <div className="flex items-center justify-between">
-                                    <Label htmlFor="viz-monstercat-y" className="text-sm">Monstercat Y Position</Label>
-                                    <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                                      {visualizerSettings.monstercatYOffset}px
-                                    </span>
-                                  </div>
-                                  <Input
-                                    id="viz-monstercat-y"
-                                    type="range"
-                                    min="0"
-                                    max="180"
-                                    step="1"
-                                    value={visualizerSettings.monstercatYOffset}
-                                    onChange={(e) => updateVisualizerSetting("monstercatYOffset", Number(e.target.value))}
-                                  />
-                                </div>
-                              )}
-
-                              {visualizerSettings.mode === "monstercat" && (
-                                <div className="space-y-2">
-                                  <div className="flex items-center justify-between">
-                                    <Label htmlFor="viz-monstercat-smoothing" className="text-sm">Monstercat Smoothing</Label>
-                                    <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                                      {visualizerSettings.monstercatSmoothing.toFixed(2)}
-                                    </span>
-                                  </div>
-                                  <Input
-                                    id="viz-monstercat-smoothing"
-                                    type="range"
-                                    min="0.05"
-                                    max="0.95"
-                                    step="0.01"
-                                    value={visualizerSettings.monstercatSmoothing}
-                                    onChange={(e) => updateVisualizerSetting("monstercatSmoothing", Number(e.target.value))}
-                                  />
-                                </div>
-                              )}
-
-                              {visualizerSettings.mode === "monstercat" && (
-                                <div className="space-y-2">
-                                  <div className="flex items-center justify-between">
-                                    <Label htmlFor="viz-monstercat-particle-speed" className="text-sm">Flow Particle Speed</Label>
-                                    <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                                      {visualizerSettings.monstercatParticleSpeed.toFixed(2)}x
-                                    </span>
-                                  </div>
-                                  <Input
-                                    id="viz-monstercat-particle-speed"
-                                    type="range"
-                                    min="0.3"
-                                    max="3"
-                                    step="0.05"
-                                    value={visualizerSettings.monstercatParticleSpeed}
-                                    onChange={(e) => updateVisualizerSetting("monstercatParticleSpeed", Number(e.target.value))}
-                                  />
-                                </div>
-                              )}
-
-                              {visualizerSettings.mode === "monstercat" && (
-                                <div className="space-y-2">
-                                  <div className="flex items-center justify-between">
-                                    <Label htmlFor="viz-monstercat-particle-size" className="text-sm">Flow Particle Size</Label>
-                                    <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                                      {visualizerSettings.monstercatParticleSize.toFixed(2)}x
-                                    </span>
-                                  </div>
-                                  <Input
-                                    id="viz-monstercat-particle-size"
-                                    type="range"
-                                    min="0.35"
-                                    max="3"
-                                    step="0.05"
-                                    value={visualizerSettings.monstercatParticleSize}
-                                    onChange={(e) => updateVisualizerSetting("monstercatParticleSize", Number(e.target.value))}
-                                  />
-                                </div>
-                              )}
-
-                              {visualizerSettings.mode === "monstercat" && (
-                                <div className="grid grid-cols-1 gap-2">
-                                  <Button
-                                    type="button"
-                                    variant={visualizerSettings.monstercatParticleEnabled ? "default" : "outline"}
-                                    size="sm"
-                                    onClick={() => updateVisualizerSetting("monstercatParticleEnabled", !visualizerSettings.monstercatParticleEnabled)}
-                                  >
-                                    {visualizerSettings.monstercatParticleEnabled ? "Flow Particles ON" : "Flow Particles OFF"}
-                                  </Button>
-                                </div>
-                              )}
-                            </>
-                          )}
-                        </div>
-                      )}
-
-                      <div className="space-y-2">
-                        <Label htmlFor="privacy-status">Privacy Status</Label>
-                        <Select value={privacyStatus} onValueChange={setPrivacyStatus}>
-                          <SelectTrigger id="privacy-status" data-testid="privacy-status">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="public">Public</SelectItem>
-                            <SelectItem value="unlisted">Unlisted</SelectItem>
-                            <SelectItem value="private">Private</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {/* Watermark Removal Option */}
-                      <div className="space-y-2 p-4 rounded-lg border-2" style={{
-                        borderColor: subscriptionStatus?.is_subscribed ? 'var(--accent-primary)' : 'var(--border-color)',
-                        backgroundColor: 'var(--bg-secondary)'
-                      }}>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              id="remove-watermark"
-                              checked={removeWatermark}
-                              onChange={(e) => {
-                                if (!subscriptionStatus?.is_subscribed && e.target.checked) {
-                                  // Free user trying to enable - show upgrade modal
-                                  setShowUpgradeModal(true);
-                                  toast.info("Upgrade to Pro to remove watermarks!");
-                                } else {
-                                  setRemoveWatermark(e.target.checked);
-                                }
-                              }}
-                              disabled={!subscriptionStatus?.is_subscribed && removeWatermark}
-                              className="w-4 h-4 cursor-pointer"
-                              data-testid="remove-watermark-checkbox"
-                            />
-                            <Label htmlFor="remove-watermark" className="cursor-pointer text-sm font-medium">
-                              Remove watermark
-                            </Label>
-                          </div>
-                          {!subscriptionStatus?.is_subscribed && (
-                            <span className="text-xs px-2 py-1 rounded-full bg-gradient-to-r from-[var(--accent-primary)] to-[var(--accent-secondary)] text-white font-semibold">
-                              PRO
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs leading-relaxed" style={{color: 'var(--text-secondary)'}}>
-                          {subscriptionStatus?.is_subscribed 
-                            ? "✅ As a Pro member, you can remove the watermark from your videos"
-                            : "⚠️ Free users get a small watermark at the top: \"Upload your beats online: https://sendmybeat.com\""}
-                        </p>
-                      </div>
-
-                      {/* Preview Player */}
-                      {audioFile && imageFile && (
-                        <Card className="producer-card border-l-4 border-blue-500" ref={previewSectionRef}>
-                          <CardHeader>
-                            <CardTitle className="text-lg flex items-center gap-2">
-                              <Music className="h-5 w-5 text-blue-500" />
-                              Preview Your Beat Video
-                            </CardTitle>
-                            <CardDescription>See how your beat will look on YouTube</CardDescription>
-                          </CardHeader>
-                          <CardContent>
-                            <div
-                              className="relative rounded-lg overflow-hidden"
-                              ref={previewContainerRef}
-                              style={{
-                                backgroundColor: backgroundColor === "white" ? "#ffffff" : "#000000",
-                                overflow: 'hidden',
-                                width: `${frameWidth}px`,
-                                height: `${frameHeight}px`,
-                                maxWidth: '100%',
-                                minWidth: '220px',
-                                minHeight: '220px',
-                                aspectRatio: previewAspectRatio
-                              }}
-                            >
-                              <div
-                                className="absolute inset-0 cursor-move"
-                                onMouseDown={handlePreviewMouseDown}
-                                onClick={handlePreviewClick}
-                                aria-label="Drag image"
-                              />
-                              <div
-                                className="absolute"
-                                style={{
-                                  width: `${fitWidth}px`,
-                                  height: `${fitHeight}px`,
-                                  left: `${fitLeft}px`,
-                                  top: `${fitTop}px`,
-                                  transform: `translate(${imagePosX * 50}%, ${imagePosY * 50}%) scale(${imageScaleX}, ${imageScaleY})`,
-                                  transformOrigin: "center"
-                                }}
-                              >
-                                <img 
-                                  src={imagePreviewUrl} 
-                                  alt="Beat cover"
-                                  className="w-full h-full object-contain"
-                                  style={{
-                                    objectFit: "contain",
-                                    opacity: visualizerEnabled ? visualizerSettings.backgroundOpacity : 1
-                                  }}
-                                />
-                                <div className="absolute inset-0 pointer-events-none">
-                                  <button
-                                    type="button"
-                                    onMouseDown={handleResizeStart("tl")}
-                                    className="absolute -top-2.5 -left-2.5 h-5 w-5 rounded-full border-2 border-white/80 bg-black/80 shadow-md pointer-events-auto"
-                                    style={{
-                                      transform: `scale(${1 / Math.max(0.5, imageScaleX)}, ${1 / Math.max(0.5, imageScaleY)})`,
-                                      transformOrigin: "top left",
-                                    }}
-                                    aria-label="Resize top left"
-                                  />
-                                  <button
-                                    type="button"
-                                    onMouseDown={handleResizeStart("tr")}
-                                    className="absolute -top-2.5 -right-2.5 h-5 w-5 rounded-full border-2 border-white/80 bg-black/80 shadow-md pointer-events-auto"
-                                    style={{
-                                      transform: `scale(${1 / Math.max(0.5, imageScaleX)}, ${1 / Math.max(0.5, imageScaleY)})`,
-                                      transformOrigin: "top right",
-                                    }}
-                                    aria-label="Resize top right"
-                                  />
-                                  <button
-                                    type="button"
-                                    onMouseDown={handleResizeStart("bl")}
-                                    className="absolute -bottom-2.5 -left-2.5 h-5 w-5 rounded-full border-2 border-white/80 bg-black/80 shadow-md pointer-events-auto"
-                                    style={{
-                                      transform: `scale(${1 / Math.max(0.5, imageScaleX)}, ${1 / Math.max(0.5, imageScaleY)})`,
-                                      transformOrigin: "bottom left",
-                                    }}
-                                    aria-label="Resize bottom left"
-                                  />
-                                  <button
-                                    type="button"
-                                    onMouseDown={handleResizeStart("br")}
-                                    className="absolute -bottom-2.5 -right-2.5 h-5 w-5 rounded-full border-2 border-white/80 bg-black/80 shadow-md pointer-events-auto"
-                                    style={{
-                                      transform: `scale(${1 / Math.max(0.5, imageScaleX)}, ${1 / Math.max(0.5, imageScaleY)})`,
-                                      transformOrigin: "bottom right",
-                                    }}
-                                    aria-label="Resize bottom right"
-                                  />
-                                </div>
-                              </div>
-
-                              {visualizerEnabled && (
-                                <canvas
-                                  ref={visualizerCanvasRef}
-                                  className="absolute inset-0 pointer-events-none"
-                                  style={{ width: "100%", height: "100%", opacity: 1 }}
-                                />
-                              )}
-                            </div>
-                            <div className="mt-3 rounded-lg p-3" style={{ backgroundColor: 'var(--bg-secondary)' }}>
-                              <div className="flex flex-wrap items-center gap-3">
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={toggleAudioPlayback}
-                                >
-                                  {isAudioPlaying ? "Pause" : "Play"}
-                                </Button>
-                                <span className="text-xs" style={{color: 'var(--text-secondary)'}}>
-                                  {formatTime(audioCurrentTime)}
-                                </span>
-                                <input
-                                  type="range"
-                                  min={0}
-                                  max={audioDuration || 0}
-                                  step={0.1}
-                                  value={Math.min(audioCurrentTime, audioDuration || 0)}
-                                  onChange={handleAudioSeek}
-                                  className="flex-1"
-                                />
-                                <span className="text-xs" style={{color: 'var(--text-secondary)'}}>
-                                  {formatTime(audioDuration)}
-                                </span>
-                              </div>
-                            </div>
-                              <p className="text-sm mt-3 text-center" style={{color: 'var(--text-secondary)'}}>
-                                Drag to reposition. Scale down only. Use "Fit image" to lock. Aspect ratio: {videoAspectRatio}
-                              </p>
-                          </CardContent>
-                        </Card>
-                      )}
-
-
-                      <Button
-                        onClick={handleYouTubeUpload}
-                        className="w-full bg-red-600 hover:bg-red-700 text-white"
-                        disabled={uploadingToYouTube || !audioFileId || !imageFileId}
-                        data-testid="youtube-upload-btn"
-                      >
-                        {uploadingToYouTube ? "Uploading to YouTube..." : "Upload to YouTube"}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+             <UploadStudio
+               user={user}
+               subscriptionStatus={subscriptionStatus}
+               youtubeConnected={youtubeConnected}
+               youtubeProfilePicture={youtubeProfilePicture}
+               youtubeName={youtubeName}
+               youtubeEmail={youtubeEmail}
+               descriptions={descriptions}
+               tagHistory={tagHistory}
+               API={API}
+               onUpgrade={() => setShowUpgradeModal(true)}
+               onDisconnectYouTube={disconnectYouTube}
+               onConnectYouTube={connectYouTube}
+             />
           </TabsContent>
 
           {/* YouTube Analytics Tab */}
@@ -4160,13 +1969,13 @@ const Dashboard = ({ setIsAuthenticated }) => {
                               const dayNumber = index + 1;
                               const status = typeof statusData === 'string' ? statusData : statusData.status;
                               const activity = typeof statusData === 'object' ? statusData.activity : null;
-                              
-                              const bgColor = 
+
+                              const bgColor =
                                 status === 'completed' ? 'bg-green-500' :
                                 status === 'missed' ? 'bg-red-500' :
                                 status === 'today' ? 'bg-purple-500' :
                                 'bg-gray-500';
-                              
+
                               return (
                                 <div
                                   key={date}
@@ -4313,73 +2122,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
           </TabsContent>
         </Tabs>
       </div>
-
-      {audioFile && imageFile && (
-        <div
-          className="fixed bottom-4 right-4 z-50 border rounded-lg shadow-lg p-3"
-          style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}
-        >
-          <div className="flex items-center gap-3">
-            <div
-              className="relative rounded overflow-hidden"
-              style={{
-                width: 132,
-                aspectRatio: previewAspectRatio,
-                backgroundColor: backgroundColor === "white" ? "#ffffff" : "#000000"
-              }}
-            >
-              <img
-                src={imagePreviewUrl}
-                alt="Mini preview"
-                className="w-full h-full object-contain"
-                style={{
-                  objectFit: "contain",
-                  opacity: visualizerEnabled ? visualizerSettings.backgroundOpacity : 1,
-                  transform: `translate(${imagePosX * 50}%, ${imagePosY * 50}%) scale(${imageScaleX}, ${imageScaleY})`,
-                  transformOrigin: 'center'
-                }}
-              />
-              {visualizerEnabled && (
-                <canvas
-                  ref={miniPreviewCanvasRef}
-                  className="absolute inset-0 pointer-events-none"
-                  style={{ width: "100%", height: "100%", opacity: 1 }}
-                />
-              )}
-            </div>
-            <div className="flex flex-col gap-2 min-w-[220px]">
-              <div className="flex items-center gap-2">
-                <Button type="button" size="sm" variant="outline" onClick={toggleAudioPlayback}>
-                  {isAudioPlaying ? "Pause" : "Play"}
-                </Button>
-                <Button type="button" size="sm" variant="outline" onClick={scrollToPreview}>
-                  Back to preview
-                </Button>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs" style={{color: 'var(--text-secondary)'}}>
-                  {formatTime(audioCurrentTime)}
-                </span>
-                <input
-                  type="range"
-                  min={0}
-                  max={audioDuration || 0}
-                  step={0.1}
-                  value={Math.min(audioCurrentTime, audioDuration || 0)}
-                  onChange={handleAudioSeek}
-                  className="flex-1"
-                />
-                <span className="text-xs" style={{color: 'var(--text-secondary)'}}>
-                  {formatTime(audioDuration)}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-      {audioPreviewUrl && (
-        <audio ref={audioPlayerRef} src={audioPreviewUrl} preload="metadata" className="hidden" />
-      )}
 
       {/* Save Refined Text Dialog */}
       <Dialog open={showSaveRefinedDialog} onOpenChange={setShowSaveRefinedDialog}>
