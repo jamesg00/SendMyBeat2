@@ -10,7 +10,7 @@ import asyncio
 import random
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import uuid
 from datetime import datetime, timezone, timedelta
 import jwt
@@ -29,6 +29,7 @@ import shutil
 import stripe
 import requests
 import pytz
+import re
 from itsdangerous import URLSafeSerializer, BadSignature
 from models_spotlight import (
     ProducerProfile,
@@ -446,6 +447,80 @@ class CheckoutSessionRequest(BaseModel):
     success_url: str
     cancel_url: str
 
+class ThemeGenerateRequest(BaseModel):
+    prompt: str = ""
+    mode: str = "auto"  # "light" | "dark" | "auto"
+
+class ThemeGenerateResponse(BaseModel):
+    theme_name: str
+    description: str
+    variables: Dict[str, str]
+
+
+THEME_ALLOWED_VARIABLES = {
+    "--bg-primary",
+    "--bg-secondary",
+    "--bg-tertiary",
+    "--text-primary",
+    "--text-secondary",
+    "--accent-primary",
+    "--accent-secondary",
+    "--border-color",
+    "--card-bg",
+    "--shadow",
+    "--glow",
+}
+
+
+def _extract_json_object(text: str) -> dict:
+    if not text:
+        raise ValueError("Empty LLM response")
+
+    candidate = text.strip()
+
+    if "```json" in candidate:
+        start = candidate.find("```json") + 7
+        end = candidate.find("```", start)
+        if end != -1:
+            candidate = candidate[start:end].strip()
+    elif "```" in candidate:
+        start = candidate.find("```") + 3
+        end = candidate.find("```", start)
+        if end != -1:
+            candidate = candidate[start:end].strip()
+
+    if not candidate.startswith("{"):
+        match = re.search(r"\{[\s\S]*\}", candidate)
+        if match:
+            candidate = match.group(0)
+
+    return json.loads(candidate)
+
+
+def _is_safe_css_value(value: str) -> bool:
+    value = (value or "").strip()
+    if not value or len(value) > 120:
+        return False
+    if any(token in value for token in ["{", "}", ";", "@import", "url(", "<", ">"]):
+        return False
+    return True
+
+
+def _sanitize_theme_variables(raw_variables: Any) -> Dict[str, str]:
+    if not isinstance(raw_variables, dict):
+        return {}
+
+    safe: Dict[str, str] = {}
+    for key, value in raw_variables.items():
+        if key not in THEME_ALLOWED_VARIABLES:
+            continue
+        if not isinstance(value, str):
+            continue
+        if not _is_safe_css_value(value):
+            continue
+        safe[key] = value.strip()
+    return safe
+
 
 # ============ Subscription Helper Functions ============
 async def get_user_subscription_status(user_id: str) -> dict:
@@ -650,6 +725,70 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         user_doc['created_at'] = datetime.fromisoformat(user_doc['created_at'])
     
     return User(**user_doc)
+
+@api_router.post("/theme/generate", response_model=ThemeGenerateResponse)
+async def generate_theme(request: ThemeGenerateRequest, current_user: dict = Depends(get_current_user)):
+    mode = (request.mode or "auto").strip().lower()
+    if mode not in {"auto", "light", "dark"}:
+        mode = "auto"
+
+    user_prompt = (request.prompt or "").strip()
+    if not user_prompt:
+        user_prompt = "Create a premium producer dashboard theme that feels modern, bold, and readable."
+
+    system_message = (
+        "You design website color themes. "
+        "Return only JSON with keys: theme_name, description, variables. "
+        "variables must include only these CSS variables: "
+        "--bg-primary, --bg-secondary, --bg-tertiary, --text-primary, --text-secondary, "
+        "--accent-primary, --accent-secondary, --border-color, --card-bg, --shadow, --glow. "
+        "Use valid CSS color values only (hex, rgb/rgba, hsl/hsla). No prose."
+    )
+
+    llm_input = (
+        f"Mode preference: {mode}\n"
+        f"Prompt: {user_prompt}\n"
+        "Output example:\n"
+        "{\n"
+        "  \"theme_name\": \"Ocean Pulse\",\n"
+        "  \"description\": \"Deep blue neon producer UI\",\n"
+        "  \"variables\": {\n"
+        "    \"--bg-primary\": \"#0b1220\",\n"
+        "    \"--bg-secondary\": \"#111a2d\",\n"
+        "    \"--bg-tertiary\": \"#16233c\",\n"
+        "    \"--text-primary\": \"#e5f0ff\",\n"
+        "    \"--text-secondary\": \"#9ec5ff\",\n"
+        "    \"--accent-primary\": \"#3b82f6\",\n"
+        "    \"--accent-secondary\": \"#60a5fa\",\n"
+        "    \"--border-color\": \"rgba(96, 165, 250, 0.35)\",\n"
+        "    \"--card-bg\": \"rgba(14, 23, 40, 0.75)\",\n"
+        "    \"--shadow\": \"rgba(5, 9, 20, 0.45)\",\n"
+        "    \"--glow\": \"rgba(59, 130, 246, 0.35)\"\n"
+        "  }\n"
+        "}"
+    )
+
+    try:
+        response_text = await llm_chat(
+            system_message=system_message,
+            user_message=llm_input,
+            temperature=0.85,
+            max_tokens=500,
+            user_id=current_user.get("id"),
+        )
+        parsed = _extract_json_object(response_text)
+        variables = _sanitize_theme_variables(parsed.get("variables"))
+        if len(variables) < 6:
+            raise ValueError("Insufficient theme variables returned by LLM")
+
+        return ThemeGenerateResponse(
+            theme_name=str(parsed.get("theme_name") or "AI Theme").strip()[:60],
+            description=str(parsed.get("description") or "Generated with Grok").strip()[:180],
+            variables=variables,
+        )
+    except Exception as exc:
+        logging.error(f"Failed to generate AI theme: {str(exc)}")
+        raise HTTPException(status_code=500, detail="Failed to generate AI theme")
 
 
 # ============ YouTube OAuth Routes ============
@@ -2713,6 +2852,7 @@ async def upload_to_youtube(
     image_scale_y: Optional[float] = Form(None),
     image_pos_x: float = Form(0.0),
     image_pos_y: float = Form(0.0),
+    image_rotation: float = Form(0.0),
     background_color: str = Form("black"),
     remove_watermark: bool = Form(False),
     current_user: dict = Depends(get_current_user)
@@ -2868,6 +3008,8 @@ async def upload_to_youtube(
             raise HTTPException(status_code=400, detail="image_pos_x must be between -1 and 1.")
         if not -1.0 <= image_pos_y <= 1.0:
             raise HTTPException(status_code=400, detail="image_pos_y must be between -1 and 1.")
+        if not -180.0 <= image_rotation <= 180.0:
+            raise HTTPException(status_code=400, detail="image_rotation must be between -180 and 180 degrees.")
 
         background_color = (background_color or "black").strip().lower()
         if background_color not in ("black", "white"):
@@ -2879,8 +3021,15 @@ async def upload_to_youtube(
         fit_expr = f"min({target_w}/iw\\,{target_h}/ih)"
 
         # Build video filter - add watermark for non-pro users OR pro users who didn't uncheck it
+        rotation_filter = ""
+        if abs(image_rotation) > 0.01:
+            rotation_filter = (
+                f"rotate={image_rotation}*PI/180:c={background_color}:ow=rotw(iw):oh=roth(ih),"
+            )
+
         video_filter = (
             f"scale=iw*{fit_expr}*{scale_x}:ih*{fit_expr}*{scale_y},"
+            f"{rotation_filter}"
             f"pad={target_w}:{target_h}:(ow-iw)/2+(ow-iw)/2*{image_pos_x}:(oh-ih)/2+(oh-ih)/2*{image_pos_y}:{background_color}"
         )
         
@@ -2891,7 +3040,7 @@ async def upload_to_youtube(
         
         if should_add_watermark:
             # Add text watermark at the top left with black semi-transparent background
-            watermark_text = 'Upload your beats online: https://sendmybeat.com'
+            watermark_text = 'Upload your beats for free: https://sendmybeat.com'
             # Escape special characters for FFmpeg
             watermark_text_escaped = watermark_text.replace(':', r'\:').replace('/', r'\/')
             

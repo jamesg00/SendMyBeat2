@@ -36,6 +36,8 @@ const DEFAULT_OPTIONS = {
   monstercatParticleEnabled: false,
   monstercatParticleSpeed: 1,
   monstercatParticleSize: 1,
+  monstercatParticleCount: 900,
+  monstercatGlow: 15,
   lowSensitivity: 1,
   midSensitivity: 1,
   highSensitivity: 1,
@@ -43,10 +45,13 @@ const DEFAULT_OPTIONS = {
   shakeIntensity: 0.6, // Reduced from 1.0
   multiColorReactive: false,
   spectrumStyle: "fill",
-  fillCenter: "white",
+  fillCenter: "color",
+  fillCenterColor: "255, 255, 255",
+  centerImageSpin: true,
   centerImageUrl: "",
   spectrumBorderWidth: 2,
   spectrumBorderColor: "255, 255, 255",
+  spectrumBorderEnabled: true,
   spectrumRecordImageUrl: "",
   // FFT-to-reactivity pipeline settings (Musicvid-like behavior, custom implementation)
   reactivity: {
@@ -436,10 +441,17 @@ export default class AudioVisualizer {
 
   resize() {
     const rect = this.canvas.getBoundingClientRect();
+    const cssW = Math.floor(rect.width || this.canvas.clientWidth || 0);
+    const cssH = Math.floor(rect.height || this.canvas.clientHeight || 0);
+    if (!cssW || !cssH) return;
     const dpr = window.devicePixelRatio || 1;
-    this.canvas.width = Math.max(1, Math.floor(rect.width * dpr));
-    this.canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+    this.canvas.width = Math.max(1, Math.floor(cssW * dpr));
+    this.canvas.height = Math.max(1, Math.floor(cssH * dpr));
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // Keep caches aligned with new viewport to avoid warped transitions.
+    if (this.monstercatSmoothedBars.length > this.options.bars) {
+      this.monstercatSmoothedBars = this.monstercatSmoothedBars.slice(0, this.options.bars);
+    }
   }
 
   computeBars() {
@@ -631,6 +643,12 @@ export default class AudioVisualizer {
 
       p.x += p.vx * dt;
       p.y += p.vy * dt;
+      // Add NCS-style sinusoidal side drift while particles travel outward.
+      const waveAmp = (1.5 + drive * 2.2) * Math.max(0.6, this.options.particleIntensity || 1);
+      const waveFreq = 7 + drive * 3.5;
+      const waveOffset = Math.sin(p.age * waveFreq + p.seed) * waveAmp * dt * 18;
+      p.x += tx * waveOffset;
+      p.y += ty * waveOffset;
       const margin = 40;
       if (
         p.x < -margin ||
@@ -689,12 +707,14 @@ export default class AudioVisualizer {
     const maxBarPx = Math.min(this.canvas.clientWidth, this.canvas.clientHeight) * this.runtime.maxBarLength;
     const avgAmp = bars.reduce((acc, n) => acc + Math.max(0, n), 0) / Math.max(1, count);
     const reactiveAmp = Math.min(1.6, avgAmp + this.beatPulse * 0.55 + this.impactPulse * 0.7);
+    const [sr, sg, sb] = (this.options.spectrumColor || "255, 255, 255").split(",").map((v) => Number(v.trim()));
 
     c.save();
     c.translate(cx, cy);
     c.rotate(this.rotation);
     c.globalCompositeOperation = "lighter";
     const fillMode = this.options.spectrumStyle === "fill";
+    let disableOuterBorder = false;
 
     // Draw main spectrum path
     c.beginPath();
@@ -704,7 +724,12 @@ export default class AudioVisualizer {
     const points = [];
     for (let i = 0; i < count; i++) {
         const a = i * step;
-        const amp = Math.max(0, bars[i]);
+        const rawAmp = Math.max(0, bars[i]);
+        const prevAmp = Math.max(0, bars[(i - 1 + count) % count]);
+        const nextAmp = Math.max(0, bars[(i + 1) % count]);
+        const amp = fillMode
+          ? (rawAmp * 0.64 + prevAmp * 0.18 + nextAmp * 0.18)
+          : rawAmp;
         const len = amp * maxBarPx;
         const x = Math.cos(a) * (radius + len);
         const y = Math.sin(a) * (radius + len);
@@ -725,47 +750,92 @@ export default class AudioVisualizer {
     }
     c.closePath();
     if (fillMode) {
-      c.fillStyle = "rgba(255, 255, 255, 0.86)";
-      c.fill();
-      c.strokeStyle = "rgba(255, 255, 255, 0.95)";
+      const centerModeRaw = String(this.options.fillCenter || "color").toLowerCase();
+      const centerMode = centerModeRaw === "white" ? "color" : centerModeRaw;
+      const isCenterTransparent = centerMode === "transparent";
+      if (isCenterTransparent) disableOuterBorder = true;
+      const isCenterImage = centerMode === "image" || centerMode === "ncs";
+      const [cr, cg, cb] = (this.options.fillCenterColor || "255, 255, 255")
+        .split(",")
+        .map((v) => Number(v.trim()));
+      const coreSpectrumColor = this.getReactiveColor(reactiveAmp * 0.85, 0.92, 1.16, true);
+      const layerA = this.getReactiveColor(reactiveAmp * 0.7, 0.52, 1.14, true);
+      const layerB = this.getReactiveColor(reactiveAmp * 1.0, 0.34, 1.2, true);
+      const layerC = this.getReactiveColor(reactiveAmp * 1.25, 0.2, 1.25, true);
+
+      const useConic = typeof c.createConicGradient === "function";
+      let rainbowStroke = null;
+      if (useConic) {
+        rainbowStroke = c.createConicGradient(this.rotation, 0, 0);
+        rainbowStroke.addColorStop(0.00, "rgba(255, 82, 82, 0.95)");
+        rainbowStroke.addColorStop(0.17, "rgba(255, 178, 66, 0.95)");
+        rainbowStroke.addColorStop(0.34, "rgba(247, 255, 84, 0.95)");
+        rainbowStroke.addColorStop(0.51, "rgba(97, 255, 143, 0.95)");
+        rainbowStroke.addColorStop(0.68, "rgba(88, 179, 255, 0.95)");
+        rainbowStroke.addColorStop(0.84, "rgba(166, 126, 255, 0.95)");
+        rainbowStroke.addColorStop(1.00, "rgba(255, 82, 82, 0.95)");
+      }
+
+      // NCS-style aura band (smooth, no point vectors)
+      c.save();
+      c.strokeStyle = (this.options.multiColorReactive && rainbowStroke) ? rainbowStroke : layerA;
+      c.lineWidth = Math.max(6, this.options.glowWidth * 2.1);
+      c.stroke();
+      c.strokeStyle = (this.options.multiColorReactive && rainbowStroke) ? rainbowStroke : layerB;
+      c.lineWidth = Math.max(10, this.options.glowWidth * 3);
+      c.stroke();
+      c.strokeStyle = (this.options.multiColorReactive && rainbowStroke) ? rainbowStroke : layerC;
+      c.lineWidth = Math.max(14, this.options.glowWidth * 3.8);
+      c.stroke();
+      c.restore();
+
+      // For transparent mode keep only outline behavior.
+      if (!isCenterTransparent) {
+        c.fillStyle = this.getReactiveColor(reactiveAmp * 0.9, 0.24, 1.1, true);
+        c.fill();
+      }
+      c.strokeStyle = coreSpectrumColor;
       c.stroke();
 
       const innerRadius = Math.max(6, radius * 0.94);
       c.save();
+      c.globalCompositeOperation = "source-over";
       c.beginPath();
       c.arc(0, 0, innerRadius, 0, Math.PI * 2);
       c.closePath();
       c.clip();
-      if (
-        (this.options.fillCenter === "image" || this.options.fillCenter === "ncs") &&
-        this.centerImage &&
-        this.centerImage.complete &&
-        this.centerImage.naturalWidth > 0
-      ) {
-        const drawSize = innerRadius * 2;
-        if (this.options.fillCenter === "ncs") {
-          const intensity = Math.min(1.6, this.energySlew + this.beatPulse * 0.6 + this.impactPulse * 0.8);
-          const zoom = 1.08 + intensity * 0.12;
-          const renderSize = drawSize * zoom;
-
-          c.save();
-          c.filter = "blur(10px) saturate(1.35) contrast(1.06) brightness(1.04)";
-          c.drawImage(this.centerImage, -renderSize / 2, -renderSize / 2, renderSize, renderSize);
-          c.restore();
-
-          const ringGrad = c.createRadialGradient(0, 0, innerRadius * 0.35, 0, 0, innerRadius);
-          ringGrad.addColorStop(0, "rgba(255,255,255,0)");
-          ringGrad.addColorStop(1, this.getReactiveColor(intensity, 0.34, 1.2));
-          c.fillStyle = ringGrad;
-          c.fillRect(-innerRadius, -innerRadius, innerRadius * 2, innerRadius * 2);
-        } else {
-          c.drawImage(this.centerImage, -drawSize / 2, -drawSize / 2, drawSize, drawSize);
+      if (isCenterImage && this.centerImage && this.centerImage.complete && this.centerImage.naturalWidth > 0) {
+        const maxSize = innerRadius * 2;
+        const imgW = this.centerImage.naturalWidth || this.centerImage.width || maxSize;
+        const imgH = this.centerImage.naturalHeight || this.centerImage.height || maxSize;
+        const scale = Math.min(maxSize / imgW, maxSize / imgH);
+        const drawW = imgW * scale;
+        const drawH = imgH * scale;
+        c.save();
+        if (this.options.centerImageSpin) {
+          c.rotate(this.recordRotation);
         }
-      } else {
-        c.fillStyle = "rgba(255, 255, 255, 1)";
+        c.drawImage(this.centerImage, -drawW / 2, -drawH / 2, drawW, drawH);
+        c.restore();
+      } else if (!isCenterTransparent) {
+        c.fillStyle = `rgba(${cr}, ${cg}, ${cb}, 0.99)`;
         c.fillRect(-innerRadius, -innerRadius, innerRadius * 2, innerRadius * 2);
       }
       c.restore();
+
+      if (isCenterTransparent) {
+        c.save();
+        c.globalCompositeOperation = "destination-out";
+        c.beginPath();
+        c.arc(0, 0, innerRadius * 0.99, 0, Math.PI * 2);
+        c.fill();
+        c.restore();
+        c.beginPath();
+        c.strokeStyle = coreSpectrumColor;
+        c.lineWidth = Math.max(1.4, this.options.lineWidth * 0.7);
+        c.arc(0, 0, innerRadius * 0.995, 0, Math.PI * 2);
+        c.stroke();
+      }
     } else {
       c.strokeStyle = this.getReactiveColor(reactiveAmp, 0.95, 1.14);
       c.stroke();
@@ -775,23 +845,29 @@ export default class AudioVisualizer {
       this.drawRecordDisc(radius);
     }
 
-    if ((this.options.spectrumBorderWidth || 0) > 0) {
+    if (this.options.spectrumBorderEnabled && !disableOuterBorder) {
       const [br, bg, bb] = this.options.spectrumBorderColor.split(",").map((v) => Number(v.trim()));
+      const borderWidth = this.options.mode === "circle" ? 5 : Math.max(1, this.options.spectrumBorderWidth || 2);
       c.beginPath();
       c.strokeStyle = `rgba(${br}, ${bg}, ${bb}, 0.92)`;
-      c.lineWidth = this.options.spectrumBorderWidth;
+      c.lineWidth = borderWidth;
       c.arc(0, 0, radius, 0, Math.PI * 2);
       c.stroke();
     }
 
-    // Keep a visible base ring so the circle style never disappears on quieter passages.
-    c.beginPath();
-    c.strokeStyle = this.getReactiveColor(Math.max(0.18, reactiveAmp * 0.7), fillMode ? 0.42 : 0.32, 1.1, true);
-    c.lineWidth = Math.max(1, this.options.lineWidth * 0.7);
-    c.arc(0, 0, radius, 0, Math.PI * 2);
-    c.stroke();
+    // For fill mode, avoid forced full base ring so visualizer clips/reacts naturally.
+    if (!fillMode) {
+      c.beginPath();
+      c.strokeStyle = this.options.multiColorReactive
+        ? this.getReactiveColor(Math.max(0.18, reactiveAmp * 0.7), 0.32, 1.1, true)
+        : `rgba(${sr}, ${sg}, ${sb}, 0.32)`;
+      c.lineWidth = Math.max(1, this.options.lineWidth * 0.7);
+      c.arc(0, 0, radius, 0, Math.PI * 2);
+      c.stroke();
+    }
 
-    // Draw bars (classic style) inside
+    // Draw bars only for non-filled styles to keep NCS mode smooth.
+    if (!fillMode) {
     for (let i = 0; i < count; i += 1) {
       const a = i * step;
       const amp = Math.max(0, bars[i]);
@@ -821,6 +897,7 @@ export default class AudioVisualizer {
       c.moveTo(fillMode ? xTip0 : x0, fillMode ? yTip0 : y0);
       c.lineTo(x1, y1);
       c.stroke();
+    }
     }
     c.restore();
   }
@@ -861,7 +938,8 @@ export default class AudioVisualizer {
       if (p.x > w + 80 || p.y < -40 || p.y > h + 40) continue;
       keep.push(p);
     }
-    this.monstercatParticles = keep.slice(-1200);
+    const maxCount = Math.max(40, Math.floor(this.options.monstercatParticleCount ?? 900));
+    this.monstercatParticles = keep.slice(-maxCount);
   }
 
   drawMonstercatParticles() {
@@ -894,15 +972,18 @@ export default class AudioVisualizer {
 
   drawMonstercat(bars, w, h) {
     const c = this.ctx;
-    const count = Math.min(bars.length, 63); // Limit bars for cleaner look
+    const maxBarsForWidth = Math.max(24, Math.floor(w / 4));
+    const count = Math.max(16, Math.min(bars.length, maxBarsForWidth));
     const smoothing = Math.max(0.05, Math.min(0.95, this.runtime.monstercatSmoothing || 0.35));
 
-    const barWidth = this.options.monstercatBarWidth || (w / count * 0.6);
-    const spacing = this.options.monstercatSpacing || (w / count * 0.2);
-    const totalWidth = count * (barWidth + spacing);
-    const startX = (w - totalWidth) / 2;
+    // Exact edge-to-edge layout: last bar always reaches the right edge.
+    let spacing = Math.max(0, this.options.monstercatSpacing ?? 2);
+    const barSlot = w / Math.max(1, count);
+    if (barSlot - spacing < 1) {
+      spacing = Math.max(0, barSlot - 1);
+    }
     const maxHeight = h * 0.44;
-    const baselineY = h - (this.options.monstercatYOffset || 20);
+    const baselineY = h - (this.options.monstercatYOffset ?? 20);
     const transparentBars = this.options.spectrumStyle === "transparent";
 
     for (let i = 0; i < count; i++) {
@@ -911,7 +992,8 @@ export default class AudioVisualizer {
       const amp = prevAmp + (rawAmp - prevAmp) * (1 - smoothing);
       this.monstercatSmoothedBars[i] = amp;
       const barHeight = Math.max(2, Math.min(maxHeight, amp * maxHeight * 1.02));
-      const x = startX + i * (barWidth + spacing);
+      const x = i * barSlot;
+      const barWidth = Math.max(1, barSlot - spacing);
       const y = baselineY - barHeight;
       const barReactive = Math.min(1.6, amp + this.beatPulse * 0.45 + this.impactPulse * 0.7);
       if (transparentBars) {
@@ -926,7 +1008,7 @@ export default class AudioVisualizer {
         c.stroke();
       } else {
         c.fillStyle = this.getReactiveColor(barReactive, 0.92, 1.15);
-        c.shadowBlur = 15;
+        c.shadowBlur = Math.max(0, this.options.monstercatGlow ?? 15);
         c.shadowColor = this.getReactiveColor(barReactive, 0.6, 1.1);
         c.fillRect(x, y, barWidth, barHeight);
       }

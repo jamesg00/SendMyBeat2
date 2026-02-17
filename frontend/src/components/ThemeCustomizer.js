@@ -1,18 +1,47 @@
-import React from 'react';
+import React, { useState } from 'react';
+import axios from 'axios';
+import { API } from '@/App';
 import { useTheme } from '@/lib/ThemeContext';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Palette, Monitor, Zap, Grid, Box } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Palette, Monitor, Zap, Box, Sparkles } from 'lucide-react';
+import { toast } from 'sonner';
 
 export default function ThemeCustomizer() {
-  const { theme, setTheme } = useTheme();
+  const { theme, setTheme, setAiTheme } = useTheme();
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [isGeneratingTheme, setIsGeneratingTheme] = useState(false);
 
   const themes = [
     { id: 'matrix', name: 'Matrix Arcade', icon: <Monitor className="h-5 w-5" />, desc: 'Cyberpunk retro style' },
     { id: 'glass', name: 'Glassmorphism', icon: <Box className="h-5 w-5" />, desc: 'Modern frosted glass' },
     { id: 'neubrutalism', name: 'Neubrutalism', icon: <Zap className="h-5 w-5" />, desc: 'Bold, high contrast' },
-    { id: 'minimal', name: 'Clean Minimal', icon: <Grid className="h-5 w-5" />, desc: 'Simple & professional' },
   ];
+
+  const handleGenerateAiTheme = async () => {
+    setIsGeneratingTheme(true);
+    try {
+      const response = await axios.post(`${API}/theme/generate`, {
+        prompt: aiPrompt,
+        mode: document.documentElement.classList.contains('dark') ? 'dark' : 'light',
+      });
+
+      const generated = response?.data;
+      if (!generated?.variables) {
+        throw new Error('Invalid AI theme response');
+      }
+
+      setAiTheme(generated);
+      setTheme('ai');
+      toast.success(`Applied AI Theme: ${generated.theme_name || 'Custom Theme'}`);
+    } catch (error) {
+      console.error('Failed to generate AI theme', error);
+      toast.error(error?.response?.data?.detail || 'Failed to generate AI theme');
+    } finally {
+      setIsGeneratingTheme(false);
+    }
+  };
 
   return (
     <Card className="dashboard-card border-l-4 border-primary">
@@ -24,7 +53,7 @@ export default function ThemeCustomizer() {
         <CardDescription>Customize the look and feel of your studio</CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {themes.map((t) => (
             <button
               key={t.id}
@@ -49,6 +78,28 @@ export default function ThemeCustomizer() {
               )}
             </button>
           ))}
+        </div>
+
+        <div className="mt-4 rounded-xl border border-primary/30 bg-card p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-primary" />
+            <p className="font-bold text-sm">AI Theme Generator (Grok)</p>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Generate a fresh custom theme from a prompt. You can re-run it anytime.
+          </p>
+          <Input
+            value={aiPrompt}
+            onChange={(e) => setAiPrompt(e.target.value)}
+            placeholder="e.g. icy blue futuristic studio with soft neon accents"
+          />
+          <Button
+            className="w-full"
+            onClick={handleGenerateAiTheme}
+            disabled={isGeneratingTheme}
+          >
+            {isGeneratingTheme ? 'Generating Theme...' : 'Generate AI Theme'}
+          </Button>
         </div>
       </CardContent>
     </Card>

@@ -887,7 +887,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
               variant="ghost"
               size="icon"
               onClick={goToPreviousTab}
-              className="h-8 w-8 rounded-md"
+              className="h-8 w-8 rounded-md text-[var(--text-primary)] bg-[var(--bg-secondary)]/80 hover:bg-[var(--bg-tertiary)]"
               aria-label="Previous tab"
             >
               <ChevronLeft className="h-4 w-4" />
@@ -895,9 +895,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
             <div
               className="flex-1 text-center text-sm font-semibold truncate px-2 py-1 rounded-md"
               style={{
-                color: "var(--text-primary)",
+                color: "#ffffff",
                 background: "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))",
                 boxShadow: "0 0 0 1px var(--border-color) inset",
+                textShadow: "0 1px 2px rgba(0,0,0,0.45)",
               }}
             >
               {activeTabLabel}
@@ -907,7 +908,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
               variant="ghost"
               size="icon"
               onClick={goToNextTab}
-              className="h-8 w-8 rounded-md"
+              className="h-8 w-8 rounded-md text-[var(--text-primary)] bg-[var(--bg-secondary)]/80 hover:bg-[var(--bg-tertiary)]"
               aria-label="Next tab"
             >
               <ChevronRight className="h-4 w-4" />
@@ -1542,6 +1543,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                onUpgrade={() => setShowUpgradeModal(true)}
                onDisconnectYouTube={disconnectYouTube}
                onConnectYouTube={connectYouTube}
+               onExitUploadTab={() => setActiveTab("tags")}
              />
           </TabsContent>
 

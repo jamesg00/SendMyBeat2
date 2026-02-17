@@ -200,6 +200,115 @@ h1, h2, h3, h4, h5, h6 {
   animation: slideIn 0.35s ease-out;
 }
 
+/* Upload Studio slider system */
+.studio-slider {
+  --slider-accent: #8b5cf6;
+  width: 100%;
+  height: 10px;
+  border-radius: 999px;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  background: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0.1) 0%,
+    rgba(255, 255, 255, 0.28) 50%,
+    rgba(255, 255, 255, 0.1) 100%
+  );
+  border: 1px solid var(--border-color);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+}
+
+.studio-slider::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0.12) 0%,
+    rgba(255, 255, 255, 0.32) 50%,
+    rgba(255, 255, 255, 0.12) 100%
+  );
+}
+
+.studio-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -4px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.86);
+  background: var(--slider-accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--slider-accent) 24%, transparent);
+}
+
+.studio-slider::-moz-range-track {
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0.12) 0%,
+    rgba(255, 255, 255, 0.32) 50%,
+    rgba(255, 255, 255, 0.12) 100%
+  );
+}
+
+.studio-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.86);
+  background: var(--slider-accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--slider-accent) 24%, transparent);
+}
+
+.studio-slider-purple {
+  --slider-accent: #8b5cf6;
+}
+
+.studio-slider-amber {
+  --slider-accent: #f59e0b;
+}
+
+/* Upload preview watermark marquee */
+.upload-watermark-marquee {
+  width: min(86%, 460px);
+  margin: 0 auto;
+  overflow: hidden;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.56);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+
+.upload-watermark-track {
+  display: inline-flex;
+  min-width: 200%;
+  animation: uploadWatermarkScroll 12s linear infinite;
+  white-space: nowrap;
+}
+
+.upload-watermark-text {
+  display: inline-block;
+  min-width: 50%;
+  padding: 6px 16px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+@keyframes uploadWatermarkScroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
 /* Tag Cloud Styling */
 .tag-cloud {
   display: flex;
@@ -404,6 +513,15 @@ body, html {
 img {
   max-width: 100% !important;
   height: auto !important;
+}
+
+/* Upload Studio preview image must ignore global img auto-height rule */
+.upload-preview-image {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain !important;
+  object-position: center center !important;
+  display: block !important;
 }
 
 /* Card responsive padding */
