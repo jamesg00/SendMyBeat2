@@ -80,6 +80,28 @@ GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', 'your_google_clien
 # Security
 security = HTTPBearer()
 
+
+def build_cors_origins() -> list[str]:
+    raw = (os.environ.get("CORS_ORIGINS") or "").strip()
+    defaults = [
+        "https://www.sendmybeat.com",
+        "https://sendmybeat.com",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
+    if not raw or raw == "*":
+        return defaults
+    parsed = [origin.strip() for origin in raw.split(",") if origin.strip()]
+    for origin in defaults:
+        if origin not in parsed:
+            parsed.append(origin)
+    return parsed
+
+
+CORS_ORIGINS = build_cors_origins()
+
 # Create the main app without a prefix
 app = FastAPI()
 
@@ -3099,7 +3121,7 @@ app.include_router(api_router)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=CORS_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
