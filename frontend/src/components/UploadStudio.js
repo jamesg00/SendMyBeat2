@@ -5,7 +5,8 @@ import {
   Upload, Music, Image as ImageIcon, X, Youtube,
   CheckCircle2, AlertCircle, Play, Pause,
   Maximize2, Minimize2, Move, RotateCw, Palette,
-  ChevronDown, ChevronUp, Link, Wand2, Target, Sparkles
+  ChevronDown, ChevronUp, Link, Wand2, Target, Sparkles,
+  SlidersHorizontal
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Drawer, DrawerContent, DrawerTrigger, DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter } from "@/components/ui/drawer";
 import AudioVisualizer from "@/lib/AudioVisualizer";
 
 const AUDIO_EXTENSIONS = [".mp3", ".wav", ".m4a", ".flac", ".ogg"];
@@ -37,6 +39,8 @@ const UploadStudio = ({
 }) => {
   // --- State ---
   const [studioOpen, setStudioOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
 
   // Files
   const [audioFile, setAudioFile] = useState(null);
@@ -75,9 +79,11 @@ const UploadStudio = ({
   const [lockImageScale, setLockImageScale] = useState(true);
   const [imagePosX, setImagePosX] = useState(0);
   const [imagePosY, setImagePosY] = useState(0);
-  const [previewSize, setPreviewSize] = useState(480); // Smaller default for mobile optimization
   const [imageMeta, setImageMeta] = useState({ width: 0, height: 0, ratio: 1 });
   const [imagePreviewUrl, setImagePreviewUrl] = useState("");
+
+  // Responsive Dims
+  const [previewDims, setPreviewDims] = useState({ width: 320, height: 180 });
 
   // Audio Player
   const [audioPreviewUrl, setAudioPreviewUrl] = useState("");
@@ -126,10 +132,10 @@ const UploadStudio = ({
   const visualizerRef = useRef(null);
   const visualizerCanvasRef = useRef(null);
   const previewContainerRef = useRef(null);
-  const spectrumImageInputRef = useRef(null);
   const previewClickStartRef = useRef({ x: 0, y: 0 });
   const previewDraggedRef = useRef(false);
   const [dragState, setDragState] = useState(null);
+  const [pinchState, setPinchState] = useState(null); // { startDist, startScale }
   const thumbnailAbortRef = useRef(null);
   const thumbnailProgressIntervalRef = useRef(null);
 
@@ -158,7 +164,41 @@ const UploadStudio = ({
     return query.replace(/\([^)]*\)/g, "").trim() || query;
   };
 
+  const getDistance = (touch1, touch2) => {
+    const dx = touch1.clientX - touch2.clientX;
+    const dy = touch1.clientY - touch2.clientY;
+    return Math.hypot(dx, dy);
+  };
+
   // --- Effects ---
+
+  // Handle Resize for Preview & Mobile Check
+  useEffect(() => {
+    const updateDims = () => {
+      const mobile = window.innerWidth < 1024;
+      setIsMobile(mobile);
+
+      const ratioMap = { "16:9": 1.777, "9:16": 0.5625, "1:1": 1, "4:5": 0.8 };
+      const targetRatio = ratioMap[videoAspectRatio] || 1.777;
+
+      const maxWidth = mobile ? window.innerWidth : (window.innerWidth / 2) - 64;
+      const maxHeight = mobile ? window.innerHeight : (window.innerHeight - 150);
+
+      let width = Math.min(maxWidth, 800);
+      let height = width / targetRatio;
+
+      if (height > maxHeight) {
+         height = maxHeight;
+         width = height * targetRatio;
+      }
+
+      setPreviewDims({ width, height });
+    };
+
+    updateDims();
+    window.addEventListener("resize", updateDims);
+    return () => window.removeEventListener("resize", updateDims);
+  }, [videoAspectRatio]);
 
   useEffect(() => {
     if (!selectedDescriptionId) {
@@ -200,7 +240,13 @@ const UploadStudio = ({
     audioEl.addEventListener("pause", handlePause);
     audioEl.addEventListener("ended", handleEnded);
 
+    // Backup polling for time update
+    const poll = setInterval(() => {
+        if (audioEl && !audioEl.paused) setAudioCurrentTime(audioEl.currentTime);
+    }, 200);
+
     return () => {
+      clearInterval(poll);
       audioEl.removeEventListener("timeupdate", handleTimeUpdate);
       audioEl.removeEventListener("loadedmetadata", handleLoadedMetadata);
       audioEl.removeEventListener("play", handlePlay);
@@ -242,7 +288,7 @@ const UploadStudio = ({
     };
     initViz();
 
-  }, [visualizerEnabled, audioPreviewUrl, imagePreviewUrl, visualizerSettings, studioOpen]);
+  }, [visualizerEnabled, audioPreviewUrl, imagePreviewUrl, visualizerSettings, studioOpen, previewDims]);
 
   const getVisualizerOptions = () => ({
     bars: visualizerSettings.bars,
@@ -276,29 +322,52 @@ const UploadStudio = ({
     monstercatSmoothing: visualizerSettings.monstercatSmoothing,
   });
 
+  // Touch & Drag Handling (including Pinch Zoom)
   useEffect(() => {
-    if (!dragState) return;
+    if (!dragState && !pinchState) return;
+
     const handleMove = (e) => {
-      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-      const rect = previewContainerRef.current?.getBoundingClientRect();
-      if (!rect) return;
+      // Handle Pinch Zoom
+      if (e.touches && e.touches.length === 2 && pinchState) {
+        e.preventDefault(); // Prevent page scroll during pinch
+        const currentDist = getDistance(e.touches[0], e.touches[1]);
+        if (currentDist > 0 && pinchState.startDist > 0) {
+          const scaleFactor = currentDist / pinchState.startDist;
+          const newScale = Math.min(2.0, Math.max(0.1, pinchState.startScale * scaleFactor));
 
-      const deltaX = clientX - dragState.startX;
-      const deltaY = clientY - dragState.startY;
-      if (Math.abs(deltaX) > 4 || Math.abs(deltaY) > 4) previewDraggedRef.current = true;
+          setImageScaleX(newScale);
+          if (lockImageScale) setImageScaleY(newScale);
+        }
+        return;
+      }
 
-      const nextX = Math.max(-1, Math.min(1, dragState.originX + deltaX / (rect.width / 2)));
-      const nextY = Math.max(-1, Math.min(1, dragState.originY + deltaY / (rect.height / 2)));
+      // Handle Drag (Pan)
+      if (dragState) {
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        const rect = previewContainerRef.current?.getBoundingClientRect();
+        if (!rect) return;
 
-      setImagePosX(nextX);
-      setImagePosY(nextY);
+        const deltaX = clientX - dragState.startX;
+        const deltaY = clientY - dragState.startY;
+        if (Math.abs(deltaX) > 4 || Math.abs(deltaY) > 4) previewDraggedRef.current = true;
+
+        const nextX = Math.max(-1, Math.min(1, dragState.originX + deltaX / (rect.width / 2)));
+        const nextY = Math.max(-1, Math.min(1, dragState.originY + deltaY / (rect.height / 2)));
+
+        setImagePosX(nextX);
+        setImagePosY(nextY);
+      }
     };
-    const handleUp = () => setDragState(null);
+
+    const handleUp = () => {
+      setDragState(null);
+      setPinchState(null);
+    };
 
     window.addEventListener("mousemove", handleMove);
     window.addEventListener("mouseup", handleUp);
-    window.addEventListener("touchmove", handleMove);
+    window.addEventListener("touchmove", handleMove, { passive: false });
     window.addEventListener("touchend", handleUp);
     return () => {
       window.removeEventListener("mousemove", handleMove);
@@ -306,7 +375,7 @@ const UploadStudio = ({
       window.removeEventListener("touchmove", handleMove);
       window.removeEventListener("touchend", handleUp);
     };
-  }, [dragState]);
+  }, [dragState, pinchState, lockImageScale]);
 
 
   // --- Handlers ---
@@ -377,9 +446,25 @@ const UploadStudio = ({
     }
   };
 
+  const handleTouchStart = (e) => {
+    if (e.touches.length === 2) {
+      const dist = getDistance(e.touches[0], e.touches[1]);
+      setPinchState({
+        startDist: dist,
+        startScale: imageScaleX
+      });
+      setDragState(null);
+    } else if (e.touches.length === 1) {
+      handleDragStart(e);
+    }
+  };
+
   const handleDragStart = (e) => {
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+    if (!e.touches && e.button !== 0) return;
+
     previewClickStartRef.current = { x: clientX, y: clientY };
     previewDraggedRef.current = false;
     setDragState({
@@ -432,7 +517,6 @@ const UploadStudio = ({
       toast.error("Upload an image first");
       return;
     }
-    // Note: requires text context
     const tags = tagHistory.find(t => t.id === selectedTagsId)?.tags || [];
 
     setCheckingThumbnail(true);
@@ -538,20 +622,344 @@ const UploadStudio = ({
     }
   }, [audioFile, imageFile]);
 
+  // --- Controls Markup ---
+  const controlsMarkup = (
+    <div className="space-y-6 pb-20 lg:pb-6">
+        <Card className="border-l-4 border-l-blue-500 shadow-sm">
+           <CardHeader className="pb-3">
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                 <Youtube className="h-4 w-4" /> Video Metadata
+              </CardTitle>
+           </CardHeader>
+           <CardContent className="space-y-4">
+              <div className="space-y-2">
+                 <Label>Video Title</Label>
+                 <Input
+                    value={uploadTitle}
+                    onChange={(e) => setUploadTitle(e.target.value)}
+                    placeholder="e.g. 'Midnight Rain' - LoFi Beat"
+                    className="font-medium"
+                 />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                 <div className="space-y-2">
+                    <Label>Template</Label>
+                    <Select value={selectedDescriptionId} onValueChange={setSelectedDescriptionId}>
+                       <SelectTrigger className="text-foreground">
+                          <SelectValue placeholder="Select description..." />
+                       </SelectTrigger>
+                       <SelectContent>
+                          {descriptions.map(d => (
+                             <SelectItem key={d.id} value={d.id} className="text-foreground">{d.title}</SelectItem>
+                          ))}
+                       </SelectContent>
+                    </Select>
+                 </div>
+                 <div className="space-y-2">
+                    <Label>Tags</Label>
+                    <Select value={selectedTagsId} onValueChange={setSelectedTagsId}>
+                       <SelectTrigger className="text-foreground">
+                          <SelectValue placeholder="Select tags..." />
+                       </SelectTrigger>
+                       <SelectContent>
+                          {tagHistory.map(t => (
+                             <SelectItem key={t.id} value={t.id} className="text-foreground">{formatTagHistoryLabel(t.query)}</SelectItem>
+                          ))}
+                       </SelectContent>
+                    </Select>
+                 </div>
+              </div>
+              {selectedDescriptionId && (
+                 <Textarea
+                    value={uploadDescriptionText}
+                    onChange={(e) => setUploadDescriptionText(e.target.value)}
+                    rows={4}
+                    className="text-xs font-mono bg-secondary/30 text-foreground"
+                 />
+              )}
+              <div className="space-y-2">
+                 <Label>Privacy</Label>
+                 <Select value={privacyStatus} onValueChange={setPrivacyStatus}>
+                    <SelectTrigger className="text-foreground">
+                       <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                       <SelectItem value="public">Public</SelectItem>
+                       <SelectItem value="unlisted">Unlisted</SelectItem>
+                       <SelectItem value="private">Private</SelectItem>
+                    </SelectContent>
+                 </Select>
+              </div>
+           </CardContent>
+        </Card>
+
+        {/* AI Tools */}
+        <Card className="border-l-4 border-l-emerald-500 shadow-sm">
+           <CardHeader className="pb-3 flex flex-row items-center justify-between">
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                 <Wand2 className="h-4 w-4" /> AI Tools
+              </CardTitle>
+              <Button size="sm" variant="ghost" onClick={() => setShowTools(!showTools)}>
+                 {showTools ? <ChevronUp className="h-4 w-4"/> : <ChevronDown className="h-4 w-4"/>}
+              </Button>
+           </CardHeader>
+           {showTools && (
+              <CardContent className="space-y-4">
+                 <div className="grid grid-cols-2 gap-3">
+                    <Button
+                       variant="outline"
+                       onClick={handleAnalyzeBeat}
+                       disabled={analyzingBeat}
+                       className="text-yellow-600 border-yellow-200 hover:bg-yellow-50 dark:hover:bg-yellow-900/20"
+                    >
+                       {analyzingBeat ? "..." : <><Target className="mr-2 h-4 w-4"/> Analyze Beat</>}
+                    </Button>
+                    <Button
+                       variant="outline"
+                       onClick={handleThumbnailCheck}
+                       disabled={checkingThumbnail}
+                       className="text-emerald-600 border-emerald-200 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
+                    >
+                       {checkingThumbnail ? "..." : <><Sparkles className="mr-2 h-4 w-4"/> Check Thumb</>}
+                    </Button>
+                 </div>
+
+                 {beatAnalysis && (
+                    <div className="p-3 bg-secondary/50 rounded-md text-sm space-y-2">
+                       <div className="flex justify-between font-bold">
+                          <span>Score: {beatAnalysis.overall_score}/100</span>
+                          <span>{beatAnalysis.predicted_performance}</span>
+                       </div>
+                       <div className="text-xs text-muted-foreground">
+                          {beatAnalysis.suggestions[0]}
+                       </div>
+                    </div>
+                 )}
+                 {thumbnailCheckResult && (
+                    <div className="p-3 bg-secondary/50 rounded-md text-sm space-y-2">
+                       <div className="flex justify-between font-bold">
+                          <span>Score: {thumbnailCheckResult.score}/100</span>
+                          <span>{thumbnailCheckResult.verdict}</span>
+                       </div>
+                       <div className="text-xs text-muted-foreground">
+                          {thumbnailCheckResult.suggestions[0]}
+                       </div>
+                    </div>
+                 )}
+              </CardContent>
+           )}
+        </Card>
+
+        <Card className="border-l-4 border-l-purple-500 shadow-sm">
+           <CardHeader className="pb-3 flex flex-row items-center justify-between">
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                 <Music className="h-4 w-4" /> Audio Visualizer
+              </CardTitle>
+              <Button
+                size="sm"
+                variant={visualizerEnabled ? "default" : "outline"}
+                onClick={() => setVisualizerEnabled(!visualizerEnabled)}
+                className={visualizerEnabled ? "bg-purple-600 hover:bg-purple-700" : ""}
+              >
+                 {visualizerEnabled ? "Enabled" : "Disabled"}
+              </Button>
+           </CardHeader>
+
+           {visualizerEnabled && (
+           <CardContent className="space-y-5 animate-in slide-in-from-top-2">
+              <div className="grid grid-cols-2 gap-4">
+                 <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Style</Label>
+                    <Select
+                       value={visualizerSettings.mode}
+                       onValueChange={(v) => setVisualizerSettings(s => ({...s, mode: v}))}
+                    >
+                       <SelectTrigger className="text-foreground"><SelectValue /></SelectTrigger>
+                       <SelectContent>
+                          <SelectItem value="circle">Trap Nation Circle</SelectItem>
+                          <SelectItem value="monstercat">Linear Bars</SelectItem>
+                       </SelectContent>
+                    </Select>
+                 </div>
+                 <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Color</Label>
+                    <div className="flex flex-wrap gap-2">
+                      <Input
+                         type="color"
+                         value={visualizerSettings.particleColor}
+                         onChange={(e) => setVisualizerSettings(s => ({...s, particleColor: e.target.value, spectrumBorderColor: e.target.value}))}
+                         className="w-10 h-10 p-1 cursor-pointer"
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 text-xs whitespace-nowrap px-2"
+                        onClick={() => setVisualizerSettings(s => ({...s, multiColorReactive: !s.multiColorReactive}))}
+                      >
+                        {visualizerSettings.multiColorReactive ? "🌈 On" : "🌈 Off"}
+                      </Button>
+                    </div>
+                 </div>
+              </div>
+
+              <div className="space-y-4 pt-2">
+                 <div className="space-y-2">
+                    <div className="flex justify-between text-xs">
+                       <Label>Reactivity / Intensity</Label>
+                       <span className="text-muted-foreground">{visualizerSettings.intensity.toFixed(2)}</span>
+                    </div>
+                    <input
+                       type="range" min="0.5" max="2.0" step="0.1"
+                       value={visualizerSettings.intensity}
+                       onChange={(e) => setVisualizerSettings(s => ({...s, intensity: parseFloat(e.target.value)}))}
+                       className="w-full h-2 bg-secondary rounded-lg appearance-none cursor-pointer accent-purple-500"
+                    />
+                 </div>
+
+                 <div className="space-y-2">
+                    <div className="flex justify-between text-xs">
+                       <Label>Bar Count</Label>
+                       <span className="text-muted-foreground">{visualizerSettings.bars}</span>
+                    </div>
+                    <input
+                       type="range" min="32" max="160" step="4"
+                       value={visualizerSettings.bars}
+                       onChange={(e) => setVisualizerSettings(s => ({...s, bars: parseInt(e.target.value)}))}
+                       className="w-full h-2 bg-secondary rounded-lg appearance-none cursor-pointer accent-purple-500"
+                    />
+                 </div>
+
+                 {visualizerSettings.mode === 'circle' && (
+                    <div className="grid grid-cols-2 gap-4">
+                       <div className="space-y-2">
+                          <div className="flex justify-between text-xs">
+                             <Label>Particles</Label>
+                             <span className="text-muted-foreground">{visualizerSettings.particleIntensity.toFixed(1)}</span>
+                          </div>
+                          <input
+                             type="range" min="0" max="2" step="0.1"
+                             value={visualizerSettings.particleIntensity}
+                             onChange={(e) => setVisualizerSettings(s => ({...s, particleIntensity: parseFloat(e.target.value)}))}
+                             className="w-full h-2 bg-secondary rounded-lg appearance-none cursor-pointer accent-purple-500"
+                          />
+                       </div>
+                       <div className="space-y-2">
+                          <div className="flex justify-between text-xs">
+                             <Label>Shake</Label>
+                             <span className="text-muted-foreground">{visualizerSettings.shakeIntensity.toFixed(1)}</span>
+                          </div>
+                          <input
+                             type="range" min="0" max="2" step="0.1"
+                             value={visualizerSettings.shakeIntensity}
+                             onChange={(e) => setVisualizerSettings(s => ({...s, shakeIntensity: parseFloat(e.target.value)}))}
+                             className="w-full h-2 bg-secondary rounded-lg appearance-none cursor-pointer accent-purple-500"
+                          />
+                       </div>
+                    </div>
+                 )}
+              </div>
+           </CardContent>
+           )}
+        </Card>
+
+        <Card className="border-l-4 border-l-orange-500 shadow-sm">
+           <CardHeader className="pb-3">
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                 <ImageIcon className="h-4 w-4" /> Layout & Background
+              </CardTitle>
+           </CardHeader>
+           <CardContent className="space-y-5">
+              <div className="grid grid-cols-2 gap-4">
+                 <div className="space-y-2">
+                    <Label>Aspect Ratio</Label>
+                    <Select value={videoAspectRatio} onValueChange={setVideoAspectRatio}>
+                       <SelectTrigger className="text-foreground"><SelectValue /></SelectTrigger>
+                       <SelectContent>
+                          <SelectItem value="16:9">16:9 (YouTube)</SelectItem>
+                          <SelectItem value="9:16">9:16 (Shorts/TikTok)</SelectItem>
+                          <SelectItem value="1:1">1:1 (Square)</SelectItem>
+                          <SelectItem value="4:5">4:5 (Insta)</SelectItem>
+                       </SelectContent>
+                    </Select>
+                 </div>
+                 <div className="space-y-2">
+                    <Label>Background</Label>
+                    <div className="flex border rounded-md overflow-hidden">
+                       <button
+                         onClick={() => setBackgroundColor("black")}
+                         className={`flex-1 h-10 ${backgroundColor === "black" ? "bg-black text-white" : "bg-white text-black hover:bg-gray-100"}`}
+                       >
+                          Black
+                       </button>
+                       <button
+                         onClick={() => setBackgroundColor("white")}
+                         className={`flex-1 h-10 border-l ${backgroundColor === "white" ? "bg-gray-200 text-black font-bold" : "bg-white text-black hover:bg-gray-100"}`}
+                       >
+                          White
+                       </button>
+                    </div>
+                 </div>
+              </div>
+
+              <div className="space-y-2">
+                 <div className="flex justify-between text-xs">
+                    <Label>Image Scale</Label>
+                    <span className="text-muted-foreground">{imageScaleX.toFixed(2)}x</span>
+                 </div>
+                 <input
+                    type="range" min="0.1" max="1.5" step="0.05"
+                    value={imageScaleX}
+                    onChange={(e) => {
+                       const val = parseFloat(e.target.value);
+                       setImageScaleX(val);
+                       if (lockImageScale) setImageScaleY(val);
+                    }}
+                    className="w-full h-2 bg-secondary rounded-lg appearance-none cursor-pointer accent-orange-500"
+                 />
+              </div>
+
+              <div className={`flex items-center justify-between p-3 rounded-md border ${subscriptionStatus?.is_subscribed ? 'bg-green-500/10 border-green-500/30' : 'bg-secondary border-transparent'}`}>
+                 <div className="flex items-center gap-2">
+                    <input
+                       type="checkbox"
+                       id="wm-check"
+                       checked={removeWatermark}
+                       onChange={(e) => {
+                          if (!subscriptionStatus?.is_subscribed && e.target.checked) {
+                             onUpgrade();
+                             return;
+                             }
+                             setRemoveWatermark(e.target.checked);
+                       }}
+                       className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <label htmlFor="wm-check" className="text-sm font-medium cursor-pointer">Remove Watermark</label>
+                 </div>
+                 {!subscriptionStatus?.is_subscribed && (
+                    <Button size="sm" variant="link" className="h-auto p-0 text-xs text-blue-500" onClick={onUpgrade}>
+                       Upgrade to Remove
+                    </Button>
+                 )}
+              </div>
+           </CardContent>
+        </Card>
+
+        <div className="pt-4">
+           <Button
+              size="lg"
+              className="w-full text-lg shadow-xl shadow-red-500/20 bg-red-600 hover:bg-red-700"
+              onClick={handleYouTubeUpload}
+              disabled={uploadingToYouTube}
+           >
+              {uploadingToYouTube ? "Uploading..." : "Upload Video to YouTube"}
+              {!uploadingToYouTube && <Youtube className="ml-2 h-5 w-5" />}
+           </Button>
+        </div>
+    </div>
+  );
+
   // --- Rendering ---
 
-  const getPreviewDimensions = () => {
-    const ratioMap = { "16:9": 1.777, "9:16": 0.5625, "1:1": 1, "4:5": 0.8 };
-    const targetRatio = ratioMap[videoAspectRatio] || 1.777;
-    const maxWidth = Math.min(window.innerWidth - 32, 600);
-    const width = maxWidth;
-    const height = width / targetRatio;
-    return { width, height };
-  };
-
-  const previewDims = getPreviewDimensions();
-
-  // Initial Upload View
   if (!studioOpen) {
     return (
       <Card className="dashboard-card min-h-[400px]">
@@ -628,12 +1036,13 @@ const UploadStudio = ({
     );
   }
 
-  // --- STUDIO OVERLAY ---
+  // --- STUDIO OVERLAY (SPLIT VIEW) ---
   return (
     <div className={`fixed inset-0 z-50 bg-background/95 backdrop-blur-md flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-300`}>
       {audioPreviewUrl && <audio ref={audioPlayerRef} src={audioPreviewUrl} preload="auto" />}
 
-      <div className="flex-none h-14 border-b bg-background/50 backdrop-blur px-4 flex items-center justify-between">
+      {/* Header */}
+      <div className="flex-none h-14 border-b bg-background/50 backdrop-blur px-4 flex items-center justify-between z-50">
          <div className="flex items-center gap-2">
             <span className="font-bold text-lg gradient-text">Upload Studio</span>
             <span className="text-xs bg-secondary px-2 py-0.5 rounded-full text-muted-foreground hidden sm:inline-block">Beta</span>
@@ -645,413 +1054,115 @@ const UploadStudio = ({
          </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto overflow-x-hidden">
-         <div className="flex flex-col lg:flex-row min-h-full">
+      {/* Main Content */}
+      <div className="flex-1 flex overflow-hidden relative">
 
-            <div className="lg:w-1/2 lg:flex-none flex flex-col border-b lg:border-b-0 lg:border-r bg-background/50 relative">
-               <div className="sticky top-0 p-4 sm:p-8 flex flex-col items-center justify-center min-h-[50vh] lg:h-full lg:min-h-0">
-                  <div
-                    ref={previewContainerRef}
-                    className="relative shadow-2xl overflow-hidden border border-border/50 rounded-md"
-                    style={{
-                      width: previewDims.width,
-                      height: previewDims.height,
-                      backgroundColor: backgroundColor === "white" ? "white" : "black",
-                      touchAction: "none"
-                    }}
-                    onMouseDown={handleDragStart}
-                    onTouchStart={handleDragStart}
-                  >
+         {/* Preview Section */}
+         <div className={`
+             relative bg-background/50 flex flex-col items-center justify-center transition-all duration-300
+             ${isMobile ? "absolute inset-0 z-10 w-full h-full" : "flex-none lg:flex-1 lg:w-1/2 lg:border-r z-20"}
+         `}>
+            <div
+               ref={previewContainerRef}
+               className="relative shadow-2xl overflow-hidden border border-border/50 rounded-md"
+               style={{
+                 width: previewDims.width,
+                 height: previewDims.height,
+                 backgroundColor: backgroundColor === "white" ? "white" : "black",
+                 touchAction: "none"
+               }}
+               onMouseDown={handleDragStart}
+               onTouchStart={handleTouchStart}
+            >
+               <div
+                  className="absolute inset-0"
+                  style={{
+                     transform: `translate(${imagePosX * 50}%, ${imagePosY * 50}%) scale(${lockImageScale ? imageScaleX : imageScaleX}, ${lockImageScale ? imageScaleX : imageScaleY})`,
+                     transformOrigin: 'center',
+                     transition: dragState || pinchState ? 'none' : 'transform 0.1s ease-out'
+                  }}
+               >
+                  <img
+                    src={imagePreviewUrl}
+                    alt="preview"
+                    className="w-full h-full object-contain pointer-events-none select-none"
+                    style={{ opacity: visualizerEnabled ? visualizerSettings.backgroundOpacity : 1 }}
+                  />
+               </div>
+
+               {visualizerEnabled && (
+                  <canvas ref={visualizerCanvasRef} className="absolute inset-0 w-full h-full pointer-events-none" />
+               )}
+
+               {!subscriptionStatus?.is_subscribed && !removeWatermark && (
+                  <div className="absolute top-2 left-0 right-0 text-center pointer-events-none">
+                     <span className="text-[10px] text-white/50 bg-black/30 px-2 py-1 rounded">sendmybeat.com</span>
+                  </div>
+               )}
+            </div>
+
+            <div className={`
+                mt-4 w-full max-w-xs sm:max-w-md flex items-center gap-3 bg-secondary/50 p-2 rounded-full backdrop-blur-sm border border-border/50
+                ${isMobile ? "absolute bottom-24 z-30" : "relative"}
+            `}>
+               <Button
+                 size="icon"
+                 variant="ghost"
+                 className="h-8 w-8 rounded-full bg-primary/10 text-primary hover:bg-primary/20"
+                 onClick={toggleAudioPlayback}
+               >
+                  {isAudioPlaying ? <Pause className="h-4 w-4 fill-current" /> : <Play className="h-4 w-4 fill-current ml-0.5" />}
+               </Button>
+               <div className="flex-1 space-y-1">
+                  <div className="h-1 bg-primary/20 rounded-full overflow-hidden">
                      <div
-                        className="absolute inset-0"
-                        style={{
-                           transform: `translate(${imagePosX * 50}%, ${imagePosY * 50}%) scale(${lockImageScale ? imageScaleX : imageScaleX}, ${lockImageScale ? imageScaleX : imageScaleY})`,
-                           transformOrigin: 'center',
-                           transition: dragState ? 'none' : 'transform 0.1s ease-out'
-                        }}
-                     >
-                        <img
-                          src={imagePreviewUrl}
-                          alt="preview"
-                          className="w-full h-full object-contain pointer-events-none select-none"
-                          style={{ opacity: visualizerEnabled ? visualizerSettings.backgroundOpacity : 1 }}
-                        />
-                     </div>
-
-                     {visualizerEnabled && (
-                        <canvas ref={visualizerCanvasRef} className="absolute inset-0 w-full h-full pointer-events-none" />
-                     )}
-
-                     {!subscriptionStatus?.is_subscribed && !removeWatermark && (
-                        <div className="absolute top-2 left-0 right-0 text-center pointer-events-none">
-                           <span className="text-[10px] text-white/50 bg-black/30 px-2 py-1 rounded">sendmybeat.com</span>
-                        </div>
-                     )}
+                       className="h-full bg-primary transition-all duration-100"
+                       style={{ width: `${(audioCurrentTime / (audioDuration || 1)) * 100}%` }}
+                     />
                   </div>
-
-                  <div className="mt-6 w-full max-w-md flex items-center gap-4 bg-secondary/50 p-3 rounded-full backdrop-blur-sm border border-border/50">
-                     <Button
-                       size="icon"
-                       variant="ghost"
-                       className="h-10 w-10 rounded-full bg-primary/10 text-primary hover:bg-primary/20"
-                       onClick={toggleAudioPlayback}
-                     >
-                        {isAudioPlaying ? <Pause className="h-5 w-5 fill-current" /> : <Play className="h-5 w-5 fill-current ml-0.5" />}
-                     </Button>
-                     <div className="flex-1 space-y-1">
-                        <div className="h-1 bg-primary/20 rounded-full overflow-hidden">
-                           <div
-                             className="h-full bg-primary transition-all duration-100"
-                             style={{ width: `${(audioCurrentTime / (audioDuration || 1)) * 100}%` }}
-                           />
-                        </div>
-                        <div className="flex justify-between text-[10px] text-muted-foreground font-mono">
-                           <span>{formatTime(audioCurrentTime)}</span>
-                           <span>{formatTime(audioDuration)}</span>
-                        </div>
-                     </div>
+                  <div className="flex justify-between text-[10px] text-muted-foreground font-mono">
+                     <span>{formatTime(audioCurrentTime)}</span>
+                     <span>{formatTime(audioDuration)}</span>
                   </div>
-
-                  <p className="text-xs text-muted-foreground mt-4 text-center">
-                    <Move className="h-3 w-3 inline mr-1" /> Drag image to position
-                  </p>
                </div>
             </div>
 
-            <div className="lg:w-1/2 p-4 sm:p-6 space-y-6 pb-20 lg:pb-6">
+            <p className={`text-[10px] text-muted-foreground mt-2 text-center lg:mb-0 ${isMobile ? "hidden" : ""}`}>
+               <Move className="h-3 w-3 inline mr-1" /> Drag to move • Pinch to zoom
+            </p>
 
-               <Card className="border-l-4 border-l-blue-500 shadow-sm">
-                  <CardHeader className="pb-3">
-                     <CardTitle className="text-base font-semibold flex items-center gap-2">
-                        <Youtube className="h-4 w-4" /> Video Metadata
-                     </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                     <div className="space-y-2">
-                        <Label>Video Title</Label>
-                        <Input
-                           value={uploadTitle}
-                           onChange={(e) => setUploadTitle(e.target.value)}
-                           placeholder="e.g. 'Midnight Rain' - LoFi Beat"
-                           className="font-medium"
-                        />
-                     </div>
-                     <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-2">
-                           <Label>Template</Label>
-                           <Select value={selectedDescriptionId} onValueChange={setSelectedDescriptionId}>
-                              <SelectTrigger>
-                                 <SelectValue placeholder="Select description..." />
-                              </SelectTrigger>
-                              <SelectContent>
-                                 {descriptions.map(d => (
-                                    <SelectItem key={d.id} value={d.id}>{d.title}</SelectItem>
-                                 ))}
-                              </SelectContent>
-                           </Select>
-                        </div>
-                        <div className="space-y-2">
-                           <Label>Tags</Label>
-                           <Select value={selectedTagsId} onValueChange={setSelectedTagsId}>
-                              <SelectTrigger>
-                                 <SelectValue placeholder="Select tags..." />
-                              </SelectTrigger>
-                              <SelectContent>
-                                 {tagHistory.map(t => (
-                                    <SelectItem key={t.id} value={t.id}>{formatTagHistoryLabel(t.query)}</SelectItem>
-                                 ))}
-                              </SelectContent>
-                           </Select>
-                        </div>
-                     </div>
-                     {selectedDescriptionId && (
-                        <Textarea
-                           value={uploadDescriptionText}
-                           onChange={(e) => setUploadDescriptionText(e.target.value)}
-                           rows={4}
-                           className="text-xs font-mono bg-secondary/30"
-                        />
-                     )}
-                     <div className="space-y-2">
-                        <Label>Privacy</Label>
-                        <Select value={privacyStatus} onValueChange={setPrivacyStatus}>
-                           <SelectTrigger>
-                              <SelectValue />
-                           </SelectTrigger>
-                           <SelectContent>
-                              <SelectItem value="public">Public</SelectItem>
-                              <SelectItem value="unlisted">Unlisted</SelectItem>
-                              <SelectItem value="private">Private</SelectItem>
-                           </SelectContent>
-                        </Select>
-                     </div>
-                  </CardContent>
-               </Card>
-
-               {/* AI Tools */}
-               <Card className="border-l-4 border-l-emerald-500 shadow-sm">
-                  <CardHeader className="pb-3 flex flex-row items-center justify-between">
-                     <CardTitle className="text-base font-semibold flex items-center gap-2">
-                        <Wand2 className="h-4 w-4" /> AI Tools
-                     </CardTitle>
-                     <Button size="sm" variant="ghost" onClick={() => setShowTools(!showTools)}>
-                        {showTools ? <ChevronUp className="h-4 w-4"/> : <ChevronDown className="h-4 w-4"/>}
-                     </Button>
-                  </CardHeader>
-                  {showTools && (
-                     <CardContent className="space-y-4">
-                        <div className="grid grid-cols-2 gap-3">
-                           <Button
-                              variant="outline"
-                              onClick={handleAnalyzeBeat}
-                              disabled={analyzingBeat}
-                              className="text-yellow-600 border-yellow-200 hover:bg-yellow-50 dark:hover:bg-yellow-900/20"
-                           >
-                              {analyzingBeat ? "..." : <><Target className="mr-2 h-4 w-4"/> Analyze Beat</>}
-                           </Button>
-                           <Button
-                              variant="outline"
-                              onClick={handleThumbnailCheck}
-                              disabled={checkingThumbnail}
-                              className="text-emerald-600 border-emerald-200 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
-                           >
-                              {checkingThumbnail ? "..." : <><Sparkles className="mr-2 h-4 w-4"/> Check Thumb</>}
-                           </Button>
-                        </div>
-
-                        {beatAnalysis && (
-                           <div className="p-3 bg-secondary/50 rounded-md text-sm space-y-2">
-                              <div className="flex justify-between font-bold">
-                                 <span>Score: {beatAnalysis.overall_score}/100</span>
-                                 <span>{beatAnalysis.predicted_performance}</span>
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                 {beatAnalysis.suggestions[0]}
-                              </div>
-                           </div>
-                        )}
-                        {thumbnailCheckResult && (
-                           <div className="p-3 bg-secondary/50 rounded-md text-sm space-y-2">
-                              <div className="flex justify-between font-bold">
-                                 <span>Score: {thumbnailCheckResult.score}/100</span>
-                                 <span>{thumbnailCheckResult.verdict}</span>
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                 {thumbnailCheckResult.suggestions[0]}
-                              </div>
-                           </div>
-                        )}
-                     </CardContent>
-                  )}
-               </Card>
-
-               <Card className="border-l-4 border-l-purple-500 shadow-sm">
-                  <CardHeader className="pb-3 flex flex-row items-center justify-between">
-                     <CardTitle className="text-base font-semibold flex items-center gap-2">
-                        <Music className="h-4 w-4" /> Audio Visualizer
-                     </CardTitle>
-                     <Button
-                       size="sm"
-                       variant={visualizerEnabled ? "default" : "outline"}
-                       onClick={() => setVisualizerEnabled(!visualizerEnabled)}
-                       className={visualizerEnabled ? "bg-purple-600 hover:bg-purple-700" : ""}
-                     >
-                        {visualizerEnabled ? "Enabled" : "Disabled"}
-                     </Button>
-                  </CardHeader>
-
-                  {visualizerEnabled && (
-                  <CardContent className="space-y-5 animate-in slide-in-from-top-2">
-                     <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                           <Label className="text-xs text-muted-foreground">Style</Label>
-                           <Select
-                              value={visualizerSettings.mode}
-                              onValueChange={(v) => setVisualizerSettings(s => ({...s, mode: v}))}
-                           >
-                              <SelectTrigger><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                 <SelectItem value="circle">Trap Nation Circle</SelectItem>
-                                 <SelectItem value="monstercat">Linear Bars</SelectItem>
-                              </SelectContent>
-                           </Select>
-                        </div>
-                        <div className="space-y-2">
-                           <Label className="text-xs text-muted-foreground">Color</Label>
-                           <div className="flex gap-2">
-                             <Input
-                                type="color"
-                                value={visualizerSettings.particleColor}
-                                onChange={(e) => setVisualizerSettings(s => ({...s, particleColor: e.target.value, spectrumBorderColor: e.target.value}))}
-                                className="w-10 h-10 p-1 cursor-pointer"
-                             />
-                             <Button
-                               variant="outline"
-                               size="sm"
-                               className="flex-1 text-xs"
-                               onClick={() => setVisualizerSettings(s => ({...s, multiColorReactive: !s.multiColorReactive}))}
-                             >
-                               {visualizerSettings.multiColorReactive ? "🌈 Rainbow On" : "🌈 Rainbow Off"}
-                             </Button>
-                           </div>
-                        </div>
-                     </div>
-
-                     <div className="space-y-4 pt-2">
-                        <div className="space-y-2">
-                           <div className="flex justify-between text-xs">
-                              <Label>Reactivity / Intensity</Label>
-                              <span className="text-muted-foreground">{visualizerSettings.intensity.toFixed(2)}</span>
-                           </div>
-                           <input
-                              type="range" min="0.5" max="2.0" step="0.1"
-                              value={visualizerSettings.intensity}
-                              onChange={(e) => setVisualizerSettings(s => ({...s, intensity: parseFloat(e.target.value)}))}
-                              className="w-full accent-purple-500 h-2 bg-secondary rounded-lg appearance-none cursor-pointer"
-                           />
-                        </div>
-
-                        <div className="space-y-2">
-                           <div className="flex justify-between text-xs">
-                              <Label>Bar Count</Label>
-                              <span className="text-muted-foreground">{visualizerSettings.bars}</span>
-                           </div>
-                           <input
-                              type="range" min="32" max="160" step="4"
-                              value={visualizerSettings.bars}
-                              onChange={(e) => setVisualizerSettings(s => ({...s, bars: parseInt(e.target.value)}))}
-                              className="w-full accent-purple-500 h-2 bg-secondary rounded-lg appearance-none cursor-pointer"
-                           />
-                        </div>
-
-                        {visualizerSettings.mode === 'circle' && (
-                           <div className="grid grid-cols-2 gap-4">
-                              <div className="space-y-2">
-                                 <div className="flex justify-between text-xs">
-                                    <Label>Particles</Label>
-                                    <span className="text-muted-foreground">{visualizerSettings.particleIntensity.toFixed(1)}</span>
-                                 </div>
-                                 <input
-                                    type="range" min="0" max="2" step="0.1"
-                                    value={visualizerSettings.particleIntensity}
-                                    onChange={(e) => setVisualizerSettings(s => ({...s, particleIntensity: parseFloat(e.target.value)}))}
-                                    className="w-full accent-purple-500 h-2 bg-secondary rounded-lg appearance-none cursor-pointer"
-                                 />
-                              </div>
-                              <div className="space-y-2">
-                                 <div className="flex justify-between text-xs">
-                                    <Label>Shake</Label>
-                                    <span className="text-muted-foreground">{visualizerSettings.shakeIntensity.toFixed(1)}</span>
-                                 </div>
-                                 <input
-                                    type="range" min="0" max="2" step="0.1"
-                                    value={visualizerSettings.shakeIntensity}
-                                    onChange={(e) => setVisualizerSettings(s => ({...s, shakeIntensity: parseFloat(e.target.value)}))}
-                                    className="w-full accent-purple-500 h-2 bg-secondary rounded-lg appearance-none cursor-pointer"
-                                 />
-                              </div>
-                           </div>
-                        )}
-                     </div>
-                  </CardContent>
-                  )}
-               </Card>
-
-               <Card className="border-l-4 border-l-orange-500 shadow-sm">
-                  <CardHeader className="pb-3">
-                     <CardTitle className="text-base font-semibold flex items-center gap-2">
-                        <ImageIcon className="h-4 w-4" /> Layout & Background
-                     </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-5">
-                     <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                           <Label>Aspect Ratio</Label>
-                           <Select value={videoAspectRatio} onValueChange={setVideoAspectRatio}>
-                              <SelectTrigger><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                 <SelectItem value="16:9">16:9 (YouTube)</SelectItem>
-                                 <SelectItem value="9:16">9:16 (Shorts/TikTok)</SelectItem>
-                                 <SelectItem value="1:1">1:1 (Square)</SelectItem>
-                                 <SelectItem value="4:5">4:5 (Insta)</SelectItem>
-                              </SelectContent>
-                           </Select>
-                        </div>
-                        <div className="space-y-2">
-                           <Label>Background</Label>
-                           <div className="flex border rounded-md overflow-hidden">
-                              <button
-                                onClick={() => setBackgroundColor("black")}
-                                className={`flex-1 h-10 ${backgroundColor === "black" ? "bg-black text-white" : "bg-white text-black hover:bg-gray-100"}`}
-                              >
-                                 Black
-                              </button>
-                              <button
-                                onClick={() => setBackgroundColor("white")}
-                                className={`flex-1 h-10 border-l ${backgroundColor === "white" ? "bg-gray-200 text-black font-bold" : "bg-white text-black hover:bg-gray-100"}`}
-                              >
-                                 White
-                              </button>
-                           </div>
-                        </div>
-                     </div>
-
-                     <div className="space-y-2">
-                        <div className="flex justify-between text-xs">
-                           <Label>Image Scale</Label>
-                           <span className="text-muted-foreground">{imageScaleX.toFixed(2)}x</span>
-                        </div>
-                        <input
-                           type="range" min="0.1" max="1.5" step="0.05"
-                           value={imageScaleX}
-                           onChange={(e) => {
-                              const val = parseFloat(e.target.value);
-                              setImageScaleX(val);
-                              if (lockImageScale) setImageScaleY(val);
-                           }}
-                           className="w-full accent-orange-500 h-2 bg-secondary rounded-lg appearance-none cursor-pointer"
-                        />
-                     </div>
-
-                     <div className={`flex items-center justify-between p-3 rounded-md border ${subscriptionStatus?.is_subscribed ? 'bg-green-500/10 border-green-500/30' : 'bg-secondary border-transparent'}`}>
-                        <div className="flex items-center gap-2">
-                           <input
-                              type="checkbox"
-                              id="wm-check"
-                              checked={removeWatermark}
-                              onChange={(e) => {
-                                 if (!subscriptionStatus?.is_subscribed && e.target.checked) {
-                                    onUpgrade();
-                                    return;
-                                 }
-                                 setRemoveWatermark(e.target.checked);
-                              }}
-                              className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                           />
-                           <label htmlFor="wm-check" className="text-sm font-medium cursor-pointer">Remove Watermark</label>
-                        </div>
-                        {!subscriptionStatus?.is_subscribed && (
-                           <Button size="sm" variant="link" className="h-auto p-0 text-xs text-blue-500" onClick={onUpgrade}>
-                              Upgrade to Remove
-                           </Button>
-                        )}
-                     </div>
-                  </CardContent>
-               </Card>
-
-               <div className="pt-4">
-                  <Button
-                     size="lg"
-                     className="w-full text-lg shadow-xl shadow-red-500/20 bg-red-600 hover:bg-red-700"
-                     onClick={handleYouTubeUpload}
-                     disabled={uploadingToYouTube}
-                  >
-                     {uploadingToYouTube ? "Uploading..." : "Upload Video to YouTube"}
-                     {!uploadingToYouTube && <Youtube className="ml-2 h-5 w-5" />}
-                  </Button>
-               </div>
-            </div>
+            {/* Mobile Toggle Button */}
+            {isMobile && (
+                <div className="absolute bottom-6 z-40 w-full flex justify-center">
+                    <Button
+                        size="lg"
+                        className="rounded-full shadow-xl bg-primary text-primary-foreground font-bold px-8 animate-in slide-in-from-bottom-8"
+                        onClick={() => setMobileDrawerOpen(true)}
+                    >
+                        <SlidersHorizontal className="mr-2 h-5 w-5" /> Open Controls
+                    </Button>
+                </div>
+            )}
          </div>
+
+         {/* Controls Section: Desktop (Sidebar) vs Mobile (Drawer) */}
+         {isMobile ? (
+             <Drawer open={mobileDrawerOpen} onOpenChange={setMobileDrawerOpen}>
+                 <DrawerContent className="max-h-[85vh]">
+                     <DrawerHeader>
+                         <DrawerTitle>Studio Controls</DrawerTitle>
+                         <DrawerDescription>Edit metadata and settings</DrawerDescription>
+                     </DrawerHeader>
+                     <div className="px-4 pb-8 overflow-y-auto">
+                        {controlsMarkup}
+                     </div>
+                 </DrawerContent>
+             </Drawer>
+         ) : (
+             <div className="flex-1 lg:w-1/2 overflow-y-auto p-4 sm:p-6 bg-background">
+                 {controlsMarkup}
+             </div>
+         )}
       </div>
     </div>
   );

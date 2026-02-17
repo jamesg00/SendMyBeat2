@@ -1,0 +1,56 @@
+npm warn exec The following package was not found and will be installed: serve@14.2.5
+ INFO  Accepting connections at http://localhost:45967
+ HTTP  2/17/2026 4:35:17 AM ::1 GET /
+ HTTP  2/17/2026 4:35:17 AM ::1 Returned 200 in 289 ms
+ HTTP  2/17/2026 4:35:18 AM ::1 GET /static/js/main.23654cde.js
+ HTTP  2/17/2026 4:35:18 AM ::1 GET /static/css/main.9409ce86.css
+ HTTP  2/17/2026 4:35:18 AM ::1 Returned 200 in 6 ms
+ HTTP  2/17/2026 4:35:18 AM ::1 Returned 200 in 10 ms
+ HTTP  2/17/2026 4:36:30 AM ::1 GET /
+ HTTP  2/17/2026 4:36:30 AM ::1 Returned 200 in 2 ms
+ HTTP  2/17/2026 4:36:30 AM ::1 GET /static/js/main.23654cde.js
+ HTTP  2/17/2026 4:36:30 AM ::1 Returned 200 in 2 ms
+ HTTP  2/17/2026 4:36:30 AM ::1 GET /static/css/main.9409ce86.css
+ HTTP  2/17/2026 4:36:30 AM ::1 Returned 200 in 0 ms
+ HTTP  2/17/2026 4:37:32 AM ::1 GET /
+ HTTP  2/17/2026 4:37:32 AM ::1 Returned 200 in 1 ms
+ HTTP  2/17/2026 4:37:32 AM ::1 GET /static/js/main.23654cde.js
+ HTTP  2/17/2026 4:37:32 AM ::1 Returned 200 in 2 ms
+ HTTP  2/17/2026 4:37:32 AM ::1 GET /static/css/main.9409ce86.css
+ HTTP  2/17/2026 4:37:32 AM ::1 Returned 200 in 1 ms
+ HTTP  2/17/2026 4:38:37 AM ::1 GET /
+ HTTP  2/17/2026 4:38:37 AM ::1 Returned 200 in 2 ms
+ HTTP  2/17/2026 4:38:37 AM ::1 GET /static/js/main.23654cde.js
+ HTTP  2/17/2026 4:38:37 AM ::1 Returned 200 in 1 ms
+ HTTP  2/17/2026 4:38:37 AM ::1 GET /static/css/main.9409ce86.css
+ HTTP  2/17/2026 4:38:37 AM ::1 Returned 200 in 1 ms
+ HTTP  2/17/2026 4:40:17 AM ::1 GET /
+ HTTP  2/17/2026 4:40:17 AM ::1 Returned 200 in 1 ms
+ HTTP  2/17/2026 4:40:17 AM ::1 GET /static/js/main.23654cde.js
+ HTTP  2/17/2026 4:40:17 AM ::1 GET /static/css/main.9409ce86.css
+ HTTP  2/17/2026 4:40:17 AM ::1 Returned 200 in 2 ms
+ HTTP  2/17/2026 4:40:17 AM ::1 Returned 200 in 2 ms
+ HTTP  2/17/2026 4:41:30 AM ::1 GET /dashboard
+ HTTP  2/17/2026 4:41:30 AM ::1 Returned 200 in 1 ms
+ HTTP  2/17/2026 4:41:30 AM ::1 GET /static/js/main.23654cde.js
+ HTTP  2/17/2026 4:41:30 AM ::1 Returned 200 in 2 ms
+ HTTP  2/17/2026 4:41:30 AM ::1 GET /static/css/main.9409ce86.css
+ HTTP  2/17/2026 4:41:30 AM ::1 Returned 200 in 1 ms
+ HTTP  2/17/2026 4:41:30 AM ::1 GET /sendmybeat.png
+ HTTP  2/17/2026 4:41:30 AM ::1 Returned 200 in 7 ms
+ HTTP  2/17/2026 4:42:42 AM ::1 GET /dashboard
+ HTTP  2/17/2026 4:42:42 AM ::1 Returned 200 in 2 ms
+ HTTP  2/17/2026 4:42:42 AM ::1 GET /static/js/main.23654cde.js
+ HTTP  2/17/2026 4:42:42 AM ::1 GET /static/css/main.9409ce86.css
+ HTTP  2/17/2026 4:42:42 AM ::1 Returned 200 in 1 ms
+ HTTP  2/17/2026 4:42:42 AM ::1 Returned 200 in 2 ms
+ HTTP  2/17/2026 4:42:42 AM ::1 GET /sendmybeat.png
+ HTTP  2/17/2026 4:42:42 AM ::1 Returned 200 in 1 ms
+ HTTP  2/17/2026 4:43:33 AM ::1 GET /dashboard
+ HTTP  2/17/2026 4:43:33 AM ::1 Returned 200 in 1 ms
+ HTTP  2/17/2026 4:43:33 AM ::1 GET /static/js/main.23654cde.js
+ HTTP  2/17/2026 4:43:33 AM ::1 Returned 200 in 2 ms
+ HTTP  2/17/2026 4:43:33 AM ::1 GET /static/css/main.9409ce86.css
+ HTTP  2/17/2026 4:43:33 AM ::1 Returned 200 in 1 ms
+ HTTP  2/17/2026 4:43:33 AM ::1 GET /sendmybeat.png
+ HTTP  2/17/2026 4:43:33 AM ::1 Returned 200 in 1 ms
