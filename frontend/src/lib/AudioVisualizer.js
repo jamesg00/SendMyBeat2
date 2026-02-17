@@ -7,7 +7,7 @@ const DEFAULT_OPTIONS = {
   curvePower: 0.6,
   attack: 0.72,
   release: 0.16,
-  gain: 1.0, // Reduced from 1.35 to prevent clipping
+  gain: 0.75, // Reduced from 1.0 to prevent clipping/bass boost
   radius: 0.23,
   maxBarLength: 0.18,
   rotateSpeed: 0.002,
@@ -52,14 +52,14 @@ const DEFAULT_OPTIONS = {
   reactivity: {
     startBin: 0,
     endBin: null,
-    amplitudeScale: 2.4, // Reduced from 2.8
+    amplitudeScale: 1.7, // Reduced from 2.4 to fix bass boost
     normalizeByWindowSize: true,
     maxAmount: 1.0,
     minAmount: 0,
-    minThreshold: 0.03,
+    minThreshold: 0.08, // Increased from 0.03 to reduce noise
     useDeltaSmoothing: true,
     minDeltaNeededToTrigger: 0.025,
-    deltaDecay: 0.90, // Reduced from 0.95 for faster release
+    deltaDecay: 0.85, // Reduced from 0.90 for faster release
   },
 };
 
