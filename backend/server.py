@@ -1642,109 +1642,105 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
         if llm_provider not in (None, "openai", "grok"):
             raise HTTPException(status_code=400, detail="Invalid llm_provider. Use 'openai' or 'grok'.")
 
-        # Generate tags (avoid tag stuffing; focus on relevance + search intent)
-        base_tag_count = 60 if llm_provider == "grok" else 80
-        candidate_tags = ", ".join(youtube_type_beat_tags[:40]) if youtube_type_beat_tags else "None"
-        prompt = f"""Generate exactly {base_tag_count} YouTube tags for: "{request.query}"
+        # Generate a refined final list only (no blind appending afterwards)
+        target_count = 64
+        candidate_pool = []
+        candidate_pool.extend(youtube_type_beat_tags[:40])
+        if request.custom_tags:
+            candidate_pool.extend([tag.strip() for tag in request.custom_tags if tag and tag.strip()])
 
-CRITICAL RULES:
-1. BE HYPER-SPECIFIC to the artist/style mentioned
-2. NO GENERIC TAGS (like "zen beat", "groove beat", "chill instrumental")
-3. ONLY tags that someone would actually type when searching for THIS specific artist/style
-4. Avoid tag stuffing: no redundant variations, no off-genre artists, no unrelated trends
-5. Favor high-intent searches over volume padding
+        # Deduplicate candidate pool
+        pool_seen = set()
+        unique_candidate_pool = []
+        for tag in candidate_pool:
+            key = tag.lower()
+            if key in pool_seen:
+                continue
+            pool_seen.add(key)
+            unique_candidate_pool.append(tag)
 
-REQUIRED TAG CATEGORIES:
+        candidate_tags_text = ", ".join(unique_candidate_pool[:80]) if unique_candidate_pool else "None"
+        prompt = f"""Create ONE refined YouTube tag set for: "{request.query}".
 
-1. ARTIST NAME VARIATIONS (15-20 tags):
-   - Full name variations (e.g., "lil uzi vert type beat", "uzi type beat", "lil uzi")
-   - With "type beat", "style beat", "instrumental", "beat"
-   - Real name if famous (e.g., "symere woods type beat")
-   - 1-2 year variations only if relevant
-   - Location only if strongly tied to the artist (e.g., "philly type beat")
+GOAL:
+- Maximize discoverability for beat producers.
+- Keep tags tightly relevant and high-intent.
+- Return exactly {target_count} tags (or as close as possible, min 50).
 
-2. ARTIST'S POPULAR PROJECTS/ERAS (8-12 tags):
-   - Album names (e.g., "pink tape type beat", "eternal atake type beat")
-   - Song names (e.g., "just wanna rock type beat")
-   - Era/style (e.g., "2020 lil uzi type beat", "new lil uzi type beat")
+STRICT RULES:
+1) NO generic/filler tags like "chill beat", "vibe", "music", "instrumental music".
+2) NO redundant near-duplicates (e.g., tiny wording swaps that mean same thing).
+3) Focus on search intent: artist type-beat terms, close related artists, specific subgenre, era/project keywords.
+4) Keep most tags short and practical (2-5 words), but allow a few long-tail queries.
+5) Every tag must be useful for THIS exact query context.
+6) If candidates are provided, use only the strongest ones (do not include all).
+7) Return STRICT JSON only in this schema:
+{{"tags":["tag1","tag2","tag3"]}}
 
-3. SIMILAR/RELATED ARTISTS (12-18 tags):
-   - Artists in the SAME genre/subgenre
-   - Artists with similar sound
-   - All with "type beat" variations
-   - Example: If lil uzi, include: playboi carti, ken carson, destroy lonely, yeat, etc.
-
-4. SPECIFIC SUBGENRE TAGS (8-12 tags):
-   - Exact subgenre (e.g., "rage type beat", "melodic trap beat", "plugg type beat")
-   - NOT generic genres (avoid just "trap" or "hip hop")
-   - Be specific to the sound
-
-5. PRODUCER TAGS (5-8 tags):
-   - Famous producers in that style (e.g., "working on dying type beat", "maaly raw type beat")
-   - Production style (e.g., "808 mafia type beat")
-
-6. SEARCH INTENT TAGS (6-10 tags):
-   - "free [artist] type beat"
-   - "[artist] type beat free for profit"
-   - "[artist] instrumental"
-   - "beat like [artist]"
-   - "[artist] style"
-
-7. COMPETITIVE TAGS (5-8 tags):
-   - ONLY if directly relevant to the artist's niche
-
-SELECTION CONSTRAINTS:
-- You must stay within {base_tag_count} tags total (never exceed this).
-- Use the candidate tag list below as inspiration and pick ONLY the strongest, most relevant options (do NOT include all of them).
-
-Candidate tags from top YouTube results (select the best 8-15 if relevant):
-{candidate_tags}
-
-FORMAT: Return ONLY the tags separated by commas. NO explanations, NO generic filler tags. Keep tags short (2-5 words max).
-
-EXAMPLE of GOOD vs BAD:
-GOOD: "lil uzi vert type beat", "pink tape type beat", "playboi carti type beat", "rage type beat", "philly type beat"
-BAD: "zen beat", "groove beat", "chill instrumental", "relaxing music", "study beats"
-
-Generate {base_tag_count} HYPER-SPECIFIC tags now:"""
+Optional candidate inspirations from YouTube/custom inputs:
+{candidate_tags_text}
+"""
         
         response = await llm_chat(
-            system_message="You are an expert YouTube SEO specialist for beat producers. You ONLY generate hyper-specific, high-intent tags. Avoid tag stuffing, redundancy, and off-genre artists.",
+            system_message="You are an expert YouTube SEO specialist for beat producers. Produce a refined, high-intent final tag list only. Return strict JSON.",
             user_message=prompt,
             provider=llm_provider,
         )
         
-        # Parse AI-generated tags
+        # Parse AI-generated tags (JSON first, then fallback to comma split)
         tags_text = response.strip()
-        ai_tags = [tag.strip() for tag in tags_text.split(',') if tag.strip()]
-        
-        # Combine all tags: AI tags + YouTube song type beat tags + custom tags
-        all_tags = []
-        
-        # Add AI tags first
-        all_tags.extend(ai_tags)
-        
-        # Add YouTube popular song variations
-        all_tags.extend(youtube_type_beat_tags)
-        
-        # Add user's custom tags
-        if request.custom_tags:
-            custom_cleaned = [tag.strip() for tag in request.custom_tags if tag.strip()]
-            all_tags.extend(custom_cleaned)
-        
-        # Remove duplicates while preserving order
+        if "```json" in tags_text:
+            start = tags_text.find("```json") + 7
+            end = tags_text.find("```", start)
+            tags_text = tags_text[start:end].strip()
+        elif "```" in tags_text:
+            start = tags_text.find("```") + 3
+            end = tags_text.find("```", start)
+            tags_text = tags_text[start:end].strip()
+
+        parsed_tags = []
+        try:
+            parsed = json.loads(tags_text)
+            if isinstance(parsed, dict) and isinstance(parsed.get("tags"), list):
+                parsed_tags = parsed["tags"]
+        except Exception:
+            parsed_tags = [tag.strip() for tag in tags_text.split(",") if tag.strip()]
+
+        # Clean + dedupe + size bounds
         seen = set()
-        unique_tags = []
-        for tag in all_tags:
-            tag_lower = tag.lower()
-            if tag_lower not in seen:
-                seen.add(tag_lower)
-                unique_tags.append(tag)
-        
-        # Limit to a focused set to avoid tag stuffing
-        final_tags = unique_tags[:120]
-        
-        logging.info(f"Generated {len(final_tags)} total tags: {len(ai_tags)} AI + {len(youtube_type_beat_tags)} YouTube + {len(request.custom_tags or [])} custom")
+        final_tags = []
+        for tag in parsed_tags:
+            if not isinstance(tag, str):
+                continue
+            clean = tag.strip()
+            if not clean:
+                continue
+            key = clean.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            final_tags.append(clean)
+            if len(final_tags) >= 80:
+                break
+
+        # If model under-returns, top up carefully from candidate pool
+        if len(final_tags) < 50:
+            for tag in unique_candidate_pool:
+                key = tag.lower()
+                if key in seen:
+                    continue
+                seen.add(key)
+                final_tags.append(tag)
+                if len(final_tags) >= 64:
+                    break
+
+        # Hard safety limit
+        final_tags = final_tags[:80]
+
+        logging.info(
+            f"Generated refined tags: {len(final_tags)} final, "
+            f"{len(unique_candidate_pool)} candidates considered"
+        )
         
         # Save to database
         tag_gen = TagGenerationResponse(
@@ -1892,6 +1888,7 @@ async def join_tags_ai(request: TagJoinRequest, current_user: dict = Depends(get
         unique_candidates.append(tag)
 
     query_summary = " x ".join(request.queries)
+    target_output = min(max_tags, 70)
     prompt = f"""You are a YouTube SEO expert for beat producers.
 We are combining tags from multiple artists to create ONE optimized set of tags.
 
@@ -1899,10 +1896,11 @@ Artists/queries: {request.queries}
 
 Rules:
 1) Select ONLY from the candidate tag list provided.
-2) Max {max_tags} tags. Never exceed the limit.
+2) Return about {target_output} tags (max {max_tags}). Never exceed {max_tags}.
 3) Prefer high-intent, relevant tags for a "{query_summary} type beat".
 4) Avoid tag stuffing or near-duplicate variations.
-5) Keep tags short (2-5 words).
+5) Remove weak/generic terms and keep strongest discoverability tags only.
+6) Keep tags short (2-5 words) with a few long-tail searches when useful.
 
 Candidate tags:
 {", ".join(unique_candidates)}

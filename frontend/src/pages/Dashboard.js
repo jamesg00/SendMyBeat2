@@ -260,10 +260,14 @@ const Dashboard = ({ setIsAuthenticated }) => {
         toast.error(detail.message || "Daily limit reached");
         setShowUpgradeModal(true);
       } else if (error.response?.status === 400) {
-        toast.error("Please connect your YouTube account first");
+        const detail = error.response?.data?.detail;
+        toast.error(typeof detail === "string" ? detail : "Please connect your YouTube account first");
+      } else if (error.response?.status === 401) {
+        toast.error("YouTube auth expired. Reconnect your YouTube account.");
       } else {
         console.error("Analytics error:", error);
-        toast.error("Failed to analyze channel");
+        const detail = error.response?.data?.detail;
+        toast.error(typeof detail === "string" ? detail : "Failed to analyze channel");
       }
 
       // Still refresh credits on error to show updated count
