@@ -1,27 +1,19 @@
-﻿import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import {
-  Upload, Music, Image as ImageIcon, X, Youtube,
-  CheckCircle2, AlertCircle, Play, Pause,
-  Maximize2, Minimize2, Move, RotateCw, Palette,
-  ChevronDown, ChevronUp, Link, Wand2, Target, Sparkles,
-  SlidersHorizontal
+  Play, Pause, X, SlidersHorizontal, Youtube
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Drawer, DrawerContent, DrawerTrigger, DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter } from "@/components/ui/drawer";
-import AudioVisualizer from "@/lib/AudioVisualizer";
+import { Drawer, DrawerContent, DrawerTrigger, DrawerHeader, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
 
-const AUDIO_EXTENSIONS = [".mp3", ".wav", ".m4a", ".flac", ".ogg"];
-const AUDIO_MIME_TYPES = ["audio/mpeg", "audio/wav", "audio/x-wav", "audio/mp4", "audio/flac", "audio/ogg"];
-const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".avif", ".heic", ".heif"];
-const IMAGE_MIME_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif", "image/heic", "image/heif"];
+import UploadDashboard from "./upload-studio/UploadDashboard";
+import MetadataEditor from "./upload-studio/MetadataEditor";
+import AIToolsPanel from "./upload-studio/AIToolsPanel";
+import VisualizerSettings from "./upload-studio/VisualizerSettings";
+import ImageEditorControls from "./upload-studio/ImageEditorControls";
+import LayoutSettings from "./upload-studio/LayoutSettings";
+import VisualizerCanvas from "./upload-studio/VisualizerCanvas";
 
 const UploadStudio = ({
   user,
@@ -143,7 +135,7 @@ const UploadStudio = ({
   // Refs
   const audioPlayerRef = useRef(null);
   const visualizerRef = useRef(null);
-  const visualizerCanvasRef = useRef(null);
+  // visualizerCanvasRef moved to VisualizerCanvas component
   const previewContainerRef = useRef(null);
   const studioImageInputRef = useRef(null);
   const centerVisualizerImageInputRef = useRef(null);
@@ -161,22 +153,6 @@ const UploadStudio = ({
     const mins = Math.floor(totalSeconds / 60);
     const secs = totalSeconds % 60;
     return `${mins}:${secs.toString().padStart(2, "0")}`;
-  };
-
-  const hexToRgbString = (hex, fallback = "255, 255, 255") => {
-    const clean = (hex || "").replace("#", "");
-    if (clean.length !== 6) return fallback;
-    const value = Number.parseInt(clean, 16);
-    if (Number.isNaN(value)) return fallback;
-    const r = (value >> 16) & 255;
-    const g = (value >> 8) & 255;
-    const b = value & 255;
-    return `${r}, ${g}, ${b}`;
-  };
-
-  const formatTagHistoryLabel = (query = "") => {
-    if (!query) return "Untitled";
-    return query.replace(/\([^)]*\)/g, "").trim() || query;
   };
 
   const getDistance = (touch1, touch2) => {
@@ -331,84 +307,7 @@ const UploadStudio = ({
     };
   }, [audioPreviewUrl, visualizerEnabled, studioOpen]);
 
-  useEffect(() => {
-    const canvas = visualizerCanvasRef.current;
-    const audioEl = audioPlayerRef.current;
-
-    if (!canvas || !audioEl || !visualizerEnabled) {
-      if (visualizerRef.current) {
-        visualizerRef.current.stop();
-        const ctx = canvas?.getContext("2d");
-        ctx?.clearRect(0, 0, canvas.width, canvas.height);
-      }
-      return;
-    }
-
-    const options = getVisualizerOptions();
-
-    if (!visualizerRef.current) {
-      visualizerRef.current = new AudioVisualizer(canvas, options);
-    } else {
-      visualizerRef.current.attachCanvas(canvas);
-      visualizerRef.current.setOptions(options);
-    }
-    visualizerRef.current.resize();
-    requestAnimationFrame(() => visualizerRef.current?.resize());
-
-    const initViz = async () => {
-      try {
-        await visualizerRef.current.connectMediaElement(audioEl);
-        if (!audioEl.paused && !audioEl.ended) {
-          await visualizerRef.current.resumeAudioContext();
-          visualizerRef.current.start();
-        }
-      } catch (err) { console.error(err); }
-    };
-    initViz();
-
-  }, [visualizerEnabled, audioPreviewUrl, imagePreviewUrl, centerVisualizerImageUrl, spectrumRecordImageUrl, visualizerSettings, studioOpen, previewDims]);
-
-  const getVisualizerOptions = () => ({
-    bars: visualizerSettings.bars,
-    gain: visualizerSettings.intensity * 0.8,
-    maxBarLength: visualizerSettings.maxBarLength,
-    radius: visualizerSettings.radius,
-    rotateSpeed: visualizerSettings.rotateSpeed,
-    trailsEnabled: visualizerSettings.trailsEnabled,
-    particleEnabled: visualizerSettings.particleEnabled,
-    particleIntensity: visualizerSettings.particleIntensity,
-    monstercatParticleEnabled: visualizerSettings.monstercatParticleEnabled,
-    maxSpawnRate: Math.round(120 * visualizerSettings.particleIntensity),
-    baseSpawnRate: Math.round(10 * Math.max(0.5, visualizerSettings.particleIntensity)),
-    particleSpeed: 72 * visualizerSettings.particleIntensity,
-    mode: visualizerSettings.mode,
-    shakeIntensity: visualizerSettings.shakeIntensity * 0.7,
-    multiColorReactive: visualizerSettings.multiColorReactive,
-    spectrumStyle: visualizerSettings.mode === "circle" ? "fill" : visualizerSettings.spectrumStyle,
-    fillCenter: visualizerSettings.fillCenter,
-    fillCenterColor: hexToRgbString(visualizerSettings.fillCenterColor, "255, 255, 255"),
-    centerImageSpin: visualizerSettings.centerImageSpin,
-    spectrumColor: hexToRgbString(visualizerSettings.spectrumColor, "255, 255, 255"),
-    centerImageUrl: centerVisualizerImageUrl || imagePreviewUrl || "",
-    particleColor: hexToRgbString(visualizerSettings.particleColor, "140, 200, 255"),
-    spectrumBorderEnabled:
-      visualizerSettings.mode === "circle" && visualizerSettings.fillCenter === "transparent"
-        ? false
-        : visualizerSettings.spectrumBorderEnabled,
-    spectrumBorderWidth: 5,
-    spectrumBorderColor: hexToRgbString(visualizerSettings.spectrumBorderColor, "255, 255, 255"),
-    spectrumRecordImageUrl,
-    monstercatYOffset: visualizerSettings.monstercatYOffset,
-    monstercatSpacing: visualizerSettings.monstercatSpacing,
-    monstercatParticleSpeed: visualizerSettings.monstercatParticleSpeed,
-    monstercatParticleSize: visualizerSettings.monstercatParticleSize,
-    monstercatParticleCount: visualizerSettings.monstercatParticleCount,
-    monstercatGlow: visualizerSettings.monstercatGlow,
-    lowSensitivity: visualizerSettings.lowSensitivity,
-    midSensitivity: visualizerSettings.midSensitivity,
-    highSensitivity: visualizerSettings.highSensitivity,
-    monstercatSmoothing: visualizerSettings.monstercatSmoothing,
-  });
+  // Visualizer initialization and update moved to VisualizerCanvas component
 
   // Touch & Drag Handling (including Pinch Zoom)
   useEffect(() => {
@@ -838,661 +737,71 @@ const UploadStudio = ({
   // --- Controls Markup ---
   const controlsMarkup = (
     <div className="space-y-6 pb-20 lg:pb-6">
-        <Card className="border-l-4 border-l-blue-500 shadow-sm">
-           <CardHeader className="pb-3">
-              <CardTitle className="text-base font-semibold flex items-center gap-2">
-                 <Youtube className="h-4 w-4" /> Video Metadata
-              </CardTitle>
-           </CardHeader>
-           <CardContent className="space-y-4">
-              <div className="space-y-2">
-                 <Label>Video Title</Label>
-                 <Input
-                    value={uploadTitle}
-                    onChange={(e) => setUploadTitle(e.target.value)}
-                    placeholder="Enter Beat Title Here"
-                    className="font-medium"
-                 />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                 <div className="space-y-2">
-                    <Label>Template</Label>
-                    <Select value={selectedDescriptionId} onValueChange={setSelectedDescriptionId}>
-                       <SelectTrigger className="text-foreground">
-                          <SelectValue placeholder="Select description..." />
-                       </SelectTrigger>
-                       <SelectContent>
-                          {descriptions.map(d => (
-                             <SelectItem key={d.id} value={d.id} className="text-foreground">{d.title}</SelectItem>
-                          ))}
-                       </SelectContent>
-                    </Select>
-                 </div>
-                 <div className="space-y-2">
-                    <Label>Tags</Label>
-                    <Select value={selectedTagsId} onValueChange={setSelectedTagsId}>
-                       <SelectTrigger className="text-foreground">
-                          <SelectValue placeholder="Select tags..." />
-                       </SelectTrigger>
-                       <SelectContent>
-                          {tagHistory.map(t => (
-                             <SelectItem key={t.id} value={t.id} className="text-foreground">{formatTagHistoryLabel(t.query)}</SelectItem>
-                          ))}
-                       </SelectContent>
-                    </Select>
-                 </div>
-              </div>
-              {selectedDescriptionId && (
-                 <Textarea
-                    value={uploadDescriptionText}
-                    onChange={(e) => setUploadDescriptionText(e.target.value)}
-                    rows={4}
-                    className="text-xs font-mono bg-secondary/30 text-foreground"
-                 />
-              )}
-              <div className="space-y-2">
-                 <Label>Privacy</Label>
-                 <Select value={privacyStatus} onValueChange={setPrivacyStatus}>
-                    <SelectTrigger className="text-foreground">
-                       <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                       <SelectItem value="public">Public</SelectItem>
-                       <SelectItem value="unlisted">Unlisted</SelectItem>
-                       <SelectItem value="private">Private</SelectItem>
-                    </SelectContent>
-                 </Select>
-              </div>
-           </CardContent>
-        </Card>
+        <MetadataEditor
+          uploadTitle={uploadTitle}
+          setUploadTitle={setUploadTitle}
+          descriptions={descriptions}
+          selectedDescriptionId={selectedDescriptionId}
+          setSelectedDescriptionId={setSelectedDescriptionId}
+          tagHistory={tagHistory}
+          selectedTagsId={selectedTagsId}
+          setSelectedTagsId={setSelectedTagsId}
+          uploadDescriptionText={uploadDescriptionText}
+          setUploadDescriptionText={setUploadDescriptionText}
+          privacyStatus={privacyStatus}
+          setPrivacyStatus={setPrivacyStatus}
+        />
 
-        {/* AI Tools */}
-        <Card className="border-l-4 border-l-emerald-500 shadow-sm">
-           <CardHeader className="pb-3 flex flex-row items-center justify-between">
-              <CardTitle className="text-base font-semibold flex items-center gap-2">
-                 <Wand2 className="h-4 w-4" /> AI Tools
-              </CardTitle>
-              <Button size="sm" variant="ghost" onClick={() => setShowTools(!showTools)}>
-                 {showTools ? <ChevronUp className="h-4 w-4"/> : <ChevronDown className="h-4 w-4"/>}
-              </Button>
-           </CardHeader>
-           {showTools && (
-              <CardContent className="space-y-4">
-                 <div className="grid grid-cols-2 gap-3">
-                    <Button
-                       variant="outline"
-                       onClick={handleAnalyzeBeat}
-                       disabled={analyzingBeat}
-                       className="text-yellow-600 border-yellow-200 hover:bg-yellow-50 dark:hover:bg-yellow-900/20"
-                    >
-                       {analyzingBeat ? "..." : <><Target className="mr-2 h-4 w-4"/> Analyze Beat</>}
-                    </Button>
-                    <Button
-                       variant="outline"
-                       onClick={handleThumbnailCheck}
-                       disabled={checkingThumbnail}
-                       className="text-emerald-600 border-emerald-200 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
-                    >
-                       {checkingThumbnail ? "..." : <><Sparkles className="mr-2 h-4 w-4"/> Check Thumb</>}
-                    </Button>
-                 </div>
+        <AIToolsPanel
+          showTools={showTools}
+          setShowTools={setShowTools}
+          analyzingBeat={analyzingBeat}
+          handleAnalyzeBeat={handleAnalyzeBeat}
+          checkingThumbnail={checkingThumbnail}
+          handleThumbnailCheck={handleThumbnailCheck}
+          beatAnalysis={beatAnalysis}
+          thumbnailCheckResult={thumbnailCheckResult}
+        />
 
-                 {beatAnalysis && (
-                    <div className="p-3 bg-secondary/50 rounded-md text-sm space-y-2">
-                       <div className="flex justify-between font-bold">
-                          <span>Score: {beatAnalysis.overall_score}/100</span>
-                          <span>{beatAnalysis.predicted_performance}</span>
-                       </div>
-                       <div className="text-xs text-muted-foreground">
-                          {beatAnalysis.suggestions[0]}
-                       </div>
-                    </div>
-                 )}
-                 {thumbnailCheckResult && (
-                    <div className="p-3 bg-secondary/50 rounded-md text-sm space-y-2">
-                       <div className="flex justify-between font-bold">
-                          <span>Score: {thumbnailCheckResult.score}/100</span>
-                          <span>{thumbnailCheckResult.verdict}</span>
-                       </div>
-                       <div className="text-xs text-muted-foreground">
-                          {thumbnailCheckResult.suggestions[0]}
-                       </div>
-                    </div>
-                 )}
-              </CardContent>
-           )}
-        </Card>
+        <VisualizerSettings
+          visualizerEnabled={visualizerEnabled}
+          setVisualizerEnabled={setVisualizerEnabled}
+          visualizerSettings={visualizerSettings}
+          setVisualizerSettings={setVisualizerSettings}
+          applyVisualizerPreset={applyVisualizerPreset}
+          handleCenterVisualizerImageUpload={handleCenterVisualizerImageUpload}
+          centerVisualizerImageName={centerVisualizerImageName}
+          centerVisualizerImageInputRef={centerVisualizerImageInputRef}
+        />
 
-        <Card className="border-l-4 border-l-purple-500 shadow-sm">
-           <CardHeader className="pb-3 flex flex-row items-center justify-between">
-              <CardTitle className="text-base font-semibold flex items-center gap-2">
-                 <Music className="h-4 w-4" /> Audio Visualizer
-              </CardTitle>
-              <Button
-                size="sm"
-                variant={visualizerEnabled ? "default" : "outline"}
-                onClick={() => setVisualizerEnabled(!visualizerEnabled)}
-                className={visualizerEnabled ? "bg-purple-600 hover:bg-purple-700" : ""}
-              >
-                 {visualizerEnabled ? "Enabled" : "Disabled"}
-              </Button>
-           </CardHeader>
+        <ImageEditorControls
+          imageSettingsOpen={imageSettingsOpen}
+          setImageSettingsOpen={setImageSettingsOpen}
+          applyImageSettings={applyImageSettings}
+          handleImageUpload={handleImageUpload}
+          studioImageInputRef={studioImageInputRef}
+          imageScaleX={imageScaleX}
+          setImageScaleX={setImageScaleX}
+          setImageScaleY={setImageScaleY}
+          lockImageScale={lockImageScale}
+          imageRotation={imageRotation}
+          setImageRotation={setImageRotation}
+          fitImageToFrame={fitImageToFrame}
+          centerImagePosition={centerImagePosition}
+          centerLockEnabled={centerLockEnabled}
+          setCenterLockEnabled={setCenterLockEnabled}
+        />
 
-           {visualizerEnabled && (
-           <CardContent className="space-y-5 animate-in slide-in-from-top-2">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                 <Button
-                   type="button"
-                   variant="outline"
-                   size="sm"
-                   className="text-xs"
-                   onClick={() => applyVisualizerPreset("ncs-clean")}
-                 >
-                   NCS Clean
-                 </Button>
-                 <Button
-                   type="button"
-                   variant="outline"
-                   size="sm"
-                   className="text-xs"
-                   onClick={() => applyVisualizerPreset("ncs-aggressive")}
-                 >
-                   NCS Aggressive
-                 </Button>
-                 <Button
-                   type="button"
-                   variant="outline"
-                   size="sm"
-                   className="text-xs"
-                   onClick={() => applyVisualizerPreset("monstercat-tight")}
-                 >
-                   Monstercat Tight
-                 </Button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                 <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">Style</Label>
-                    <Select
-                       value={visualizerSettings.mode}
-                       onValueChange={(v) => setVisualizerSettings(s => ({...s, mode: v}))}
-                    >
-                       <SelectTrigger className="text-foreground"><SelectValue /></SelectTrigger>
-                       <SelectContent>
-                          <SelectItem value="circle">NCS Circle</SelectItem>
-                          <SelectItem value="monstercat">Linear Bars</SelectItem>
-                       </SelectContent>
-                    </Select>
-                 </div>
-                 <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">Spectrum Color</Label>
-                    <div className="flex flex-wrap gap-2">
-                      <Input
-                         type="color"
-                         value={visualizerSettings.spectrumColor}
-                         onChange={(e) => setVisualizerSettings(s => ({...s, spectrumColor: e.target.value, spectrumBorderColor: e.target.value}))}
-                         className="w-10 h-10 p-1 cursor-pointer"
-                      />
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="flex-1 text-xs whitespace-nowrap px-2"
-                        onClick={() => setVisualizerSettings(s => ({...s, multiColorReactive: !s.multiColorReactive}))}
-                      >
-                        {visualizerSettings.multiColorReactive ? "Rainbow On" : "Rainbow Off"}
-                      </Button>
-                    </div>
-                 </div>
-                 <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">Particle Color</Label>
-                    <div className="flex flex-wrap gap-2">
-                      <Input
-                         type="color"
-                         value={visualizerSettings.particleColor}
-                         onChange={(e) => setVisualizerSettings(s => ({...s, particleColor: e.target.value}))}
-                         className="w-10 h-10 p-1 cursor-pointer"
-                      />
-                    </div>
-                 </div>
-              </div>
-
-              <div className="space-y-4 pt-2">
-                 {visualizerSettings.mode === 'circle' && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                       <div className="space-y-2">
-                          <Label className="text-xs text-muted-foreground">Center Mode</Label>
-                          <Select
-                             value={visualizerSettings.fillCenter}
-                             onValueChange={(v) => setVisualizerSettings(s => ({...s, fillCenter: v}))}
-                          >
-                             <SelectTrigger className="text-foreground"><SelectValue /></SelectTrigger>
-                             <SelectContent>
-                                <SelectItem value="color">Color Fill</SelectItem>
-                                <SelectItem value="image">Image</SelectItem>
-                                <SelectItem value="transparent">Transparent</SelectItem>
-                             </SelectContent>
-                          </Select>
-                       </div>
-                       {visualizerSettings.fillCenter === "color" && (
-                         <div className="space-y-2">
-                            <Label className="text-xs text-muted-foreground">Center Fill Color</Label>
-                            <Input
-                              type="color"
-                              value={visualizerSettings.fillCenterColor}
-                              onChange={(e) => setVisualizerSettings(s => ({...s, fillCenterColor: e.target.value}))}
-                              className="w-10 h-10 p-1 cursor-pointer"
-                            />
-                         </div>
-                       )}
-                       {visualizerSettings.fillCenter === "image" && (
-                         <div className="space-y-2">
-                            <Label className="text-xs text-muted-foreground">Image Spin</Label>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="w-full"
-                              onClick={() => setVisualizerSettings(s => ({...s, centerImageSpin: !s.centerImageSpin}))}
-                            >
-                              {visualizerSettings.centerImageSpin ? "Spin On" : "Spin Off"}
-                            </Button>
-                            <Input
-                              ref={centerVisualizerImageInputRef}
-                              type="file"
-                              accept={IMAGE_EXTENSIONS.join(',')}
-                              className="hidden"
-                              onChange={handleCenterVisualizerImageUpload}
-                            />
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="w-full"
-                              onClick={() => {
-                                toast("Upload image");
-                                centerVisualizerImageInputRef.current?.click();
-                              }}
-                            >
-                              Upload Image
-                            </Button>
-                            {!!centerVisualizerImageName && (
-                              <p className="text-[11px] text-muted-foreground truncate">{centerVisualizerImageName}</p>
-                            )}
-                         </div>
-                       )}
-                       <div className="space-y-2">
-                          <Label className="text-xs text-muted-foreground">Circle Border</Label>
-                          <Button
-                            variant={visualizerSettings.spectrumBorderEnabled ? "default" : "outline"}
-                            size="sm"
-                            className="w-full"
-                            onClick={() => setVisualizerSettings(s => ({ ...s, spectrumBorderEnabled: !s.spectrumBorderEnabled }))}
-                          >
-                            {visualizerSettings.spectrumBorderEnabled ? "Border On" : "Border Off"}
-                          </Button>
-                          {visualizerSettings.spectrumBorderEnabled && (
-                            <div className="flex items-center gap-2">
-                              <Input
-                                type="color"
-                                value={visualizerSettings.spectrumBorderColor}
-                                onChange={(e) => setVisualizerSettings(s => ({ ...s, spectrumBorderColor: e.target.value }))}
-                                className="w-10 h-10 p-1 cursor-pointer"
-                              />
-                              <div className="flex-1 text-[11px] text-muted-foreground">
-                                NCS thickness enabled
-                              </div>
-                            </div>
-                          )}
-                          {visualizerSettings.fillCenter === "transparent" && (
-                            <p className="text-[11px] text-muted-foreground">
-                              Border is auto-disabled in Transparent mode.
-                            </p>
-                          )}
-                       </div>
-                    </div>
-                 )}
-
-                 <div className="space-y-2">
-                    <div className="flex justify-between text-xs">
-                       <Label>Reactivity / Intensity</Label>
-                       <span className="text-muted-foreground">{visualizerSettings.intensity.toFixed(2)}</span>
-                    </div>
-                    <input
-                       type="range" min="0.5" max="2.0" step="0.1"
-                       value={visualizerSettings.intensity}
-                       onChange={(e) => setVisualizerSettings(s => ({...s, intensity: parseFloat(e.target.value)}))}
-                       className="studio-slider studio-slider-purple"
-                    />
-                 </div>
-
-                 <div className="space-y-2">
-                    <div className="flex justify-between text-xs">
-                       <Label>Bar Count</Label>
-                       <span className="text-muted-foreground">{visualizerSettings.bars}</span>
-                    </div>
-                    <input
-                       type="range" min="32" max="160" step="4"
-                       value={visualizerSettings.bars}
-                       onChange={(e) => setVisualizerSettings(s => ({...s, bars: parseInt(e.target.value)}))}
-                       className="studio-slider studio-slider-purple"
-                    />
-                 </div>
-
-                 {visualizerSettings.mode === 'circle' && (
-                    <div className="grid grid-cols-2 gap-4">
-                       <div className="space-y-2">
-                          <div className="flex justify-between text-xs">
-                             <Label>Particles</Label>
-                             <span className="text-muted-foreground">{visualizerSettings.particleIntensity.toFixed(1)}</span>
-                          </div>
-                          <input
-                             type="range" min="0" max="2" step="0.1"
-                             value={visualizerSettings.particleIntensity}
-                             onChange={(e) => setVisualizerSettings(s => ({...s, particleIntensity: parseFloat(e.target.value)}))}
-                             className="studio-slider studio-slider-purple"
-                          />
-                       </div>
-                       <div className="space-y-2">
-                          <div className="flex justify-between text-xs">
-                             <Label>Shake</Label>
-                             <span className="text-muted-foreground">{visualizerSettings.shakeIntensity.toFixed(1)}</span>
-                          </div>
-                          <input
-                             type="range" min="0" max="2" step="0.1"
-                             value={visualizerSettings.shakeIntensity}
-                             onChange={(e) => setVisualizerSettings(s => ({...s, shakeIntensity: parseFloat(e.target.value)}))}
-                             className="studio-slider studio-slider-purple"
-                          />
-                       </div>
-                    </div>
-                 )}
-
-                 {visualizerSettings.mode === 'monstercat' && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                       <div className="space-y-2">
-                          <div className="flex justify-between text-xs">
-                             <Label>Monstercat Y Position</Label>
-                             <div className="flex items-center gap-2">
-                               <span className="text-muted-foreground">{visualizerSettings.monstercatYOffset}px</span>
-                               <Button
-                                 type="button"
-                                 variant="outline"
-                                 size="sm"
-                                 className="h-6 px-2 text-[10px]"
-                                 onClick={() => setVisualizerSettings(s => ({...s, monstercatYOffset: 0}))}
-                               >
-                                 Reset Position
-                               </Button>
-                             </div>
-                          </div>
-                          <input
-                             type="range" min="0" max="320" step="5"
-                             value={visualizerSettings.monstercatYOffset}
-                             onChange={(e) => setVisualizerSettings(s => ({...s, monstercatYOffset: parseInt(e.target.value, 10)}))}
-                             className="studio-slider studio-slider-purple"
-                          />
-                       </div>
-                       <div className="space-y-2">
-                          <div className="flex justify-between text-xs">
-                             <Label>Bar Spacing</Label>
-                             <span className="text-muted-foreground">{visualizerSettings.monstercatSpacing.toFixed(1)}</span>
-                          </div>
-                          <input
-                             type="range" min="0" max="12" step="0.5"
-                             value={visualizerSettings.monstercatSpacing}
-                             onChange={(e) => setVisualizerSettings(s => ({...s, monstercatSpacing: parseFloat(e.target.value)}))}
-                             className="studio-slider studio-slider-purple"
-                          />
-                       </div>
-                       <div className="space-y-2">
-                          <div className="flex justify-between text-xs">
-                             <Label>Glow</Label>
-                             <span className="text-muted-foreground">{visualizerSettings.monstercatGlow.toFixed(0)}</span>
-                          </div>
-                          <input
-                             type="range" min="0" max="36" step="1"
-                             value={visualizerSettings.monstercatGlow}
-                             onChange={(e) => setVisualizerSettings(s => ({...s, monstercatGlow: parseInt(e.target.value, 10)}))}
-                             className="studio-slider studio-slider-purple"
-                          />
-                       </div>
-
-                       <div className="md:col-span-2 border rounded-md p-3 bg-secondary/30 space-y-3">
-                          <div className="flex items-center justify-between">
-                            <Label className="text-xs">Linear Particles</Label>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant={visualizerSettings.monstercatParticleEnabled ? "default" : "outline"}
-                              className={visualizerSettings.monstercatParticleEnabled ? "bg-purple-600 hover:bg-purple-700" : ""}
-                              onClick={() => setVisualizerSettings(s => ({...s, monstercatParticleEnabled: !s.monstercatParticleEnabled}))}
-                            >
-                              {visualizerSettings.monstercatParticleEnabled ? "On" : "Off"}
-                            </Button>
-                          </div>
-
-                          {visualizerSettings.monstercatParticleEnabled && (
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                              <div className="space-y-1">
-                                <div className="flex justify-between text-xs">
-                                  <Label>Particle Speed</Label>
-                                  <span className="text-muted-foreground">{visualizerSettings.monstercatParticleSpeed.toFixed(1)}</span>
-                                </div>
-                                <input
-                                  type="range" min="0.2" max="3.5" step="0.1"
-                                  value={visualizerSettings.monstercatParticleSpeed}
-                                  onChange={(e) => setVisualizerSettings(s => ({...s, monstercatParticleSpeed: parseFloat(e.target.value)}))}
-                                  className="studio-slider studio-slider-purple"
-                                />
-                              </div>
-                              <div className="space-y-1">
-                                <div className="flex justify-between text-xs">
-                                  <Label>Particle Size</Label>
-                                  <span className="text-muted-foreground">{visualizerSettings.monstercatParticleSize.toFixed(1)}</span>
-                                </div>
-                                <input
-                                  type="range" min="0.4" max="4" step="0.1"
-                                  value={visualizerSettings.monstercatParticleSize}
-                                  onChange={(e) => setVisualizerSettings(s => ({...s, monstercatParticleSize: parseFloat(e.target.value)}))}
-                                  className="studio-slider studio-slider-purple"
-                                />
-                              </div>
-                              <div className="space-y-1">
-                                <div className="flex justify-between text-xs">
-                                  <Label>Particle Count</Label>
-                                  <span className="text-muted-foreground">{visualizerSettings.monstercatParticleCount}</span>
-                                </div>
-                                <input
-                                  type="range" min="120" max="3000" step="20"
-                                  value={visualizerSettings.monstercatParticleCount}
-                                  onChange={(e) => setVisualizerSettings(s => ({...s, monstercatParticleCount: parseInt(e.target.value, 10)}))}
-                                  className="studio-slider studio-slider-purple"
-                                />
-                              </div>
-                            </div>
-                          )}
-                       </div>
-                    </div>
-                 )}
-              </div>
-           </CardContent>
-           )}
-        </Card>
-
-        <Card className="border-l-4 border-l-amber-500 shadow-sm">
-           <CardHeader className="pb-3">
-              <CardTitle className="text-base font-semibold flex items-center gap-2">
-                 <Move className="h-4 w-4" /> Image Settings
-              </CardTitle>
-           </CardHeader>
-           <CardContent className="space-y-4">
-              <div className="flex items-center gap-2">
-                 <Button
-                    type="button"
-                    variant={imageSettingsOpen ? "default" : "outline"}
-                    onClick={() => setImageSettingsOpen((v) => !v)}
-                    className={imageSettingsOpen ? "bg-amber-600 hover:bg-amber-700" : ""}
-                 >
-                    {imageSettingsOpen ? "Close Editor" : "Open Image Editor"}
-                 </Button>
-                 {imageSettingsOpen && (
-                    <Button type="button" variant="outline" onClick={applyImageSettings}>
-                      Apply (Lock)
-                    </Button>
-                 )}
-              </div>
-
-              {imageSettingsOpen && (
-                <div className="space-y-4 border rounded-md p-3 bg-secondary/30">
-                  <p className="text-xs text-muted-foreground">
-                    Edit mode is ON: drag/touch the preview to move image, pinch to zoom, adjust rotation below.
-                  </p>
-
-                  <Input
-                     ref={studioImageInputRef}
-                     type="file"
-                     accept={IMAGE_EXTENSIONS.join(',')}
-                     className="hidden"
-                     onChange={(e) => handleImageUpload(e.target.files?.[0])}
-                  />
-
-                  <div className="space-y-2">
-                     <div className="flex justify-between text-xs">
-                        <Label>Image Scale</Label>
-                        <span className="text-muted-foreground">{imageScaleX.toFixed(2)}x</span>
-                     </div>
-                     <input
-                        type="range" min="0.1" max="1.5" step="0.05"
-                        value={imageScaleX}
-                        onChange={(e) => {
-                           const val = parseFloat(e.target.value);
-                           setImageScaleX(val);
-                           if (lockImageScale) setImageScaleY(val);
-                        }}
-                        className="studio-slider studio-slider-amber"
-                     />
-                  </div>
-
-                  <div className="space-y-2">
-                     <div className="flex justify-between text-xs">
-                        <Label>Rotation</Label>
-                        <span className="text-muted-foreground">{Math.round(imageRotation)}°</span>
-                     </div>
-                     <input
-                        type="range" min="-180" max="180" step="1"
-                        value={imageRotation}
-                        onChange={(e) => setImageRotation(parseFloat(e.target.value))}
-                        className="studio-slider studio-slider-amber"
-                     />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                     <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => studioImageInputRef.current?.click()}
-                     >
-                        Change Photo
-                     </Button>
-                     <Button
-                        type="button"
-                        variant="outline"
-                        onClick={fitImageToFrame}
-                     >
-                        Fit Image
-                     </Button>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                     <Button
-                        type="button"
-                        variant="outline"
-                        onClick={centerImagePosition}
-                     >
-                        Center Image
-                     </Button>
-                     <Button
-                        type="button"
-                        variant={centerLockEnabled ? "default" : "outline"}
-                        onClick={() => {
-                          setCenterLockEnabled((v) => {
-                            const next = !v;
-                            if (next) centerImagePosition();
-                            return next;
-                          });
-                        }}
-                        className={centerLockEnabled ? "bg-amber-600 hover:bg-amber-700" : ""}
-                     >
-                        {centerLockEnabled ? "Center Locked" : "Lock Center"}
-                     </Button>
-                  </div>
-                </div>
-              )}
-           </CardContent>
-        </Card>
-
-        <Card className="border-l-4 border-l-orange-500 shadow-sm">
-           <CardHeader className="pb-3">
-              <CardTitle className="text-base font-semibold flex items-center gap-2">
-                 <ImageIcon className="h-4 w-4" /> Layout & Background
-              </CardTitle>
-           </CardHeader>
-           <CardContent className="space-y-5">
-              <div className="grid grid-cols-2 gap-4">
-                 <div className="space-y-2">
-                    <Label>Aspect Ratio</Label>
-                    <Select value={videoAspectRatio} onValueChange={setVideoAspectRatio}>
-                       <SelectTrigger className="text-foreground"><SelectValue /></SelectTrigger>
-                       <SelectContent>
-                          <SelectItem value="16:9">16:9 (YouTube)</SelectItem>
-                          <SelectItem value="9:16">9:16 (Shorts/TikTok)</SelectItem>
-                          <SelectItem value="1:1">1:1 (Square)</SelectItem>
-                          <SelectItem value="4:5">4:5 (Insta)</SelectItem>
-                       </SelectContent>
-                    </Select>
-                 </div>
-                 <div className="space-y-2">
-                    <Label>Background</Label>
-                    <div className="flex border rounded-md overflow-hidden">
-                       <button
-                         onClick={() => setBackgroundColor("black")}
-                         className={`flex-1 h-10 ${backgroundColor === "black" ? "bg-black text-white" : "bg-white text-black hover:bg-gray-100"}`}
-                       >
-                          Black
-                       </button>
-                       <button
-                         onClick={() => setBackgroundColor("white")}
-                         className={`flex-1 h-10 border-l ${backgroundColor === "white" ? "bg-gray-200 text-black font-bold" : "bg-white text-black hover:bg-gray-100"}`}
-                       >
-                          White
-                       </button>
-                    </div>
-                 </div>
-              </div>
-
-              <div className={`flex items-center justify-between p-3 rounded-md border ${subscriptionStatus?.is_subscribed ? 'bg-green-500/10 border-green-500/30' : 'bg-secondary border-transparent'}`}>
-                 <div className="flex items-center gap-2">
-                    <input
-                       type="checkbox"
-                       id="wm-check"
-                       checked={removeWatermark}
-                       onChange={(e) => {
-                          if (!subscriptionStatus?.is_subscribed && e.target.checked) {
-                             onUpgrade();
-                             return;
-                             }
-                             setRemoveWatermark(e.target.checked);
-                       }}
-                       className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                    />
-                    <label htmlFor="wm-check" className="text-sm font-medium cursor-pointer">Remove Watermark</label>
-                 </div>
-                 {!subscriptionStatus?.is_subscribed && (
-                    <Button size="sm" variant="link" className="h-auto p-0 text-xs text-blue-500" onClick={onUpgrade}>
-                       Upgrade to Remove
-                    </Button>
-                 )}
-              </div>
-           </CardContent>
-        </Card>
+        <LayoutSettings
+          videoAspectRatio={videoAspectRatio}
+          setVideoAspectRatio={setVideoAspectRatio}
+          backgroundColor={backgroundColor}
+          setBackgroundColor={setBackgroundColor}
+          removeWatermark={removeWatermark}
+          setRemoveWatermark={setRemoveWatermark}
+          subscriptionStatus={subscriptionStatus}
+          onUpgrade={onUpgrade}
+        />
 
         <div className="pt-4">
            <Button
@@ -1512,82 +821,26 @@ const UploadStudio = ({
 
   if (!studioOpen) {
     return (
-      <Card className="dashboard-card min-h-[400px]">
-        <CardHeader>
-          <div className="flex items-center justify-between gap-3">
-            <CardTitle className="flex items-center gap-2">
-               <Youtube className="h-5 w-5 text-red-600" />
-               New Upload
-            </CardTitle>
-            <Button variant="outline" size="sm" onClick={() => onExitUploadTab?.()}>
-              Exit Upload Tab
-            </Button>
-          </div>
-          <CardDescription>Upload audio and image to enter the studio.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-           <div className={`p-4 rounded-lg flex items-center justify-between ${youtubeConnected ? 'bg-green-500/10 border border-green-500/20' : 'bg-red-500/10 border border-red-500/20'}`}>
-              <div className="flex items-center gap-3">
-                 {youtubeConnected ? <CheckCircle2 className="text-green-500 h-5 w-5"/> : <AlertCircle className="text-red-500 h-5 w-5"/>}
-                 <div>
-                    <p className="font-medium text-sm">{youtubeConnected ? `Connected as ${youtubeName}` : "YouTube Disconnected"}</p>
-                    {youtubeConnected && <p className="text-xs opacity-70">{youtubeEmail}</p>}
-                 </div>
-              </div>
-              <Button size="sm" variant="outline" onClick={youtubeConnected ? onDisconnectYouTube : onConnectYouTube}>
-                 {youtubeConnected ? "Disconnect" : "Connect"}
-              </Button>
-           </div>
-
-           <div className="grid md:grid-cols-2 gap-4">
-              <div
-                className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${isAudioDragActive ? 'border-blue-500 bg-blue-500/10' : 'border-slate-700 hover:border-slate-500'}`}
-                onDragOver={(e) => { e.preventDefault(); setIsAudioDragActive(true); }}
-                onDragLeave={() => setIsAudioDragActive(false)}
-                onDrop={(e) => { e.preventDefault(); setIsAudioDragActive(false); handleAudioUpload(e.dataTransfer.files[0]); }}
-              >
-                 <Input type="file" accept={AUDIO_EXTENSIONS.join(',')} className="hidden" id="audio-input" onChange={(e) => handleAudioUpload(e.target.files[0])} />
-                 <label htmlFor="audio-input" className="cursor-pointer flex flex-col items-center gap-3">
-                    <div className="h-12 w-12 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-500">
-                       <Music className="h-6 w-6" />
-                    </div>
-                    <div>
-                       <p className="font-medium">Upload Audio</p>
-                       <p className="text-xs text-slate-500">MP3, WAV, FLAC</p>
-                    </div>
-                    {uploadingAudio && <div className="text-xs text-blue-400">Uploading... {uploadProgress}%</div>}
-                    {audioFile && <div className="text-xs text-green-500 font-medium break-all">{audioFile.name}</div>}
-                 </label>
-              </div>
-
-              <div
-                className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${isImageDragActive ? 'border-purple-500 bg-purple-500/10' : 'border-slate-700 hover:border-slate-500'}`}
-                onDragOver={(e) => { e.preventDefault(); setIsImageDragActive(true); }}
-                onDragLeave={() => setIsImageDragActive(false)}
-                onDrop={(e) => { e.preventDefault(); setIsImageDragActive(false); handleImageUpload(e.dataTransfer.files[0]); }}
-              >
-                 <Input type="file" accept={IMAGE_EXTENSIONS.join(',')} className="hidden" id="image-input" onChange={(e) => handleImageUpload(e.target.files[0])} />
-                 <label htmlFor="image-input" className="cursor-pointer flex flex-col items-center gap-3">
-                    <div className="h-12 w-12 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-500">
-                       <ImageIcon className="h-6 w-6" />
-                    </div>
-                    <div>
-                       <p className="font-medium">Upload Artwork</p>
-                       <p className="text-xs text-slate-500">JPG, PNG, WEBP</p>
-                    </div>
-                    {uploadingImage && <div className="text-xs text-purple-400">Uploading...</div>}
-                    {imageFile && <div className="text-xs text-green-500 font-medium break-all">{imageFile.name}</div>}
-                 </label>
-              </div>
-           </div>
-
-           {audioFile && imageFile && (
-             <Button onClick={() => setStudioOpen(true)} className="w-full py-6 text-lg bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700">
-                Enter Studio <Wand2 className="ml-2 h-5 w-5" />
-             </Button>
-           )}
-        </CardContent>
-      </Card>
+      <UploadDashboard
+        youtubeConnected={youtubeConnected}
+        youtubeName={youtubeName}
+        youtubeEmail={youtubeEmail}
+        onDisconnectYouTube={onDisconnectYouTube}
+        onConnectYouTube={onConnectYouTube}
+        onExitUploadTab={onExitUploadTab}
+        handleAudioUpload={handleAudioUpload}
+        handleImageUpload={handleImageUpload}
+        uploadingAudio={uploadingAudio}
+        uploadProgress={uploadProgress}
+        audioFile={audioFile}
+        uploadingImage={uploadingImage}
+        imageFile={imageFile}
+        isAudioDragActive={isAudioDragActive}
+        setIsAudioDragActive={setIsAudioDragActive}
+        isImageDragActive={isImageDragActive}
+        setIsImageDragActive={setIsImageDragActive}
+        setStudioOpen={setStudioOpen}
+      />
     );
   }
 
@@ -1674,9 +927,18 @@ const UploadStudio = ({
                   </div>
                )}
 
-               {visualizerEnabled && (
-                  <canvas ref={visualizerCanvasRef} className="absolute inset-0 w-full h-full pointer-events-none" />
-               )}
+               <VisualizerCanvas
+                 visualizerRef={visualizerRef}
+                 audioPlayerRef={audioPlayerRef}
+                 visualizerEnabled={visualizerEnabled}
+                 visualizerSettings={visualizerSettings}
+                 studioOpen={studioOpen}
+                 previewDims={previewDims}
+                 audioPreviewUrl={audioPreviewUrl}
+                 imagePreviewUrl={imagePreviewUrl}
+                 centerVisualizerImageUrl={centerVisualizerImageUrl}
+                 spectrumRecordImageUrl={spectrumRecordImageUrl}
+               />
 
                {!subscriptionStatus?.is_subscribed && !removeWatermark && (
                   <div className="absolute top-2 left-0 right-0 text-center pointer-events-none">
@@ -1763,5 +1025,3 @@ const UploadStudio = ({
 };
 
 export default UploadStudio;
-
-
