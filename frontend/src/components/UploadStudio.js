@@ -5,7 +5,23 @@ import {
   Play, Pause, X, SlidersHorizontal, Youtube
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Drawer, DrawerContent, DrawerTrigger, DrawerHeader, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Drawer, DrawerContent, DrawerTrigger, DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter } from "@/components/ui/drawer";
+import AudioVisualizer from "@/lib/AudioVisualizer";
+import {
+  AUDIO_EXTENSIONS,
+  AUDIO_MIME_TYPES,
+  IMAGE_EXTENSIONS,
+  IMAGE_MIME_TYPES,
+  DEFAULT_VISUALIZER_SETTINGS,
+  VISUALIZER_PRESETS
+} from "@/lib/constants";
+
 
 import UploadDashboard from "./upload-studio/UploadDashboard";
 import MetadataEditor from "./upload-studio/MetadataEditor";
@@ -89,40 +105,7 @@ const UploadStudio = ({
 
   // Visualizer
   const [visualizerEnabled, setVisualizerEnabled] = useState(false);
-  const [visualizerSettings, setVisualizerSettings] = useState({
-    bars: 128,
-    intensity: 1,
-    particleIntensity: 1,
-    monstercatParticleSpeed: 1,
-    monstercatParticleSize: 1,
-    monstercatParticleCount: 900,
-    monstercatGlow: 15,
-    monstercatSpacing: 2,
-    rotateSpeed: 0.002,
-    radius: 0.23,
-    maxBarLength: 0.18,
-    trailsEnabled: true,
-    particleEnabled: true,
-    monstercatParticleEnabled: false,
-    mode: "circle",
-    shakeIntensity: 1,
-    multiColorReactive: false,
-    backgroundOpacity: 1,
-    spectrumStyle: "fill",
-    fillCenter: "color",
-    fillCenterColor: "#ffffff",
-    centerImageSpin: true,
-    spectrumColor: "#ffffff",
-    particleColor: "#8cc8ff",
-    spectrumBorderEnabled: true,
-    spectrumBorderWidth: 5,
-    spectrumBorderColor: "#ffffff",
-    monstercatYOffset: 20,
-    lowSensitivity: 1,
-    midSensitivity: 1,
-    highSensitivity: 1,
-    monstercatSmoothing: 0.35,
-  });
+  const [visualizerSettings, setVisualizerSettings] = useState(DEFAULT_VISUALIZER_SETTINGS);
   const [spectrumRecordImageUrl, setSpectrumRecordImageUrl] = useState("");
   const [spectrumRecordImageName, setSpectrumRecordImageName] = useState("");
   const [centerVisualizerImageUrl, setCenterVisualizerImageUrl] = useState("");
@@ -518,51 +501,21 @@ const UploadStudio = ({
       if (preset === "ncs-clean") {
         return {
           ...s,
-          mode: "circle",
-          bars: 96,
-          intensity: 0.82,
-          particleIntensity: 0.3,
-          shakeIntensity: 0.08,
-          rotateSpeed: 0.0018,
-          radius: 0.23,
-          maxBarLength: 0.16,
-          multiColorReactive: false,
-          spectrumStyle: "fill",
+          ...VISUALIZER_PRESETS["ncs-clean"],
           spectrumBorderEnabled: s.fillCenter !== "transparent",
-          spectrumBorderColor: "#ffffff",
         };
       }
       if (preset === "ncs-aggressive") {
         return {
           ...s,
-          mode: "circle",
-          bars: 124,
-          intensity: 1.12,
-          particleIntensity: 0.85,
-          shakeIntensity: 0.45,
-          rotateSpeed: 0.0026,
-          radius: 0.235,
-          maxBarLength: 0.19,
-          multiColorReactive: true,
-          spectrumStyle: "fill",
+          ...VISUALIZER_PRESETS["ncs-aggressive"],
           spectrumBorderEnabled: s.fillCenter !== "transparent",
         };
       }
       if (preset === "monstercat-tight") {
         return {
           ...s,
-          mode: "monstercat",
-          bars: 128,
-          intensity: 0.9,
-          multiColorReactive: false,
-          monstercatSpacing: 1,
-          monstercatYOffset: 20,
-          monstercatGlow: 16,
-          monstercatSmoothing: 0.42,
-          monstercatParticleEnabled: true,
-          monstercatParticleSpeed: 1,
-          monstercatParticleSize: 1.1,
-          monstercatParticleCount: 700,
+          ...VISUALIZER_PRESETS["monstercat-tight"],
         };
       }
       return s;
