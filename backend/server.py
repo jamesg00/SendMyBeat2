@@ -27,6 +27,8 @@ import shutil
 import stripe
 import requests
 import re
+import subprocess
+from urllib.parse import urlencode
 from itsdangerous import URLSafeSerializer, BadSignature
 from models_spotlight import (
     ProducerProfile,
@@ -799,8 +801,6 @@ async def get_youtube_auth_url(current_user: dict = Depends(get_current_user)):
         )
     
     # Create OAuth URL with YouTube upload and readonly scopes
-    from urllib.parse import urlencode
-    
     params = {
         'client_id': GOOGLE_CLIENT_ID,
         'redirect_uri': f"{os.environ.get('FRONTEND_URL', 'https://tagbeats.preview.emergentagent.com')}/youtube-callback",
@@ -818,8 +818,6 @@ async def get_youtube_auth_url(current_user: dict = Depends(get_current_user)):
 async def connect_youtube(code: str = Form(...), current_user: dict = Depends(get_current_user)):
     """Exchange authorization code for tokens and store them"""
     try:
-        import requests
-        
         # Exchange code for tokens manually to avoid scope validation issues
         token_url = "https://oauth2.googleapis.com/token"
         data = {
@@ -837,7 +835,6 @@ async def connect_youtube(code: str = Form(...), current_user: dict = Depends(ge
         tokens = token_response.json()
         
         # Create credentials from tokens
-        from google.oauth2.credentials import Credentials
         credentials = Credentials(
             token=tokens['access_token'],
             refresh_token=tokens.get('refresh_token'),
@@ -847,12 +844,10 @@ async def connect_youtube(code: str = Form(...), current_user: dict = Depends(ge
         )
         
         # Get user email from Google
-        from googleapiclient.discovery import build as google_build
-        oauth2_service = google_build('oauth2', 'v2', credentials=credentials)
+        oauth2_service = build('oauth2', 'v2', credentials=credentials)
         user_info = oauth2_service.userinfo().get().execute()
         
         # Calculate token expiry (default 1 hour from now)
-        from datetime import timedelta
         token_expiry = datetime.now(timezone.utc) + timedelta(hours=1)
         
         # Store credentials in database with profile picture
@@ -2950,15 +2945,11 @@ async def upload_to_youtube(
             raise HTTPException(status_code=404, detail="Audio and image files are required")
         
         # Create video from audio + image using ffmpeg
-        import subprocess
         video_filename = f"{uuid.uuid4()}.mp4"
         video_path = UPLOADS_DIR / video_filename
         
         # Optimized ffmpeg command for large files
         # Try to find ffmpeg, install if not found
-        import shutil
-        import subprocess
-        
         ffmpeg_path = shutil.which('ffmpeg')
         
         if not ffmpeg_path:
