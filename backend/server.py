@@ -1800,6 +1800,8 @@ Optional candidate inspirations from YouTube/custom inputs:
         await consume_credit(current_user['id'])
         return tag_gen
         
+    except HTTPException:
+        raise
     except Exception as e:
         logging.error(f"Error generating tags: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to generate tags: {str(e)}")
