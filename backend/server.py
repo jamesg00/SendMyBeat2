@@ -645,6 +645,22 @@ async def check_and_use_upload_credit(user_id: str) -> bool:
     
     return True
 
+async def ensure_has_credit(user_id: str, feature_name: str = "generations") -> None:
+    """
+    Check if user has credits. If not, raise HTTPException(402).
+    Does not consume credit here; consumer must call consume_credit() later.
+    """
+    has_credit = await check_and_use_credit(user_id, consume=False)
+    if not has_credit:
+        status = await get_user_subscription_status(user_id)
+        raise HTTPException(
+            status_code=402,
+            detail={
+                "message": f"Daily limit reached. Upgrade to Pro for unlimited {feature_name}!",
+                "resets_at": status.get('resets_at')
+            }
+        )
+
 
 # ============ Auth Helper Functions ============
 def create_access_token(user_id: str, username: str) -> str:
@@ -904,16 +920,7 @@ async def get_youtube_analytics(current_user: dict = Depends(get_current_user)):
     """Analyze YouTube channel performance and provide AI insights"""
     try:
         # Check if user has credits
-        has_credit = await check_and_use_credit(current_user['id'], consume=False)
-        if not has_credit:
-            status = await get_user_subscription_status(current_user['id'])
-            raise HTTPException(
-                status_code=402,
-                detail={
-                    "message": "Daily limit reached. Upgrade to Pro for unlimited analytics!",
-                    "resets_at": status.get('resets_at')
-                }
-            )
+        await ensure_has_credit(current_user['id'], "analytics")
         
         # Check if YouTube is connected
         connection = await db.youtube_connections.find_one({"user_id": current_user['id']})
@@ -1576,16 +1583,7 @@ async def create_customer_portal_session(current_user: dict = Depends(get_curren
 async def generate_tags(request: TagGenerationRequest, current_user: dict = Depends(get_current_user)):
     try:
         # Check if user has credits
-        has_credit = await check_and_use_credit(current_user['id'], consume=False)
-        if not has_credit:
-            status = await get_user_subscription_status(current_user['id'])
-            raise HTTPException(
-                status_code=402,
-                detail={
-                    "message": "Daily limit reached. Upgrade to Pro for unlimited generations!",
-                    "resets_at": status.get('resets_at')
-                }
-            )
+        await ensure_has_credit(current_user['id'], "generations")
         
         # Extract artist name from query (e.g., "drake type beat" -> "drake")
         query_lower = request.query.lower()
@@ -1854,16 +1852,7 @@ async def join_tags_ai(request: TagJoinRequest, current_user: dict = Depends(get
     if not request.candidate_tags:
         raise HTTPException(status_code=400, detail="Candidate tags are required.")
 
-    has_credit = await check_and_use_credit(current_user['id'], consume=False)
-    if not has_credit:
-        status = await get_user_subscription_status(current_user['id'])
-        raise HTTPException(
-            status_code=402,
-            detail={
-                "message": "Daily limit reached. Upgrade to Pro for unlimited generations!",
-                "resets_at": status.get('resets_at')
-            }
-        )
+    await ensure_has_credit(current_user['id'], "generations")
 
     max_tags = max(10, min(120, request.max_tags or 120))
     llm_provider = request.llm_provider.lower() if request.llm_provider else None
@@ -2039,16 +2028,7 @@ async def delete_description(description_id: str, current_user: dict = Depends(g
 async def refine_description(request: RefineDescriptionRequest, current_user: dict = Depends(get_current_user)):
     try:
         # Check if user has credits
-        has_credit = await check_and_use_credit(current_user['id'], consume=False)
-        if not has_credit:
-            status = await get_user_subscription_status(current_user['id'])
-            raise HTTPException(
-                status_code=402,
-                detail={
-                    "message": "Daily limit reached. Upgrade to Pro for unlimited generations!",
-                    "resets_at": status.get('resets_at')
-                }
-            )
+        await ensure_has_credit(current_user['id'], "generations")
         prompt = f"""Refine and improve this YouTube beat description:
 
 {request.description}
@@ -2071,16 +2051,7 @@ Make it more engaging, professional, and optimized for YouTube. Keep the same in
 async def generate_description(request: GenerateDescriptionRequest, current_user: dict = Depends(get_current_user)):
     try:
         # Check if user has credits
-        has_credit = await check_and_use_credit(current_user['id'], consume=False)
-        if not has_credit:
-            status = await get_user_subscription_status(current_user['id'])
-            raise HTTPException(
-                status_code=402,
-                detail={
-                    "message": "Daily limit reached. Upgrade to Pro for unlimited generations!",
-                    "resets_at": status.get('resets_at')
-                }
-            )
+        await ensure_has_credit(current_user['id'], "generations")
         
         info_parts = []
         if request.key:
@@ -2599,16 +2570,7 @@ async def review_verification_application(
 async def fix_beat(request: BeatFixRequest, current_user: dict = Depends(get_current_user)):
     """Apply AI fixes to title/description/tags only when analysis indicates issues."""
     try:
-        has_credit = await check_and_use_credit(current_user['id'], consume=False)
-        if not has_credit:
-            status = await get_user_subscription_status(current_user['id'])
-            raise HTTPException(
-                status_code=402,
-                detail={
-                    "message": "Daily limit reached. Upgrade to Pro for unlimited fixes!",
-                    "resets_at": status.get('resets_at')
-                }
-            )
+        await ensure_has_credit(current_user['id'], "fixes")
 
         analysis = request.analysis
         issues_text = " ".join(analysis.weaknesses + analysis.suggestions).lower()
@@ -2732,16 +2694,7 @@ async def check_thumbnail(
 ):
     """Analyze a thumbnail image for click potential and clarity"""
     try:
-        has_credit = await check_and_use_credit(current_user['id'], consume=False)
-        if not has_credit:
-            status = await get_user_subscription_status(current_user['id'])
-            raise HTTPException(
-                status_code=402,
-                detail={
-                    "message": "Daily limit reached. Upgrade to Pro for unlimited thumbnail checks!",
-                    "resets_at": status.get('resets_at')
-                }
-            )
+        await ensure_has_credit(current_user['id'], "thumbnail checks")
 
         if not title.strip() or not tags.strip() or not description.strip():
             raise HTTPException(
