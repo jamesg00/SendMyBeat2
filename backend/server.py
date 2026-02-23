@@ -2835,6 +2835,262 @@ Return STRICT JSON with this exact schema:
 
 
 # ============ YouTube Upload Routes ============
+
+async def check_credits(user_id: str, remove_watermark: bool) -> bool:
+    """
+    Checks subscription status and upload credits.
+    Returns:
+        is_subscribed (bool): Whether the user is subscribed (Pro).
+    """
+    # Check if user wants to remove watermark but is not subscribed
+    user_sub_status = await get_user_subscription_status(user_id)
+    is_subscribed = user_sub_status.get('is_subscribed', False)
+
+    if remove_watermark and not is_subscribed:
+        raise HTTPException(
+            status_code=402,
+            detail={
+                "message": "Watermark removal is a Pro feature. Upgrade to Pro to remove watermarks!",
+                "feature": "remove_watermark"
+            }
+        )
+
+    # Check if user has upload credits
+    has_credit = await check_and_use_upload_credit(user_id)
+    if not has_credit:
+        status = await get_user_subscription_status(user_id)
+        raise HTTPException(
+            status_code=402,
+            detail={
+                "message": "Daily upload limit reached. Upgrade to Pro for unlimited uploads!",
+                "resets_at": status.get('resets_at')
+            }
+        )
+    return is_subscribed
+
+
+async def prepare_video(
+    audio_file: dict,
+    image_file: dict,
+    video_path: Path,
+    aspect_ratio: str,
+    image_scale: float,
+    image_scale_x: float | None,
+    image_scale_y: float | None,
+    image_pos_x: float,
+    image_pos_y: float,
+    image_rotation: float,
+    background_color: str,
+    is_subscribed: bool,
+    remove_watermark: bool,
+    ffmpeg_path: str | None = None
+):
+    """
+    Generates the video using FFmpeg.
+    """
+    if not ffmpeg_path:
+        import shutil
+        ffmpeg_path = shutil.which('ffmpeg')
+
+    if not ffmpeg_path:
+        # Try to install ffmpeg if not found
+        logging.warning("FFmpeg not found, attempting to install...")
+        try:
+            import subprocess
+            subprocess.run(
+                ['apt-get', 'update'],
+                capture_output=True,
+                timeout=120
+            )
+            subprocess.run(
+                ['apt-get', 'install', '-y', 'ffmpeg'],
+                capture_output=True,
+                timeout=300
+            )
+            ffmpeg_path = shutil.which('ffmpeg')
+            if ffmpeg_path:
+                logging.info(f"FFmpeg successfully installed at {ffmpeg_path}")
+            else:
+                raise Exception("FFmpeg installation failed")
+        except Exception as install_error:
+            logging.error(f"Failed to install FFmpeg: {str(install_error)}")
+            raise HTTPException(
+                status_code=500,
+                detail="FFmpeg not available. Please contact support or install FFmpeg on the server."
+            )
+
+    logging.info(f"Using FFmpeg at: {ffmpeg_path}")
+
+    aspect_ratio = (aspect_ratio or "16:9").strip()
+    aspect_map = {
+        "16:9": (1280, 720),
+        "1:1": (1080, 1080),
+        "9:16": (1080, 1920),
+        "4:5": (1080, 1350),
+    }
+    if aspect_ratio not in aspect_map:
+        raise HTTPException(status_code=400, detail="Invalid aspect_ratio. Use 16:9, 1:1, 9:16, or 4:5.")
+    target_w, target_h = aspect_map[aspect_ratio]
+
+    scale_x = image_scale_x if image_scale_x is not None else image_scale
+    scale_y = image_scale_y if image_scale_y is not None else image_scale
+
+    if not 0.5 <= scale_x <= 2.0:
+        raise HTTPException(status_code=400, detail="image_scale_x must be between 0.5 and 2.0.")
+    if not 0.5 <= scale_y <= 2.0:
+        raise HTTPException(status_code=400, detail="image_scale_y must be between 0.5 and 2.0.")
+    if not -1.0 <= image_pos_x <= 1.0:
+        raise HTTPException(status_code=400, detail="image_pos_x must be between -1 and 1.")
+    if not -1.0 <= image_pos_y <= 1.0:
+        raise HTTPException(status_code=400, detail="image_pos_y must be between -1 and 1.")
+    if not -180.0 <= image_rotation <= 180.0:
+        raise HTTPException(status_code=400, detail="image_rotation must be between -180 and 180 degrees.")
+
+    background_color = (background_color or "black").strip().lower()
+    if background_color not in ("black", "white"):
+        raise HTTPException(status_code=400, detail="background_color must be black or white.")
+
+    # Always fit inside the target frame to avoid pad errors
+    scale_x = min(scale_x, 1.0)
+    scale_y = min(scale_y, 1.0)
+    fit_expr = f"min({target_w}/iw\\,{target_h}/ih)"
+
+    # Build video filter - add watermark for non-pro users OR pro users who didn't uncheck it
+    rotation_filter = ""
+    if abs(image_rotation) > 0.01:
+        rotation_filter = (
+            f"rotate={image_rotation}*PI/180:c={background_color}:ow=rotw(iw):oh=roth(ih),"
+        )
+
+    video_filter = (
+        f"scale=iw*{fit_expr}*{scale_x}:ih*{fit_expr}*{scale_y},"
+        f"{rotation_filter}"
+        f"pad={target_w}:{target_h}:(ow-iw)/2+(ow-iw)/2*{image_pos_x}:(oh-ih)/2+(oh-ih)/2*{image_pos_y}:{background_color}"
+    )
+
+    should_add_watermark = not is_subscribed or not remove_watermark
+
+    if should_add_watermark:
+        watermark_text = 'Upload your beats for free: https://sendmybeat.com'
+        watermark_text_escaped = watermark_text.replace(':', r'\:').replace('/', r'\/')
+        video_filter += f",drawtext=text='{watermark_text_escaped}':fontcolor=white:fontsize=20:x=20:y=20:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:box=1:boxcolor=black@0.6:boxborderw=8"
+        logging.info(f"Adding watermark at top-left with background - User type: {'free' if not is_subscribed else 'pro (chose to keep it)'}")
+    else:
+        logging.info("Pro user - watermark removed per user request")
+
+    audio_ext = Path(audio_file['file_path']).suffix.lower()
+    copy_audio = audio_ext in (".mp3", ".m4a", ".aac")
+
+    audio_args = ['-c:a', 'copy'] if copy_audio else ['-c:a', 'aac', '-b:a', '320k', '-ar', '48000']
+
+    ffmpeg_cmd = [
+        ffmpeg_path,
+        '-loop', '1',
+        '-framerate', '0.5',  # 0.5fps for faster processing
+        '-i', image_file['file_path'],
+        '-i', audio_file['file_path'],
+        '-c:v', 'libx264',
+        '-preset', 'ultrafast',
+        '-crf', '28',
+        '-tune', 'stillimage',
+        *audio_args,
+        '-pix_fmt', 'yuv420p',
+        '-vf', video_filter,
+        '-shortest',
+        '-movflags', '+faststart',
+        '-threads', '0',
+        '-y',
+        str(video_path)
+    ]
+
+    logging.info(f"Creating video with ffmpeg: {' '.join(ffmpeg_cmd)}")
+
+    try:
+        import subprocess
+        # Run ffmpeg with asyncio.to_thread to avoid blocking
+        result = await asyncio.to_thread(
+            subprocess.run,
+            ffmpeg_cmd,
+            capture_output=True,
+            text=True,
+            timeout=600
+        )
+
+        if result.returncode != 0:
+            logging.error(f"FFmpeg error: {result.stderr}")
+            raise Exception(f"Video creation failed: {result.stderr[:500]}")
+
+        logging.info(f"Video created successfully at {video_path}")
+
+    except Exception as e:
+        if "TimeoutExpired" in str(type(e)):
+             logging.error("FFmpeg timeout - file too large")
+             raise Exception("Video creation timed out. File may be too large (>150MB).")
+        logging.error(f"FFmpeg execution error: {str(e)}")
+        raise e
+
+
+async def upload_video(
+    youtube_client,
+    video_path: Path,
+    title: str,
+    description: str,
+    tags: list,
+    privacy_status: str
+) -> dict:
+    """
+    Uploads the video to YouTube.
+    """
+    snippet = {
+        'title': title[:100],
+        'description': description[:5000],
+        'categoryId': '10'
+    }
+
+    if tags and len(tags) > 0:
+        snippet['tags'] = tags
+
+    body = {
+        'snippet': snippet,
+        'status': {
+            'privacyStatus': privacy_status,
+            'selfDeclaredMadeForKids': False
+        }
+    }
+
+    logging.info(f"Uploading to YouTube with title: {title}, tags: {len(tags)}, privacy: {privacy_status}")
+
+    file_size = video_path.stat().st_size
+    chunk_size = 10*1024*1024 if file_size > 50*1024*1024 else 5*1024*1024
+
+    logging.info(f"File size: {file_size / (1024*1024):.1f}MB, using {chunk_size/(1024*1024):.0f}MB chunks")
+    media = MediaFileUpload(str(video_path), chunksize=chunk_size, resumable=True)
+
+    logging.info(f"Starting YouTube upload with chunked transfer...")
+    request = youtube_client.videos().insert(
+        part='snippet,status',
+        body=body,
+        media_body=media
+    )
+
+    response = None
+    retries = 0
+    max_retries = 5
+
+    while response is None and retries < max_retries:
+        try:
+            status, response = await asyncio.to_thread(request.next_chunk)
+            if status:
+                progress = int(status.progress() * 100)
+                logging.info(f"YouTube upload progress: {progress}%")
+        except Exception as e:
+            logging.error(f"Upload error (retry {retries + 1}/{max_retries}): {str(e)}")
+            retries += 1
+            if retries >= max_retries:
+                raise Exception(f"YouTube upload failed after {max_retries} retries: {str(e)}")
+
+    return response
+
 @api_router.post("/youtube/upload")
 async def upload_to_youtube(
     title: str = Form(...),
@@ -2859,32 +3115,10 @@ async def upload_to_youtube(
     try:
         logging.info(f"Starting YouTube upload for user {current_user['id']}")
         
-        # Check if user wants to remove watermark but is not subscribed
-        user_sub_status = await get_user_subscription_status(current_user['id'])
-        is_subscribed = user_sub_status.get('is_subscribed', False)
+        # 1. Check credits and subscription
+        is_subscribed = await check_credits(current_user['id'], remove_watermark)
         
-        if remove_watermark and not is_subscribed:
-            raise HTTPException(
-                status_code=402,
-                detail={
-                    "message": "Watermark removal is a Pro feature. Upgrade to Pro to remove watermarks!",
-                    "feature": "remove_watermark"
-                }
-            )
-        
-        # Check if user has upload credits
-        has_credit = await check_and_use_upload_credit(current_user['id'])
-        if not has_credit:
-            status = await get_user_subscription_status(current_user['id'])
-            raise HTTPException(
-                status_code=402,
-                detail={
-                    "message": "Daily upload limit reached. Upgrade to Pro for unlimited uploads!",
-                    "resets_at": status.get('resets_at')
-                }
-            )
-        
-        # Get and refresh YouTube credentials if needed
+        # 2. Get and refresh YouTube credentials
         try:
             credentials = await refresh_youtube_token(current_user['id'])
             logging.info("YouTube credentials refreshed successfully")
@@ -2892,7 +3126,7 @@ async def upload_to_youtube(
             logging.error(f"Error refreshing token: {str(e)}")
             raise
         
-        # Get description
+        # 3. Get description
         desc_doc = await db.descriptions.find_one({"id": description_id, "user_id": current_user['id']})
         if not desc_doc:
             raise HTTPException(status_code=404, detail="Description not found")
@@ -2907,7 +3141,7 @@ async def upload_to_youtube(
             else:
                 description_text = promo_line
         
-        # Get tags if provided
+        # 4. Get tags
         tags = []
         if tags_id:
             tags_doc = await db.tag_generations.find_one({"id": tags_id, "user_id": current_user['id']})
@@ -2937,220 +3171,43 @@ async def upload_to_youtube(
                 
                 logging.info(f"Using {len(tags)} tags (total {total_chars} chars) out of {len(raw_tags)} generated")
         
-        # Get uploaded files
+        # 5. Get uploaded files
         audio_file = await db.uploads.find_one({"id": audio_file_id, "user_id": current_user['id']})
         image_file = await db.uploads.find_one({"id": image_file_id, "user_id": current_user['id']})
         
         if not audio_file or not image_file:
             raise HTTPException(status_code=404, detail="Audio and image files are required")
         
-        # Create video from audio + image using ffmpeg
-        import subprocess
+        # 6. Prepare video
         video_filename = f"{uuid.uuid4()}.mp4"
         video_path = UPLOADS_DIR / video_filename
         
-        # Optimized ffmpeg command for large files
-        # Try to find ffmpeg, install if not found
-        import shutil
-        import subprocess
-        
-        ffmpeg_path = shutil.which('ffmpeg')
-        
-        if not ffmpeg_path:
-            # Try to install ffmpeg if not found
-            logging.warning("FFmpeg not found, attempting to install...")
-            try:
-                install_result = subprocess.run(
-                    ['apt-get', 'update'],
-                    capture_output=True,
-                    timeout=120
-                )
-                install_result = subprocess.run(
-                    ['apt-get', 'install', '-y', 'ffmpeg'],
-                    capture_output=True,
-                    timeout=300
-                )
-                ffmpeg_path = shutil.which('ffmpeg')
-                if ffmpeg_path:
-                    logging.info(f"FFmpeg successfully installed at {ffmpeg_path}")
-                else:
-                    raise Exception("FFmpeg installation failed")
-            except Exception as install_error:
-                logging.error(f"Failed to install FFmpeg: {str(install_error)}")
-                raise HTTPException(
-                    status_code=500,
-                    detail="FFmpeg not available. Please contact support or install FFmpeg on the server."
-                )
-        
-        logging.info(f"Using FFmpeg at: {ffmpeg_path}")
-        
-        aspect_ratio = (aspect_ratio or "16:9").strip()
-        aspect_map = {
-            "16:9": (1280, 720),
-            "1:1": (1080, 1080),
-            "9:16": (1080, 1920),
-            "4:5": (1080, 1350),
-        }
-        if aspect_ratio not in aspect_map:
-            raise HTTPException(status_code=400, detail="Invalid aspect_ratio. Use 16:9, 1:1, 9:16, or 4:5.")
-        target_w, target_h = aspect_map[aspect_ratio]
-
-        scale_x = image_scale_x if image_scale_x is not None else image_scale
-        scale_y = image_scale_y if image_scale_y is not None else image_scale
-
-        if not 0.5 <= scale_x <= 2.0:
-            raise HTTPException(status_code=400, detail="image_scale_x must be between 0.5 and 2.0.")
-        if not 0.5 <= scale_y <= 2.0:
-            raise HTTPException(status_code=400, detail="image_scale_y must be between 0.5 and 2.0.")
-        if not -1.0 <= image_pos_x <= 1.0:
-            raise HTTPException(status_code=400, detail="image_pos_x must be between -1 and 1.")
-        if not -1.0 <= image_pos_y <= 1.0:
-            raise HTTPException(status_code=400, detail="image_pos_y must be between -1 and 1.")
-        if not -180.0 <= image_rotation <= 180.0:
-            raise HTTPException(status_code=400, detail="image_rotation must be between -180 and 180 degrees.")
-
-        background_color = (background_color or "black").strip().lower()
-        if background_color not in ("black", "white"):
-            raise HTTPException(status_code=400, detail="background_color must be black or white.")
-
-        # Always fit inside the target frame to avoid pad errors
-        scale_x = min(scale_x, 1.0)
-        scale_y = min(scale_y, 1.0)
-        fit_expr = f"min({target_w}/iw\\,{target_h}/ih)"
-
-        # Build video filter - add watermark for non-pro users OR pro users who didn't uncheck it
-        rotation_filter = ""
-        if abs(image_rotation) > 0.01:
-            rotation_filter = (
-                f"rotate={image_rotation}*PI/180:c={background_color}:ow=rotw(iw):oh=roth(ih),"
-            )
-
-        video_filter = (
-            f"scale=iw*{fit_expr}*{scale_x}:ih*{fit_expr}*{scale_y},"
-            f"{rotation_filter}"
-            f"pad={target_w}:{target_h}:(ow-iw)/2+(ow-iw)/2*{image_pos_x}:(oh-ih)/2+(oh-ih)/2*{image_pos_y}:{background_color}"
+        await prepare_video(
+            audio_file=audio_file,
+            image_file=image_file,
+            video_path=video_path,
+            aspect_ratio=aspect_ratio,
+            image_scale=image_scale,
+            image_scale_x=image_scale_x,
+            image_scale_y=image_scale_y,
+            image_pos_x=image_pos_x,
+            image_pos_y=image_pos_y,
+            image_rotation=image_rotation,
+            background_color=background_color,
+            is_subscribed=is_subscribed,
+            remove_watermark=remove_watermark
         )
         
-        # Add watermark logic:
-        # - Free users: ALWAYS get watermark (remove_watermark is ignored/blocked at API level)
-        # - Pro users: Get watermark UNLESS they checked "remove_watermark"
-        should_add_watermark = not is_subscribed or not remove_watermark
-        
-        if should_add_watermark:
-            # Add text watermark at the top left with black semi-transparent background
-            watermark_text = 'Upload your beats for free: https://sendmybeat.com'
-            # Escape special characters for FFmpeg
-            watermark_text_escaped = watermark_text.replace(':', r'\:').replace('/', r'\/')
-            
-            # Add black background box with some padding for better visibility
-            video_filter += f",drawtext=text='{watermark_text_escaped}':fontcolor=white:fontsize=20:x=20:y=20:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:box=1:boxcolor=black@0.6:boxborderw=8"
-            
-            logging.info(f"Adding watermark at top-left with background - User type: {'free' if not is_subscribed else 'pro (chose to keep it)'}")
-        else:
-            logging.info("Pro user - watermark removed per user request")
-        
-        audio_ext = Path(audio_file['file_path']).suffix.lower()
-        copy_audio = audio_ext in (".mp3", ".m4a", ".aac")
-
-        audio_args = ['-c:a', 'copy'] if copy_audio else ['-c:a', 'aac', '-b:a', '320k', '-ar', '48000']
-
-        ffmpeg_cmd = [
-            ffmpeg_path,
-            '-loop', '1',
-            '-framerate', '0.5',  # 0.5fps for faster processing
-            '-i', image_file['file_path'],
-            '-i', audio_file['file_path'],
-            '-c:v', 'libx264',
-            '-preset', 'ultrafast',
-            '-crf', '28',
-            '-tune', 'stillimage',
-            *audio_args,
-            '-pix_fmt', 'yuv420p',
-            # Maintain aspect ratio with black letterboxing/pillarboxing like YouTube + optional watermark
-            '-vf', video_filter,
-            '-shortest',
-            '-movflags', '+faststart',
-            '-threads', '0',
-            '-y',
-            str(video_path)
-        ]
-        
-        logging.info(f"Creating video with ffmpeg: {' '.join(ffmpeg_cmd)}")
-        
-        try:
-            # Run ffmpeg with timeout for large files (10 minutes)
-            result = subprocess.run(
-                ffmpeg_cmd, 
-                capture_output=True, 
-                text=True, 
-                timeout=600
-            )
-            
-            if result.returncode != 0:
-                logging.error(f"FFmpeg error: {result.stderr}")
-                raise Exception(f"Video creation failed: {result.stderr[:500]}")
-            
-            logging.info(f"Video created successfully at {video_path}")
-            
-        except subprocess.TimeoutExpired:
-            logging.error("FFmpeg timeout - file too large")
-            raise Exception("Video creation timed out. File may be too large (>150MB).")
-        
-        # Upload to YouTube
+        # 7. Upload to YouTube
         youtube = build('youtube', 'v3', credentials=credentials)
-        
-        # Prepare video metadata
-        snippet = {
-            'title': title[:100],  # YouTube title max 100 chars
-            'description': description_text[:5000],  # YouTube description max 5000 chars
-            'categoryId': '10'  # Music category
-        }
-        
-        # Only add tags if we have valid ones
-        if tags and len(tags) > 0:
-            snippet['tags'] = tags
-        
-        body = {
-            'snippet': snippet,
-            'status': {
-                'privacyStatus': privacy_status,
-                'selfDeclaredMadeForKids': False
-            }
-        }
-        
-        logging.info(f"Uploading to YouTube with title: {title}, tags: {len(tags)}, privacy: {privacy_status}")
-        
-        # Use larger chunks for files over 50MB (10MB chunks)
-        # This significantly speeds up large file uploads
-        file_size = video_path.stat().st_size
-        chunk_size = 10*1024*1024 if file_size > 50*1024*1024 else 5*1024*1024
-        
-        logging.info(f"File size: {file_size / (1024*1024):.1f}MB, using {chunk_size/(1024*1024):.0f}MB chunks")
-        media = MediaFileUpload(str(video_path), chunksize=chunk_size, resumable=True)
-        
-        logging.info(f"Starting YouTube upload with chunked transfer...")
-        request = youtube.videos().insert(
-            part='snippet,status',
-            body=body,
-            media_body=media
+        response = await upload_video(
+            youtube_client=youtube,
+            video_path=video_path,
+            title=title,
+            description=description_text,
+            tags=tags,
+            privacy_status=privacy_status
         )
-        
-        # Upload in chunks with progress tracking and retries
-        response = None
-        retries = 0
-        max_retries = 5  # More retries for large files
-        
-        while response is None and retries < max_retries:
-            try:
-                status, response = request.next_chunk()
-                if status:
-                    progress = int(status.progress() * 100)
-                    logging.info(f"YouTube upload progress: {progress}%")
-            except Exception as e:
-                logging.error(f"Upload error (retry {retries + 1}/{max_retries}): {str(e)}")
-                retries += 1
-                if retries >= max_retries:
-                    raise Exception(f"YouTube upload failed after {max_retries} retries: {str(e)}")
         
         logging.info(f"Video uploaded successfully! Video ID: {response['id']}")
         
@@ -3161,13 +3218,12 @@ async def upload_to_youtube(
         except:
             pass
         
-        # Auto check-in for Grow in 120 challenge
+        # 8. Auto check-in for Grow in 120 challenge
         try:
             today = datetime.now(timezone.utc).date().isoformat()
             growth = await db.growth_streaks.find_one({"user_id": current_user['id']})
             
             if growth and growth.get('last_checkin_date') != today:
-                # Auto checkin on upload
                 last_checkin = growth.get('last_checkin_date')
                 current_streak = growth.get('current_streak', 0)
                 
@@ -3204,7 +3260,6 @@ async def upload_to_youtube(
                 logging.info(f"Auto check-in complete for user {current_user['id']}")
         except Exception as e:
             logging.error(f"Auto checkin failed: {str(e)}")
-            # Don't fail the upload if checkin fails
         
         return {
             "success": True,
