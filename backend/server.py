@@ -2499,10 +2499,14 @@ async def upload_producer_avatar(
     if file.content_type not in allowed_types:
         raise HTTPException(status_code=400, detail="Invalid image type. Use JPG, PNG, or WEBP.")
 
-    image_bytes = await file.read()
+    # Read up to 2MB + 1 byte to check size limit efficiently
+    MAX_SIZE = 2 * 1024 * 1024
+    image_bytes = await file.read(MAX_SIZE + 1)
+
     if not image_bytes:
         raise HTTPException(status_code=400, detail="Empty image file.")
-    if len(image_bytes) > 2 * 1024 * 1024:
+
+    if len(image_bytes) > MAX_SIZE:
         raise HTTPException(status_code=400, detail="Image too large. Max size is 2MB.")
 
     avatar_data_url = f"data:{file.content_type};base64,{base64.b64encode(image_bytes).decode('utf-8')}"
