@@ -2666,12 +2666,12 @@ Return JSON schema:
 }}
 """
 
-        response = await llm_chat(
-            system_message="You refine beat uploads for YouTube. Be concise, practical, and keep the creator's style.",
-            user_message=fix_prompt,
-        )
-
         try:
+            response = await llm_chat(
+                system_message="You refine beat uploads for YouTube. Be concise, practical, and keep the creator's style.",
+                user_message=fix_prompt,
+            )
+
             response_text = response.strip()
             if '```json' in response_text:
                 start = response_text.find('```json') + 7
@@ -2704,7 +2704,7 @@ Return JSON schema:
             await consume_credit(current_user['id'])
             return result
         except Exception as e:
-            logging.error(f"Failed to parse beat fixes: {str(e)}")
+            logging.error(f"Failed to apply beat fixes: {str(e)}")
             await consume_credit(current_user['id'])
             return BeatFixResponse(
                 title=request.title,
@@ -2713,6 +2713,8 @@ Return JSON schema:
                 applied_fixes={"title": False, "tags": False, "description": False},
                 notes="Failed to apply fixes. Please try again."
             )
+    except HTTPException:
+        raise
     except Exception as e:
         logging.error(f"Beat fix error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
