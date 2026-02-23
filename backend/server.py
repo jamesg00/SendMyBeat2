@@ -17,8 +17,6 @@ import jwt
 from passlib.hash import bcrypt
 from openai import AsyncOpenAI
 from authlib.integrations.starlette_client import OAuth, OAuthError
-from starlette.requests import Request
-from starlette.responses import RedirectResponse
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request as GoogleRequest
 from googleapiclient.discovery import build
