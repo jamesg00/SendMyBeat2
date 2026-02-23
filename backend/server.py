@@ -3215,6 +3215,8 @@ async def upload_to_youtube(
             "tags_count": len(tags)
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         logging.error(f"YouTube upload error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to prepare YouTube upload: {str(e)}")
