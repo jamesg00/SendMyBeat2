@@ -1,19 +1,47 @@
+
+const IS_MOBILE = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(max-width: 768px)").matches;
+
+// Magic Number Constants for better maintainability and readability
+const FREQ_BANDS = {
+  LOW_MID_SPLIT: 220,
+  MID_HIGH_SPLIT: 3200,
+};
+
+const DEFAULT_TRANSITION_DURATION = 0.22;
+
+const REACTIVE_COLOR_PALETTE = [
+  [68, 120, 255],  // blue
+  [0, 210, 255],   // cyan
+  [50, 236, 150],  // mint
+  [165, 255, 60],  // lime
+  [255, 212, 64],  // yellow
+  [255, 126, 52],  // orange
+  [255, 62, 88],   // pink-red
+];
+
 const DEFAULT_OPTIONS = {
+  // FFT & Audio Analysis Settings
   fftSize: 16384,
   minHz: 20,
   maxHz: 18000,
   bars: 128,
   noiseFloor: 0.06,
+
+  // Curve / Smoothing / Gain
   curvePower: 0.6,
   attack: 0.72,
   release: 0.16,
   gain: 0.75, // Reduced from 1.0 to prevent clipping/bass boost
+
+  // Visual Layout (Circle Mode)
   radius: 0.23,
   maxBarLength: 0.18,
   rotateSpeed: 0.002,
   lineWidth: 2,
   glowWidth: 5,
   backgroundFade: 0.16,
+
+  // Particles (Circle Mode)
   baseSpawnRate: 10,
   maxSpawnRate: 120,
   particleLifeMin: 0.8,
@@ -26,24 +54,11 @@ const DEFAULT_OPTIONS = {
   particleEnabled: true,
   particleIntensity: 1,
   trailsEnabled: true,
+  particleColor: "140, 200, 255",
+
+  // Spectrum Appearance
   spectrumColor: "90, 160, 255",
   glowColor: "125, 185, 255",
-  particleColor: "140, 200, 255",
-  mode: "circle", // "circle" or "monstercat"
-  monstercatBarWidth: 10,
-  monstercatSpacing: 2,
-  monstercatYOffset: 20,
-  monstercatParticleEnabled: false,
-  monstercatParticleSpeed: 1,
-  monstercatParticleSize: 1,
-  monstercatParticleCount: 900,
-  monstercatGlow: 15,
-  lowSensitivity: 1,
-  midSensitivity: 1,
-  highSensitivity: 1,
-  monstercatSmoothing: 0.35,
-  shakeIntensity: 0.6, // Reduced from 1.0
-  multiColorReactive: false,
   spectrumStyle: "fill",
   fillCenter: "color",
   fillCenterColor: "255, 255, 255",
@@ -53,7 +68,31 @@ const DEFAULT_OPTIONS = {
   spectrumBorderColor: "255, 255, 255",
   spectrumBorderEnabled: true,
   spectrumRecordImageUrl: "",
-  // FFT-to-reactivity pipeline settings (Musicvid-like behavior, custom implementation)
+
+  // Mode Selection
+  mode: "circle", // "circle" or "monstercat"
+
+  // Monstercat Mode Settings
+  monstercatBarWidth: 10,
+  monstercatSpacing: 2,
+  monstercatYOffset: 20,
+  monstercatParticleEnabled: false,
+  monstercatParticleSpeed: 1,
+  monstercatParticleSize: 1,
+  monstercatParticleCount: 900,
+  monstercatGlow: 15,
+  monstercatSmoothing: 0.35,
+
+  // Sensitivity Tuning
+  lowSensitivity: 1,
+  midSensitivity: 1,
+  highSensitivity: 1,
+
+  // Effects
+  shakeIntensity: 0.6, // Reduced from 1.0
+  multiColorReactive: false,
+
+  // Reactivity Pipeline (Musicvid-like behavior)
   reactivity: {
     startBin: 0,
     endBin: null,
@@ -67,8 +106,6 @@ const DEFAULT_OPTIONS = {
     deltaDecay: 0.85, // Reduced from 0.90 for faster release
   },
 };
-
-const IS_MOBILE = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(max-width: 768px)").matches;
 
 export default class AudioVisualizer {
   constructor(canvas, options = {}) {
@@ -109,7 +146,7 @@ export default class AudioVisualizer {
     this.smoothedBars = [];
     this.prevSmoothedBars = [];
     this.barTransition = 0;
-    this.barTransitionDuration = 0.22;
+    this.barTransitionDuration = DEFAULT_TRANSITION_DURATION;
     this.lastPipelineBars = [];
     this.lastGlobalImpact = 0;
 
@@ -194,15 +231,7 @@ export default class AudioVisualizer {
       return `rgba(${r}, ${g}, ${b}, ${safeAlpha})`;
     }
 
-    const palette = [
-      [68, 120, 255],  // blue
-      [0, 210, 255],   // cyan
-      [50, 236, 150],  // mint
-      [165, 255, 60],  // lime
-      [255, 212, 64],  // yellow
-      [255, 126, 52],  // orange
-      [255, 62, 88],   // pink-red
-    ];
+    const palette = REACTIVE_COLOR_PALETTE;
 
     const intensity = this.clamp01(Math.pow(Math.max(0, amp) / 1.35, 0.8));
     const scaled = intensity * (palette.length - 1);
@@ -409,8 +438,8 @@ export default class AudioVisualizer {
   }
 
   getFreqBand(hz) {
-    if (hz < 220) return "low";
-    if (hz < 3200) return "mid";
+    if (hz < FREQ_BANDS.LOW_MID_SPLIT) return "low";
+    if (hz < FREQ_BANDS.MID_HIGH_SPLIT) return "mid";
     return "high";
   }
 
