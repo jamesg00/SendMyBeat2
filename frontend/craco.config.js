@@ -71,6 +71,14 @@ const webpackConfig = {
       return webpackConfig;
     },
   },
+  jest: {
+    configure: {
+      moduleNameMapper: {
+        '^@/(.*)$': '<rootDir>/src/$1',
+        '^axios$': '<rootDir>/node_modules/axios/dist/node/axios.cjs',
+      },
+    },
+  },
 };
 
 // Only add babel plugin if visual editing is enabled
