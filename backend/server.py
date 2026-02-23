@@ -10,7 +10,7 @@ import asyncio
 import random
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Literal
 import uuid
 from datetime import datetime, timezone, timedelta
 import jwt
@@ -436,7 +436,7 @@ class CheckinResponse(BaseModel):
 
 class SubscriptionStatus(BaseModel):
     is_subscribed: bool
-    plan: str  # "free" or "pro"
+    plan: Literal["free", "pro"]
     daily_credits_remaining: int
     daily_credits_total: int
     upload_credits_remaining: int
