@@ -16,6 +16,12 @@ import { ThemeProvider } from "@/lib/ThemeContext";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 export const API = `${BACKEND_URL}/api`;
+const ADMIN_USERNAMES = new Set(
+  (process.env.REACT_APP_ADMIN_USERNAMES || "deadat18")
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean)
+);
 
 // Axios interceptor for auth token
 axios.interceptors.request.use(
@@ -33,19 +39,25 @@ axios.interceptors.request.use(
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [currentUsername, setCurrentUsername] = useState("");
   const [loading, setLoading] = useState(true);
+  const isAdmin = ADMIN_USERNAMES.has((currentUsername || "").toLowerCase());
 
   useEffect(() => {
     const checkAuth = async () => {
       const token = localStorage.getItem("token");
       if (token) {
         try {
-          await axios.get(`${API}/auth/me`);
+          const me = await axios.get(`${API}/auth/me`);
+          setCurrentUsername(me?.data?.username || "");
           setIsAuthenticated(true);
         } catch (error) {
           localStorage.removeItem("token");
           setIsAuthenticated(false);
+          setCurrentUsername("");
         }
+      } else {
+        setCurrentUsername("");
       }
       setLoading(false);
     };
@@ -90,10 +102,10 @@ function App() {
             <Route
               path="/admin/costs"
               element={
-                isAuthenticated ? (
+                isAuthenticated && isAdmin ? (
                   <AdminCosts />
                 ) : (
-                  <Navigate to="/" replace />
+                  <Navigate to={isAuthenticated ? "/dashboard" : "/"} replace />
                 )
               }
             />

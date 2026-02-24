@@ -55,8 +55,8 @@ const LayoutSettings = ({
              </div>
           </div>
 
-          <div className={`flex items-center justify-between p-3 rounded-md border ${subscriptionStatus?.is_subscribed ? 'bg-green-500/10 border-green-500/30' : 'bg-secondary border-transparent'}`}>
-             <div className="flex items-center gap-2">
+          <div className={`upload-wm-row p-3 rounded-md border ${subscriptionStatus?.is_subscribed ? 'bg-green-500/10 border-green-500/30' : 'bg-secondary border-transparent'}`}>
+             <div className="flex items-center gap-2 min-w-0">
                 <input
                    type="checkbox"
                    id="wm-check"
@@ -70,10 +70,10 @@ const LayoutSettings = ({
                    }}
                    className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                 />
-                <label htmlFor="wm-check" className="text-sm font-medium cursor-pointer">Remove Watermark</label>
+                <label htmlFor="wm-check" className="upload-wm-label text-sm font-medium cursor-pointer">Remove Watermark</label>
              </div>
              {!subscriptionStatus?.is_subscribed && (
-                <Button size="sm" variant="link" className="h-auto p-0 text-xs text-blue-500" onClick={onUpgrade}>
+                <Button size="sm" variant="link" className="upload-wm-upgrade h-auto p-0 text-xs text-blue-500" onClick={onUpgrade}>
                    Upgrade to Remove
                 </Button>
              )}

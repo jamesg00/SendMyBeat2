@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
-import { Trophy, Star, TrendingUp, Music, User, Globe, Youtube, Instagram, Twitter, ArrowLeft, Crown, BadgeCheck, Shield } from "lucide-react";
+import { Trophy, Star, TrendingUp, Music, User, Globe, Youtube, Instagram, Twitter, ArrowLeft, Crown, BadgeCheck, Shield, Flame, Eye, BarChart3 } from "lucide-react";
 import DarkModeToggle from "@/components/DarkModeToggle";
 import { toast } from "sonner";
 
@@ -34,6 +34,12 @@ export default function ProducerSpotlight() {
   const [spotlightApiMissing, setSpotlightApiMissing] = useState(false);
   const [profileApiMissing, setProfileApiMissing] = useState(false);
   const [applyingVerification, setApplyingVerification] = useState(false);
+  const [selectedProducer, setSelectedProducer] = useState(null);
+  const [producerStats, setProducerStats] = useState(null);
+  const [loadingProducerStats, setLoadingProducerStats] = useState(false);
+  const [producerStatsOpen, setProducerStatsOpen] = useState(false);
+  const [activeView, setActiveView] = useState("trending");
+  const [showAllOpen, setShowAllOpen] = useState(false);
   const [verificationForm, setVerificationForm] = useState({
     stage_name: "",
     main_platform_url: "",
@@ -42,6 +48,7 @@ export default function ProducerSpotlight() {
   });
   const [editForm, setEditForm] = useState({
     avatar_url: AVATAR_CHOICES[0].url,
+    banner_url: "",
     bio: "",
     top_beat_url: "",
     tags: "",
@@ -77,6 +84,7 @@ export default function ProducerSpotlight() {
       setProfileApiMissing(false);
       setEditForm({
         avatar_url: response.data.avatar_url || AVATAR_CHOICES[0].url,
+        banner_url: response.data.banner_url || "",
         bio: response.data.bio || "",
         top_beat_url: response.data.top_beat_url || "",
         tags: response.data.tags ? response.data.tags.join(", ") : "",
@@ -97,6 +105,7 @@ export default function ProducerSpotlight() {
     try {
       const updateData = {
         avatar_url: editForm.avatar_url,
+        banner_url: editForm.banner_url,
         bio: editForm.bio,
         top_beat_url: editForm.top_beat_url,
         tags: editForm.tags.split(",").map(t => t.trim()).filter(Boolean),
@@ -120,6 +129,33 @@ export default function ProducerSpotlight() {
       }
     } finally {
       setSavingProfile(false);
+    }
+  };
+
+  const handleBannerUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const allowed = ["image/jpeg", "image/png", "image/webp"];
+    if (!allowed.includes(file.type)) {
+      toast.error("Use JPG, PNG, or WEBP for banner.");
+      return;
+    }
+    if (file.size > 4 * 1024 * 1024) {
+      toast.error("Banner must be under 4MB.");
+      return;
+    }
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const response = await axios.post(`${API}/producers/banner`, formData, {
+        headers: { "Content-Type": "multipart/form-data" }
+      });
+      setEditForm((prev) => ({ ...prev, banner_url: response.data.banner_url }));
+      toast.success("Banner uploaded.");
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Failed to upload banner.");
+    } finally {
+      e.target.value = "";
     }
   };
 
@@ -194,6 +230,22 @@ export default function ProducerSpotlight() {
     return <User className="h-3 w-3" />;
   };
 
+  const openProducerStats = async (producer) => {
+    if (!producer?.user_id) return;
+    setSelectedProducer(producer);
+    setProducerStatsOpen(true);
+    setLoadingProducerStats(true);
+    setProducerStats(null);
+    try {
+      const response = await axios.get(`${API}/producers/${producer.user_id}/stats`);
+      setProducerStats(response.data);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Failed to load producer stats.");
+    } finally {
+      setLoadingProducerStats(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -203,8 +255,18 @@ export default function ProducerSpotlight() {
   }
 
   const ProducerCard = ({ producer, badge }) => (
-    <Card className={`producer-card overflow-hidden ${producer.featured ? 'border-2 border-yellow-500 shadow-[0_0_20px_rgba(234,179,8,0.3)]' : ''}`}>
-      <div className="h-24 bg-gradient-to-r from-purple-500 to-blue-600 relative">
+    <Card
+      className={`producer-card overflow-hidden cursor-pointer transition-transform hover:-translate-y-1 ${producer.featured ? 'border-2 border-yellow-500 shadow-[0_0_20px_rgba(234,179,8,0.3)]' : ''}`}
+      onClick={() => openProducerStats(producer)}
+    >
+      <div
+        className="h-24 bg-gradient-to-r from-purple-500 to-blue-600 relative"
+        style={producer.banner_url ? {
+          backgroundImage: `linear-gradient(120deg, rgba(0,0,0,0.35), rgba(0,0,0,0.15)), url(${producer.banner_url})`,
+          backgroundSize: "cover",
+          backgroundPosition: "center"
+        } : undefined}
+      >
         {badge && (
           <div className="absolute top-2 right-2 bg-yellow-400 text-black px-2 py-1 rounded-full text-xs font-bold flex items-center gap-1 shadow-lg">
             {badge === 'featured' && <Star className="h-3 w-3 fill-black" />}
@@ -225,12 +287,12 @@ export default function ProducerSpotlight() {
           </div>
           <div className="flex gap-2 mb-1">
             {producer.social_links?.youtube && (
-              <a href={producer.social_links.youtube} target="_blank" rel="noreferrer" className="p-2 rounded-full bg-red-600 text-white hover:scale-110 transition-transform">
+              <a href={producer.social_links.youtube} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="p-2 rounded-full bg-red-600 text-white hover:scale-110 transition-transform">
                 <Youtube className="h-4 w-4" />
               </a>
             )}
             {producer.social_links?.instagram && (
-              <a href={producer.social_links.instagram} target="_blank" rel="noreferrer" className="p-2 rounded-full bg-pink-600 text-white hover:scale-110 transition-transform">
+              <a href={producer.social_links.instagram} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="p-2 rounded-full bg-pink-600 text-white hover:scale-110 transition-transform">
                 <Instagram className="h-4 w-4" />
               </a>
             )}
@@ -261,7 +323,8 @@ export default function ProducerSpotlight() {
             <Button
               variant="outline"
               className="w-full mt-2 gap-2 group hover:border-primary"
-              onClick={() => {
+              onClick={(e) => {
+                e.stopPropagation();
                 const raw = (producer.top_beat_url || "").trim();
                 if (!raw) return;
                 const url = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
@@ -276,6 +339,39 @@ export default function ProducerSpotlight() {
       </CardContent>
     </Card>
   );
+
+  const MiniProducerCard = ({ producer }) => (
+    <button
+      type="button"
+      className="text-left rounded-lg border p-3 bg-[var(--bg-secondary)] hover:border-emerald-500 transition-colors"
+      onClick={() => {
+        setShowAllOpen(false);
+        openProducerStats(producer);
+      }}
+    >
+      <div className="flex items-center gap-2">
+        <div className="h-10 w-10 rounded-full overflow-hidden bg-slate-200 flex items-center justify-center">
+          {producer.avatar_url ? (
+            <img src={producer.avatar_url} alt={producer.username} className="h-full w-full object-cover" />
+          ) : (
+            <User className="h-5 w-5 text-slate-400" />
+          )}
+        </div>
+        <div className="min-w-0">
+          <p className="font-semibold truncate">{producer.username}</p>
+          <p className="text-[11px] text-muted-foreground truncate">
+            {producer.total_days_completed || 0} days • {producer.current_streak || 0} streak
+          </p>
+        </div>
+      </div>
+    </button>
+  );
+
+  const allProducers = spotlightData?.all_producers || [];
+  const streakLeaders = [...allProducers]
+    .sort((a, b) => (b.total_days_completed || 0) - (a.total_days_completed || 0) || (b.current_streak || 0) - (a.current_streak || 0))
+    .slice(0, 18);
+  const visibleNetwork = allProducers.slice(0, 12);
 
   return (
     <div className="spotlight-parallax-bg relative min-h-screen overflow-hidden">
@@ -362,6 +458,25 @@ export default function ProducerSpotlight() {
                     </button>
                   ))}
                 </div>
+              </div>
+              <div className="grid gap-2">
+                <label>Profile Banner</label>
+                <div className="flex items-center gap-3">
+                  <Input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={handleBannerUpload}
+                    className="max-w-sm"
+                  />
+                  <span className="text-xs text-muted-foreground">Upload banner (max 4MB)</span>
+                </div>
+                {editForm.banner_url && (
+                  <img
+                    src={editForm.banner_url}
+                    alt="Banner preview"
+                    className="w-full h-24 rounded-lg object-cover border border-[var(--border-color)]"
+                  />
+                )}
               </div>
               <div className="grid gap-2">
                 <label>Bio (Short & Sweet)</label>
@@ -487,6 +602,23 @@ export default function ProducerSpotlight() {
         )}
       </div>
 
+      <section className="space-y-4">
+        <div className="flex flex-wrap gap-2">
+          <Button variant={activeView === "trending" ? "default" : "outline"} onClick={() => setActiveView("trending")}>
+            Trending
+          </Button>
+          <Button variant={activeView === "new" ? "default" : "outline"} onClick={() => setActiveView("new")}>
+            New Users
+          </Button>
+          <Button variant={activeView === "streaks" ? "default" : "outline"} onClick={() => setActiveView("streaks")}>
+            Streak Leaders
+          </Button>
+          <Button variant={activeView === "network" ? "default" : "outline"} onClick={() => setActiveView("network")}>
+            Network
+          </Button>
+        </div>
+      </section>
+
       {/* Featured Producers */}
       {spotlightData?.featured_producers.length > 0 && (
         <section>
@@ -502,38 +634,176 @@ export default function ProducerSpotlight() {
         </section>
       )}
 
-      {/* Trending */}
-      <section>
-        <div className="flex items-center gap-2 mb-6">
-          <TrendingUp className="h-6 w-6 text-blue-500" />
-          <h2 className="text-2xl font-bold">Trending Now</h2>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {spotlightData?.trending_producers.length > 0 ? (
-            spotlightData.trending_producers.map(p => (
-              <ProducerCard key={p.user_id} producer={p} badge="trending" />
-            ))
-          ) : (
-            <p className="col-span-3 text-center text-muted-foreground py-10">
-              No trending producers yet. Be the first!
-            </p>
-          )}
-        </div>
-      </section>
+      {activeView === "trending" && (
+        <section>
+          <div className="flex items-center gap-2 mb-6">
+            <TrendingUp className="h-6 w-6 text-blue-500" />
+            <h2 className="text-2xl font-bold">Trending Now</h2>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {spotlightData?.trending_producers.length > 0 ? (
+              spotlightData.trending_producers.map(p => (
+                <ProducerCard key={p.user_id} producer={p} badge="trending" />
+              ))
+            ) : (
+              <p className="col-span-3 text-center text-muted-foreground py-10">
+                No trending producers yet. Be the first!
+              </p>
+            )}
+          </div>
+        </section>
+      )}
 
-      {/* New Arrivals */}
-      <section>
-        <div className="flex items-center gap-2 mb-6">
-          <Sparkles className="h-6 w-6 text-purple-500" />
-          <h2 className="text-2xl font-bold">Fresh Talent</h2>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {spotlightData?.new_producers.map(p => (
-            <ProducerCard key={p.user_id} producer={p} badge="new" />
-          ))}
-        </div>
-      </section>
+      {activeView === "new" && (
+        <section>
+          <div className="flex items-center gap-2 mb-6">
+            <Sparkles className="h-6 w-6 text-purple-500" />
+            <h2 className="text-2xl font-bold">New Users</h2>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {(spotlightData?.new_producers || []).map(p => (
+              <ProducerCard key={p.user_id} producer={p} badge="new" />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {activeView === "streaks" && (
+        <section>
+          <div className="flex items-center gap-2 mb-6">
+            <Flame className="h-6 w-6 text-orange-500" />
+            <h2 className="text-2xl font-bold">Streak Leaders (Ranked by Days)</h2>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {streakLeaders.map((p, idx) => (
+              <ProducerCard key={`streak-${p.user_id}`} producer={{ ...p, featured: idx < 3 }} badge={idx < 3 ? "featured" : undefined} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {activeView === "network" && (
+        <section>
+          <div className="flex items-center justify-between gap-2 mb-6">
+            <div className="flex items-center gap-2">
+              <Globe className="h-6 w-6 text-emerald-500" />
+              <h2 className="text-2xl font-bold">Producer Network</h2>
+            </div>
+            <Button variant="outline" onClick={() => setShowAllOpen(true)}>Show All</Button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {visibleNetwork.map((p) => (
+              <ProducerCard key={`all-${p.user_id}`} producer={p} />
+            ))}
+          </div>
+        </section>
+      )}
       </div>
+
+      <Dialog open={showAllOpen} onOpenChange={setShowAllOpen}>
+        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto bg-[var(--card-bg)] border border-[var(--border-color)]">
+          <DialogHeader>
+            <DialogTitle>All Producers</DialogTitle>
+            <DialogDescription>Click any producer card to open full stats and top content.</DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            {allProducers.map((p) => (
+              <MiniProducerCard key={`mini-${p.user_id}`} producer={p} />
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={producerStatsOpen} onOpenChange={setProducerStatsOpen}>
+        <DialogContent className="max-w-2xl bg-[var(--card-bg)] border border-[var(--border-color)]">
+          <DialogHeader>
+            <DialogTitle>{selectedProducer?.username || "Producer"} Stats</DialogTitle>
+            <DialogDescription>
+              Spotlight profile, activity metrics, streak, and top beat.
+            </DialogDescription>
+          </DialogHeader>
+
+          {loadingProducerStats && (
+            <div className="py-6 text-sm text-muted-foreground">Loading producer stats...</div>
+          )}
+
+          {!loadingProducerStats && producerStats && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground flex items-center gap-1"><Flame className="h-3 w-3" /> Streak</p>
+                  <p className="font-bold text-lg">{producerStats.stats?.current_streak || 0}</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground flex items-center gap-1"><Trophy className="h-3 w-3" /> Best</p>
+                  <p className="font-bold text-lg">{producerStats.stats?.longest_streak || 0}</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground flex items-center gap-1"><Eye className="h-3 w-3" /> Views</p>
+                  <p className="font-bold text-lg">{producerStats.stats?.views || 0}</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground flex items-center gap-1"><BarChart3 className="h-3 w-3" /> Likes</p>
+                  <p className="font-bold text-lg">{producerStats.stats?.likes || 0}</p>
+                </div>
+              </div>
+
+              <div className="rounded-lg border p-3 space-y-2">
+                <p className="text-sm font-semibold">Top Beat / Top Song</p>
+                {(producerStats.top_beats || []).length > 0 ? (
+                  <div className="space-y-2">
+                    {producerStats.top_beats.slice(0, 5).map((song, idx) => (
+                      <div key={`song-${idx}`} className="text-sm">
+                        {song?.url ? (
+                          <a
+                            href={/^https?:\/\//i.test(song.url) ? song.url : `https://${song.url}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-blue-500 hover:underline break-all"
+                          >
+                            {song.title || `Top Beat ${idx + 1}`}
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground">{song?.title || `Top Beat ${idx + 1}`}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : producerStats.top_song ? (
+                  <a
+                    href={/^https?:\/\//i.test(producerStats.top_song) ? producerStats.top_song : `https://${producerStats.top_song}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-sm text-blue-500 hover:underline break-all"
+                  >
+                    {producerStats.top_song}
+                  </a>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No top beats added yet.</p>
+                )}
+              </div>
+
+              <div className="rounded-lg border p-3 space-y-2">
+                <p className="text-sm font-semibold">Channel / Activity</p>
+                <p className="text-sm text-muted-foreground">
+                  YouTube Connected: {producerStats.channel?.connected ? "Yes" : "No"}
+                </p>
+                {producerStats.channel?.performance && (
+                  <p className="text-sm text-muted-foreground">
+                    Subs: {producerStats.channel.performance.subscriber_count || 0} • Views: {producerStats.channel.performance.total_views || 0} • Videos: {producerStats.channel.performance.total_videos || 0}
+                  </p>
+                )}
+                <p className="text-sm text-muted-foreground">
+                  Descriptions: {producerStats.stats?.descriptions_created || 0} | Tag Sets: {producerStats.stats?.tag_sets_created || 0}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Uploads: {producerStats.stats?.audio_uploads || 0} audio / {producerStats.stats?.image_uploads || 0} image
+                </p>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

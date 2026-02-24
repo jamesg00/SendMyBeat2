@@ -772,7 +772,7 @@ const UploadStudio = ({
         signal: controller.signal
       });
       if (response.data.video_url) {
-        toast.success("Video Uploaded Successfully! ðŸŽ‰");
+        toast.success("Video Uploaded Successfully! 🎉");
         window.open(response.data.video_url, '_blank');
       } else {
         toast.success(response.data.message || "Upload process started!");

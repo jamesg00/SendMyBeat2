@@ -11,7 +11,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import axios from "axios";
 import { API } from "@/App";
 import { toast } from "sonner";
-import { Music, Sparkles, Save, LogOut, Copy, Trash2, Edit, Plus, Youtube, CheckCircle2, AlertCircle, Target, ChevronLeft, ChevronRight, DollarSign, Link } from "lucide-react";
+import { Music, Sparkles, Save, LogOut, Copy, Trash2, Edit, Plus, Youtube, CheckCircle2, AlertCircle, Target, ChevronLeft, ChevronRight, DollarSign, Link, Bot, Clock3, Wand2, Send } from "lucide-react";
 import DarkModeToggle from "@/components/DarkModeToggle";
 import SubscriptionBanner from "@/components/SubscriptionBanner";
 import UpgradeModal from "@/components/UpgradeModal";
@@ -22,12 +22,19 @@ import UploadStudio from "@/components/UploadStudio";
 
 const TAG_LIMIT = 120;
 const TAG_HISTORY_LIMIT = 100;
+const ADMIN_USERNAMES = new Set(
+  (process.env.REACT_APP_ADMIN_USERNAMES || "deadat18")
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean)
+);
 const DASHBOARD_TABS = [
   { value: "tags", label: "Tags" },
   { value: "descriptions", label: "Descriptions" },
   { value: "upload", label: "Upload" },
   { value: "analytics", label: "Analytics" },
   { value: "grow", label: "Grow in 120" },
+  { value: "beathelper", label: "BeatHelper", proOnly: true },
   { value: "settings", label: "Settings" },
 ];
 
@@ -172,6 +179,21 @@ const Dashboard = ({ setIsAuthenticated }) => {
 
   // Check-in prompt state
   const [showCheckinPrompt, setShowCheckinPrompt] = useState(false);
+  const [beatHelperUploads, setBeatHelperUploads] = useState({ audio_uploads: [], image_uploads: [] });
+  const [beatHelperQueue, setBeatHelperQueue] = useState([]);
+  const [loadingBeatHelper, setLoadingBeatHelper] = useState(false);
+  const [beatHelperForm, setBeatHelperForm] = useState({
+    beat_file_id: "",
+    image_file_id: "",
+    beat_type: "",
+    target_artist: "",
+    context_tags: "",
+    ai_choose_image: false,
+    approval_timeout_hours: 12,
+    auto_upload_if_no_response: false,
+    notify_channel: "email",
+    privacy_status: "public",
+  });
 
   const [joiningTagsLoading, setJoiningTagsLoading] = useState(false);
   const [joiningTagsProgress, setJoiningTagsProgress] = useState(0);
@@ -179,13 +201,15 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const dashboardParallaxRef = useRef(null);
 
   const isPro = !!subscriptionStatus?.is_subscribed;
+  const isAdmin = ADMIN_USERNAMES.has((user?.username || "").toLowerCase());
+  const visibleTabs = DASHBOARD_TABS.filter((tab) => !tab.proOnly || isPro);
   const adsUnlocked = generatedTags.length > 0 || (tagHistory?.length || 0) > 0;
   const adEligibleTabs = ["tags", "descriptions"].includes(activeTab);
   const adContentReady = adsUnlocked;
-  const activeTabIndex = Math.max(0, DASHBOARD_TABS.findIndex((tab) => tab.value === activeTab));
-  const activeTabLabel = DASHBOARD_TABS[activeTabIndex]?.label || "Tags";
+  const activeTabIndex = Math.max(0, visibleTabs.findIndex((tab) => tab.value === activeTab));
+  const activeTabLabel = visibleTabs[activeTabIndex]?.label || "Tags";
   const desktopTabHighlightStyle = {
-    width: `${100 / DASHBOARD_TABS.length}%`,
+    width: `${100 / Math.max(visibleTabs.length, 1)}%`,
     transform: `translateX(${activeTabIndex * 100}%)`,
   };
   const canShowAds = Boolean(
@@ -242,13 +266,13 @@ const Dashboard = ({ setIsAuthenticated }) => {
     : "";
 
   const goToPreviousTab = () => {
-    const previousIndex = (activeTabIndex - 1 + DASHBOARD_TABS.length) % DASHBOARD_TABS.length;
-    setActiveTab(DASHBOARD_TABS[previousIndex].value);
+    const previousIndex = (activeTabIndex - 1 + visibleTabs.length) % visibleTabs.length;
+    setActiveTab(visibleTabs[previousIndex].value);
   };
 
   const goToNextTab = () => {
-    const nextIndex = (activeTabIndex + 1) % DASHBOARD_TABS.length;
-    setActiveTab(DASHBOARD_TABS[nextIndex].value);
+    const nextIndex = (activeTabIndex + 1) % visibleTabs.length;
+    setActiveTab(visibleTabs[nextIndex].value);
   };
 
   useEffect(() => {
@@ -302,6 +326,18 @@ const Dashboard = ({ setIsAuthenticated }) => {
     }
   }, [activeTab, isPro, growthData?.challenge_start_date, calendarData]);
 
+  useEffect(() => {
+    if (!visibleTabs.some((tab) => tab.value === activeTab)) {
+      setActiveTab(visibleTabs[0]?.value || "tags");
+    }
+  }, [activeTab, visibleTabs]);
+
+  useEffect(() => {
+    if (activeTab === "beathelper" && isPro) {
+      fetchBeatHelperData();
+    }
+  }, [activeTab, isPro]);
+
   const fetchUser = async () => {
     try {
       const response = await axios.get(`${API}/auth/me`);
@@ -350,10 +386,121 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const fetchSubscriptionStatus = async () => {
     try {
       const response = await axios.get(`${API}/subscription/status`);
-      console.log("ðŸ“Š Subscription Status Updated:", response.data);
+      console.log("📊 Subscription Status Updated:", response.data);
       setSubscriptionStatus(response.data);
     } catch (error) {
       console.error("Failed to fetch subscription status", error);
+    }
+  };
+
+  const fetchBeatHelperData = async () => {
+    setLoadingBeatHelper(true);
+    try {
+      const [uploadsRes, queueRes] = await Promise.all([
+        axios.get(`${API}/beat-helper/uploads`),
+        axios.get(`${API}/beat-helper/queue`),
+      ]);
+      setBeatHelperUploads(uploadsRes.data || { audio_uploads: [], image_uploads: [] });
+      setBeatHelperQueue(Array.isArray(queueRes.data) ? queueRes.data : []);
+    } catch (error) {
+      const detail = error?.response?.data?.detail;
+      if (error?.response?.status === 402) {
+        toast.error(typeof detail === "string" ? detail : "BeatHelper is a Pro feature.");
+      } else {
+        toast.error("Failed to load BeatHelper data");
+      }
+    } finally {
+      setLoadingBeatHelper(false);
+    }
+  };
+
+  const handleBeatHelperQueue = async (e) => {
+    e.preventDefault();
+    if (!beatHelperForm.beat_file_id) {
+      toast.error("Select a beat audio file");
+      return;
+    }
+    if (!beatHelperForm.image_file_id && !beatHelperForm.ai_choose_image) {
+      toast.error("Select a thumbnail or enable AI image");
+      return;
+    }
+    if (!beatHelperForm.target_artist.trim() || !beatHelperForm.beat_type.trim()) {
+      toast.error("Enter target artist and beat type");
+      return;
+    }
+    try {
+      setLoadingBeatHelper(true);
+      await axios.post(`${API}/beat-helper/queue`, {
+        beat_file_id: beatHelperForm.beat_file_id,
+        image_file_id: beatHelperForm.image_file_id || null,
+        beat_type: beatHelperForm.beat_type.trim(),
+        target_artist: beatHelperForm.target_artist.trim(),
+        context_tags: beatHelperForm.context_tags
+          .split(",")
+          .map((t) => t.trim())
+          .filter(Boolean),
+        ai_choose_image: !!beatHelperForm.ai_choose_image,
+        approval_timeout_hours: Number(beatHelperForm.approval_timeout_hours) || 12,
+        auto_upload_if_no_response: !!beatHelperForm.auto_upload_if_no_response,
+        notify_channel: beatHelperForm.notify_channel,
+        privacy_status: beatHelperForm.privacy_status,
+      });
+      toast.success("Beat queued in BeatHelper");
+      await fetchBeatHelperData();
+    } catch (error) {
+      const detail = error?.response?.data?.detail;
+      toast.error(typeof detail === "string" ? detail : "Failed to queue beat");
+    } finally {
+      setLoadingBeatHelper(false);
+    }
+  };
+
+  const handleBeatHelperRequestApproval = async (itemId) => {
+    try {
+      await axios.post(`${API}/beat-helper/queue/${itemId}/request-approval`);
+      toast.success("Approval request triggered");
+      await fetchBeatHelperData();
+    } catch (error) {
+      const detail = error?.response?.data?.detail;
+      toast.error(typeof detail === "string" ? detail : "Failed to request approval");
+    }
+  };
+
+  const handleBeatHelperApproveUpload = async (itemId) => {
+    try {
+      setLoadingBeatHelper(true);
+      const response = await axios.post(`${API}/beat-helper/queue/${itemId}/approve-upload`);
+      toast.success(response?.data?.message || "Uploaded to YouTube");
+      await fetchBeatHelperData();
+    } catch (error) {
+      const detail = error?.response?.data?.detail;
+      if (typeof detail === "string") {
+        toast.error(detail);
+      } else {
+        toast.error(detail?.message || "Failed to upload queued beat");
+      }
+    } finally {
+      setLoadingBeatHelper(false);
+    }
+  };
+
+  const handleBeatHelperSetStatus = async (itemId, status) => {
+    try {
+      await axios.patch(`${API}/beat-helper/queue/${itemId}`, { status });
+      toast.success(`Beat marked as ${status}`);
+      await fetchBeatHelperData();
+    } catch (error) {
+      toast.error("Failed to update beat status");
+    }
+  };
+
+  const handleBeatHelperDelete = async (itemId) => {
+    try {
+      await axios.delete(`${API}/beat-helper/queue/${itemId}`);
+      toast.success("Queue item removed");
+      await fetchBeatHelperData();
+    } catch (error) {
+      toast.error("Failed to delete queue item");
     }
   };
 
@@ -382,7 +529,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const handleAnalyzeChannel = async () => {
     setLoadingAnalytics(true);
     setProgressActive(true);
-    setProgressMessage("ðŸ“ˆ Analyzing your channel performance and generating AI growth strategy...");
+    setProgressMessage("📈 Analyzing your channel performance and generating AI growth strategy...");
     setProgressDuration(70000);
     try {
       const response = await axios.post(`${API}/youtube/analytics`);
@@ -454,7 +601,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
       const response = await axios.post(`${API}/growth/checkin`);
       toast.success(response?.data?.message || "Checked in");
       if (response?.data?.badge_unlocked) {
-        toast.success(`ðŸŽ‰ ${response.data.badge_unlocked}`);
+        toast.success(`🎉 ${response.data.badge_unlocked}`);
       }
       await fetchGrowthStatus();
       await fetchCalendar();
@@ -1011,15 +1158,17 @@ const Dashboard = ({ setIsAuthenticated }) => {
                 <Target className="h-3 w-3 sm:h-4 sm:w-4 text-yellow-500" />
                 <span className="hidden xl:inline font-bold text-yellow-500">Spotlight</span>
               </Button>
-              <Button
-                variant="outline"
-                onClick={() => window.location.href = '/admin/costs'}
-                className="gap-1 sm:gap-2 border-[var(--border-color)] text-xs sm:text-sm px-3 sm:px-4 py-2"
-                title="View Backend Costs"
-              >
-                <DollarSign className="h-3 w-3 sm:h-4 sm:w-4" />
-                <span className="hidden xl:inline">Costs</span>
-              </Button>
+              {isAdmin && (
+                <Button
+                  variant="outline"
+                  onClick={() => window.location.href = '/admin/costs'}
+                  className="gap-1 sm:gap-2 border-[var(--border-color)] text-xs sm:text-sm px-3 sm:px-4 py-2"
+                  title="View Backend Costs"
+                >
+                  <DollarSign className="h-3 w-3 sm:h-4 sm:w-4" />
+                  <span className="hidden xl:inline">Costs</span>
+                </Button>
+              )}
               <Button
                 variant="outline"
                 onClick={handleLogout}
@@ -1095,55 +1244,249 @@ const Dashboard = ({ setIsAuthenticated }) => {
             </Button>
           </div>
 
-          <TabsList className="hidden sm:grid w-full max-w-4xl mx-auto grid-cols-6 gap-1 text-xs sm:text-sm dashboard-tabs relative overflow-hidden">
+          <TabsList
+            className="hidden sm:grid w-full max-w-5xl mx-auto gap-1 text-xs sm:text-sm dashboard-tabs relative overflow-hidden"
+            style={{ gridTemplateColumns: `repeat(${Math.max(visibleTabs.length, 1)}, minmax(0, 1fr))` }}
+          >
             <div
               className="absolute left-0 top-0 h-full rounded-xl bg-gradient-to-r from-[var(--accent-primary)] to-[var(--accent-secondary)] shadow-md border border-[var(--border-color)] transition-transform duration-300 ease-out"
               style={desktopTabHighlightStyle}
               aria-hidden="true"
             />
-            <TabsTrigger
-              value="tags"
-              data-testid="tags-tab"
-              className="relative z-10 px-1 sm:px-3 py-1.5 sm:py-2 truncate transition-colors data-[state=active]:bg-transparent data-[state=active]:text-white"
-            >
-              Tags
-            </TabsTrigger>
-            <TabsTrigger
-              value="descriptions"
-              data-testid="descriptions-tab"
-              className="relative z-10 px-1 sm:px-3 py-1.5 sm:py-2 truncate transition-colors data-[state=active]:bg-transparent data-[state=active]:text-white"
-            >
-              Descriptions
-            </TabsTrigger>
-            <TabsTrigger
-              value="upload"
-              data-testid="upload-tab"
-              className="relative z-10 px-1 sm:px-3 py-1.5 sm:py-2 truncate transition-colors data-[state=active]:bg-transparent data-[state=active]:text-white"
-            >
-              Upload
-            </TabsTrigger>
-            <TabsTrigger
-              value="analytics"
-              data-testid="analytics-tab"
-              className="relative z-10 px-1 sm:px-3 py-1.5 sm:py-2 truncate transition-colors data-[state=active]:bg-transparent data-[state=active]:text-white"
-            >
-              Analytics
-            </TabsTrigger>
-            <TabsTrigger
-              value="grow"
-              data-testid="grow-tab"
-              className="relative z-10 px-1 sm:px-3 py-1.5 sm:py-2 truncate transition-colors data-[state=active]:bg-transparent data-[state=active]:text-white"
-            >
-              Grow in 120
-            </TabsTrigger>
-            <TabsTrigger
-              value="settings"
-              data-testid="settings-tab"
-              className="relative z-10 px-1 sm:px-3 py-1.5 sm:py-2 truncate transition-colors data-[state=active]:bg-transparent data-[state=active]:text-white"
-            >
-              Settings
-            </TabsTrigger>
+            {visibleTabs.map((tab) => (
+              <TabsTrigger
+                key={tab.value}
+                value={tab.value}
+                data-testid={`${tab.value}-tab`}
+                className="relative z-10 px-1 sm:px-3 py-1.5 sm:py-2 truncate transition-colors data-[state=active]:bg-transparent data-[state=active]:text-white"
+              >
+                {tab.label}
+              </TabsTrigger>
+            ))}
           </TabsList>
+
+          {/* BeatHelper Tab (Pro) */}
+          <TabsContent value="beathelper" className="space-y-6 dashboard-section">
+            {!isPro ? (
+              <Card className="dashboard-card">
+                <CardHeader>
+                  <CardTitle>BeatHelper is Pro-only</CardTitle>
+                  <CardDescription>
+                    Upgrade to Pro to queue beats, match thumbnails 1:1, and run assisted upload approvals.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button onClick={() => setShowUpgradeModal(true)}>Upgrade to Pro</Button>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] gap-4 sm:gap-6">
+                <Card className="dashboard-card">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Bot className="h-5 w-5 text-[var(--accent-primary)]" />
+                      BeatHelper Queue
+                    </CardTitle>
+                    <CardDescription>
+                      Pair one beat with one thumbnail. If no thumbnail is selected, AI can choose one for you.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <form onSubmit={handleBeatHelperQueue} className="space-y-4">
+                      <div className="space-y-2">
+                        <Label>Beat Audio (1)</Label>
+                        <Select
+                          value={beatHelperForm.beat_file_id}
+                          onValueChange={(value) => setBeatHelperForm((prev) => ({ ...prev, beat_file_id: value }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select uploaded beat audio" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {beatHelperUploads.audio_uploads.map((file) => (
+                              <SelectItem key={file.id} value={file.id}>
+                                {file.original_filename}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Thumbnail Image (1)</Label>
+                        <Select
+                          value={beatHelperForm.image_file_id}
+                          onValueChange={(value) => setBeatHelperForm((prev) => ({ ...prev, image_file_id: value }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select uploaded thumbnail image" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {beatHelperUploads.image_uploads.map((file) => (
+                              <SelectItem key={file.id} value={file.id}>
+                                {file.original_filename}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={beatHelperForm.ai_choose_image}
+                            onChange={(e) => setBeatHelperForm((prev) => ({ ...prev, ai_choose_image: e.target.checked }))}
+                          />
+                          Use AI image when no thumbnail is selected
+                        </label>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="space-y-2">
+                          <Label>Target Artist</Label>
+                          <Input
+                            value={beatHelperForm.target_artist}
+                            onChange={(e) => setBeatHelperForm((prev) => ({ ...prev, target_artist: e.target.value }))}
+                            placeholder="e.g. Lil Uzi Vert"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Beat Type</Label>
+                          <Input
+                            value={beatHelperForm.beat_type}
+                            onChange={(e) => setBeatHelperForm((prev) => ({ ...prev, beat_type: e.target.value }))}
+                            placeholder="e.g. rage"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Context Tags (optional, comma-separated)</Label>
+                        <Input
+                          value={beatHelperForm.context_tags}
+                          onChange={(e) => setBeatHelperForm((prev) => ({ ...prev, context_tags: e.target.value }))}
+                          placeholder="baby pluto, pink tape, melodic rage"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="space-y-2">
+                          <Label>Auto-skip hours</Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            max="72"
+                            value={beatHelperForm.approval_timeout_hours}
+                            onChange={(e) => setBeatHelperForm((prev) => ({ ...prev, approval_timeout_hours: e.target.value }))}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Notify via</Label>
+                          <Select
+                            value={beatHelperForm.notify_channel}
+                            onValueChange={(value) => setBeatHelperForm((prev) => ({ ...prev, notify_channel: value }))}
+                          >
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">None</SelectItem>
+                              <SelectItem value="email">Email</SelectItem>
+                              <SelectItem value="sms">SMS</SelectItem>
+                              <SelectItem value="email_sms">Email + SMS</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Privacy</Label>
+                          <Select
+                            value={beatHelperForm.privacy_status}
+                            onValueChange={(value) => setBeatHelperForm((prev) => ({ ...prev, privacy_status: value }))}
+                          >
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="public">Public</SelectItem>
+                              <SelectItem value="unlisted">Unlisted</SelectItem>
+                              <SelectItem value="private">Private</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={beatHelperForm.auto_upload_if_no_response}
+                          onChange={(e) => setBeatHelperForm((prev) => ({ ...prev, auto_upload_if_no_response: e.target.checked }))}
+                        />
+                        Auto-upload if no response (toggleable)
+                      </label>
+
+                      <div className="flex gap-2">
+                        <Button type="submit" disabled={loadingBeatHelper} className="gap-2">
+                          <Wand2 className="h-4 w-4" />
+                          {loadingBeatHelper ? "Queuing..." : "Queue Beat"}
+                        </Button>
+                        <Button type="button" variant="outline" onClick={fetchBeatHelperData} disabled={loadingBeatHelper}>
+                          Refresh
+                        </Button>
+                      </div>
+                    </form>
+                  </CardContent>
+                </Card>
+
+                <Card className="dashboard-card">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Clock3 className="h-5 w-5 text-[var(--accent-primary)]" />
+                      Queued Beats
+                    </CardTitle>
+                    <CardDescription>
+                      Smart time scheduling is applied automatically from your channel activity.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {beatHelperQueue.length === 0 ? (
+                      <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+                        No queued beats yet.
+                      </p>
+                    ) : (
+                      beatHelperQueue.map((item) => (
+                        <div key={item.id} className="p-3 rounded-lg border" style={{ borderColor: "var(--border-color)", background: "var(--bg-secondary)" }}>
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="font-semibold truncate">{item.generated_title || item.beat_original_filename}</p>
+                              <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                                {item.target_artist} · {item.beat_type} · status: {item.status}
+                              </p>
+                              <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
+                                Scheduled (UTC): {item.scheduled_for_utc || "n/a"}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <Button size="sm" variant="outline" onClick={() => handleBeatHelperRequestApproval(item.id)} className="gap-1">
+                              <Send className="h-3 w-3" /> Request Approval
+                            </Button>
+                            <Button size="sm" onClick={() => handleBeatHelperApproveUpload(item.id)}>
+                              Approve + Upload
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => handleBeatHelperSetStatus(item.id, "skipped")}>
+                              Skip
+                            </Button>
+                            <Button size="sm" variant="destructive" onClick={() => handleBeatHelperDelete(item.id)}>
+                              Remove
+                            </Button>
+                            {item.video_url && (
+                              <Button size="sm" variant="outline" onClick={() => window.open(item.video_url, "_blank")}>
+                                Open Video
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+          </TabsContent>
 
           {/* Settings Tab */}
           <TabsContent value="settings" className="space-y-6 dashboard-section">
@@ -1579,10 +1922,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
                   <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6 space-y-3 sm:space-y-4">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {[
-                        "ðŸ”¥ Instant vibe hook",
-                        "ðŸŽ§ Lease CTA line",
-                        "ðŸ“Œ Socials closer",
-                        "âš¡ Producer stamp opener",
+                        "🔥 Instant vibe hook",
+                        "🎧 Lease CTA line",
+                        "📌 Socials closer",
+                        "⚡ Producer stamp opener",
                       ].map((hook) => (
                         <button
                           key={hook}
@@ -2105,7 +2448,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         <ul className="space-y-3">
                           {analyticsData.insights?.seo_optimization?.map((tip, idx) => (
                             <li key={idx} className="flex items-start gap-3 p-3 rounded-lg" style={{backgroundColor: 'var(--bg-secondary)'}}>
-                              <span className="text-yellow-500">ðŸ”</span>
+                              <span className="text-yellow-500">🔍</span>
                               <span className="flex-1">{tip}</span>
                             </li>
                           ))}
@@ -2125,7 +2468,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         <ul className="space-y-3">
                           {analyticsData.insights?.content_strategy?.map((strategy, idx) => (
                             <li key={idx} className="flex items-start gap-3 p-3 rounded-lg" style={{backgroundColor: 'var(--bg-secondary)'}}>
-                              <span className="text-indigo-500">ðŸ“¹</span>
+                              <span className="text-indigo-500">🎹</span>
                               <span className="flex-1">{strategy}</span>
                             </li>
                           ))}
@@ -2146,7 +2489,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         <ul className="space-y-3">
                           {analyticsData.insights?.discoverability_tactics?.map((tactic, idx) => (
                             <li key={idx} className="flex items-start gap-3 p-3 rounded-lg" style={{backgroundColor: 'var(--bg-secondary)'}}>
-                              <span className="text-cyan-500">ðŸš€</span>
+                              <span className="text-cyan-500">🚀</span>
                               <span className="flex-1">{tactic}</span>
                             </li>
                           ))}
@@ -2167,7 +2510,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         <ul className="space-y-3">
                           {analyticsData.insights?.internet_money_lessons?.map((lesson, idx) => (
                             <li key={idx} className="flex items-start gap-3 p-3 rounded-lg" style={{backgroundColor: 'var(--bg-secondary)'}}>
-                              <span className="text-pink-500">ðŸ’Ž</span>
+                              <span className="text-pink-500">💎</span>
                               <span className="flex-1">{lesson}</span>
                             </li>
                           ))}
@@ -2233,7 +2576,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                 {!growthData?.challenge_start_date ? (
                   <Card className="dashboard-card grow-quest-hero">
                     <CardContent className="p-8 sm:p-12 text-center">
-                      <p className="text-5xl mb-4">??</p>
+                      <p className="text-5xl mb-4">🚀</p>
                       <p className="text-xs uppercase tracking-[0.2em] mb-2" style={{ color: "var(--text-secondary)" }}>
                         Challenge Mode
                       </p>
@@ -2276,7 +2619,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
 
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                           <div className="grow-stat-card">
-                            <p className="grow-stat-value">{growthData.current_streak} ??</p>
+                            <p className="grow-stat-value">{growthData.current_streak} 🔥</p>
                             <p className="grow-stat-label">Current Streak</p>
                           </div>
                           <div className="grow-stat-card">
@@ -2284,7 +2627,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                             <p className="grow-stat-label">Days Cleared</p>
                           </div>
                           <div className="grow-stat-card">
-                            <p className="grow-stat-value">{growthData.longest_streak} ??</p>
+                            <p className="grow-stat-value">{growthData.longest_streak} 🏆</p>
                             <p className="grow-stat-label">Best Streak</p>
                           </div>
                         </div>
@@ -2318,9 +2661,9 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         </CardHeader>
                         <CardContent className="space-y-4">
                           <div className="space-y-2 text-sm">
-                            <div className="grow-mission-item">? Generate tags for a beat</div>
-                            <div className="grow-mission-item">? Upload a beat to YouTube</div>
-                            <div className="grow-mission-item">? Create or edit a description</div>
+                            <div className="grow-mission-item">✅ Generate tags for a beat</div>
+                            <div className="grow-mission-item">✅ Upload a beat to YouTube</div>
+                            <div className="grow-mission-item">✅ Create or edit a description</div>
                           </div>
                           <Button
                             onClick={handleCheckin}
@@ -2364,7 +2707,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                     title={`Day ${dayNumber} - ${date}`}
                                   >
                                     <span className="grow-day-id">D{dayNumber}</span>
-                                    {status === "completed" && <span className="text-[10px] font-extrabold">OK</span>}
+                                    {status === "completed" && <span className="text-[10px] font-extrabold">✓</span>}
                                     {status === "missed" && <span className="text-[10px] font-extrabold">X</span>}
                                     {status === "today" && <span className="text-[10px] font-extrabold">NOW</span>}
                                   </button>
@@ -2412,7 +2755,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                     {growthData.badges_earned?.length > 0 && (
                       <Card className="dashboard-card">
                         <CardHeader>
-                          <CardTitle className="text-lg">?? Reward Vault</CardTitle>
+                          <CardTitle className="text-lg">🏆 Reward Vault</CardTitle>
                           <CardDescription>Your unlocked challenge badges.</CardDescription>
                         </CardHeader>
                         <CardContent>
@@ -2498,7 +2841,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
         <DialogContent className="sm:max-w-md" data-testid="checkin-prompt-dialog">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <span className="text-2xl">ðŸ”¥</span>
+              <span className="text-2xl">🔥</span>
               Keep Your Streak Alive!
             </DialogTitle>
             <DialogDescription>

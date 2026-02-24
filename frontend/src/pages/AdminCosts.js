@@ -22,7 +22,11 @@ export default function AdminCosts() {
       setError(null);
     } catch (err) {
       console.error("Failed to fetch costs:", err);
-      setError("Failed to load cost data. Ensure you are logged in.");
+      if (err?.response?.status === 403) {
+        setError("Unauthorized. This page is only available to admin accounts.");
+      } else {
+        setError("Failed to load cost data. Ensure you are logged in.");
+      }
     } finally {
       setLoading(false);
     }

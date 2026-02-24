@@ -10,6 +10,7 @@ class ProducerProfile(BaseModel):
     user_id: str
     username: str
     avatar_url: Optional[str] = None
+    banner_url: Optional[str] = None
     role_tag: Optional[str] = None
     bio: str = ""
     top_beat_url: Optional[str] = None
@@ -23,11 +24,15 @@ class ProducerProfile(BaseModel):
     likes: int = 0
     views: int = 0
     featured: bool = False
+    current_streak: int = 0
+    longest_streak: int = 0
+    total_days_completed: int = 0
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class ProducerProfileUpdate(BaseModel):
     avatar_url: Optional[str] = None
+    banner_url: Optional[str] = None
     bio: Optional[str] = None
     top_beat_url: Optional[str] = None
     social_links: Optional[dict] = None
@@ -50,3 +55,4 @@ class SpotlightResponse(BaseModel):
     featured_producers: List[ProducerProfile]
     trending_producers: List[ProducerProfile]
     new_producers: List[ProducerProfile]
+    all_producers: List[ProducerProfile] = []

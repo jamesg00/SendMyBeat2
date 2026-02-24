@@ -213,6 +213,17 @@ h1, h2, h3, h4, h5, h6 {
   padding: 6px;
 }
 
+/* Dashboard tab bar cleanup in light mode:
+   remove inner separator lines, keep a black outer border */
+html:not(.dark) .dashboard-tabs {
+  border: 1px solid #111 !important;
+}
+
+html:not(.dark) .dashboard-tabs [role="tab"] {
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
 .dashboard-card {
   background: var(--card-bg);
   border: 1px solid var(--border-color);
@@ -349,11 +360,54 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .grow-stat-card {
+  position: relative;
+  overflow: hidden;
   border: 1px solid var(--border-color);
   border-radius: 12px;
   padding: 12px;
   text-align: center;
   background: color-mix(in srgb, var(--bg-secondary) 82%, transparent);
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 220ms ease, filter 220ms ease;
+}
+
+.grow-stat-card::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(
+    120deg,
+    transparent 20%,
+    color-mix(in srgb, var(--accent-primary) 55%, transparent) 48%,
+    transparent 78%
+  );
+  transform: translateX(-135%);
+}
+
+.grow-stat-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--accent-primary) 82%, var(--border-color));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent-primary) 46%, transparent) inset,
+    0 0 22px color-mix(in srgb, var(--glow) 78%, transparent),
+    0 10px 20px color-mix(in srgb, var(--shadow) 78%, transparent);
+  filter: saturate(115%);
+}
+
+.grow-stat-card:hover::before {
+  opacity: 0.92;
+  animation: growStatSweep 850ms ease-out 1;
+}
+
+@keyframes growStatSweep {
+  0% {
+    transform: translateX(-135%);
+  }
+  100% {
+    transform: translateX(135%);
+  }
 }
 
 .grow-stat-value {
@@ -570,6 +624,32 @@ h1, h2, h3, h4, h5, h6 {
   }
   100% {
     transform: translateX(-50%);
+  }
+}
+
+/* Upload Studio: keep remove watermark control readable */
+.upload-wm-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.upload-wm-label,
+.upload-wm-upgrade {
+  white-space: nowrap !important;
+  overflow-wrap: normal !important;
+  word-break: normal !important;
+}
+
+.upload-wm-upgrade {
+  flex-shrink: 0;
+}
+
+@media (max-width: 520px) {
+  .upload-wm-row {
+    flex-wrap: wrap;
+    align-items: flex-start;
   }
 }
 

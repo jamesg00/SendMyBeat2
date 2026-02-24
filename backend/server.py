@@ -69,10 +69,22 @@ REMINDER_SECRET = os.environ.get('REMINDER_SECRET', JWT_SECRET)
 BACKEND_URL = os.environ.get('BACKEND_URL', 'https://api.sendmybeat.com')
 CREATOR_USER_ID = os.environ.get("CREATOR_USER_ID", "").strip()
 CREATOR_USERNAME = os.environ.get("CREATOR_USERNAME", "deadat18").strip().lower()
+ADMIN_USERNAMES = {
+    value.strip().lower()
+    for value in os.environ.get("ADMIN_USERNAMES", "deadat18").split(",")
+    if value.strip()
+}
+ADMIN_USER_IDS = {
+    value.strip()
+    for value in os.environ.get("ADMIN_USER_IDS", "").split(",")
+    if value.strip()
+}
 SENDGRID_API_KEY = os.environ.get('SENDGRID_API_KEY')
 SENDGRID_FROM_EMAIL = os.environ.get('SENDGRID_FROM_EMAIL')
 TEXTBELT_API_KEY = os.environ.get('TEXTBELT_API_KEY')
 REMINDER_SERIALIZER = URLSafeSerializer(REMINDER_SECRET)
+BEATHELPER_DEFAULT_APPROVAL_TIMEOUT_HOURS = int(os.environ.get("BEATHELPER_DEFAULT_APPROVAL_TIMEOUT_HOURS", "12"))
+BEATHELPER_DEFAULT_NOTIFY_CHANNEL = os.environ.get("BEATHELPER_DEFAULT_NOTIFY_CHANNEL", "email").strip().lower()
 
 # Google OAuth Configuration
 GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', 'your_google_client_id_here')
@@ -668,6 +680,23 @@ class ThemeGenerateResponse(BaseModel):
     variables: Dict[str, str]
 
 
+class BeatHelperQueueCreateRequest(BaseModel):
+    beat_file_id: str
+    image_file_id: Optional[str] = None
+    beat_type: str
+    target_artist: str
+    context_tags: List[str] = []
+    ai_choose_image: bool = False
+    approval_timeout_hours: int = BEATHELPER_DEFAULT_APPROVAL_TIMEOUT_HOURS
+    auto_upload_if_no_response: bool = False
+    notify_channel: Literal["none", "email", "sms", "email_sms"] = "email"
+    privacy_status: Literal["public", "unlisted", "private"] = "public"
+
+
+class BeatHelperQueueUpdateRequest(BaseModel):
+    status: Literal["queued", "pending_approval", "approved", "skipped", "expired"]
+
+
 THEME_ALLOWED_VARIABLES = {
     "--bg-primary",
     "--bg-secondary",
@@ -881,6 +910,22 @@ def create_access_token(user_id: str, username: str) -> str:
     encoded_jwt = jwt.encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)
     return encoded_jwt
 
+
+async def _ensure_producer_profile(user_id: str, username: str) -> None:
+    """Auto-enroll user into Producer Spotlight profile table if missing."""
+    existing = await db.producer_profiles.find_one({"user_id": user_id})
+    if existing:
+        return
+    now = datetime.now(timezone.utc)
+    profile = ProducerProfile(
+        user_id=user_id,
+        username=username or "producer",
+        created_at=now,
+        updated_at=now,
+    )
+    await db.producer_profiles.insert_one(profile.model_dump())
+
+
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
     try:
         token = credentials.credentials
@@ -894,6 +939,175 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         raise HTTPException(status_code=401, detail="Token expired")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
+
+
+def _is_admin_user(user: dict) -> bool:
+    user_id = str(user.get("id") or "").strip()
+    username = str(user.get("username") or "").strip().lower()
+    return (user_id and user_id in ADMIN_USER_IDS) or (username and username in ADMIN_USERNAMES)
+
+
+async def _ensure_pro_user(current_user: dict, feature_name: str = "This feature") -> None:
+    sub_status = await get_user_subscription_status(current_user["id"])
+    if not sub_status.get("is_subscribed"):
+        raise HTTPException(
+            status_code=402,
+            detail=f"{feature_name} is a Pro feature. Upgrade to Pro to use BeatHelper."
+        )
+
+
+def _safe_iso_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+async def _estimate_best_upload_hour_utc(user_id: str) -> int:
+    """
+    Estimate best publish hour from the user's recent YouTube uploads.
+    Falls back to 18 UTC if unavailable.
+    """
+    try:
+        credentials = await refresh_youtube_token(user_id)
+        youtube = build("youtube", "v3", credentials=credentials)
+        search_response = youtube.search().list(
+            part="id",
+            forMine=True,
+            type="video",
+            order="date",
+            maxResults=25
+        ).execute()
+        video_ids = [item["id"]["videoId"] for item in search_response.get("items", []) if item.get("id", {}).get("videoId")]
+        if not video_ids:
+            return 18
+
+        videos_response = youtube.videos().list(
+            part="snippet,statistics",
+            id=",".join(video_ids)
+        ).execute()
+
+        buckets: dict[int, float] = {}
+        for item in videos_response.get("items", []):
+            published_at = (item.get("snippet", {}) or {}).get("publishedAt", "")
+            if not published_at:
+                continue
+            dt = datetime.fromisoformat(published_at.replace("Z", "+00:00"))
+            hour = dt.hour
+            views = float((item.get("statistics", {}) or {}).get("viewCount", 0) or 0)
+            buckets[hour] = buckets.get(hour, 0.0) + max(1.0, views)
+
+        if not buckets:
+            return 18
+        return max(buckets.items(), key=lambda pair: pair[1])[0]
+    except Exception:
+        return 18
+
+
+async def _generate_beathelper_metadata(
+    *,
+    target_artist: str,
+    beat_type: str,
+    context_tags: list[str],
+    user_id: str,
+) -> dict:
+    prompt = (
+        "Generate metadata for a YouTube type beat upload.\n"
+        f"Target artist: {target_artist}\n"
+        f"Beat type/style: {beat_type}\n"
+        f"Extra context tags: {', '.join(context_tags[:25]) if context_tags else 'none'}\n\n"
+        "Return strict JSON with keys: title, tags, description.\n"
+        "- title: <= 100 chars, high-intent SEO, no BPM, no key.\n"
+        "- tags: array of 25-40 concise tags, no duplicates, high intent only.\n"
+        "- description: concise producer-focused upload description with CTA, no BPM/key/prices.\n"
+    )
+
+    fallback_title = f"{target_artist} Type Beat - {beat_type.title()} Instrumental"
+    fallback_tags = [
+        f"{target_artist} type beat",
+        f"{target_artist} instrumental",
+        f"{target_artist} type beat instrumental",
+        f"{beat_type} type beat",
+        f"{beat_type} instrumental",
+    ] + [tag for tag in context_tags if isinstance(tag, str) and tag.strip()]
+    fallback_desc = (
+        f"{target_artist} type beat in a {beat_type} style.\n"
+        "If you want more beats like this, subscribe and drop a comment with the next artist/style."
+    )
+
+    try:
+        response_text = await llm_chat(
+            system_message="You are an expert YouTube SEO producer assistant. Output JSON only.",
+            user_message=prompt,
+            temperature=0.35,
+            user_id=user_id,
+        )
+        payload = _parse_llm_json_response(response_text)
+        title = str(payload.get("title") or "").strip() or fallback_title
+        tags_raw = payload.get("tags") or []
+        if not isinstance(tags_raw, list):
+            tags_raw = []
+        seen = set()
+        tags: list[str] = []
+        for tag in tags_raw + fallback_tags:
+            cleaned = re.sub(r"\s+", " ", str(tag or "").strip())
+            if not cleaned:
+                continue
+            key = cleaned.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            tags.append(cleaned)
+            if len(tags) >= 40:
+                break
+        description = str(payload.get("description") or "").strip() or fallback_desc
+        return {"title": title[:100], "tags": tags, "description": description}
+    except Exception:
+        return {"title": fallback_title[:100], "tags": fallback_tags[:40], "description": fallback_desc}
+
+
+def _build_beathelper_approval_message(item: dict) -> str:
+    artist = item.get("target_artist", "artist")
+    title = item.get("generated_title") or item.get("beat_original_filename") or "your next beat"
+    return (
+        f"BeatHelper wants to upload: '{title}'.\n"
+        f"Style target: {artist}\n"
+        "Reply in dashboard: Approve, Skip, or Choose another beat."
+    )
+
+
+def _send_email_notification(to_email: str, subject: str, message: str) -> bool:
+    if not SENDGRID_API_KEY or not SENDGRID_FROM_EMAIL or not to_email:
+        return False
+    try:
+        resp = requests.post(
+            "https://api.sendgrid.com/v3/mail/send",
+            headers={
+                "Authorization": f"Bearer {SENDGRID_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "personalizations": [{"to": [{"email": to_email}]}],
+                "from": {"email": SENDGRID_FROM_EMAIL},
+                "subject": subject,
+                "content": [{"type": "text/plain", "value": message}],
+            },
+            timeout=12,
+        )
+        return resp.status_code < 400
+    except Exception:
+        return False
+
+
+def _send_sms_notification(to_phone: str, message: str) -> bool:
+    if not TEXTBELT_API_KEY or not to_phone:
+        return False
+    try:
+        resp = requests.post(
+            "https://textbelt.com/text",
+            data={"phone": to_phone, "message": message, "key": TEXTBELT_API_KEY},
+            timeout=12,
+        )
+        return resp.status_code < 400
+    except Exception:
+        return False
 
 
 # ============ Auth Routes ============
@@ -914,6 +1128,7 @@ async def register(user_data: UserRegister):
     user_doc['created_at'] = user_doc['created_at'].isoformat()
     
     await db.users.insert_one(user_doc)
+    await _ensure_producer_profile(user.id, user.username)
     
     # Generate token
     access_token = create_access_token(user.id, user.username)
@@ -933,6 +1148,7 @@ async def login(user_data: UserLogin):
     
     # Generate token
     access_token = create_access_token(user_doc['id'], user_doc['username'])
+    await _ensure_producer_profile(user_doc['id'], user_doc['username'])
     
     user = User(
         id=user_doc['id'],
@@ -2836,6 +3052,274 @@ async def get_my_uploads(current_user: dict = Depends(get_current_user)):
     return uploads
 
 
+# ============ BeatHelper Routes (Pro) ============
+@api_router.get("/beat-helper/uploads")
+async def beathelper_get_uploads(current_user: dict = Depends(get_current_user)):
+    await _ensure_pro_user(current_user, "BeatHelper")
+    uploads = await db.uploads.find(
+        {"user_id": current_user["id"]},
+        {"_id": 0, "id": 1, "original_filename": 1, "file_type": 1, "uploaded_at": 1}
+    ).sort("uploaded_at", -1).to_list(500)
+    audio = [item for item in uploads if item.get("file_type") == "audio"]
+    images = [item for item in uploads if item.get("file_type") == "image"]
+    return {"audio_uploads": audio, "image_uploads": images}
+
+
+@api_router.get("/beat-helper/queue")
+async def beathelper_get_queue(current_user: dict = Depends(get_current_user)):
+    await _ensure_pro_user(current_user, "BeatHelper")
+    items = await db.beat_helper_queue.find(
+        {"user_id": current_user["id"]},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(200)
+    return items
+
+
+@api_router.post("/beat-helper/queue")
+async def beathelper_create_queue_item(
+    request: BeatHelperQueueCreateRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    await _ensure_pro_user(current_user, "BeatHelper")
+
+    beat_file = await db.uploads.find_one({
+        "id": request.beat_file_id,
+        "user_id": current_user["id"],
+        "file_type": "audio",
+    })
+    if not beat_file:
+        raise HTTPException(status_code=404, detail="Beat audio file not found.")
+
+    image_file_id = (request.image_file_id or "").strip()
+    image_file = None
+    if image_file_id:
+        image_file = await db.uploads.find_one({
+            "id": image_file_id,
+            "user_id": current_user["id"],
+            "file_type": "image",
+        })
+        if not image_file:
+            raise HTTPException(status_code=404, detail="Selected thumbnail image not found.")
+
+    if not image_file and request.ai_choose_image:
+        ai_query = f"{request.target_artist} type beat {request.beat_type}".strip()
+        image_suggestions = await generate_image_suggestions(
+            ImageGenerateRequest(title=ai_query, tags=request.context_tags or [], k=1),
+            current_user,
+        )
+        if image_suggestions.results:
+            chosen = image_suggestions.results[0]
+            imported = await upload_image_from_url(
+                UploadImageFromUrlRequest(
+                    image_url=chosen.image_url,
+                    original_filename=f"{request.target_artist}-ai-thumb.jpg",
+                ),
+                current_user,
+            )
+            image_file_id = imported.get("file_id")
+            image_file = await db.uploads.find_one({
+                "id": image_file_id,
+                "user_id": current_user["id"],
+                "file_type": "image",
+            })
+
+    if not image_file:
+        raise HTTPException(
+            status_code=400,
+            detail="A thumbnail is required. Pick one manually or enable AI image selection."
+        )
+
+    approval_timeout_hours = max(1, min(72, int(request.approval_timeout_hours or BEATHELPER_DEFAULT_APPROVAL_TIMEOUT_HOURS)))
+    notify_channel = (request.notify_channel or BEATHELPER_DEFAULT_NOTIFY_CHANNEL or "email").strip().lower()
+    if notify_channel not in {"none", "email", "sms", "email_sms"}:
+        notify_channel = "email"
+
+    metadata = await _generate_beathelper_metadata(
+        target_artist=request.target_artist,
+        beat_type=request.beat_type,
+        context_tags=request.context_tags or [],
+        user_id=current_user["id"],
+    )
+
+    description_id = str(uuid.uuid4())
+    description_doc = {
+        "id": description_id,
+        "user_id": current_user["id"],
+        "title": f"BeatHelper - {metadata['title'][:80]}",
+        "content": metadata["description"],
+        "is_ai_generated": True,
+        "created_at": _safe_iso_now(),
+        "updated_at": _safe_iso_now(),
+    }
+    await db.descriptions.insert_one(description_doc)
+
+    tags_id = str(uuid.uuid4())
+    tags_doc = {
+        "id": tags_id,
+        "user_id": current_user["id"],
+        "query": f"{request.target_artist} {request.beat_type}".strip(),
+        "tags": metadata["tags"],
+        "created_at": _safe_iso_now(),
+    }
+    await db.tag_generations.insert_one(tags_doc)
+
+    best_hour_utc = await _estimate_best_upload_hour_utc(current_user["id"])
+    now_utc = datetime.now(timezone.utc)
+    scheduled_for = now_utc.replace(hour=best_hour_utc, minute=0, second=0, microsecond=0)
+    if scheduled_for <= now_utc:
+        scheduled_for = scheduled_for + timedelta(days=1)
+
+    item_id = str(uuid.uuid4())
+    queue_doc = {
+        "id": item_id,
+        "user_id": current_user["id"],
+        "status": "queued",
+        "beat_file_id": request.beat_file_id,
+        "beat_original_filename": beat_file.get("original_filename"),
+        "image_file_id": image_file.get("id"),
+        "image_original_filename": image_file.get("original_filename"),
+        "target_artist": request.target_artist.strip(),
+        "beat_type": request.beat_type.strip(),
+        "context_tags": request.context_tags or [],
+        "ai_choose_image": bool(request.ai_choose_image),
+        "approval_timeout_hours": approval_timeout_hours,
+        "auto_upload_if_no_response": bool(request.auto_upload_if_no_response),
+        "notify_channel": notify_channel,
+        "privacy_status": request.privacy_status,
+        "best_upload_hour_utc": int(best_hour_utc),
+        "scheduled_for_utc": scheduled_for.isoformat(),
+        "generated_title": metadata["title"],
+        "generated_tags": metadata["tags"],
+        "generated_description": metadata["description"],
+        "description_id": description_id,
+        "tags_id": tags_id,
+        "created_at": _safe_iso_now(),
+        "updated_at": _safe_iso_now(),
+        "approval_requested_at": None,
+        "approval_expires_at": None,
+        "last_notification_status": "none",
+    }
+
+    await db.beat_helper_queue.insert_one(queue_doc)
+    return queue_doc
+
+
+@api_router.post("/beat-helper/queue/{item_id}/request-approval")
+async def beathelper_request_approval(item_id: str, current_user: dict = Depends(get_current_user)):
+    await _ensure_pro_user(current_user, "BeatHelper")
+    item = await db.beat_helper_queue.find_one({"id": item_id, "user_id": current_user["id"]})
+    if not item:
+        raise HTTPException(status_code=404, detail="Queue item not found.")
+
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(hours=max(1, int(item.get("approval_timeout_hours", BEATHELPER_DEFAULT_APPROVAL_TIMEOUT_HOURS))))
+    subject = "BeatHelper approval request"
+    message = _build_beathelper_approval_message(item)
+
+    user_doc = await db.users.find_one({"id": current_user["id"]}, {"_id": 0, "email": 1, "phone": 1})
+    email = (user_doc or {}).get("email") or ""
+    phone = (user_doc or {}).get("phone") or ""
+    notify_channel = (item.get("notify_channel") or "none").lower()
+
+    email_sent = False
+    sms_sent = False
+    if notify_channel in {"email", "email_sms"}:
+        email_sent = _send_email_notification(email, subject, message)
+    if notify_channel in {"sms", "email_sms"}:
+        sms_sent = _send_sms_notification(phone, message)
+
+    if notify_channel == "none":
+        notification_status = "none"
+    else:
+        notification_status = "sent" if (email_sent or sms_sent) else "failed"
+
+    await db.beat_helper_queue.update_one(
+        {"id": item_id, "user_id": current_user["id"]},
+        {"$set": {
+            "status": "pending_approval",
+            "approval_requested_at": now.isoformat(),
+            "approval_expires_at": expires_at.isoformat(),
+            "last_notification_status": notification_status,
+            "updated_at": _safe_iso_now(),
+        }}
+    )
+
+    return {
+        "success": True,
+        "status": notification_status,
+        "approval_expires_at": expires_at.isoformat(),
+        "message": "Approval request sent. Beat will not upload until approved unless auto-upload is enabled.",
+    }
+
+
+@api_router.post("/beat-helper/queue/{item_id}/approve-upload")
+async def beathelper_approve_and_upload(item_id: str, current_user: dict = Depends(get_current_user)):
+    await _ensure_pro_user(current_user, "BeatHelper")
+    item = await db.beat_helper_queue.find_one({"id": item_id, "user_id": current_user["id"]})
+    if not item:
+        raise HTTPException(status_code=404, detail="Queue item not found.")
+
+    if item.get("status") == "uploaded":
+        return {"success": True, "message": "Already uploaded.", "video_url": item.get("video_url")}
+
+    upload_result = await upload_to_youtube(
+        title=item.get("generated_title") or item.get("beat_original_filename") or "Beat upload",
+        description_id=item.get("description_id"),
+        tags_id=item.get("tags_id"),
+        privacy_status=item.get("privacy_status", "public"),
+        audio_file_id=item.get("beat_file_id"),
+        image_file_id=item.get("image_file_id"),
+        description_override=item.get("generated_description"),
+        aspect_ratio="16:9",
+        image_scale=1.0,
+        image_scale_x=None,
+        image_scale_y=None,
+        image_pos_x=0.0,
+        image_pos_y=0.0,
+        image_rotation=0.0,
+        background_color="black",
+        remove_watermark=True,
+        current_user=current_user,
+    )
+
+    await db.beat_helper_queue.update_one(
+        {"id": item_id, "user_id": current_user["id"]},
+        {"$set": {
+            "status": "uploaded",
+            "uploaded_at": _safe_iso_now(),
+            "video_id": upload_result.get("video_id"),
+            "video_url": upload_result.get("video_url"),
+            "updated_at": _safe_iso_now(),
+        }}
+    )
+    return {"success": True, **upload_result}
+
+
+@api_router.patch("/beat-helper/queue/{item_id}")
+async def beathelper_update_queue_item(
+    item_id: str,
+    request: BeatHelperQueueUpdateRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    await _ensure_pro_user(current_user, "BeatHelper")
+    result = await db.beat_helper_queue.update_one(
+        {"id": item_id, "user_id": current_user["id"]},
+        {"$set": {"status": request.status, "updated_at": _safe_iso_now()}},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Queue item not found.")
+    return {"success": True}
+
+
+@api_router.delete("/beat-helper/queue/{item_id}")
+async def beathelper_delete_queue_item(item_id: str, current_user: dict = Depends(get_current_user)):
+    await _ensure_pro_user(current_user, "BeatHelper")
+    result = await db.beat_helper_queue.delete_one({"id": item_id, "user_id": current_user["id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Queue item not found.")
+    return {"success": True}
+
+
 # ============ YouTube Helper Functions ============
 async def refresh_youtube_token(user_id: str) -> Credentials:
     """Refresh YouTube access token if expired"""
@@ -3021,27 +3505,224 @@ async def _profile_with_role_tag(profile_doc: dict) -> ProducerProfile:
     return ProducerProfile(**payload)
 
 
+def _attach_growth_to_profile(profile: ProducerProfile, growth_by_user: dict[str, dict]) -> ProducerProfile:
+    growth = growth_by_user.get(profile.user_id, {}) if profile and profile.user_id else {}
+    return profile.model_copy(update={
+        "current_streak": int(growth.get("current_streak") or 0),
+        "longest_streak": int(growth.get("longest_streak") or 0),
+        "total_days_completed": int(growth.get("total_days_completed") or 0),
+    })
+
+
+def _extract_youtube_channel_hints(url: str) -> dict:
+    raw = (url or "").strip()
+    if not raw:
+        return {}
+    try:
+        from urllib.parse import urlparse, parse_qs
+        if not re.match(r"^https?://", raw, re.IGNORECASE):
+            raw = f"https://{raw}"
+        parsed = urlparse(raw)
+        path = parsed.path or ""
+        query = parse_qs(parsed.query or "")
+
+        # /channel/UC...
+        m_channel = re.search(r"/channel/(UC[\w-]{10,})", path, re.IGNORECASE)
+        if m_channel:
+            return {"channel_id": m_channel.group(1)}
+
+        # /@handle
+        m_handle = re.search(r"/@([A-Za-z0-9._-]+)", path)
+        if m_handle:
+            return {"handle": m_handle.group(1)}
+
+        # /user/name or /c/name
+        m_user = re.search(r"/(?:user|c)/([A-Za-z0-9._-]+)", path)
+        if m_user:
+            return {"legacy_name": m_user.group(1)}
+
+        # video link with v=
+        v = (query.get("v") or [None])[0]
+        if v:
+            return {"video_id": v}
+    except Exception:
+        return {}
+    return {}
+
+
+def _youtube_get_channel_id_from_hints(hints: dict, api_key: str) -> str | None:
+    if not api_key:
+        return None
+    if hints.get("channel_id"):
+        return hints["channel_id"]
+
+    try:
+        if hints.get("video_id"):
+            r = requests.get(
+                "https://www.googleapis.com/youtube/v3/videos",
+                params={"part": "snippet", "id": hints["video_id"], "key": api_key},
+                timeout=12,
+            )
+            if r.status_code < 400:
+                items = r.json().get("items", [])
+                if items:
+                    return items[0].get("snippet", {}).get("channelId")
+
+        search_term = hints.get("handle") or hints.get("legacy_name")
+        if search_term:
+            r = requests.get(
+                "https://www.googleapis.com/youtube/v3/search",
+                params={
+                    "part": "snippet",
+                    "type": "channel",
+                    "q": search_term,
+                    "maxResults": 1,
+                    "key": api_key,
+                },
+                timeout=12,
+            )
+            if r.status_code < 400:
+                items = r.json().get("items", [])
+                if items:
+                    return items[0].get("snippet", {}).get("channelId")
+    except Exception:
+        return None
+    return None
+
+
+def _fetch_channel_top_viewed_beats(youtube_url: str, top_k: int = 5) -> tuple[list[dict], dict]:
+    api_key = os.environ.get("YOUTUBE_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+    if not api_key:
+        return [], {}
+    hints = _extract_youtube_channel_hints(youtube_url)
+    channel_id = _youtube_get_channel_id_from_hints(hints, api_key)
+    if not channel_id:
+        return [], {}
+
+    performance = {}
+    try:
+        ch = requests.get(
+            "https://www.googleapis.com/youtube/v3/channels",
+            params={"part": "statistics,snippet", "id": channel_id, "key": api_key},
+            timeout=12,
+        )
+        if ch.status_code < 400:
+            items = ch.json().get("items", [])
+            if items:
+                stats = items[0].get("statistics", {})
+                performance = {
+                    "subscriber_count": int(stats.get("subscriberCount", 0) or 0),
+                    "total_views": int(stats.get("viewCount", 0) or 0),
+                    "total_videos": int(stats.get("videoCount", 0) or 0),
+                }
+    except Exception:
+        performance = {}
+
+    try:
+        s = requests.get(
+            "https://www.googleapis.com/youtube/v3/search",
+            params={
+                "part": "snippet",
+                "channelId": channel_id,
+                "type": "video",
+                "maxResults": 25,
+                "order": "viewCount",
+                "key": api_key,
+            },
+            timeout=15,
+        )
+        if s.status_code >= 400:
+            return [], performance
+        items = s.json().get("items", [])
+        video_ids = [i.get("id", {}).get("videoId") for i in items if i.get("id", {}).get("videoId")]
+        if not video_ids:
+            return [], performance
+
+        v = requests.get(
+            "https://www.googleapis.com/youtube/v3/videos",
+            params={
+                "part": "snippet,statistics",
+                "id": ",".join(video_ids[:50]),
+                "maxResults": 50,
+                "key": api_key,
+            },
+            timeout=15,
+        )
+        if v.status_code >= 400:
+            return [], performance
+
+        beats = []
+        for item in v.json().get("items", []):
+            vid = item.get("id")
+            sn = item.get("snippet", {})
+            st = item.get("statistics", {})
+            title = sn.get("title") or "Untitled"
+            beats.append({
+                "title": title,
+                "url": f"https://www.youtube.com/watch?v={vid}" if vid else None,
+                "views": int(st.get("viewCount", 0) or 0),
+                "likes": int(st.get("likeCount", 0) or 0),
+                "published_at": sn.get("publishedAt"),
+            })
+        beats = sorted(beats, key=lambda b: b.get("views", 0), reverse=True)
+        return beats[:max(1, top_k)], performance
+    except Exception:
+        return [], performance
+
+
 @api_router.get("/producers/spotlight", response_model=SpotlightResponse)
 async def get_producer_spotlight():
     """Get featured, trending, and new producers for the spotlight page"""
+    all_profiles = await db.producer_profiles.find().to_list(5000)
+    if not all_profiles:
+        return SpotlightResponse(
+            featured_producers=[],
+            trending_producers=[],
+            new_producers=[],
+            all_producers=[],
+        )
 
-    # Get featured producers (manually selected by admin or algorithm)
-    featured = await db.producer_profiles.find({"featured": True}).limit(3).to_list(3)
+    growth_rows = await db.growth_streaks.find({}, {"_id": 0, "user_id": 1, "current_streak": 1, "total_days_completed": 1}).to_list(5000)
+    growth_by_user = {g.get("user_id"): g for g in growth_rows}
 
-    # Get trending (most likes/views)
-    trending = await db.producer_profiles.find().sort("likes", -1).limit(6).to_list(6)
+    def trending_score(profile: dict) -> float:
+        growth = growth_by_user.get(profile.get("user_id"), {})
+        likes = float(profile.get("likes") or 0)
+        views = float(profile.get("views") or 0)
+        streak = float(growth.get("current_streak") or 0)
+        days = float(growth.get("total_days_completed") or 0)
+        # Networking signal: active streak + engagement.
+        return likes * 4.0 + views * 0.15 + streak * 8.0 + days * 1.5
 
-    # Get new
-    new_producers = await db.producer_profiles.find().sort("created_at", -1).limit(6).to_list(6)
+    featured = [p for p in all_profiles if p.get("featured")]
+    featured = sorted(featured, key=trending_score, reverse=True)[:3]
+    trending = sorted(all_profiles, key=trending_score, reverse=True)[:12]
+    def created_at_ts(profile: dict) -> float:
+        value = profile.get("created_at")
+        if isinstance(value, datetime):
+            return value.timestamp()
+        if isinstance(value, str):
+            try:
+                return datetime.fromisoformat(value).timestamp()
+            except Exception:
+                return 0.0
+        return 0.0
 
-    featured_profiles = [await _profile_with_role_tag(p) for p in featured]
-    trending_profiles = [await _profile_with_role_tag(p) for p in trending]
-    new_profiles = [await _profile_with_role_tag(p) for p in new_producers]
+    new_producers = sorted(all_profiles, key=created_at_ts, reverse=True)[:12]
+
+    featured_profiles = [_attach_growth_to_profile(await _profile_with_role_tag(p), growth_by_user) for p in featured]
+    trending_profiles = [_attach_growth_to_profile(await _profile_with_role_tag(p), growth_by_user) for p in trending]
+    new_profiles = [_attach_growth_to_profile(await _profile_with_role_tag(p), growth_by_user) for p in new_producers]
+    all_network_profiles = [
+        _attach_growth_to_profile(await _profile_with_role_tag(p), growth_by_user)
+        for p in sorted(all_profiles, key=trending_score, reverse=True)
+    ]
 
     return SpotlightResponse(
         featured_producers=featured_profiles,
         trending_producers=trending_profiles,
-        new_producers=new_profiles
+        new_producers=new_profiles,
+        all_producers=all_network_profiles,
     )
 
 @api_router.get("/producers/me", response_model=ProducerProfile)
@@ -3061,6 +3742,78 @@ async def get_my_producer_profile(current_user: dict = Depends(get_current_user)
 
     return await _profile_with_role_tag(profile)
 
+
+@api_router.get("/producers/{user_id}/stats")
+async def get_producer_stats(user_id: str, current_user: dict = Depends(get_current_user)):
+    """Detailed spotlight card stats for modal view."""
+    profile = await db.producer_profiles.find_one({"user_id": user_id})
+    if not profile:
+        raise HTTPException(status_code=404, detail="Producer profile not found.")
+
+    user_doc = await db.users.find_one({"id": user_id}, {"_id": 0, "username": 1, "created_at": 1})
+    growth = await db.growth_streaks.find_one({"user_id": user_id}, {"_id": 0})
+    youtube = await db.youtube_connections.find_one({"user_id": user_id}, {"_id": 0, "name": 1, "google_email": 1, "connected_at": 1})
+
+    uploads = await db.uploads.find({"user_id": user_id}, {"_id": 0, "file_type": 1, "uploaded_at": 1}).to_list(2000)
+    descriptions_count = await db.descriptions.count_documents({"user_id": user_id})
+    tag_sets_count = await db.tag_history.count_documents({"user_id": user_id})
+
+    audio_uploads = sum(1 for u in uploads if u.get("file_type") == "audio")
+    image_uploads = sum(1 for u in uploads if u.get("file_type") == "image")
+
+    profile_with_role = await _profile_with_role_tag(profile)
+    top_beats = []
+    if profile.get("top_beat_url"):
+        top_beats.append({
+            "title": "Top Beat",
+            "url": profile.get("top_beat_url"),
+        })
+
+    recent_audio = await db.uploads.find(
+        {"user_id": user_id, "file_type": "audio"},
+        {"_id": 0, "original_filename": 1, "uploaded_at": 1}
+    ).sort("uploaded_at", -1).limit(5).to_list(5)
+    for idx, upload in enumerate(recent_audio):
+        name = (upload.get("original_filename") or "").strip()
+        if not name:
+            continue
+        top_beats.append({
+            "title": f"Beat {idx + 1}: {name}",
+            "url": None,
+        })
+
+    youtube_url = ((profile.get("social_links") or {}).get("youtube") or "").strip()
+    channel_top_beats, channel_perf = await asyncio.to_thread(_fetch_channel_top_viewed_beats, youtube_url, 5)
+    if channel_top_beats:
+        # Prefer real channel top beats for spotlight.
+        top_beats = channel_top_beats
+
+    return {
+        "profile": profile_with_role.model_dump(),
+        "stats": {
+            "likes": int(profile.get("likes") or 0),
+            "views": int(profile.get("views") or 0),
+            "current_streak": int((growth or {}).get("current_streak") or 0),
+            "longest_streak": int((growth or {}).get("longest_streak") or 0),
+            "total_days_completed": int((growth or {}).get("total_days_completed") or 0),
+            "descriptions_created": int(descriptions_count),
+            "tag_sets_created": int(tag_sets_count),
+            "audio_uploads": int(audio_uploads),
+            "image_uploads": int(image_uploads),
+        },
+        "top_beats": top_beats,
+        "top_song": profile.get("top_beat_url"),
+        "channel": {
+            "connected": bool(youtube),
+            "name": (youtube or {}).get("name"),
+            "email": (youtube or {}).get("google_email"),
+            "connected_at": (youtube or {}).get("connected_at"),
+            "performance": channel_perf,
+        },
+        "channel_top_beats": channel_top_beats,
+        "member_since": (user_doc or {}).get("created_at"),
+    }
+
 @api_router.put("/producers/me", response_model=ProducerProfile)
 async def update_my_producer_profile(
     update_data: ProducerProfileUpdate,
@@ -3073,6 +3826,8 @@ async def update_my_producer_profile(
         update_fields['bio'] = update_data.bio
     if update_data.avatar_url is not None:
         update_fields['avatar_url'] = update_data.avatar_url
+    if update_data.banner_url is not None:
+        update_fields['banner_url'] = update_data.banner_url
     if update_data.top_beat_url is not None:
         update_fields['top_beat_url'] = update_data.top_beat_url
     if update_data.social_links is not None:
@@ -3123,6 +3878,32 @@ async def upload_producer_avatar(
     )
 
     return {"avatar_url": avatar_data_url}
+
+
+@api_router.post("/producers/banner")
+async def upload_producer_banner(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """Upload a profile banner and return a data URL that can be saved in profile."""
+    allowed_types = {"image/jpeg", "image/png", "image/webp"}
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Invalid image type. Use JPG, PNG, or WEBP.")
+
+    MAX_SIZE = 4 * 1024 * 1024
+    image_bytes = await file.read(MAX_SIZE + 1)
+    if not image_bytes:
+        raise HTTPException(status_code=400, detail="Empty image file.")
+    if len(image_bytes) > MAX_SIZE:
+        raise HTTPException(status_code=400, detail="Image too large. Max size is 4MB.")
+
+    banner_data_url = f"data:{file.content_type};base64,{base64.b64encode(image_bytes).decode('utf-8')}"
+    await db.producer_profiles.update_one(
+        {"user_id": current_user["id"]},
+        {"$set": {"banner_url": banner_data_url, "updated_at": datetime.now(timezone.utc)}},
+        upsert=True
+    )
+    return {"banner_url": banner_data_url}
 
 
 @api_router.post("/producers/verification/apply", response_model=ProducerProfile)
@@ -4052,6 +4833,9 @@ async def upload_to_youtube(
 @api_router.get("/admin/costs")
 async def get_admin_costs(current_user: dict = Depends(get_current_user)):
     """Get estimated backend costs for the current month"""
+    if not _is_admin_user(current_user):
+        raise HTTPException(status_code=403, detail="Admin access only")
+
     # Calculate start of current month
     now = datetime.now(timezone.utc)
     start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
