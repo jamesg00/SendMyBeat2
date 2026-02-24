@@ -254,6 +254,78 @@ def _parse_llm_json_response(raw_text: str) -> dict:
     raise ValueError("No JSON object found in model response")
 
 
+def _clean_artist_candidate(text: str) -> str:
+    candidate = re.sub(r"\s+", " ", (text or "").strip())
+    candidate = re.sub(r"[^a-zA-Z0-9&' .-]", "", candidate).strip(" -")
+    if len(candidate) < 2:
+        return ""
+    return candidate
+
+
+def _extract_artist_queries(title: str, tags: list[str]) -> list[str]:
+    candidates: list[str] = []
+    pool = [title or ""] + (tags or [])
+
+    for raw in pool:
+        s = (raw or "").lower().strip()
+        if not s:
+            continue
+
+        # e.g. "lil uzi vert type beat", "drake x future type beat", "ken carson - type beat"
+        if "type beat" in s:
+            left = s.split("type beat")[0]
+            left = re.sub(r"\b(inspired|style|vibe|free|hard|dark|melodic|rage|trap|drill|phonk)\b", "", left)
+            parts = re.split(r"\s+x\s+|,|/|&| feat\.?| ft\.? ", left)
+            for part in parts:
+                c = _clean_artist_candidate(part.title())
+                if c:
+                    candidates.append(c)
+
+    # Fallback to first words of title if no type-beat pattern
+    if not candidates:
+        title_words = re.split(r"\s+", (title or "").strip())
+        fallback = _clean_artist_candidate(" ".join(title_words[:3]).title())
+        if fallback:
+            candidates.append(fallback)
+
+    deduped: list[str] = []
+    seen = set()
+    for c in candidates:
+        key = c.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(c)
+    return deduped[:3]
+
+
+def _store_uploaded_image_bytes(
+    *,
+    current_user_id: str,
+    image_bytes: bytes,
+    file_ext: str,
+    original_filename: str,
+) -> dict:
+    file_id = str(uuid.uuid4())
+    ext = (file_ext or "").lower()
+    if ext not in [".jpg", ".jpeg", ".png", ".webp", ".webm"]:
+        ext = ".jpg"
+    filename = f"{file_id}{ext}"
+    file_path = UPLOADS_DIR / filename
+    with open(file_path, "wb") as buffer:
+        buffer.write(image_bytes)
+    upload_doc = {
+        "id": file_id,
+        "user_id": current_user_id,
+        "original_filename": original_filename,
+        "stored_filename": filename,
+        "file_type": "image",
+        "file_path": str(file_path),
+        "uploaded_at": datetime.now(timezone.utc).isoformat()
+    }
+    return {"file_id": file_id, "filename": original_filename, "upload_doc": upload_doc}
+
+
 async def llm_chat(
     system_message: str,
     user_message: str,
@@ -508,6 +580,30 @@ class ThumbnailCheckResponse(BaseModel):
     suggestions: List[str]
     text_overlay_suggestion: str
     branding_suggestion: str
+
+class GeneratedImageResult(BaseModel):
+    id: str
+    image_url: str
+    thumbnail_url: Optional[str] = None
+    artist: Optional[str] = None
+    query_used: Optional[str] = None
+    source: str
+    credit_name: Optional[str] = None
+    credit_url: Optional[str] = None
+
+class ImageGenerateRequest(BaseModel):
+    title: str
+    tags: List[str] = []
+    k: int = 6
+
+class ImageGenerateResponse(BaseModel):
+    query_used: str
+    detected_artists: List[str]
+    results: List[GeneratedImageResult]
+
+class UploadImageFromUrlRequest(BaseModel):
+    image_url: str
+    original_filename: Optional[str] = None
 
 class GrowthStreak(BaseModel):
     user_id: str
@@ -2624,39 +2720,87 @@ async def upload_image(file: UploadFile = File(...), current_user: dict = Depend
         if file_ext not in allowed_extensions:
             raise HTTPException(status_code=400, detail="Invalid image file format. Allowed: JPG, PNG, WEBP, WEBM")
         
-        # Create unique filename
-        file_id = str(uuid.uuid4())
-        filename = f"{file_id}{file_ext}"
-        file_path = UPLOADS_DIR / filename
-        
-        # Save file with chunked reading for better performance
-        chunk_size = 1024 * 1024  # 1MB chunks
-        with open(file_path, "wb") as buffer:
-            while True:
-                chunk = await file.read(chunk_size)
-                if not chunk:
-                    break
-                buffer.write(chunk)
-        
-        # Save metadata to database
-        upload_doc = {
-            "id": file_id,
-            "user_id": current_user['id'],
-            "original_filename": file.filename,
-            "stored_filename": filename,
-            "file_type": "image",
-            "file_path": str(file_path),
-            "uploaded_at": datetime.now(timezone.utc).isoformat()
-        }
-        
+        image_bytes = await file.read()
+        if not image_bytes:
+            raise HTTPException(status_code=400, detail="Empty image file.")
+
+        stored = _store_uploaded_image_bytes(
+            current_user_id=current_user["id"],
+            image_bytes=image_bytes,
+            file_ext=file_ext,
+            original_filename=file.filename,
+        )
+        upload_doc = stored["upload_doc"]
         await db.uploads.insert_one(upload_doc)
-        
-        return {"file_id": file_id, "filename": file.filename}
+
+        return {"file_id": stored["file_id"], "filename": stored["filename"]}
     except HTTPException:
         raise
     except Exception as e:
         logging.error(f"Image upload error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to upload image: {str(e)}")
+
+
+@api_router.post("/upload/image-from-url")
+async def upload_image_from_url(payload: UploadImageFromUrlRequest, current_user: dict = Depends(get_current_user)):
+    """Download image from a remote URL and store it as a normal uploaded image."""
+    try:
+        image_url = (payload.image_url or "").strip()
+        if not image_url:
+            raise HTTPException(status_code=400, detail="image_url is required.")
+        if not re.match(r"^https?://", image_url, re.IGNORECASE):
+            raise HTTPException(status_code=400, detail="image_url must start with http:// or https://")
+
+        resp = requests.get(
+            image_url,
+            timeout=20,
+            stream=True,
+            headers={"User-Agent": "SendMyBeat/1.0 (+https://sendmybeat.com)"},
+        )
+        if resp.status_code >= 400:
+            raise HTTPException(status_code=400, detail=f"Failed to fetch image (HTTP {resp.status_code}).")
+
+        content_type = (resp.headers.get("Content-Type") or "").lower()
+        if "image/" not in content_type:
+            raise HTTPException(status_code=400, detail="URL does not point to an image.")
+
+        max_bytes = 12 * 1024 * 1024  # 12MB
+        image_bytes = bytearray()
+        for chunk in resp.iter_content(chunk_size=1024 * 1024):
+            if not chunk:
+                continue
+            image_bytes.extend(chunk)
+            if len(image_bytes) > max_bytes:
+                raise HTTPException(status_code=400, detail="Image is too large (max 12MB).")
+
+        if not image_bytes:
+            raise HTTPException(status_code=400, detail="Fetched image is empty.")
+
+        ext_map = {
+            "image/jpeg": ".jpg",
+            "image/jpg": ".jpg",
+            "image/png": ".png",
+            "image/webp": ".webp",
+            "image/webm": ".webm",
+        }
+        file_ext = ext_map.get(content_type.split(";")[0].strip(), Path(image_url).suffix.lower() or ".jpg")
+        original_filename = (payload.original_filename or f"ai-generated{file_ext}").strip()
+        if not original_filename.lower().endswith(file_ext):
+            original_filename = f"{Path(original_filename).stem}{file_ext}"
+
+        stored = _store_uploaded_image_bytes(
+            current_user_id=current_user["id"],
+            image_bytes=bytes(image_bytes),
+            file_ext=file_ext,
+            original_filename=original_filename,
+        )
+        await db.uploads.insert_one(stored["upload_doc"])
+        return {"file_id": stored["file_id"], "filename": stored["filename"]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"upload_image_from_url error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to import image: {str(e)}")
 
 @api_router.get("/uploads/my-files")
 async def get_my_uploads(current_user: dict = Depends(get_current_user)):
@@ -3154,11 +3298,148 @@ Return JSON schema:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ============ AI Image Suggestions Route ============
+@api_router.post("/beat/generate-image", response_model=ImageGenerateResponse)
+async def generate_image_suggestions(
+    request: ImageGenerateRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """Generate artist-aware reference images based on title + selected tags."""
+    try:
+        title = (request.title or "").strip()
+        tags = request.tags or []
+        k = max(1, min(int(request.k or 6), 12))
+        if not title and not tags:
+            raise HTTPException(status_code=400, detail="title or tags are required.")
+
+        artists = _extract_artist_queries(title, tags)
+        query = " ".join(artists) if artists else title
+        if not query:
+            raise HTTPException(status_code=400, detail="Could not infer artist query from title/tags.")
+
+        results: list[dict] = []
+
+        # 1) Pexels (preferred when key exists)
+        pexels_key = os.environ.get("PEXELS_API_KEY")
+        if pexels_key:
+            try:
+                pexels_resp = requests.get(
+                    "https://api.pexels.com/v1/search",
+                    params={"query": query, "per_page": k, "orientation": "landscape"},
+                    headers={"Authorization": pexels_key},
+                    timeout=15,
+                )
+                if pexels_resp.status_code < 400:
+                    payload = pexels_resp.json()
+                    for photo in payload.get("photos", []):
+                        src = photo.get("src", {})
+                        image_url = src.get("large2x") or src.get("large") or src.get("original")
+                        thumb_url = src.get("medium") or src.get("small") or image_url
+                        if not image_url:
+                            continue
+                        results.append({
+                            "id": f"pexels-{photo.get('id')}",
+                            "image_url": image_url,
+                            "thumbnail_url": thumb_url,
+                            "artist": artists[0] if artists else None,
+                            "query_used": query,
+                            "source": "pexels",
+                            "credit_name": (photo.get("photographer") or "Pexels Photographer"),
+                            "credit_url": photo.get("photographer_url"),
+                        })
+            except Exception as e:
+                logging.warning(f"Pexels image search failed: {str(e)}")
+
+        # 2) Pixabay fallback
+        if len(results) < k and os.environ.get("PIXABAY_API_KEY"):
+            try:
+                needed = k - len(results)
+                px_resp = requests.get(
+                    "https://pixabay.com/api/",
+                    params={
+                        "key": os.environ.get("PIXABAY_API_KEY"),
+                        "q": query,
+                        "image_type": "photo",
+                        "per_page": needed,
+                        "safesearch": "true",
+                    },
+                    timeout=15,
+                )
+                if px_resp.status_code < 400:
+                    payload = px_resp.json()
+                    for hit in payload.get("hits", []):
+                        image_url = hit.get("largeImageURL") or hit.get("webformatURL")
+                        thumb_url = hit.get("previewURL") or hit.get("webformatURL") or image_url
+                        if not image_url:
+                            continue
+                        results.append({
+                            "id": f"pixabay-{hit.get('id')}",
+                            "image_url": image_url,
+                            "thumbnail_url": thumb_url,
+                            "artist": artists[0] if artists else None,
+                            "query_used": query,
+                            "source": "pixabay",
+                            "credit_name": hit.get("user"),
+                            "credit_url": f"https://pixabay.com/users/{hit.get('user', '')}/" if hit.get("user") else None,
+                        })
+            except Exception as e:
+                logging.warning(f"Pixabay image search failed: {str(e)}")
+
+        # 3) Deezer fallback (no key): artist photos
+        if len(results) < k:
+            try:
+                needed = k - len(results)
+                dz_resp = requests.get(
+                    "https://api.deezer.com/search/artist",
+                    params={"q": query},
+                    timeout=10,
+                )
+                if dz_resp.status_code < 400:
+                    payload = dz_resp.json()
+                    for artist in payload.get("data", [])[:needed]:
+                        image_url = artist.get("picture_xl") or artist.get("picture_big") or artist.get("picture_medium")
+                        if not image_url:
+                            continue
+                        results.append({
+                            "id": f"deezer-{artist.get('id')}",
+                            "image_url": image_url,
+                            "thumbnail_url": artist.get("picture_medium") or image_url,
+                            "artist": artist.get("name"),
+                            "query_used": query,
+                            "source": "deezer",
+                            "credit_name": artist.get("name"),
+                            "credit_url": artist.get("link"),
+                        })
+            except Exception as e:
+                logging.warning(f"Deezer image search failed: {str(e)}")
+
+        deduped: list[dict] = []
+        seen = set()
+        for item in results:
+            url = (item.get("image_url") or "").strip()
+            if not url or url in seen:
+                continue
+            seen.add(url)
+            deduped.append(item)
+
+        return ImageGenerateResponse(
+            query_used=query,
+            detected_artists=artists,
+            results=deduped[:k]
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"generate_image_suggestions error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate image suggestions: {str(e)}")
+
+
 # ============ Thumbnail Checker Route ============
 @api_router.post("/beat/thumbnail-check", response_model=ThumbnailCheckResponse)
 async def check_thumbnail(
     request: Request,
-    file: UploadFile = File(...),
+    file: UploadFile | None = File(default=None),
+    image_file_id: str = Form(""),
     title: str = Form(""),
     tags: str = Form(""),
     description: str = Form(""),
@@ -3175,13 +3456,28 @@ async def check_thumbnail(
                 detail="Title, tags, and description are required for thumbnail checks."
             )
 
-        allowed_types = {"image/jpeg", "image/png", "image/webp"}
-        if file.content_type not in allowed_types:
-            raise HTTPException(status_code=400, detail="Invalid image type. Use JPG, PNG, or WEBP.")
+        image_bytes: bytes | None = None
+        image_mime = "image/jpeg"
 
-        image_bytes = await file.read()
+        if file is not None and getattr(file, "filename", None):
+            allowed_types = {"image/jpeg", "image/png", "image/webp"}
+            if file.content_type not in allowed_types:
+                raise HTTPException(status_code=400, detail="Invalid image type. Use JPG, PNG, or WEBP.")
+            image_bytes = await file.read()
+            image_mime = file.content_type or image_mime
+        elif image_file_id.strip():
+            upload = await db.uploads.find_one({"id": image_file_id.strip(), "user_id": current_user["id"], "file_type": "image"})
+            if not upload:
+                raise HTTPException(status_code=404, detail="Referenced image file not found.")
+            path = Path(upload.get("file_path", ""))
+            if not path.exists():
+                raise HTTPException(status_code=404, detail="Referenced image file is missing on server.")
+            image_bytes = path.read_bytes()
+            ext = path.suffix.lower()
+            image_mime = ".png" == ext and "image/png" or (".webp" == ext and "image/webp" or "image/jpeg")
+
         if not image_bytes:
-            raise HTTPException(status_code=400, detail="Empty image file.")
+            raise HTTPException(status_code=400, detail="No image provided for thumbnail check.")
 
         analysis_prompt = f"""You are a YouTube beat-thumbnail specialist and active internet-money style producer in LA (~10k subs).
 Your job is to improve CTR and retention for TYPE BEAT uploads using a single static image.
@@ -3218,7 +3514,7 @@ Return STRICT JSON with this exact schema:
             system_message="You are a ruthless but helpful beat-thumbnail critic. Be concise, actionable, and focused on CTR for type beat uploads.",
             user_message=analysis_prompt,
             image_bytes=image_bytes,
-            image_mime=file.content_type,
+            image_mime=image_mime,
             provider=llm_provider,
             max_tokens=600,
         )

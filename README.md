@@ -83,6 +83,8 @@ GROK_BASE_URL=https://api.x.ai/v1
 GROK_MODEL=grok-4-1-fast-reasoning
 GROK_VISION_MODEL=grok-2-vision-latest
 OPENAI_VISION_MODEL=gpt-4o
+PEXELS_API_KEY=optional_for_generate_image_tool
+PIXABAY_API_KEY=optional_fallback_for_generate_image_tool
 ```
 
 ### Frontend (`frontend/.env`)

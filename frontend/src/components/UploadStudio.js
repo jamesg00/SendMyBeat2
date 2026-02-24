@@ -80,6 +80,9 @@ const UploadStudio = ({
   const [thumbnailCheckResult, setThumbnailCheckResult] = useState(null);
   const [checkingThumbnail, setCheckingThumbnail] = useState(false);
   const [thumbnailProgress, setThumbnailProgress] = useState(0);
+  const [generatedImages, setGeneratedImages] = useState([]);
+  const [generatedImageQuery, setGeneratedImageQuery] = useState("");
+  const [generatingImages, setGeneratingImages] = useState(false);
   const [showTools, setShowTools] = useState(false);
 
   // Visual Settings
@@ -144,17 +147,37 @@ const UploadStudio = ({
   };
 
   const buildUploadDescriptionWithMetadata = () => {
-    const base = (uploadDescriptionText || "").trim();
-    const key = (uploadBeatKey || "").trim();
-    const bpm = (uploadBeatBpm || "").trim();
+    return upsertBeatMetaInDescription(uploadDescriptionText, uploadBeatBpm, uploadBeatKey);
+  };
 
+  const stripBeatMetaFromDescription = (text = "") => {
+    const lines = String(text).split("\n");
+    const filtered = lines.filter((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return true;
+      if (/^BPM\s*:/i.test(trimmed)) return false;
+      if (/^Key\s*:/i.test(trimmed)) return false;
+      return true;
+    });
+    return filtered.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  };
+
+  const upsertBeatMetaInDescription = (text = "", bpm = "", key = "") => {
+    const clean = stripBeatMetaFromDescription(text);
     const metaParts = [];
-    if (bpm) metaParts.push(`BPM: ${bpm}`);
-    if (key) metaParts.push(`Key: ${key}`);
+    const safeBpm = String(bpm || "").trim();
+    const safeKey = String(key || "").trim();
+    if (safeBpm) metaParts.push(`BPM: ${safeBpm}`);
+    if (safeKey) metaParts.push(`Key: ${safeKey}`);
+    if (!metaParts.length) return clean;
+    if (!clean) return metaParts.join(" | ");
+    return `${clean}\n\n${metaParts.join(" | ")}`;
+  };
 
-    if (!metaParts.length) return base;
-    if (!base) return metaParts.join(" | ");
-    return `${base}\n\n${metaParts.join(" | ")}`;
+  const applyBeatMetaToDescription = () => {
+    setUploadDescriptionText((prev) =>
+      upsertBeatMetaInDescription(prev, uploadBeatBpm, uploadBeatKey)
+    );
   };
 
   const getDistance = (touch1, touch2) => {
@@ -229,7 +252,12 @@ const UploadStudio = ({
       return;
     }
     const selectedDesc = descriptions.find(d => d.id === selectedDescriptionId);
-    setUploadDescriptionText(selectedDesc?.content || "");
+    const next = upsertBeatMetaInDescription(
+      selectedDesc?.content || "",
+      uploadBeatBpm,
+      uploadBeatKey
+    );
+    setUploadDescriptionText(next);
   }, [selectedDescriptionId, descriptions]);
 
   useEffect(() => {
@@ -580,7 +608,7 @@ const UploadStudio = ({
   };
 
   const handleThumbnailCheck = async () => {
-    if (!imageFile) {
+    if (!imageFile && !imageFileId) {
       toast.error("Upload an image first");
       return;
     }
@@ -612,7 +640,11 @@ const UploadStudio = ({
 
     try {
       const formData = new FormData();
-      formData.append("file", imageFile);
+      if (imageFile) {
+        formData.append("file", imageFile);
+      } else if (imageFileId) {
+        formData.append("image_file_id", imageFileId);
+      }
       formData.append("title", safeTitle);
       formData.append("tags", safeTags.join(", "));
       formData.append("description", safeDescription);
@@ -638,6 +670,71 @@ const UploadStudio = ({
     } finally {
       if (thumbnailProgressIntervalRef.current) clearInterval(thumbnailProgressIntervalRef.current);
       setCheckingThumbnail(false);
+    }
+  };
+
+  const handleGenerateImage = async () => {
+    const safeTitle = (uploadTitle || "").trim();
+    const tags = tagHistory.find(t => t.id === selectedTagsId)?.tags || [];
+    const safeTags = tags.filter(Boolean).map((t) => String(t).trim()).filter(Boolean);
+
+    if (!safeTitle && !safeTags.length) {
+      toast.error("Add a title or select tags first.");
+      return;
+    }
+
+    setGeneratingImages(true);
+    try {
+      const response = await axios.post(`${API}/beat/generate-image`, {
+        title: safeTitle,
+        tags: safeTags,
+        k: 6,
+      });
+      const results = response.data?.results || [];
+      setGeneratedImages(results);
+      setGeneratedImageQuery(response.data?.query_used || "");
+      if (!results.length) {
+        toast.error("No image results found. Try a different artist/title.");
+      } else {
+        toast.success("Image options generated. Click one to apply.");
+      }
+    } catch (error) {
+      const detail = error?.response?.data?.detail;
+      toast.error(typeof detail === "string" ? detail : "Failed to generate image options");
+    } finally {
+      setGeneratingImages(false);
+    }
+  };
+
+  const handleUseGeneratedImage = async (imageOption) => {
+    if (!imageOption?.image_url) {
+      toast.error("Invalid generated image");
+      return;
+    }
+    setUploadingImage(true);
+    try {
+      const imported = await axios.post(`${API}/upload/image-from-url`, {
+        image_url: imageOption.image_url,
+        original_filename: `${(imageOption.artist || "generated").replace(/[^a-z0-9-]+/gi, "-").toLowerCase()}-reference.jpg`,
+      });
+      setImageFile(null);
+      setImageFileId(imported.data.file_id);
+      setImagePreviewUrl(imageOption.image_url);
+      setBeatMetaPromptShown(false);
+      const img = new Image();
+      img.onload = () => {
+        const ratio = img.width / img.height;
+        setImageMeta({ width: img.width, height: img.height, ratio });
+      };
+      img.src = imageOption.image_url;
+      fitImageToFrame();
+      setCenterLockEnabled(false);
+      toast.success("Generated image applied.");
+    } catch (error) {
+      const detail = error?.response?.data?.detail;
+      toast.error(typeof detail === "string" ? detail : "Failed to apply generated image");
+    } finally {
+      setUploadingImage(false);
     }
   };
 
@@ -709,10 +806,12 @@ const UploadStudio = ({
 
   useEffect(() => {
     if (!audioFileId || !imageFileId) return;
+    if (!selectedDescriptionId) return;
     if (beatMetaPromptShown) return;
+    if (String(uploadBeatBpm || "").trim() && String(uploadBeatKey || "").trim()) return;
     setShowBeatMetaDialog(true);
     setBeatMetaPromptShown(true);
-  }, [audioFileId, imageFileId, beatMetaPromptShown]);
+  }, [audioFileId, imageFileId, selectedDescriptionId, beatMetaPromptShown, uploadBeatBpm, uploadBeatKey]);
 
   // --- Controls Markup ---
   const controlsMarkup = (
@@ -739,6 +838,11 @@ const UploadStudio = ({
           handleAnalyzeBeat={handleAnalyzeBeat}
           checkingThumbnail={checkingThumbnail}
           handleThumbnailCheck={handleThumbnailCheck}
+          generatingImages={generatingImages}
+          handleGenerateImage={handleGenerateImage}
+          generatedImages={generatedImages}
+          generatedImageQuery={generatedImageQuery}
+          onUseGeneratedImage={handleUseGeneratedImage}
           beatAnalysis={beatAnalysis}
           thumbnailCheckResult={thumbnailCheckResult}
         />
@@ -1020,7 +1124,13 @@ const UploadStudio = ({
               onChange={(e) => setUploadBeatKey(e.target.value)}
             />
             <div className="flex gap-2">
-              <Button className="flex-1" onClick={() => setShowBeatMetaDialog(false)}>
+              <Button
+                className="flex-1"
+                onClick={() => {
+                  applyBeatMetaToDescription();
+                  setShowBeatMetaDialog(false);
+                }}
+              >
                 Save & Continue
               </Button>
               <Button variant="outline" className="flex-1" onClick={() => setShowBeatMetaDialog(false)}>
