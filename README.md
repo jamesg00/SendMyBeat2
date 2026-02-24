@@ -81,6 +81,8 @@ OPENAI_API_KEY=your_openai_key
 GROK_API_KEY=your_grok_key
 GROK_BASE_URL=https://api.x.ai/v1
 GROK_MODEL=grok-4-1-fast-reasoning
+GROK_VISION_MODEL=grok-2-vision-latest
+OPENAI_VISION_MODEL=gpt-4o
 ```
 
 ### Frontend (`frontend/.env`)

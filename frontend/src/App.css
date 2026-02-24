@@ -15,6 +15,37 @@
   --glow: rgba(0, 255, 65, 0.35) !important;
 }
 
+/* Light mode: stronger border visibility for cards + controls */
+html:not(.dark) {
+  --border-color: #111111 !important;
+}
+
+html:not(.dark) .dashboard-card,
+html:not(.dark) .dashboard-card-muted,
+html:not(.dark) .producer-card,
+html:not(.dark) .game-card,
+html:not(.dark) [class*="card"] {
+  border-color: #111111 !important;
+}
+
+html:not(.dark) button,
+html:not(.dark) [role="button"],
+html:not(.dark) .btn,
+html:not(.dark) .matrix-btn {
+  border-color: #111111 !important;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.85);
+}
+
+html:not(.dark) .btn-modern {
+  border: 1px solid #111111 !important;
+}
+
+html:not(.dark) input,
+html:not(.dark) textarea,
+html:not(.dark) select {
+  border-color: #111111 !important;
+}
+
 /* Dark Mode - Black & Green */
 body.dark, .dark {
   --bg-primary: #0d0208 !important;
@@ -290,6 +321,147 @@ h1, h2, h3, h4, h5, h6 {
   font-size: 12px;
   font-weight: 600;
   color: var(--accent-primary);
+}
+
+/* Grow in 120 Quest UI */
+.grow-quest-shell {
+  border: 1px solid var(--border-color);
+  border-radius: 18px;
+  padding: 12px;
+  background:
+    radial-gradient(circle at 12% 10%, color-mix(in srgb, var(--accent-primary) 14%, transparent), transparent 42%),
+    radial-gradient(circle at 88% 84%, color-mix(in srgb, var(--accent-secondary) 12%, transparent), transparent 44%),
+    color-mix(in srgb, var(--card-bg) 92%, transparent);
+}
+
+.grow-quest-hero {
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+  background:
+    linear-gradient(160deg, color-mix(in srgb, var(--bg-secondary) 84%, transparent), color-mix(in srgb, var(--card-bg) 90%, transparent));
+}
+
+.grow-quest-rank {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 8px 12px;
+  background: color-mix(in srgb, var(--bg-secondary) 80%, transparent);
+}
+
+.grow-stat-card {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 12px;
+  text-align: center;
+  background: color-mix(in srgb, var(--bg-secondary) 82%, transparent);
+}
+
+.grow-stat-value {
+  font-size: 1.8rem;
+  line-height: 1.1;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.grow-stat-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.grow-progress-track {
+  background: color-mix(in srgb, var(--bg-tertiary) 90%, transparent);
+}
+
+.grow-progress-fill {
+  background: linear-gradient(90deg, #06b6d4, #6366f1, #a855f7);
+  transition: width 420ms ease;
+}
+
+.grow-mission-item {
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: color-mix(in srgb, var(--bg-secondary) 78%, transparent);
+}
+
+.grow-calendar-tile {
+  height: 2.6rem;
+  width: 2.6rem;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 80%, transparent);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 700;
+  transition: transform 150ms ease, opacity 150ms ease;
+}
+
+.grow-calendar-tile:hover {
+  transform: translateY(-1px) scale(1.04);
+}
+
+.grow-day-id {
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: keep-all;
+}
+
+.grow-tile-complete {
+  background: linear-gradient(145deg, #16a34a, #22c55e);
+}
+
+.grow-tile-missed {
+  background: linear-gradient(145deg, #dc2626, #ef4444);
+}
+
+.grow-tile-today {
+  background: linear-gradient(145deg, #7c3aed, #a855f7);
+}
+
+.grow-tile-future {
+  background: linear-gradient(145deg, #4b5563, #6b7280);
+}
+
+.grow-day-panel {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 12px;
+  background: color-mix(in srgb, var(--bg-secondary) 86%, transparent);
+}
+
+.grow-legend-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  padding: 5px 10px;
+  background: color-mix(in srgb, var(--bg-secondary) 82%, transparent);
+}
+
+.grow-dot {
+  display: inline-block;
+  height: 8px;
+  width: 8px;
+  border-radius: 999px;
+}
+
+.grow-badge-chip {
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-weight: 700;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, #f59e0b 22%, var(--bg-secondary)),
+    color-mix(in srgb, #eab308 18%, var(--bg-secondary))
+  );
 }
 
 /* Upload Studio slider system */
@@ -841,7 +1013,7 @@ button span,
   pointer-events: none;
   z-index: 0;
   transition: transform 180ms ease-out;
-  opacity: 0.4;
+  opacity: 0.5;
   background-image:
     linear-gradient(rgba(0, 204, 51, 0.12) 1px, transparent 1px),
     linear-gradient(90deg, rgba(0, 204, 51, 0.12) 1px, transparent 1px);
@@ -851,10 +1023,446 @@ button span,
 
 .dark .spotlight-grid-layer,
 html.dark .spotlight-grid-layer {
-  opacity: 0.55;
+  opacity: 0.68;
   background-image:
     linear-gradient(rgba(0, 255, 65, 0.14) 1px, transparent 1px),
     linear-gradient(90deg, rgba(0, 255, 65, 0.14) 1px, transparent 1px);
+}
+
+/* Light mode spotlight: stronger grid visibility + softer ambient fire */
+html:not(.dark) .spotlight-grid-layer {
+  opacity: 0.48;
+  background-image:
+    linear-gradient(rgba(22, 101, 52, 0.2) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(22, 101, 52, 0.2) 1px, transparent 1px);
+}
+
+@keyframes spotlightEmberDrift {
+  0% { transform: translate3d(0, 0, 0) scale(1); opacity: 0.28; }
+  50% { transform: translate3d(0, -10px, 0) scale(1.04); opacity: 0.4; }
+  100% { transform: translate3d(0, -20px, 0) scale(1.08); opacity: 0.26; }
+}
+
+@keyframes spotlightTopFlare {
+  0% { transform: translate3d(0, 0, 0) scale(1); opacity: 0.16; }
+  50% { transform: translate3d(0, 8px, 0) scale(1.05); opacity: 0.28; }
+  100% { transform: translate3d(0, 14px, 0) scale(1.08); opacity: 0.14; }
+}
+
+@keyframes spotlightHeatPulse {
+  0% { opacity: 0.56; }
+  24% { opacity: 0.74; }
+  56% { opacity: 0.96; }
+  84% { opacity: 0.92; }
+  100% { opacity: 0.68; }
+}
+
+@keyframes spotlightFlameLick {
+  0% { transform: translateY(0) scaleX(1); opacity: 0.24; }
+  50% { transform: translateY(-10px) scaleX(1.08); opacity: 0.4; }
+  100% { transform: translateY(-20px) scaleX(0.96); opacity: 0.22; }
+}
+
+@keyframes spotlightFlameWave {
+  0% { transform: translateX(-4%) translateY(0) scaleY(1); opacity: 0.34; }
+  50% { transform: translateX(3%) translateY(-16px) scaleY(1.16); opacity: 0.55; }
+  100% { transform: translateX(-2%) translateY(-30px) scaleY(0.92); opacity: 0.32; }
+}
+
+@keyframes spotlightFlameFlicker {
+  0% { opacity: 0.58; }
+  24% { opacity: 0.82; }
+  50% { opacity: 1; }
+  78% { opacity: 0.94; }
+  100% { opacity: 0.72; }
+}
+
+@keyframes spotlightHeatHazeShift {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1.01);
+    opacity: 0.18;
+  }
+  25% {
+    transform: translate3d(0.6%, -1px, 0) scale(1.016);
+    opacity: 0.24;
+  }
+  50% {
+    transform: translate3d(-0.4%, -2px, 0) scale(1.02);
+    opacity: 0.29;
+  }
+  75% {
+    transform: translate3d(0.5%, -3px, 0) scale(1.024);
+    opacity: 0.26;
+  }
+  100% {
+    transform: translate3d(-0.3%, -4px, 0) scale(1.028);
+    opacity: 0.2;
+  }
+}
+
+@keyframes spotlightHeatHazeWave {
+  0% {
+    transform: translate3d(-2%, 0, 0) scaleX(1);
+    opacity: 0.22;
+  }
+  50% {
+    transform: translate3d(2%, -1px, 0) scaleX(1.04);
+    opacity: 0.34;
+  }
+  100% {
+    transform: translate3d(-1%, -2px, 0) scaleX(1.01);
+    opacity: 0.24;
+  }
+}
+
+.spotlight-fire-ambient {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 18% 2%, rgba(255, 187, 120, 0.88), transparent 38%),
+    radial-gradient(circle at 82% 4%, rgba(255, 128, 64, 0.82), transparent 40%),
+    radial-gradient(circle at 14% 92%, rgba(255, 118, 40, 0.98), transparent 54%),
+    radial-gradient(circle at 84% 90%, rgba(255, 60, 0, 0.92), transparent 56%),
+    radial-gradient(circle at 50% 100%, rgba(255, 180, 66, 0.8), transparent 58%);
+  animation: spotlightHeatPulse 7.4s ease-in-out infinite;
+}
+
+.spotlight-heat-haze {
+  position: absolute;
+  inset: -3% -3% 10%;
+  z-index: 2;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  opacity: 0.34;
+  background:
+    radial-gradient(120% 80% at 50% 100%, rgba(255, 168, 84, 0.2), rgba(255, 92, 28, 0) 72%),
+    radial-gradient(90% 52% at 28% 92%, rgba(255, 214, 162, 0.18), rgba(255, 120, 48, 0) 74%),
+    radial-gradient(88% 52% at 74% 94%, rgba(255, 176, 98, 0.17), rgba(255, 96, 34, 0) 76%);
+  will-change: transform, opacity;
+  animation: spotlightHeatHazeShift 6.4s ease-in-out infinite alternate;
+}
+
+.spotlight-heat-haze::before {
+  content: "";
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  bottom: 14%;
+  height: 36%;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(
+      180deg,
+      rgba(255, 230, 196, 0.22) 0px,
+      rgba(255, 230, 196, 0.22) 1px,
+      rgba(255, 140, 64, 0.04) 6px,
+      rgba(255, 80, 30, 0) 12px
+    );
+  filter: blur(5px);
+  border-radius: 55% 55% 48% 48%;
+  opacity: 0.3;
+  will-change: transform, opacity;
+  animation: spotlightHeatHazeWave 3.4s ease-in-out infinite;
+}
+
+.spotlight-fire-ambient > .spotlight-fire-veil {
+  position: absolute;
+  left: -8%;
+  right: -8%;
+  pointer-events: none;
+  filter: blur(14px);
+  mix-blend-mode: screen;
+}
+
+.spotlight-fire-ambient > .spotlight-fire-veil.veil-bottom::before,
+.spotlight-fire-ambient > .spotlight-fire-veil.veil-bottom::after {
+  content: "";
+  position: absolute;
+  left: 6%;
+  right: 6%;
+  bottom: -16px;
+  height: 160px;
+  border-radius: 50% 50% 0 0;
+  pointer-events: none;
+}
+
+.spotlight-fire-ambient > .spotlight-fire-veil.veil-bottom::before {
+  background:
+    radial-gradient(ellipse at 10% 100%, rgba(255, 216, 126, 1), transparent 64%),
+    radial-gradient(ellipse at 30% 100%, rgba(255, 159, 69, 0.98), transparent 66%),
+    radial-gradient(ellipse at 52% 100%, rgba(255, 112, 44, 1), transparent 64%),
+    radial-gradient(ellipse at 74% 100%, rgba(255, 86, 24, 0.98), transparent 64%),
+    radial-gradient(ellipse at 92% 100%, rgba(255, 157, 61, 0.96), transparent 62%);
+  animation: spotlightFlameWave 1.35s ease-in-out infinite;
+}
+
+.spotlight-fire-ambient > .spotlight-fire-veil.veil-bottom::after {
+  left: 14%;
+  right: 14%;
+  bottom: -6px;
+  height: 120px;
+  background:
+    radial-gradient(ellipse at 14% 100%, rgba(255, 239, 178, 0.96), transparent 58%),
+    radial-gradient(ellipse at 38% 100%, rgba(255, 195, 120, 0.9), transparent 60%),
+    radial-gradient(ellipse at 60% 100%, rgba(255, 150, 84, 0.88), transparent 60%),
+    radial-gradient(ellipse at 86% 100%, rgba(255, 190, 110, 0.9), transparent 58%);
+  animation: spotlightFlameWave 1.05s ease-in-out infinite;
+  animation-delay: 0.35s;
+}
+
+.spotlight-fire-ambient > .spotlight-fire-veil.veil-top::before {
+  content: "";
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  top: -16px;
+  height: 90px;
+  border-radius: 0 0 55% 55%;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 16% 0%, rgba(255, 189, 110, 0.62), transparent 70%),
+    radial-gradient(ellipse at 50% 0%, rgba(255, 130, 66, 0.6), transparent 72%),
+    radial-gradient(ellipse at 84% 0%, rgba(255, 170, 88, 0.58), transparent 70%);
+  animation: spotlightFlameFlicker 5.8s ease-in-out infinite;
+}
+
+html:not(.dark) .spotlight-fire-ambient {
+  background:
+    radial-gradient(circle at 18% 4%, rgba(255, 196, 86, 0.22), transparent 44%),
+    radial-gradient(circle at 82% 6%, rgba(255, 168, 58, 0.2), transparent 46%),
+    radial-gradient(circle at 12% 96%, rgba(255, 150, 40, 0.64), transparent 58%),
+    radial-gradient(circle at 86% 96%, rgba(255, 126, 28, 0.6), transparent 60%),
+    radial-gradient(circle at 50% 100%, rgba(255, 176, 54, 0.56), transparent 62%);
+  animation-duration: 8.2s;
+}
+
+html:not(.dark) .spotlight-heat-haze {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .spotlight-heat-haze {
+    display: none;
+  }
+}
+
+.spotlight-fire-ambient::before,
+.spotlight-fire-ambient::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  border-radius: 999px;
+  filter: blur(22px);
+  mix-blend-mode: screen;
+}
+
+.spotlight-fire-ambient::before {
+  width: 320px;
+  height: 140px;
+  top: -60px;
+  left: 6%;
+  background: radial-gradient(circle, rgba(255, 198, 112, 0.86) 0%, rgba(255, 184, 84, 0) 78%);
+  animation: spotlightTopFlare 8.8s ease-in-out infinite;
+}
+
+.spotlight-fire-ambient::after {
+  width: 280px;
+  height: 120px;
+  top: -48px;
+  right: 8%;
+  background: radial-gradient(circle, rgba(255, 108, 46, 0.82) 0%, rgba(255, 108, 46, 0) 80%);
+  animation: spotlightTopFlare 8.1s ease-in-out infinite;
+  animation-delay: 0.7s;
+}
+
+html:not(.dark) .spotlight-fire-ambient::before {
+  display: none;
+}
+
+html:not(.dark) .spotlight-fire-ambient::after {
+  display: none;
+}
+
+.spotlight-fire-veil {
+  position: absolute;
+  left: -8%;
+  right: -8%;
+  pointer-events: none;
+  filter: blur(20px);
+  mix-blend-mode: screen;
+}
+
+.spotlight-fire-veil.veil-top {
+  top: -80px;
+  height: 180px;
+  background:
+    conic-gradient(from 200deg at 20% 100%, rgba(255, 170, 80, 0.28), rgba(255, 90, 40, 0.18), transparent 64%),
+    conic-gradient(from 180deg at 80% 100%, rgba(255, 145, 65, 0.28), rgba(255, 72, 0, 0.18), transparent 66%);
+  animation: spotlightFlameLick 4.6s ease-in-out infinite;
+}
+
+.spotlight-fire-veil.veil-bottom {
+  bottom: -80px;
+  height: 240px;
+  background:
+    radial-gradient(ellipse at 50% 100%, rgba(255, 120, 44, 0.54), rgba(255, 60, 0, 0.2) 58%, transparent 76%),
+    radial-gradient(ellipse at 20% 100%, rgba(255, 175, 74, 0.32), transparent 68%),
+    radial-gradient(ellipse at 80% 100%, rgba(255, 115, 58, 0.34), transparent 68%);
+  animation: spotlightFlameLick 2.8s ease-in-out infinite;
+}
+
+html:not(.dark) .spotlight-fire-veil {
+  opacity: 0.9;
+  filter: blur(6px) contrast(122%);
+  mix-blend-mode: normal;
+}
+
+html:not(.dark) .spotlight-fire-veil.veil-top {
+  background:
+    conic-gradient(from 20deg at 20% 0%, rgba(255, 186, 78, 0.56), rgba(255, 128, 30, 0.28), transparent 70%),
+    conic-gradient(from -2deg at 80% 0%, rgba(255, 170, 62, 0.54), rgba(255, 118, 26, 0.28), transparent 72%);
+}
+
+html:not(.dark) .spotlight-fire-veil.veil-bottom {
+  background:
+    radial-gradient(ellipse at 50% 100%, rgba(255, 122, 30, 0.88), rgba(255, 86, 16, 0.44) 58%, transparent 78%),
+    radial-gradient(ellipse at 20% 100%, rgba(255, 182, 68, 0.64), transparent 70%),
+    radial-gradient(ellipse at 80% 100%, rgba(255, 146, 36, 0.66), transparent 70%);
+}
+
+html:not(.dark) .spotlight-fire-ambient > .spotlight-fire-veil.veil-bottom::before {
+  background:
+    radial-gradient(ellipse at 8% 100%, rgba(255, 238, 176, 0.96), transparent 56%),
+    radial-gradient(ellipse at 24% 100%, rgba(255, 206, 120, 0.98), transparent 58%),
+    radial-gradient(ellipse at 40% 100%, rgba(255, 168, 74, 1), transparent 56%),
+    radial-gradient(ellipse at 56% 100%, rgba(255, 138, 40, 0.98), transparent 58%),
+    radial-gradient(ellipse at 72% 100%, rgba(255, 112, 24, 1), transparent 56%),
+    radial-gradient(ellipse at 88% 100%, rgba(255, 180, 82, 0.98), transparent 58%);
+  filter: contrast(130%);
+}
+
+html:not(.dark) .spotlight-fire-ambient > .spotlight-fire-veil.veil-bottom::after {
+  background:
+    radial-gradient(ellipse at 14% 100%, rgba(255, 252, 218, 0.42), transparent 52%),
+    radial-gradient(ellipse at 38% 100%, rgba(255, 234, 180, 0.38), transparent 54%),
+    radial-gradient(ellipse at 60% 100%, rgba(255, 212, 148, 0.36), transparent 54%),
+    radial-gradient(ellipse at 86% 100%, rgba(255, 242, 192, 0.38), transparent 52%);
+  filter: blur(4px);
+}
+
+html:not(.dark) .spotlight-fire-ambient > .spotlight-fire-veil.veil-top::before {
+  background:
+    radial-gradient(ellipse at 16% 0%, rgba(255, 220, 142, 0.54), transparent 70%),
+    radial-gradient(ellipse at 50% 0%, rgba(255, 184, 92, 0.52), transparent 72%),
+    radial-gradient(ellipse at 84% 0%, rgba(255, 206, 120, 0.54), transparent 70%);
+}
+
+.spotlight-ember {
+  position: absolute;
+  border-radius: 999px;
+  filter: blur(20px);
+  mix-blend-mode: screen;
+  animation: spotlightEmberDrift 2.2s ease-in-out infinite;
+}
+
+html:not(.dark) .spotlight-ember {
+  opacity: 0.84;
+  filter: blur(10px);
+  mix-blend-mode: normal;
+  animation-duration: 6.8s;
+}
+
+html:not(.dark) .spotlight-ember.ember-a {
+  background: radial-gradient(circle, rgba(255, 198, 100, 0.9) 0%, rgba(255, 198, 100, 0) 80%);
+}
+
+html:not(.dark) .spotlight-ember.ember-b {
+  background: radial-gradient(circle, rgba(255, 152, 54, 0.88) 0%, rgba(255, 152, 54, 0) 82%);
+}
+
+html:not(.dark) .spotlight-ember.ember-c {
+  background: radial-gradient(circle, rgba(255, 232, 168, 0.82) 0%, rgba(255, 232, 168, 0) 84%);
+}
+
+html:not(.dark) .spotlight-ember.ember-d {
+  background: radial-gradient(circle, rgba(255, 188, 84, 0.78) 0%, rgba(255, 188, 84, 0) 84%);
+}
+
+html:not(.dark) .spotlight-ember.ember-e {
+  background: radial-gradient(circle, rgba(255, 136, 40, 0.84) 0%, rgba(255, 136, 40, 0) 86%);
+}
+
+.spotlight-ember.ember-a {
+  width: 280px;
+  height: 180px;
+  left: -40px;
+  bottom: -30px;
+  background: radial-gradient(circle, rgba(255, 153, 64, 0.9) 0%, rgba(255, 153, 64, 0) 76%);
+}
+
+.spotlight-ember.ember-b {
+  width: 240px;
+  height: 150px;
+  right: -20px;
+  bottom: -20px;
+  animation-delay: 0.9s;
+  background: radial-gradient(circle, rgba(255, 98, 41, 0.86) 0%, rgba(255, 98, 41, 0) 78%);
+}
+
+.spotlight-ember.ember-c {
+  width: 200px;
+  height: 120px;
+  left: 42%;
+  bottom: -26px;
+  animation-delay: 0.4s;
+  background: radial-gradient(circle, rgba(255, 195, 74, 0.78) 0%, rgba(255, 195, 74, 0) 80%);
+}
+
+.spotlight-ember.ember-d {
+  width: 180px;
+  height: 120px;
+  left: 24%;
+  top: -28px;
+  animation-delay: 0.2s;
+  background: radial-gradient(circle, rgba(255, 180, 86, 0.72) 0%, rgba(255, 180, 86, 0) 80%);
+}
+
+.spotlight-ember.ember-e {
+  width: 170px;
+  height: 110px;
+  right: 26%;
+  top: -24px;
+  animation-delay: 1.1s;
+  background: radial-gradient(circle, rgba(255, 132, 58, 0.78) 0%, rgba(255, 132, 58, 0) 82%);
+}
+
+/* Let fire show through cards in Spotlight instead of being blocked by opaque panels */
+.spotlight-parallax-bg .producer-card,
+.spotlight-parallax-bg .dashboard-card {
+  background: linear-gradient(
+    170deg,
+    color-mix(in srgb, var(--card-bg) 72%, rgba(255, 110, 40, 0.08)),
+    color-mix(in srgb, var(--bg-secondary) 66%, rgba(255, 70, 20, 0.1))
+  ) !important;
+  backdrop-filter: blur(10px) saturate(120%);
+  -webkit-backdrop-filter: blur(10px) saturate(120%);
+  border-color: color-mix(in srgb, var(--border-color) 76%, rgba(255, 120, 48, 0.4)) !important;
+  box-shadow:
+    0 12px 26px color-mix(in srgb, var(--shadow) 72%, transparent),
+    inset 0 0 40px rgba(255, 96, 32, 0.1) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spotlight-heat-haze,
+  .spotlight-heat-haze::before {
+    animation: none;
+  }
+
+  .spotlight-ember {
+    animation: none;
+  }
 }
 
 /* Creator badge hover FX */

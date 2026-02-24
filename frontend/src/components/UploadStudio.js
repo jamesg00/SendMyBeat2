@@ -616,7 +616,6 @@ const UploadStudio = ({
       formData.append("title", safeTitle);
       formData.append("tags", safeTags.join(", "));
       formData.append("description", safeDescription);
-      formData.append("llm_provider", "grok");
 
       const response = await axios.post(`${API}/beat/thumbnail-check`, formData, {
         headers: { "Content-Type": "multipart/form-data" },

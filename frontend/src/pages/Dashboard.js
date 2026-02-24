@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+﻿import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -198,6 +198,49 @@ const Dashboard = ({ setIsAuthenticated }) => {
     adContentReady
   );
 
+  const healthScoreRaw = analyticsData?.insights?.channel_health_score || "";
+  const parsedHealthScore = (() => {
+    const match = String(healthScoreRaw).match(/\d{1,3}/);
+    if (!match) return 0;
+    const value = Number(match[0]);
+    if (!Number.isFinite(value)) return 0;
+    return Math.max(0, Math.min(100, value));
+  })();
+
+  const analyticsRecentVideos = Array.isArray(analyticsData?.recent_videos) ? analyticsData.recent_videos : [];
+  const maxRecentViews = analyticsRecentVideos.length
+    ? Math.max(...analyticsRecentVideos.map((video) => Number(video?.views || 0)))
+    : 0;
+  const avgRecentViews = analyticsRecentVideos.length
+    ? Math.round(
+      analyticsRecentVideos.reduce((sum, video) => sum + Number(video?.views || 0), 0) /
+      analyticsRecentVideos.length
+    )
+    : 0;
+  const avgLikeRate = analyticsRecentVideos.length
+    ? analyticsRecentVideos.reduce((sum, video) => {
+      const views = Number(video?.views || 0);
+      const likes = Number(video?.likes || 0);
+      if (views <= 0) return sum;
+      return sum + ((likes / views) * 100);
+    }, 0) / analyticsRecentVideos.length
+    : 0;
+  const avgCommentRate = analyticsRecentVideos.length
+    ? analyticsRecentVideos.reduce((sum, video) => {
+      const views = Number(video?.views || 0);
+      const comments = Number(video?.comments || 0);
+      if (views <= 0) return sum;
+      return sum + ((comments / views) * 100);
+    }, 0) / analyticsRecentVideos.length
+    : 0;
+  const sparklinePoints = analyticsRecentVideos.length > 1 && maxRecentViews > 0
+    ? analyticsRecentVideos.slice(0, 8).map((video, index, arr) => {
+      const x = (index / (arr.length - 1)) * 100;
+      const y = 100 - ((Number(video?.views || 0) / maxRecentViews) * 100);
+      return `${x},${Math.max(4, Math.min(96, y))}`;
+    }).join(" ")
+    : "";
+
   const goToPreviousTab = () => {
     const previousIndex = (activeTabIndex - 1 + DASHBOARD_TABS.length) % DASHBOARD_TABS.length;
     setActiveTab(DASHBOARD_TABS[previousIndex].value);
@@ -307,7 +350,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const fetchSubscriptionStatus = async () => {
     try {
       const response = await axios.get(`${API}/subscription/status`);
-      console.log("📊 Subscription Status Updated:", response.data);
+      console.log("ðŸ“Š Subscription Status Updated:", response.data);
       setSubscriptionStatus(response.data);
     } catch (error) {
       console.error("Failed to fetch subscription status", error);
@@ -339,7 +382,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const handleAnalyzeChannel = async () => {
     setLoadingAnalytics(true);
     setProgressActive(true);
-    setProgressMessage("📈 Analyzing your channel performance and generating AI growth strategy...");
+    setProgressMessage("ðŸ“ˆ Analyzing your channel performance and generating AI growth strategy...");
     setProgressDuration(70000);
     try {
       const response = await axios.post(`${API}/youtube/analytics`);
@@ -411,7 +454,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
       const response = await axios.post(`${API}/growth/checkin`);
       toast.success(response?.data?.message || "Checked in");
       if (response?.data?.badge_unlocked) {
-        toast.success(`🎉 ${response.data.badge_unlocked}`);
+        toast.success(`ðŸŽ‰ ${response.data.badge_unlocked}`);
       }
       await fetchGrowthStatus();
       await fetchCalendar();
@@ -1536,10 +1579,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
                   <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6 space-y-3 sm:space-y-4">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {[
-                        "🔥 Instant vibe hook",
-                        "🎧 Lease CTA line",
-                        "📌 Socials closer",
-                        "⚡ Producer stamp opener",
+                        "ðŸ”¥ Instant vibe hook",
+                        "ðŸŽ§ Lease CTA line",
+                        "ðŸ“Œ Socials closer",
+                        "âš¡ Producer stamp opener",
                       ].map((hook) => (
                         <button
                           key={hook}
@@ -1878,6 +1921,103 @@ const Dashboard = ({ setIsAuthenticated }) => {
                       </CardContent>
                     </Card>
 
+                    {/* Visual Performance Snapshot */}
+                    <Card className="producer-card">
+                      <CardHeader>
+                        <CardTitle className="text-lg">Performance Snapshot</CardTitle>
+                        <CardDescription>Visual breakdown of channel momentum and audience interaction</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-5">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div className="p-3 rounded-lg border" style={{ borderColor: "var(--border-color)", backgroundColor: "var(--bg-secondary)" }}>
+                            <p className="text-xs uppercase tracking-wide" style={{ color: "var(--text-secondary)" }}>Health Meter</p>
+                            <p className="text-2xl font-bold gradient-text mt-1">{parsedHealthScore}/100</p>
+                            <div className="mt-2 h-2 rounded-full overflow-hidden" style={{ backgroundColor: "var(--bg-tertiary)" }}>
+                              <div
+                                className="h-full rounded-full"
+                                style={{
+                                  width: `${parsedHealthScore}%`,
+                                  background: "linear-gradient(90deg, #22c55e, #3b82f6, #a855f7)",
+                                }}
+                              />
+                            </div>
+                          </div>
+                          <div className="p-3 rounded-lg border" style={{ borderColor: "var(--border-color)", backgroundColor: "var(--bg-secondary)" }}>
+                            <p className="text-xs uppercase tracking-wide" style={{ color: "var(--text-secondary)" }}>Avg Views (Recent)</p>
+                            <p className="text-2xl font-bold gradient-text mt-1">{avgRecentViews.toLocaleString()}</p>
+                            <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
+                              Based on last {analyticsRecentVideos.length || 0} videos
+                            </p>
+                          </div>
+                          <div className="p-3 rounded-lg border" style={{ borderColor: "var(--border-color)", backgroundColor: "var(--bg-secondary)" }}>
+                            <p className="text-xs uppercase tracking-wide" style={{ color: "var(--text-secondary)" }}>Engagement Pulse</p>
+                            <p className="text-2xl font-bold gradient-text mt-1">{avgLikeRate.toFixed(2)}%</p>
+                            <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
+                              Avg likes rate | Comments {avgCommentRate.toFixed(2)}%
+                            </p>
+                          </div>
+                        </div>
+
+                        {analyticsRecentVideos.length > 0 && (
+                          <div className="space-y-3">
+                            <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Recent Video Views Trend</p>
+                            <div className="p-3 rounded-lg border" style={{ borderColor: "var(--border-color)", backgroundColor: "var(--bg-secondary)" }}>
+                              {sparklinePoints ? (
+                                <svg viewBox="0 0 100 100" className="w-full h-24">
+                                  <polyline
+                                    fill="none"
+                                    stroke="var(--accent-primary)"
+                                    strokeWidth="2.5"
+                                    points={sparklinePoints}
+                                  />
+                                </svg>
+                              ) : (
+                                <p className="text-xs" style={{ color: "var(--text-secondary)" }}>Not enough video data for trend line.</p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {analyticsRecentVideos.length > 0 && (
+                          <div className="space-y-3">
+                            <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Top Recent Videos by Views</p>
+                            <div className="space-y-2">
+                              {analyticsRecentVideos.slice(0, 6).map((video, idx) => {
+                                const views = Number(video?.views || 0);
+                                const likes = Number(video?.likes || 0);
+                                const comments = Number(video?.comments || 0);
+                                const likeRate = views > 0 ? (likes / views) * 100 : 0;
+                                const commentRate = views > 0 ? (comments / views) * 100 : 0;
+                                const barWidth = maxRecentViews > 0 ? (views / maxRecentViews) * 100 : 0;
+
+                                return (
+                                  <div key={`analytics-visual-${idx}`} className="p-2 rounded-lg border" style={{ borderColor: "var(--border-color)", backgroundColor: "var(--bg-secondary)" }}>
+                                    <div className="flex items-center justify-between gap-3">
+                                      <p className="text-xs font-medium truncate flex-1">{video.title}</p>
+                                      <p className="text-xs font-semibold">{views.toLocaleString()}</p>
+                                    </div>
+                                    <div className="mt-2 h-2 rounded-full overflow-hidden" style={{ backgroundColor: "var(--bg-tertiary)" }}>
+                                      <div
+                                        className="h-full rounded-full"
+                                        style={{
+                                          width: `${Math.max(6, barWidth)}%`,
+                                          background: "linear-gradient(90deg, var(--accent-primary), var(--accent-secondary))",
+                                        }}
+                                      />
+                                    </div>
+                                    <div className="mt-2 flex items-center gap-3 text-[11px]" style={{ color: "var(--text-secondary)" }}>
+                                      <span>Likes {likeRate.toFixed(2)}%</span>
+                                      <span>Comments {commentRate.toFixed(2)}%</span>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+
                     {/* Growth Roadmap - Featured Section */}
                     <Card className="producer-card border-l-4 border-purple-500">
                       <CardHeader>
@@ -1904,7 +2044,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         <ul className="space-y-3">
                           {analyticsData.insights?.what_works?.map((point, idx) => (
                             <li key={idx} className="flex items-start gap-3 p-3 rounded-lg" style={{backgroundColor: 'var(--bg-secondary)'}}>
-                              <span className="text-green-500 text-xl">✓</span>
+                              <span className="text-green-500 text-xl">âœ“</span>
                               <span className="flex-1">{point}</span>
                             </li>
                           ))}
@@ -1924,7 +2064,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         <ul className="space-y-3">
                           {analyticsData.insights?.critical_issues?.map((issue, idx) => (
                             <li key={idx} className="flex items-start gap-3 p-3 rounded-lg" style={{backgroundColor: 'var(--bg-secondary)'}}>
-                              <span className="text-red-500 text-xl">⚠</span>
+                              <span className="text-red-500 text-xl">âš </span>
                               <span className="flex-1">{issue}</span>
                             </li>
                           ))}
@@ -1965,7 +2105,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         <ul className="space-y-3">
                           {analyticsData.insights?.seo_optimization?.map((tip, idx) => (
                             <li key={idx} className="flex items-start gap-3 p-3 rounded-lg" style={{backgroundColor: 'var(--bg-secondary)'}}>
-                              <span className="text-yellow-500">🔍</span>
+                              <span className="text-yellow-500">ðŸ”</span>
                               <span className="flex-1">{tip}</span>
                             </li>
                           ))}
@@ -1985,7 +2125,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         <ul className="space-y-3">
                           {analyticsData.insights?.content_strategy?.map((strategy, idx) => (
                             <li key={idx} className="flex items-start gap-3 p-3 rounded-lg" style={{backgroundColor: 'var(--bg-secondary)'}}>
-                              <span className="text-indigo-500">📹</span>
+                              <span className="text-indigo-500">ðŸ“¹</span>
                               <span className="flex-1">{strategy}</span>
                             </li>
                           ))}
@@ -2006,7 +2146,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         <ul className="space-y-3">
                           {analyticsData.insights?.discoverability_tactics?.map((tactic, idx) => (
                             <li key={idx} className="flex items-start gap-3 p-3 rounded-lg" style={{backgroundColor: 'var(--bg-secondary)'}}>
-                              <span className="text-cyan-500">🚀</span>
+                              <span className="text-cyan-500">ðŸš€</span>
                               <span className="flex-1">{tactic}</span>
                             </li>
                           ))}
@@ -2027,7 +2167,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         <ul className="space-y-3">
                           {analyticsData.insights?.internet_money_lessons?.map((lesson, idx) => (
                             <li key={idx} className="flex items-start gap-3 p-3 rounded-lg" style={{backgroundColor: 'var(--bg-secondary)'}}>
-                              <span className="text-pink-500">💎</span>
+                              <span className="text-pink-500">ðŸ’Ž</span>
                               <span className="flex-1">{lesson}</span>
                             </li>
                           ))}
@@ -2081,308 +2221,229 @@ const Dashboard = ({ setIsAuthenticated }) => {
                 )}
               </CardContent>
             </Card>
-          </TabsContent>
-
-          {/* Grow in 120 Tab */}
+          </TabsContent>          {/* Grow in 120 Tab */}
           <TabsContent value="grow" className="space-y-4 sm:space-y-6 dashboard-section">
-            <Card className="dashboard-card">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <span className="text-2xl">🔥</span>
-                  Grow in 120 - Build Your Producer Momentum
-                </CardTitle>
-                <CardDescription>
-                  Work every day for 120 days. Generate tags, upload beats, or create descriptions to maintain your streak!
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6 relative">
-                <div
-                  style={{
-                    filter: isPro ? "none" : "blur(6px)",
-                    pointerEvents: isPro ? "auto" : "none"
-                  }}
-                >
+            <div className="grow-quest-shell relative">
+              <div
+                style={{
+                  filter: isPro ? "none" : "blur(6px)",
+                  pointerEvents: isPro ? "auto" : "none"
+                }}
+              >
                 {!growthData?.challenge_start_date ? (
-                  // Not started
-                  <div className="text-center py-12">
-                    <div className="mb-6">
-                      <p className="text-5xl mb-4">🚀</p>
-                      <h3 className="text-2xl font-bold mb-2">Ready to Commit?</h3>
-                      <p className="text-lg mb-6" style={{color: 'var(--text-secondary)'}}>
-                        Join the 120-day challenge and build unstoppable momentum
+                  <Card className="dashboard-card grow-quest-hero">
+                    <CardContent className="p-8 sm:p-12 text-center">
+                      <p className="text-5xl mb-4">??</p>
+                      <p className="text-xs uppercase tracking-[0.2em] mb-2" style={{ color: "var(--text-secondary)" }}>
+                        Challenge Mode
                       </p>
-                    </div>
-                    <Button
-                      onClick={handleStartChallenge}
-                      disabled={loadingGrowth}
-                      className="btn-modern text-lg py-6 px-12"
-                    >
-                      {loadingGrowth ? "Starting..." : "Start My 120-Day Journey"}
-                    </Button>
-                  </div>
+                      <h3 className="text-3xl sm:text-4xl font-extrabold mb-3 gradient-text">Grow in 120</h3>
+                      <p className="text-sm sm:text-base mb-6 max-w-2xl mx-auto" style={{ color: "var(--text-secondary)" }}>
+                        Turn your upload grind into a game. Stack streaks, clear daily missions, and push your channel for 120 straight days.
+                      </p>
+                      <Button
+                        onClick={handleStartChallenge}
+                        disabled={loadingGrowth}
+                        className="btn-modern text-base sm:text-lg py-6 px-12"
+                      >
+                        {loadingGrowth ? "Starting..." : "Start My 120-Day Quest"}
+                      </Button>
+                    </CardContent>
+                  </Card>
                 ) : (
-                  <>
-                    {/* Stats Overview */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-                      <Card className="producer-card">
-                        <CardContent className="p-4 sm:p-6 text-center">
-                          <p className="text-3xl sm:text-4xl font-bold mb-2">{growthData.current_streak} 🔥</p>
-                          <p className="text-sm" style={{color: 'var(--text-secondary)'}}>Current Streak</p>
+                  <div className="space-y-4 sm:space-y-6">
+                    <Card className="dashboard-card grow-quest-hero">
+                      <CardContent className="p-4 sm:p-6 space-y-4">
+                        <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3">
+                          <div>
+                            <p className="text-xs uppercase tracking-[0.2em]" style={{ color: "var(--text-secondary)" }}>
+                              Producer Quest Board
+                            </p>
+                            <h3 className="text-2xl sm:text-3xl font-extrabold gradient-text">
+                              Day {Math.min(120, (growthData.total_days_completed || 0) + 1)} / 120
+                            </h3>
+                            <p className="text-sm mt-1" style={{ color: "var(--text-secondary)" }}>
+                              Keep the flame alive. Missed days reset streak power.
+                            </p>
+                          </div>
+                          <div className="grow-quest-rank">
+                            <p className="text-xs uppercase tracking-wider">Rank</p>
+                            <p className="font-bold">
+                              {(growthData.current_streak || 0) >= 45 ? "Legendary" : (growthData.current_streak || 0) >= 20 ? "Locked In" : (growthData.current_streak || 0) >= 7 ? "Rising" : "Rookie"}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div className="grow-stat-card">
+                            <p className="grow-stat-value">{growthData.current_streak} ??</p>
+                            <p className="grow-stat-label">Current Streak</p>
+                          </div>
+                          <div className="grow-stat-card">
+                            <p className="grow-stat-value">{growthData.total_days_completed}/120</p>
+                            <p className="grow-stat-label">Days Cleared</p>
+                          </div>
+                          <div className="grow-stat-card">
+                            <p className="grow-stat-value">{growthData.longest_streak} ??</p>
+                            <p className="grow-stat-label">Best Streak</p>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="flex justify-between text-sm">
+                            <span>Quest Completion</span>
+                            <span className="font-bold gradient-text">{Math.round(((growthData.total_days_completed || 0) / 120) * 100)}%</span>
+                          </div>
+                          <div className="h-3 rounded-full overflow-hidden grow-progress-track">
+                            <div
+                              className="h-full grow-progress-fill"
+                              style={{ width: `${((growthData.total_days_completed || 0) / 120) * 100}%` }}
+                            />
+                          </div>
+                          <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                            {Math.max(0, 120 - (growthData.total_days_completed || 0))} days remaining to finish the quest.
+                          </p>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6">
+                      <Card className="dashboard-card lg:col-span-4">
+                        <CardHeader>
+                          <CardTitle className="text-lg flex items-center gap-2">
+                            <Target className="h-5 w-5 text-blue-500" />
+                            Daily Mission
+                          </CardTitle>
+                          <CardDescription>Complete any quest objective, then check in.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                          <div className="space-y-2 text-sm">
+                            <div className="grow-mission-item">? Generate tags for a beat</div>
+                            <div className="grow-mission-item">? Upload a beat to YouTube</div>
+                            <div className="grow-mission-item">? Create or edit a description</div>
+                          </div>
+                          <Button
+                            onClick={handleCheckin}
+                            disabled={loadingGrowth}
+                            className="w-full btn-modern py-4"
+                          >
+                            <CheckCircle2 className="mr-2 h-5 w-5" />
+                            {loadingGrowth ? "Checking in..." : "Complete Daily Check-In"}
+                          </Button>
                         </CardContent>
                       </Card>
-                      <Card className="producer-card">
-                        <CardContent className="p-4 sm:p-6 text-center">
-                          <p className="text-3xl sm:text-4xl font-bold mb-2">{growthData.total_days_completed}/120</p>
-                          <p className="text-sm" style={{color: 'var(--text-secondary)'}}>Days Complete</p>
-                        </CardContent>
-                      </Card>
-                      <Card className="producer-card">
-                        <CardContent className="p-4 sm:p-6 text-center">
-                          <p className="text-3xl sm:text-4xl font-bold mb-2">{growthData.longest_streak} 🏆</p>
-                          <p className="text-sm" style={{color: 'var(--text-secondary)'}}>Longest Streak</p>
+
+                      <Card className="dashboard-card lg:col-span-8">
+                        <CardHeader>
+                          <div className="flex flex-wrap justify-between gap-2 items-center">
+                            <CardTitle className="text-lg">120-Day Quest Map</CardTitle>
+                            <Button onClick={fetchCalendar} variant="outline" size="sm">Refresh</Button>
+                          </div>
+                          <CardDescription>Tap any day tile to inspect progress details.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                          {calendarData && (
+                            <div className="grid grid-cols-5 sm:grid-cols-8 lg:grid-cols-10 gap-2">
+                              {Object.entries(calendarData.calendar || {}).slice(0, 120).map(([date, statusData], index) => {
+                                const dayNumber = index + 1;
+                                const safeStatusData = statusData && typeof statusData === "object" ? statusData : null;
+                                const status = typeof statusData === "string" ? statusData : (safeStatusData?.status || "future");
+                                const activity = safeStatusData?.activity || null;
+                                const tileClass =
+                                  status === "completed" ? "grow-tile-complete" :
+                                  status === "missed" ? "grow-tile-missed" :
+                                  status === "today" ? "grow-tile-today" :
+                                  "grow-tile-future";
+
+                                return (
+                                  <button
+                                    key={date}
+                                    type="button"
+                                    className={`grow-calendar-tile ${tileClass}`}
+                                    onClick={() => setSelectedDay({ date, status, dayNumber, activity })}
+                                    title={`Day ${dayNumber} - ${date}`}
+                                  >
+                                    <span className="grow-day-id">D{dayNumber}</span>
+                                    {status === "completed" && <span className="text-[10px] font-extrabold">OK</span>}
+                                    {status === "missed" && <span className="text-[10px] font-extrabold">X</span>}
+                                    {status === "today" && <span className="text-[10px] font-extrabold">NOW</span>}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {selectedDay && (
+                            <div className="grow-day-panel">
+                              <div className="flex justify-between items-start gap-2">
+                                <div>
+                                  <p className="font-bold gradient-text text-lg">Day {selectedDay.dayNumber}</p>
+                                  <p className="text-sm" style={{ color: "var(--text-secondary)" }}>{selectedDay.date}</p>
+                                </div>
+                                <Button variant="ghost" size="sm" onClick={() => setSelectedDay(null)}>×</Button>
+                              </div>
+                              <div className="mt-3 text-sm">
+                                {selectedDay.status === "completed" && (
+                                  <p className="text-green-600 font-semibold">Completed mission: {selectedDay.activity || "activity recorded"}</p>
+                                )}
+                                {selectedDay.status === "missed" && (
+                                  <p className="text-red-600 font-semibold">Missed day. Streak reset risk detected.</p>
+                                )}
+                                {selectedDay.status === "today" && (
+                                  <p className="text-purple-600 font-semibold">Live mission day. Complete one task then check in.</p>
+                                )}
+                                {selectedDay.status === "future" && (
+                                  <p style={{ color: "var(--text-secondary)" }}>Upcoming day. Keep consistency to avoid resets.</p>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="flex flex-wrap gap-2 text-xs">
+                            <span className="grow-legend-chip"><span className="grow-dot bg-green-500" /> Complete</span>
+                            <span className="grow-legend-chip"><span className="grow-dot bg-red-500" /> Missed</span>
+                            <span className="grow-legend-chip"><span className="grow-dot bg-purple-500" /> Today</span>
+                            <span className="grow-legend-chip"><span className="grow-dot bg-gray-500" /> Future</span>
+                          </div>
                         </CardContent>
                       </Card>
                     </div>
 
-                    {/* Progress Bar */}
-                    <Card className="producer-card">
-                      <CardContent className="p-4 sm:p-6">
-                        <div className="flex flex-wrap justify-between gap-2 mb-2">
-                          <p className="font-semibold">Challenge Progress</p>
-                          <p className="font-bold gradient-text">
-                            {Math.round((growthData.total_days_completed / 120) * 100)}%
-                          </p>
-                        </div>
-                        <div className="h-4 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-500"
-                            style={{ width: `${(growthData.total_days_completed / 120) * 100}%` }}
-                          />
-                        </div>
-                        <p className="text-sm mt-2 text-center" style={{color: 'var(--text-secondary)'}}>
-                          {120 - growthData.total_days_completed} days remaining
-                        </p>
-                      </CardContent>
-                    </Card>
-
-                    {/* Check-in Button */}
-                    <Card className="producer-card border-l-4 border-blue-500">
-                      <CardContent className="p-4 sm:p-6">
-                        <div className="mb-4">
-                          <p className="font-semibold mb-2">📋 Daily Requirements:</p>
-                          <ul className="text-sm space-y-1" style={{color: 'var(--text-secondary)'}}>
-                            <li>✓ Generate tags for a beat</li>
-                            <li>✓ Upload a beat to YouTube</li>
-                            <li>✓ OR create/edit a description</li>
-                          </ul>
-                          <p className="text-xs mt-3 font-medium" style={{color: 'var(--text-primary)'}}>
-                            Complete any task above, then check in to maintain your streak!
-                          </p>
-                        </div>
-                        <Button
-                          onClick={handleCheckin}
-                          disabled={loadingGrowth}
-                          className="w-full btn-modern py-4"
-                        >
-                          <CheckCircle2 className="mr-2 h-5 w-5" />
-                          {loadingGrowth ? "Checking in..." : "Check In Today"}
-                        </Button>
-                      </CardContent>
-                    </Card>
-
-                    {/* Badges */}
                     {growthData.badges_earned?.length > 0 && (
-                      <Card className="producer-card border-l-4 border-yellow-500">
+                      <Card className="dashboard-card">
                         <CardHeader>
-                          <CardTitle className="text-lg">🏆 Badges Earned</CardTitle>
+                          <CardTitle className="text-lg">?? Reward Vault</CardTitle>
+                          <CardDescription>Your unlocked challenge badges.</CardDescription>
                         </CardHeader>
                         <CardContent>
-                          <div className="flex flex-wrap gap-3">
+                          <div className="flex flex-wrap gap-2">
                             {growthData.badges_earned.map((badge, idx) => (
-                              <div
-                                key={idx}
-                                className="px-4 py-2 rounded-full font-semibold"
-                                style={{backgroundColor: 'var(--bg-secondary)'}}
-                              >
-                                {badge}
-                              </div>
+                              <span key={idx} className="grow-badge-chip">{badge}</span>
                             ))}
                           </div>
                         </CardContent>
                       </Card>
                     )}
-
-                    {/* Calendar View */}
-                    {calendarData && (
-                      <Card className="producer-card">
-                        <CardHeader>
-                          <div className="flex flex-wrap justify-between items-center gap-2">
-                            <CardTitle className="text-lg">📅 Your 120-Day Calendar</CardTitle>
-                            <Button
-                              onClick={fetchCalendar}
-                              variant="outline"
-                              size="sm"
-                            >
-                              Refresh
-                            </Button>
-                          </div>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="grid grid-cols-5 sm:grid-cols-8 lg:grid-cols-10 gap-2 mb-4">
-                            {Object.entries(calendarData.calendar || {}).slice(0, 120).map(([date, statusData], index) => {
-                              const dayNumber = index + 1;
-                              const safeStatusData = statusData && typeof statusData === "object" ? statusData : null;
-                              const status = typeof statusData === "string" ? statusData : (safeStatusData?.status || "future");
-                              const activity = safeStatusData?.activity || null;
-
-                              const bgColor =
-                                status === 'completed' ? 'bg-green-500' :
-                                status === 'missed' ? 'bg-red-500' :
-                                status === 'today' ? 'bg-purple-500' :
-                                'bg-gray-500';
-
-                              return (
-                                <div
-                                  key={date}
-                                  className={`h-10 w-10 sm:h-11 sm:w-11 lg:h-12 lg:w-12 rounded ${bgColor} opacity-80 hover:opacity-100 transition-all cursor-pointer flex flex-col items-center justify-center text-white font-bold text-[10px] hover:scale-105`}
-                                  onClick={() => setSelectedDay({ date, status, dayNumber, activity })}
-                                  title={`Day ${dayNumber} - ${date}`}
-                                >
-                                  <span className="text-[9px] sm:text-[10px]">D{dayNumber}</span>
-                                  {status === 'completed' && <span className="text-lg">✓</span>}
-                                  {status === 'missed' && <span className="text-lg">✗</span>}
-                                  {status === 'today' && <span className="text-lg">•</span>}
-                                </div>
-                              );
-                            })}
-                          </div>
-
-                          {/* Selected Day Details */}
-                          {selectedDay && (
-                            <Card className="mb-4 border-l-4 border-purple-500" style={{backgroundColor: 'var(--bg-tertiary)'}}>
-                              <CardContent className="p-4">
-                                <div className="flex justify-between items-start mb-2">
-                                  <div>
-                                    <p className="font-bold text-lg gradient-text">Day {selectedDay.dayNumber}</p>
-                                    <p className="text-sm" style={{color: 'var(--text-secondary)'}}>{selectedDay.date}</p>
-                                  </div>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => setSelectedDay(null)}
-                                  >
-                                    ×
-                                  </Button>
-                                </div>
-                                <div className="mt-3">
-                                  {selectedDay.status === 'completed' && (
-                                    <div className="space-y-2">
-                                      <p className="font-semibold text-green-600 flex items-center gap-2">
-                                        <CheckCircle2 className="h-4 w-4" />
-                                        Completed!
-                                      </p>
-                                      <p className="text-sm" style={{color: 'var(--text-primary)'}}>
-                                        You crushed it this day! You completed:
-                                      </p>
-                                      <ul className="text-sm space-y-1">
-                                        <li className={selectedDay.activity === 'tag_generation' ? 'text-green-600 font-semibold' : ''} style={{color: selectedDay.activity === 'tag_generation' ? undefined : 'var(--text-secondary)'}}>
-                                          {selectedDay.activity === 'tag_generation' ? '✓ ' : '• '}Generated YouTube tags
-                                        </li>
-                                        <li className={selectedDay.activity === 'youtube_upload' ? 'text-green-600 font-semibold' : ''} style={{color: selectedDay.activity === 'youtube_upload' ? undefined : 'var(--text-secondary)'}}>
-                                          {selectedDay.activity === 'youtube_upload' ? '✓ ' : '• '}Uploaded a beat to YouTube
-                                        </li>
-                                        <li className={selectedDay.activity === 'description_work' ? 'text-green-600 font-semibold' : ''} style={{color: selectedDay.activity === 'description_work' ? undefined : 'var(--text-secondary)'}}>
-                                          {selectedDay.activity === 'description_work' ? '✓ ' : '• '}Created/edited a description
-                                        </li>
-                                        {selectedDay.activity === 'manual_checkin' && (
-                                          <li className="text-green-600 font-semibold">
-                                            ✓ Manual check-in
-                                          </li>
-                                        )}
-                                      </ul>
-                                    </div>
-                                  )}
-                                  {selectedDay.status === 'missed' && (
-                                    <div>
-                                      <p className="font-semibold text-red-600 flex items-center gap-2">
-                                        <AlertCircle className="h-4 w-4" />
-                                        Missed Day
-                                      </p>
-                                      <p className="text-sm mt-2" style={{color: 'var(--text-primary)'}}>
-                                        No activity recorded. Your streak reset. Keep pushing forward!
-                                      </p>
-                                    </div>
-                                  )}
-                                  {selectedDay.status === 'today' && (
-                                    <div>
-                                      <p className="font-semibold text-purple-600 flex items-center gap-2">
-                                        <Sparkles className="h-4 w-4" />
-                                        Today's the Day!
-                                      </p>
-                                      <p className="text-sm mt-2" style={{color: 'var(--text-primary)'}}>
-                                        Complete a task and check in to keep your streak alive!
-                                      </p>
-                                    </div>
-                                  )}
-                                  {selectedDay.status === 'future' && (
-                                    <div>
-                                      <p className="font-semibold" style={{color: 'var(--text-secondary)'}}>
-                                        Future Day
-                                      </p>
-                                      <p className="text-sm mt-2" style={{color: 'var(--text-secondary)'}}>
-                                        This day is coming up. Stay consistent!
-                                      </p>
-                                    </div>
-                                  )}
-                                </div>
-                              </CardContent>
-                            </Card>
-                          )}
-
-                          <div className="flex flex-wrap gap-3 text-sm">
-                            <div className="flex items-center gap-2">
-                              <div className="h-4 w-4 rounded bg-green-500" />
-                              <span>Complete</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <div className="h-4 w-4 rounded bg-red-500" />
-                              <span>Missed</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <div className="h-4 w-4 rounded bg-purple-500" />
-                              <span>Today</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <div className="h-4 w-4 rounded bg-gray-500" />
-                              <span>Future</span>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
-
-                    {/* Load calendar on tab view */}
-                  </>
-                )}
-                </div>
-
-                {!isPro && (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="text-center p-6 rounded-xl border-2 shadow-lg max-w-md"
-                      style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--accent-primary)' }}
-                    >
-                      <p className="text-lg font-semibold mb-2">Unlock Grow in 120</p>
-                      <p className="text-sm mb-4" style={{color: 'var(--text-secondary)'}}>
-                        Premium-only momentum tracking. Upgrade to access the 120-day challenge.
-                      </p>
-                      <Button onClick={() => setShowUpgradeModal(true)} className="btn-modern">
-                        Upgrade to Pro
-                      </Button>
-                    </div>
                   </div>
                 )}
-              </CardContent>
-            </Card>
+              </div>
+
+              {!isPro && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="text-center p-6 rounded-xl border-2 shadow-lg max-w-md"
+                    style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--accent-primary)' }}
+                  >
+                    <p className="text-lg font-semibold mb-2">Unlock Grow in 120</p>
+                    <p className="text-sm mb-4" style={{color: 'var(--text-secondary)'}}>
+                      Premium-only momentum tracking. Upgrade to access the 120-day challenge.
+                    </p>
+                    <Button onClick={() => setShowUpgradeModal(true)} className="btn-modern">
+                      Upgrade to Pro
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
           </TabsContent>
         </Tabs>
       </div>
@@ -2437,7 +2498,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
         <DialogContent className="sm:max-w-md" data-testid="checkin-prompt-dialog">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <span className="text-2xl">🔥</span>
+              <span className="text-2xl">ðŸ”¥</span>
               Keep Your Streak Alive!
             </DialogTitle>
             <DialogDescription>
@@ -2483,4 +2544,5 @@ const Dashboard = ({ setIsAuthenticated }) => {
 };
 
 export default Dashboard;
+
 

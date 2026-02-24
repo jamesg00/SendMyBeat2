@@ -283,6 +283,16 @@ export default function ProducerSpotlight() {
         className="spotlight-grid-layer"
         aria-hidden="true"
       />
+      <div className="spotlight-fire-ambient" aria-hidden="true">
+        <div className="spotlight-fire-veil veil-top" />
+        <div className="spotlight-fire-veil veil-bottom" />
+        <div className="spotlight-ember ember-a" />
+        <div className="spotlight-ember ember-b" />
+        <div className="spotlight-ember ember-c" />
+        <div className="spotlight-ember ember-d" />
+        <div className="spotlight-ember ember-e" />
+      </div>
+      <div className="spotlight-heat-haze" aria-hidden="true" />
       <div className="relative z-10 container mx-auto px-4 py-8 space-y-12 text-[var(--text-primary)]">
         <DarkModeToggle />
         <div className="flex items-center justify-start">

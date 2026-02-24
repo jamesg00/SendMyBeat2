@@ -198,6 +198,24 @@ def _get_llm_client(provider_override: str | None = None, model_override: str | 
     return _llm_client, settings
 
 
+def _get_vision_model_for_provider(provider_name: str) -> str:
+    provider = (provider_name or os.environ.get("LLM_PROVIDER", "grok")).lower()
+    if provider == "grok":
+        return (
+            os.environ.get("GROK_VISION_MODEL")
+            or os.environ.get("GROK_MODEL_VISION")
+            or "grok-2-vision-latest"
+        )
+    if provider == "openai":
+        return (
+            os.environ.get("OPENAI_VISION_MODEL")
+            or os.environ.get("OPENAI_MODEL_VISION")
+            or os.environ.get("OPENAI_MODEL")
+            or "gpt-4o"
+        )
+    return os.environ.get("LLM_VISION_MODEL") or os.environ.get("LLM_MODEL", "gpt-4o")
+
+
 async def llm_chat(
     system_message: str,
     user_message: str,
@@ -241,24 +259,52 @@ async def llm_chat_with_image(
     model: str | None = None,
     user_id: str | None = None,  # For cost tracking
 ) -> str:
-    client, settings = _get_llm_client(provider_override=provider, model_override=model)
+    selected_provider = (provider or os.environ.get("LLM_PROVIDER", "grok")).lower()
+    selected_model = model or _get_vision_model_for_provider(selected_provider)
+    client, settings = _get_llm_client(provider_override=selected_provider, model_override=selected_model)
     image_b64 = base64.b64encode(image_bytes).decode("utf-8")
     image_url = f"data:{image_mime};base64,{image_b64}"
-    response = await client.chat.completions.create(
-        model=settings["model"],
-        messages=[
-            {"role": "system", "content": system_message},
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": user_message},
-                    {"type": "image_url", "image_url": {"url": image_url}},
-                ],
-            },
-        ],
-        temperature=temperature,
-        max_tokens=max_tokens,
-    )
+    payload_messages = [
+        {"role": "system", "content": system_message},
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": user_message},
+                {"type": "image_url", "image_url": {"url": image_url}},
+            ],
+        },
+    ]
+
+    async def _send_request(active_client, active_settings):
+        return await active_client.chat.completions.create(
+            model=active_settings["model"],
+            messages=payload_messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+
+    try:
+        response = await _send_request(client, settings)
+    except Exception as first_error:
+        err_text = str(first_error).lower()
+        image_not_supported = (
+            "image inputs are not supported" in err_text
+            or "does not support image" in err_text
+            or "images are not supported" in err_text
+            or "invalid request content" in err_text
+        )
+        can_fallback_to_openai = (
+            selected_provider != "openai" and bool(os.environ.get("OPENAI_API_KEY"))
+        )
+        if image_not_supported and can_fallback_to_openai:
+            fallback_model = _get_vision_model_for_provider("openai")
+            client, settings = _get_llm_client(
+                provider_override="openai",
+                model_override=fallback_model
+            )
+            response = await _send_request(client, settings)
+        else:
+            raise
 
     # Track usage
     if response.usage:
