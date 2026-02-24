@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Palette, Monitor, Zap, Box, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 
-export default function ThemeCustomizer() {
+export default function ThemeCustomizer({ isPro = false, onUpgrade }) {
   const { theme, setTheme, setAiTheme } = useTheme();
   const [aiPrompt, setAiPrompt] = useState('');
   const [isGeneratingTheme, setIsGeneratingTheme] = useState(false);
@@ -20,6 +20,12 @@ export default function ThemeCustomizer() {
   ];
 
   const handleGenerateAiTheme = async () => {
+    if (!isPro) {
+      toast.error('AI Theme Generator is a Pro feature.');
+      if (onUpgrade) onUpgrade();
+      return;
+    }
+
     setIsGeneratingTheme(true);
     try {
       const response = await axios.post(`${API}/theme/generate`, {
@@ -37,6 +43,9 @@ export default function ThemeCustomizer() {
       toast.success(`Applied AI Theme: ${generated.theme_name || 'Custom Theme'}`);
     } catch (error) {
       console.error('Failed to generate AI theme', error);
+      if (error?.response?.status === 402 && onUpgrade) {
+        onUpgrade();
+      }
       toast.error(error?.response?.data?.detail || 'Failed to generate AI theme');
     } finally {
       setIsGeneratingTheme(false);
@@ -83,22 +92,25 @@ export default function ThemeCustomizer() {
         <div className="mt-4 rounded-xl border border-primary/30 bg-card p-4 space-y-3">
           <div className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-primary" />
-            <p className="font-bold text-sm">AI Theme Generator (Grok)</p>
+            <p className="font-bold text-sm">AI Theme Generator (Grok) {isPro ? '' : '· Pro Only'}</p>
           </div>
           <p className="text-xs text-muted-foreground">
-            Generate a fresh custom theme from a prompt. You can re-run it anytime.
+            {isPro
+              ? 'Generate a fresh custom theme from a prompt. You can re-run it anytime.'
+              : 'Upgrade to Pro to unlock AI-generated custom themes.'}
           </p>
           <Input
             value={aiPrompt}
             onChange={(e) => setAiPrompt(e.target.value)}
             placeholder="e.g. icy blue futuristic studio with soft neon accents"
+            disabled={!isPro || isGeneratingTheme}
           />
           <Button
             className="w-full"
             onClick={handleGenerateAiTheme}
             disabled={isGeneratingTheme}
           >
-            {isGeneratingTheme ? 'Generating Theme...' : 'Generate AI Theme'}
+            {isGeneratingTheme ? 'Generating Theme...' : (isPro ? 'Generate AI Theme' : 'Upgrade to Use AI Themes')}
           </Button>
         </div>
       </CardContent>

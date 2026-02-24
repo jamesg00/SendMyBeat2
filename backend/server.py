@@ -357,7 +357,14 @@ class TagGenerationResponse(BaseModel):
     user_id: str
     query: str
     tags: List[str]
+    debug: Optional[Dict[str, Any]] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class TagDebugResponse(BaseModel):
+    id: str
+    query: str
+    debug: Dict[str, Any]
 
 class YouTubeUploadRequest(BaseModel):
     title: str
@@ -743,6 +750,13 @@ async def get_me(current_user: dict = Depends(get_current_user)):
 
 @api_router.post("/theme/generate", response_model=ThemeGenerateResponse)
 async def generate_theme(request: ThemeGenerateRequest, current_user: dict = Depends(get_current_user)):
+    status = await get_user_subscription_status(current_user['id'])
+    if not status.get("is_subscribed"):
+        raise HTTPException(
+            status_code=402,
+            detail="AI Theme Generator is a Pro feature. Upgrade to Pro to generate custom AI themes."
+        )
+
     mode = (request.mode or "auto").strip().lower()
     if mode not in {"auto", "light", "dark"}:
         mode = "auto"
@@ -1579,6 +1593,197 @@ async def create_customer_portal_session(current_user: dict = Depends(get_curren
 
 
 # ============ Tag Generation Routes ============
+_TAG_NOISE_WORDS = {
+    "type", "beat", "beats", "instrumental", "instrumentals", "style",
+    "prod", "producer", "free", "download", "copyright", "no", "official",
+    "audio", "video", "lyrics", "remix",
+}
+
+_LOW_INTENT_EXACT_TAGS = {
+    "beat", "beats", "music", "instrumental music", "vibe", "vibes",
+    "chill beat", "rap beat", "trap beat",
+}
+
+
+def _clean_tag_text(value: str) -> str:
+    clean = (value or "").strip().strip(",").strip('"').strip("'")
+    clean = re.sub(r"\s+", " ", clean)
+    return clean
+
+
+def _normalize_artist_query(query: str) -> str:
+    text = (query or "").lower()
+    text = re.sub(r"\b(type beat|type|beat|style|instrumental)\b", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def _tag_exact_key(tag: str) -> str:
+    key = (tag or "").lower()
+    key = re.sub(r"[^a-z0-9\s]", " ", key)
+    key = re.sub(r"\s+", " ", key).strip()
+    return key
+
+
+def _tag_semantic_key(tag: str) -> str:
+    key = _tag_exact_key(tag)
+    if not key:
+        return ""
+
+    semantic_tokens: list[str] = []
+    for token in key.split():
+        if re.fullmatch(r"20\d{2}", token):
+            continue
+        if token in _TAG_NOISE_WORDS:
+            continue
+        semantic_tokens.append(token)
+
+    semantic = " ".join(semantic_tokens).strip()
+    return semantic or key
+
+
+def _is_low_intent_tag(tag: str) -> bool:
+    key = _tag_exact_key(tag)
+    if not key:
+        return True
+    if key in _LOW_INTENT_EXACT_TAGS:
+        return True
+    if len(key) < 3 or len(key) > 72:
+        return True
+    return False
+
+
+def _append_unique_tags(base_tags: list[str], extra_tags: list[str], max_tags: int) -> list[str]:
+    final_tags = list(base_tags)
+    seen_exact = {_tag_exact_key(tag) for tag in final_tags}
+    seen_semantic = {_tag_semantic_key(tag) for tag in final_tags}
+
+    for raw in extra_tags:
+        clean = _clean_tag_text(raw)
+        if not clean or _is_low_intent_tag(clean):
+            continue
+
+        exact_key = _tag_exact_key(clean)
+        semantic_key = _tag_semantic_key(clean)
+        if not exact_key or exact_key in seen_exact:
+            continue
+        if semantic_key and semantic_key in seen_semantic:
+            continue
+
+        seen_exact.add(exact_key)
+        if semantic_key:
+            seen_semantic.add(semantic_key)
+        final_tags.append(clean)
+
+        if len(final_tags) >= max_tags:
+            break
+
+    return final_tags
+
+
+def _extract_song_seed(title: str, artist_name: str = "") -> str:
+    seed = re.split(r'[\(\[\|]', (title or ""))[0].strip()
+    seed = re.sub(r'\s+', ' ', seed)
+    if not seed:
+        return ""
+
+    if artist_name:
+        artist_prefix = re.compile(rf'^\s*{re.escape(artist_name)}\s*[-:]\s*', re.IGNORECASE)
+        seed = artist_prefix.sub("", seed).strip()
+
+    if not seed or len(seed) > 55:
+        return ""
+    if "type beat" in seed.lower():
+        return ""
+    return seed
+
+
+def _fetch_spotify_track_seeds(artist_name: str) -> list[str]:
+    client_id = os.environ.get("SPOTIFY_CLIENT_ID")
+    client_secret = os.environ.get("SPOTIFY_CLIENT_SECRET")
+    if not artist_name or not client_id or not client_secret:
+        return []
+
+    try:
+        token_response = requests.post(
+            "https://accounts.spotify.com/api/token",
+            data={"grant_type": "client_credentials"},
+            auth=(client_id, client_secret),
+            timeout=8,
+        )
+        token_response.raise_for_status()
+        access_token = token_response.json().get("access_token")
+        if not access_token:
+            return []
+
+        headers = {"Authorization": f"Bearer {access_token}"}
+
+        artist_search = requests.get(
+            "https://api.spotify.com/v1/search",
+            params={"q": artist_name, "type": "artist", "limit": 1},
+            headers=headers,
+            timeout=8,
+        )
+        artist_search.raise_for_status()
+        artists = (((artist_search.json() or {}).get("artists") or {}).get("items") or [])
+        if not artists:
+            return []
+
+        artist_id = artists[0].get("id")
+        if not artist_id:
+            return []
+
+        top_tracks = requests.get(
+            f"https://api.spotify.com/v1/artists/{artist_id}/top-tracks",
+            params={"market": "US"},
+            headers=headers,
+            timeout=8,
+        )
+        top_tracks.raise_for_status()
+        tracks = (top_tracks.json() or {}).get("tracks") or []
+
+        seeds: list[str] = []
+        for track in tracks[:10]:
+            name = (track or {}).get("name", "")
+            seed = _extract_song_seed(name, artist_name)
+            if seed:
+                seeds.append(seed)
+        return seeds
+    except Exception as e:
+        logging.warning(f"Spotify enrichment failed: {str(e)}")
+        return []
+
+
+def _fetch_soundcloud_track_seeds(artist_name: str) -> list[str]:
+    client_id = os.environ.get("SOUNDCLOUD_CLIENT_ID")
+    if not artist_name or not client_id:
+        return []
+
+    try:
+        response = requests.get(
+            "https://api-v2.soundcloud.com/search/tracks",
+            params={
+                "q": artist_name,
+                "client_id": client_id,
+                "limit": 12,
+            },
+            timeout=8,
+        )
+        response.raise_for_status()
+        collection = (response.json() or {}).get("collection") or []
+
+        seeds: list[str] = []
+        for item in collection[:12]:
+            title = (item or {}).get("title", "")
+            seed = _extract_song_seed(title, artist_name)
+            if seed:
+                seeds.append(seed)
+        return seeds
+    except Exception as e:
+        logging.warning(f"SoundCloud enrichment failed: {str(e)}")
+        return []
+
+
 @api_router.post("/tags/generate", response_model=TagGenerationResponse)
 async def generate_tags(request: TagGenerationRequest, current_user: dict = Depends(get_current_user)):
     try:
@@ -1586,11 +1791,10 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
         await ensure_has_credit(current_user['id'], "generations")
         
         # Extract artist name from query (e.g., "drake type beat" -> "drake")
-        query_lower = request.query.lower()
-        artist_name = query_lower.replace("type beat", "").replace("style", "").replace("beat", "").strip()
+        artist_name = _normalize_artist_query(request.query)
         
         # Search YouTube for artist's popular songs
-        youtube_type_beat_tags = []
+        youtube_type_beat_tags: list[str] = []
         try:
             # Get user's YouTube credentials if available for search
             user = await db.users.find_one({"id": current_user['id']})
@@ -1599,8 +1803,10 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
                 credentials = Credentials(**credentials_dict)
                 youtube = build('youtube', 'v3', credentials=credentials)
             else:
-                # Use basic API without credentials (limited but works for search)
-                youtube = build('youtube', 'v3', developerKey=os.environ.get('GOOGLE_CLIENT_SECRET', ''))
+                youtube_api_key = os.environ.get("YOUTUBE_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+                if not youtube_api_key:
+                    raise RuntimeError("Missing YOUTUBE_API_KEY/GOOGLE_API_KEY for public YouTube search.")
+                youtube = build('youtube', 'v3', developerKey=youtube_api_key)
             
             # Search for artist's popular songs
             search_response = youtube.search().list(
@@ -1612,21 +1818,26 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
                 maxResults=10
             ).execute()
             
-            # Extract song titles and create "type beat" variations
+            # Extract popular song/title seeds and create one strong variation per title.
             for item in search_response.get('items', []):
                 title = item['snippet']['title']
-                # Clean the title (remove common suffixes)
-                clean_title = title.split('(')[0].split('[')[0].split('|')[0].strip()
-                if clean_title and len(clean_title) < 50:  # Reasonable length
-                    # Add variations
-                    youtube_type_beat_tags.append(f"{clean_title} type beat")
-                    youtube_type_beat_tags.append(f"{clean_title} instrumental")
-                    youtube_type_beat_tags.append(f"{clean_title} beat")
+                song_seed = _extract_song_seed(title, artist_name)
+                if not song_seed:
+                    continue
+                youtube_type_beat_tags.append(f"{song_seed} type beat")
             
             logging.info(f"Found {len(youtube_type_beat_tags)} YouTube song variations for {artist_name}")
         except Exception as e:
             logging.warning(f"YouTube search for popular songs failed: {str(e)}")
             # Continue without YouTube search results
+
+        spotify_seeds, soundcloud_seeds = await asyncio.gather(
+            asyncio.to_thread(_fetch_spotify_track_seeds, artist_name),
+            asyncio.to_thread(_fetch_soundcloud_track_seeds, artist_name),
+        )
+
+        spotify_type_beat_tags = [f"{seed} type beat" for seed in spotify_seeds]
+        soundcloud_type_beat_tags = [f"{seed} type beat" for seed in soundcloud_seeds]
         
         llm_provider = request.llm_provider.lower() if request.llm_provider else None
         if llm_provider not in (None, "openai", "grok"):
@@ -1634,20 +1845,23 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
 
         # Generate a refined final list only (no blind appending afterwards)
         target_count = 64
-        candidate_pool = []
-        candidate_pool.extend(youtube_type_beat_tags[:40])
-        if request.custom_tags:
-            candidate_pool.extend([tag.strip() for tag in request.custom_tags if tag and tag.strip()])
+        custom_input_tags = [tag.strip() for tag in (request.custom_tags or []) if tag and tag.strip()]
+        candidate_pool: list[str] = []
+        candidate_source_map: dict[str, str] = {}
 
-        # Deduplicate candidate pool
-        pool_seen = set()
-        unique_candidate_pool = []
-        for tag in candidate_pool:
-            key = tag.lower()
-            if key in pool_seen:
-                continue
-            pool_seen.add(key)
-            unique_candidate_pool.append(tag)
+        for source_name, tags in [
+            ("youtube", youtube_type_beat_tags[:28]),
+            ("spotify", spotify_type_beat_tags[:18]),
+            ("soundcloud", soundcloud_type_beat_tags[:18]),
+            ("custom", custom_input_tags[:40]),
+        ]:
+            for tag in tags:
+                candidate_pool.append(tag)
+                key = _tag_exact_key(tag)
+                if key and key not in candidate_source_map:
+                    candidate_source_map[key] = source_name
+
+        unique_candidate_pool = _append_unique_tags([], candidate_pool, max_tags=80)
 
         candidate_tags_text = ", ".join(unique_candidate_pool[:80]) if unique_candidate_pool else "None"
         prompt = f"""Create ONE refined YouTube tag set for: "{request.query}".
@@ -1659,15 +1873,23 @@ GOAL:
 
 STRICT RULES:
 1) NO generic/filler tags like "chill beat", "vibe", "music", "instrumental music".
-2) NO redundant near-duplicates (e.g., tiny wording swaps that mean same thing).
-3) Focus on search intent: artist type-beat terms, close related artists, specific subgenre, era/project keywords.
+2) NO redundant near-duplicates. Do NOT output multiple wording swaps for the same base keyword.
+3) Focus on search intent: artist type-beat terms, close related artists, specific subgenre/mood/tempo, era/project/song influence.
 4) Keep most tags short and practical (2-5 words), but allow a few long-tail queries.
 5) Every tag must be useful for THIS exact query context.
 6) If candidates are provided, use only the strongest ones (do not include all).
-7) Return STRICT JSON only in this schema:
+7) Avoid low-value producer-only terms unless directly relevant: "free download", "no copyright", "fl studio", "logic pro", "ableton".
+8) Return STRICT JSON only in this schema:
 {{"tags":["tag1","tag2","tag3"]}}
 
-Optional candidate inspirations from YouTube/custom inputs:
+Required diversity mix (approximate):
+- 20-24 core artist/search intent tags
+- 10-14 adjacent artist crossover tags
+- 10-14 subgenre/mood/tempo tags
+- 8-12 era/project/song influence tags
+- 4-8 long-tail discovery tags
+
+Optional candidate inspirations from YouTube/Spotify/SoundCloud/custom inputs:
 {candidate_tags_text}
 """
         
@@ -1696,36 +1918,87 @@ Optional candidate inspirations from YouTube/custom inputs:
         except Exception:
             parsed_tags = [tag.strip() for tag in tags_text.split(",") if tag.strip()]
 
-        # Clean + dedupe + size bounds
-        seen = set()
-        final_tags = []
-        for tag in parsed_tags:
-            if not isinstance(tag, str):
-                continue
-            clean = tag.strip()
+        final_tags: list[str] = []
+        selected_tags_debug: list[dict[str, str]] = []
+        dropped_debug: list[dict[str, str]] = []
+        seen_exact: set[str] = set()
+        seen_semantic: set[str] = set()
+
+        def try_push_tag(raw_tag: str, source: str, accepted_reason: str, max_tags: int) -> None:
+            if len(final_tags) >= max_tags:
+                if len(dropped_debug) < 80:
+                    dropped_debug.append({"tag": raw_tag, "reason": "limit_reached"})
+                return
+
+            clean = _clean_tag_text(raw_tag)
             if not clean:
-                continue
-            key = clean.lower()
-            if key in seen:
-                continue
-            seen.add(key)
+                return
+
+            if _is_low_intent_tag(clean):
+                if len(dropped_debug) < 80:
+                    dropped_debug.append({"tag": clean, "reason": "low_intent"})
+                return
+
+            exact_key = _tag_exact_key(clean)
+            semantic_key = _tag_semantic_key(clean)
+            if not exact_key:
+                return
+            if exact_key in seen_exact:
+                if len(dropped_debug) < 80:
+                    dropped_debug.append({"tag": clean, "reason": "duplicate_exact"})
+                return
+            if semantic_key and semantic_key in seen_semantic:
+                if len(dropped_debug) < 80:
+                    dropped_debug.append({"tag": clean, "reason": "duplicate_semantic"})
+                return
+
+            seen_exact.add(exact_key)
+            if semantic_key:
+                seen_semantic.add(semantic_key)
             final_tags.append(clean)
-            if len(final_tags) >= 80:
-                break
+            selected_tags_debug.append(
+                {
+                    "tag": clean,
+                    "source": source,
+                    "reason": accepted_reason,
+                }
+            )
+
+        for tag in [t for t in parsed_tags if isinstance(t, str)]:
+            try_push_tag(tag, "llm", "llm_high_intent", max_tags=80)
+
+        llm_selected_count = len(final_tags)
 
         # If model under-returns, top up carefully from candidate pool
         if len(final_tags) < 50:
-            for tag in unique_candidate_pool:
-                key = tag.lower()
-                if key in seen:
-                    continue
-                seen.add(key)
-                final_tags.append(tag)
+            for candidate in unique_candidate_pool:
+                source = candidate_source_map.get(_tag_exact_key(candidate), "candidate")
+                try_push_tag(candidate, source, "candidate_top_up", max_tags=64)
                 if len(final_tags) >= 64:
                     break
 
         # Hard safety limit
         final_tags = final_tags[:80]
+        selected_tags_debug = selected_tags_debug[:80]
+
+        source_counts = {
+            "youtube_seed_tags": len(youtube_type_beat_tags),
+            "spotify_seed_tags": len(spotify_type_beat_tags),
+            "soundcloud_seed_tags": len(soundcloud_type_beat_tags),
+            "custom_input_tags": len(custom_input_tags),
+            "llm_raw_tags": len([t for t in parsed_tags if isinstance(t, str)]),
+            "llm_selected_tags": llm_selected_count,
+            "final_tags": len(final_tags),
+        }
+
+        debug_info = {
+            "query": request.query,
+            "artist_seed": artist_name,
+            "source_counts": source_counts,
+            "top_up_used": len(final_tags) > llm_selected_count,
+            "selected_tags": selected_tags_debug,
+            "dropped_tags": dropped_debug,
+        }
 
         logging.info(
             f"Generated refined tags: {len(final_tags)} final, "
@@ -1736,7 +2009,8 @@ Optional candidate inspirations from YouTube/custom inputs:
         tag_gen = TagGenerationResponse(
             user_id=current_user['id'],
             query=request.query,
-            tags=final_tags
+            tags=final_tags,
+            debug=debug_info,
         )
         
         tag_doc = tag_gen.model_dump()
@@ -1809,6 +2083,24 @@ async def get_tag_history(current_user: dict = Depends(get_current_user)):
     
     return [TagGenerationResponse(**doc) for doc in tag_docs]
 
+
+@api_router.get("/tags/debug/{tag_id}", response_model=TagDebugResponse)
+async def get_tag_debug(tag_id: str, current_user: dict = Depends(get_current_user)):
+    doc = await db.tag_generations.find_one(
+        {"id": tag_id, "user_id": current_user["id"]},
+        {"_id": 0, "id": 1, "query": 1, "debug": 1},
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="Tag generation not found.")
+    if not isinstance(doc.get("debug"), dict):
+        raise HTTPException(status_code=404, detail="No debug data available for this generation.")
+
+    return TagDebugResponse(
+        id=doc["id"],
+        query=doc.get("query", ""),
+        debug=doc["debug"],
+    )
+
 @api_router.post("/tags/history", response_model=TagGenerationResponse)
 async def save_tag_history(request: TagHistorySaveRequest, current_user: dict = Depends(get_current_user)):
     if not request.query.strip():
@@ -1860,15 +2152,7 @@ async def join_tags_ai(request: TagJoinRequest, current_user: dict = Depends(get
         raise HTTPException(status_code=400, detail="Invalid llm_provider. Use 'openai' or 'grok'.")
 
     candidate_tags = [t.strip() for t in request.candidate_tags if t and t.strip()]
-    # Deduplicate candidates
-    seen = set()
-    unique_candidates = []
-    for tag in candidate_tags:
-        key = tag.lower()
-        if key in seen:
-            continue
-        seen.add(key)
-        unique_candidates.append(tag)
+    unique_candidates = _append_unique_tags([], candidate_tags, max_tags=max_tags)
 
     query_summary = " x ".join(request.queries)
     target_output = min(max_tags, 70)
@@ -1884,6 +2168,7 @@ Rules:
 4) Avoid tag stuffing or near-duplicate variations.
 5) Remove weak/generic terms and keep strongest discoverability tags only.
 6) Keep tags short (2-5 words) with a few long-tail searches when useful.
+7) Never keep both wording swaps that share the same base meaning (e.g., "x beat" vs "x instrumental" vs "x type beat").
 
 Candidate tags:
 {", ".join(unique_candidates)}
@@ -1914,22 +2199,7 @@ Return STRICT JSON:
         if not isinstance(tags, list):
             tags = []
 
-        # Clean + enforce max + dedupe
-        seen = set()
-        final_tags = []
-        for tag in tags:
-            if not isinstance(tag, str):
-                continue
-            clean = tag.strip()
-            if not clean:
-                continue
-            key = clean.lower()
-            if key in seen:
-                continue
-            seen.add(key)
-            final_tags.append(clean)
-            if len(final_tags) >= max_tags:
-                break
+        final_tags = _append_unique_tags([], [t for t in tags if isinstance(t, str)], max_tags=max_tags)
 
         if not final_tags:
             raise ValueError("No tags returned from AI")

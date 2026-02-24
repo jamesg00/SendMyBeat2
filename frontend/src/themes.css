@@ -15,8 +15,32 @@ body[data-theme="ai"] {
     --shadow: rgba(0, 0, 0, 0.5);
     --glow: rgba(93, 140, 255, 0.34);
 
-    background: radial-gradient(circle at 20% 10%, rgba(93, 140, 255, 0.16), transparent 42%), var(--bg-primary);
+    /* Fallback + dynamic hue ambient that follows AI-generated accent colors */
+    background:
+        radial-gradient(circle at 20% 10%, rgba(93, 140, 255, 0.16), transparent 42%),
+        radial-gradient(circle at 85% 88%, rgba(141, 181, 255, 0.14), transparent 44%),
+        linear-gradient(160deg, var(--bg-primary) 0%, var(--bg-secondary) 54%, var(--bg-tertiary) 100%);
+    background:
+        radial-gradient(circle at 18% 12%, color-mix(in srgb, var(--accent-primary) 28%, transparent) 0%, transparent 44%),
+        radial-gradient(circle at 84% 86%, color-mix(in srgb, var(--accent-secondary) 24%, transparent) 0%, transparent 46%),
+        linear-gradient(160deg, var(--bg-primary) 0%, var(--bg-secondary) 54%, var(--bg-tertiary) 100%);
+    background-attachment: fixed;
     color: var(--text-primary);
+}
+
+body[data-theme="ai"] .App,
+body[data-theme="ai"] .cyber-grid {
+    background-image: none !important;
+    background-color: transparent !important;
+}
+
+html.dark body[data-theme="ai"],
+body.dark[data-theme="ai"] {
+    background:
+        radial-gradient(circle at 16% 10%, color-mix(in srgb, var(--accent-primary) 22%, transparent) 0%, transparent 42%),
+        radial-gradient(circle at 86% 84%, color-mix(in srgb, var(--accent-secondary) 20%, transparent) 0%, transparent 44%),
+        linear-gradient(165deg, var(--bg-primary) 0%, var(--bg-secondary) 55%, var(--bg-tertiary) 100%);
+    background-attachment: fixed;
 }
 
 body[data-theme="ai"] .dashboard-card,

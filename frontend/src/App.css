@@ -417,6 +417,56 @@ body.dark .tag-item,
     radial-gradient(at 0% 50%, rgba(57, 255, 20, 0.08) 0px, transparent 55%);
 }
 
+@keyframes dashboardGridDrift {
+  0% {
+    background-position: 0 0, 0 0;
+  }
+  100% {
+    background-position: 0 -140px, 0 -140px;
+  }
+}
+
+.dashboard-parallax-bg {
+  --dashboard-grid-offset: 0px;
+  position: relative;
+  isolation: isolate;
+  background-color: var(--bg-primary);
+  background-image: none !important;
+}
+
+.dashboard-grid-layer {
+  position: fixed;
+  inset: -6%;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.28;
+  transition: transform 180ms ease-out;
+  transform: translate3d(0, calc(var(--dashboard-grid-offset) * -0.22), 0);
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--accent-primary) 16%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--accent-secondary) 16%, transparent) 1px, transparent 1px);
+  background-size: 24px 24px;
+  animation: dashboardGridDrift 8s linear infinite;
+}
+
+.dashboard-parallax-bg > :not(.dashboard-grid-layer) {
+  position: relative;
+  z-index: 1;
+}
+
+.dark .dashboard-grid-layer,
+html.dark .dashboard-grid-layer {
+  opacity: 0.42;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-grid-layer {
+    animation: none;
+    transform: none;
+    transition: none;
+  }
+}
+
 /* Music Producer Vibes */
 .producer-card {
   background: var(--card-bg);

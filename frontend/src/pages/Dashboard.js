@@ -11,7 +11,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import axios from "axios";
 import { API } from "@/App";
 import { toast } from "sonner";
-import { Music, Sparkles, Save, LogOut, Copy, Trash2, Edit, Plus, Youtube, CheckCircle2, AlertCircle, Target, ChevronLeft, ChevronRight, DollarSign } from "lucide-react";
+import { Music, Sparkles, Save, LogOut, Copy, Trash2, Edit, Plus, Youtube, CheckCircle2, AlertCircle, Target, ChevronLeft, ChevronRight, DollarSign, Link } from "lucide-react";
 import DarkModeToggle from "@/components/DarkModeToggle";
 import SubscriptionBanner from "@/components/SubscriptionBanner";
 import UpgradeModal from "@/components/UpgradeModal";
@@ -30,6 +30,62 @@ const DASHBOARD_TABS = [
   { value: "grow", label: "Grow in 120" },
   { value: "settings", label: "Settings" },
 ];
+
+const toSafeNumber = (value, fallback = 0) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const toSafeArray = (value) => (Array.isArray(value) ? value : []);
+
+const normalizeAnalyticsData = (raw) => {
+  if (!raw || typeof raw !== "object") return null;
+  const insights = raw.insights && typeof raw.insights === "object" ? raw.insights : {};
+
+  return {
+    channel_name: typeof raw.channel_name === "string" ? raw.channel_name : "Unknown Channel",
+    subscriber_count: toSafeNumber(raw.subscriber_count, 0),
+    total_views: toSafeNumber(raw.total_views, 0),
+    total_videos: toSafeNumber(raw.total_videos, 0),
+    recent_videos: toSafeArray(raw.recent_videos).map((video) => ({
+      title: typeof video?.title === "string" ? video.title : "Untitled",
+      views: toSafeNumber(video?.views, 0),
+      likes: toSafeNumber(video?.likes, 0),
+      comments: toSafeNumber(video?.comments, 0),
+      published_at: typeof video?.published_at === "string" ? video.published_at : "",
+    })),
+    insights: {
+      channel_health_score: typeof insights.channel_health_score === "string" ? insights.channel_health_score : "N/A",
+      growth_roadmap: typeof insights.growth_roadmap === "string" ? insights.growth_roadmap : "",
+      what_works: toSafeArray(insights.what_works),
+      critical_issues: toSafeArray(insights.critical_issues),
+      immediate_actions: toSafeArray(insights.immediate_actions),
+      seo_optimization: toSafeArray(insights.seo_optimization),
+      content_strategy: toSafeArray(insights.content_strategy),
+      discoverability_tactics: toSafeArray(insights.discoverability_tactics),
+      internet_money_lessons: toSafeArray(insights.internet_money_lessons),
+    },
+  };
+};
+
+const normalizeGrowthData = (raw) => {
+  if (!raw || typeof raw !== "object") return null;
+  return {
+    ...raw,
+    current_streak: toSafeNumber(raw.current_streak, 0),
+    total_days_completed: toSafeNumber(raw.total_days_completed, 0),
+    longest_streak: toSafeNumber(raw.longest_streak, 0),
+    badges_earned: toSafeArray(raw.badges_earned),
+  };
+};
+
+const normalizeCalendarData = (raw) => {
+  if (!raw || typeof raw !== "object") return null;
+  return {
+    ...raw,
+    calendar: raw.calendar && typeof raw.calendar === "object" ? raw.calendar : {},
+  };
+};
 
   const formatTagHistoryLabel = (query = "") => {
     if (!query) return "Untitled";
@@ -59,6 +115,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [customTags, setCustomTags] = useState("");
   const [additionalTags, setAdditionalTags] = useState("");
   const [generatedTags, setGeneratedTags] = useState([]);
+  const [tagDebug, setTagDebug] = useState(null);
+  const [showTagDebug, setShowTagDebug] = useState(false);
   const [loadingTags, setLoadingTags] = useState(false);
   const [tagHistory, setTagHistory] = useState([]);
   const [selectedTagHistoryIds, setSelectedTagHistoryIds] = useState([]);
@@ -121,6 +179,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [joiningTagsLoading, setJoiningTagsLoading] = useState(false);
   const [joiningTagsProgress, setJoiningTagsProgress] = useState(0);
   const joinProgressIntervalRef = useRef(null);
+  const dashboardParallaxRef = useRef(null);
 
   const isPro = !!subscriptionStatus?.is_subscribed;
   const adsUnlocked = generatedTags.length > 0 || (tagHistory?.length || 0) > 0;
@@ -167,6 +226,41 @@ const Dashboard = ({ setIsAuthenticated }) => {
       joinProgressIntervalRef.current = null;
     }
   }, []);
+
+  useEffect(() => {
+    let ticking = false;
+
+    const updateParallaxOffset = () => {
+      const scrollY = window.scrollY || window.pageYOffset || 0;
+      const offset = Math.min(260, scrollY * 0.24);
+      if (dashboardParallaxRef.current) {
+        dashboardParallaxRef.current.style.setProperty("--dashboard-grid-offset", `${offset}px`);
+      }
+      ticking = false;
+    };
+
+    const onScroll = () => {
+      if (!ticking) {
+        window.requestAnimationFrame(updateParallaxOffset);
+        ticking = true;
+      }
+    };
+
+    updateParallaxOffset();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "grow" && isPro && growthData?.challenge_start_date && !calendarData) {
+      fetchCalendar();
+    }
+  }, [activeTab, isPro, growthData?.challenge_start_date, calendarData]);
 
   const fetchUser = async () => {
     try {
@@ -247,9 +341,12 @@ const Dashboard = ({ setIsAuthenticated }) => {
 
   const handleAnalyzeChannel = async () => {
     setLoadingAnalytics(true);
+    setProgressActive(true);
+    setProgressMessage("📈 Analyzing your channel performance and generating AI growth strategy...");
+    setProgressDuration(70000);
     try {
       const response = await axios.post(`${API}/youtube/analytics`);
-      setAnalyticsData(response.data);
+      setAnalyticsData(normalizeAnalyticsData(response.data));
       toast.success("Channel analysis complete!");
 
       // Refresh credits after analysis
@@ -274,13 +371,14 @@ const Dashboard = ({ setIsAuthenticated }) => {
       await fetchSubscriptionStatus();
     } finally {
       setLoadingAnalytics(false);
+      setProgressActive(false);
     }
   };
 
   const fetchGrowthStatus = async () => {
     try {
       const response = await axios.get(`${API}/growth/status`);
-      setGrowthData(response.data);
+      setGrowthData(normalizeGrowthData(response.data));
     } catch (error) {
       console.error("Failed to fetch growth status:", error);
     }
@@ -289,7 +387,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const fetchCalendar = async () => {
     try {
       const response = await axios.get(`${API}/growth/calendar`);
-      setCalendarData(response.data);
+      setCalendarData(normalizeCalendarData(response.data));
     } catch (error) {
       console.error("Failed to fetch calendar:", error);
     }
@@ -299,7 +397,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
     setLoadingGrowth(true);
     try {
       const response = await axios.post(`${API}/growth/start`);
-      toast.success(response.data.message);
+      toast.success(response?.data?.message || "Challenge started");
       await fetchGrowthStatus();
       await fetchCalendar();
     } catch (error) {
@@ -314,8 +412,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
     setLoadingGrowth(true);
     try {
       const response = await axios.post(`${API}/growth/checkin`);
-      toast.success(response.data.message);
-      if (response.data.badge_unlocked) {
+      toast.success(response?.data?.message || "Checked in");
+      if (response?.data?.badge_unlocked) {
         toast.success(`🎉 ${response.data.badge_unlocked}`);
       }
       await fetchGrowthStatus();
@@ -356,8 +454,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
     setTagGenerationController(controller);
 
     setLoadingTags(true);
+    setTagDebug(null);
+    setShowTagDebug(false);
     setProgressActive(true);
-    setProgressMessage("🎵 Generating optimized YouTube tags + searching artist's popular songs...");
+    setProgressMessage("Generating optimized tags using AI + YouTube + Spotify + SoundCloud signals...");
     setProgressDuration(45000); // 45 seconds for tag generation
 
     try {
@@ -371,7 +471,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
         { signal: controller.signal }
       );
       setGeneratedTags(response.data.tags);
-      toast.success(`Generated ${response.data.tags.length} tags! (AI + YouTube search + your custom tags)`);
+      setTagDebug(response.data?.debug || null);
+      toast.success(`Generated ${response.data.tags.length} tags! (AI + YouTube + Spotify + SoundCloud + custom tags)`);
       fetchTagHistory();
 
       // Refresh credits after a short delay to ensure backend has updated
@@ -485,8 +586,26 @@ const Dashboard = ({ setIsAuthenticated }) => {
     }
 
     setGeneratedTags(uniqueTags);
+    setTagDebug(null);
+    setShowTagDebug(false);
     setAdditionalTags(""); // Clear input
     toast.success(`Added ${newTags.length} tags! Total: ${uniqueTags.length}/${TAG_LIMIT}`);
+  };
+
+  const fetchTagDebug = async (tagId) => {
+    if (!tagId) {
+      setTagDebug(null);
+      setShowTagDebug(false);
+      return;
+    }
+    try {
+      const response = await axios.get(`${API}/tags/debug/${tagId}`);
+      setTagDebug(response.data?.debug || null);
+      setShowTagDebug(false);
+    } catch (error) {
+      setTagDebug(null);
+      setShowTagDebug(false);
+    }
   };
 
   const handleTagHistoryTileClick = (item) => {
@@ -509,11 +628,14 @@ const Dashboard = ({ setIsAuthenticated }) => {
       if (nextActiveItem) {
         setGeneratedTags(nextActiveItem.tags || []);
         setTagQuery(nextActiveItem.query || "");
+        fetchTagDebug(nextActiveItem.id);
         toast.success("Tags loaded!");
       }
     } else {
       setGeneratedTags([]);
       setTagQuery("");
+      setTagDebug(null);
+      setShowTagDebug(false);
     }
   };
 
@@ -554,6 +676,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
       }
 
       setGeneratedTags(optimizedTags);
+      setTagDebug(null);
+      setShowTagDebug(false);
       setTagQuery(joinLabel || "Joined Tags");
       setSelectedTagHistoryIds([]);
       setActiveTagHistoryId(null);
@@ -779,7 +903,12 @@ const Dashboard = ({ setIsAuthenticated }) => {
   };
 
   return (
-    <div className="min-h-screen mesh-gradient" data-testid="dashboard">
+    <div
+      ref={dashboardParallaxRef}
+      className="min-h-screen dashboard-parallax-bg"
+      data-testid="dashboard"
+    >
+      <div className="dashboard-grid-layer" aria-hidden="true" />
       <DarkModeToggle />
 
       {/* Header */}
@@ -971,7 +1100,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
 
           {/* Settings Tab */}
           <TabsContent value="settings" className="space-y-6 dashboard-section">
-            <ThemeCustomizer />
+            <ThemeCustomizer
+              isPro={isPro}
+              onUpgrade={() => setShowUpgradeModal(true)}
+            />
           </TabsContent>
 
           {/* Tag Generator Tab */}
@@ -990,7 +1122,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                     <Sparkles className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 flex-shrink-0" />
                     <span>Generate YouTube Tags</span>
                   </CardTitle>
-                  <CardDescription className="text-xs sm:text-sm">AI generates focused tags + searches artist's popular songs + adds your custom tags (up to 120 total)</CardDescription>
+                  <CardDescription className="text-xs sm:text-sm">AI generates focused tags using YouTube + Spotify + SoundCloud song signals + your custom tags (up to 120 total)</CardDescription>
                 </CardHeader>
                 <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
                   <form onSubmit={handleGenerateTags} className="space-y-3 sm:space-y-4" data-testid="tag-generator-form">
@@ -1098,6 +1230,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setGeneratedTags(generatedTags.filter((_, i) => i !== index));
+                                setTagDebug(null);
+                                setShowTagDebug(false);
                                 toast.success("Tag removed");
                               }}
                               className="ml-2 text-red-500 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-700"
@@ -1142,6 +1276,62 @@ const Dashboard = ({ setIsAuthenticated }) => {
                           </Button>
                         </div>
                       </div>
+
+                      {tagDebug && (
+                        <div className="p-3 sm:p-4 rounded-lg border" style={{ backgroundColor: "var(--bg-secondary)", borderColor: "var(--border-color)" }}>
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-sm sm:text-base font-semibold">Tag Generation Debug</p>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setShowTagDebug((prev) => !prev)}
+                              className="text-xs sm:text-sm"
+                            >
+                              {showTagDebug ? "Hide Debug" : "Show Debug"}
+                            </Button>
+                          </div>
+                          <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
+                            Source mix, selected tags, and de-duplication drops for this generation.
+                          </p>
+
+                          {showTagDebug && (
+                            <div className="mt-3 space-y-3">
+                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                                {Object.entries(tagDebug?.source_counts || {}).map(([key, value]) => (
+                                  <div key={key} className="rounded-md border px-2 py-1" style={{ borderColor: "var(--border-color)" }}>
+                                    <p className="font-semibold">{String(value)}</p>
+                                    <p style={{ color: "var(--text-secondary)" }}>{key.replaceAll("_", " ")}</p>
+                                  </div>
+                                ))}
+                              </div>
+
+                              <div>
+                                <p className="text-xs font-semibold mb-1">Selected Tags (sample)</p>
+                                <div className="max-h-40 overflow-auto space-y-1 text-xs">
+                                  {(tagDebug?.selected_tags || []).slice(0, 18).map((entry, idx) => (
+                                    <div key={`${entry.tag}-${idx}`} className="rounded px-2 py-1 border" style={{ borderColor: "var(--border-color)" }}>
+                                      <span className="font-medium">{entry.tag}</span>{" "}
+                                      <span style={{ color: "var(--text-secondary)" }}>[{entry.source}] {entry.reason}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+
+                              <div>
+                                <p className="text-xs font-semibold mb-1">Dropped Tags (sample)</p>
+                                <div className="max-h-32 overflow-auto space-y-1 text-xs">
+                                  {(tagDebug?.dropped_tags || []).slice(0, 14).map((entry, idx) => (
+                                    <div key={`${entry.tag}-${idx}`} className="rounded px-2 py-1 border" style={{ borderColor: "var(--border-color)" }}>
+                                      <span className="font-medium">{entry.tag}</span>{" "}
+                                      <span style={{ color: "var(--text-secondary)" }}>{entry.reason}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 )}
@@ -1174,6 +1364,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                 setActiveTagHistoryId(null);
                                 setGeneratedTags([]);
                                 setTagQuery("");
+                                setTagDebug(null);
+                                setShowTagDebug(false);
                               }}
                               className="text-xs sm:text-sm"
                             >
@@ -1239,11 +1431,14 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                             setActiveTagHistoryId(nextActiveId);
                                             setGeneratedTags(nextActiveItem.tags || []);
                                             setTagQuery(nextActiveItem.query || "");
+                                            fetchTagDebug(nextActiveId);
                                           }
                                         } else {
                                           setActiveTagHistoryId(null);
                                           setGeneratedTags([]);
                                           setTagQuery("");
+                                          setTagDebug(null);
+                                          setShowTagDebug(false);
                                         }
                                       }
                                       return nextSelected;
@@ -1591,8 +1786,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
                       <CardContent className="p-6">
                         <div className="text-center">
                           <p className="text-sm font-semibold text-purple-500 mb-2">CHANNEL HEALTH SCORE</p>
-                          <p className="text-4xl font-bold gradient-text mb-3">{analyticsData.insights.channel_health_score?.split('-')[0] || 'N/A'}</p>
-                          <p className="text-sm" style={{color: 'var(--text-secondary)'}}>{analyticsData.insights.channel_health_score?.split('-').slice(1).join('-') || ''}</p>
+                          <p className="text-4xl font-bold gradient-text mb-3">{analyticsData.insights?.channel_health_score?.split('-')[0] || 'N/A'}</p>
+                          <p className="text-sm" style={{color: 'var(--text-secondary)'}}>{analyticsData.insights?.channel_health_score?.split('-').slice(1).join('-') || ''}</p>
                         </div>
                       </CardContent>
                     </Card>
@@ -1630,7 +1825,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         <CardDescription>Your personalized path to YouTube success</CardDescription>
                       </CardHeader>
                       <CardContent>
-                        <p className="leading-relaxed whitespace-pre-wrap">{analyticsData.insights.growth_roadmap}</p>
+                        <p className="leading-relaxed whitespace-pre-wrap">{analyticsData.insights?.growth_roadmap}</p>
                       </CardContent>
                     </Card>
 
@@ -1644,7 +1839,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                       </CardHeader>
                       <CardContent>
                         <ul className="space-y-3">
-                          {analyticsData.insights.what_works?.map((point, idx) => (
+                          {analyticsData.insights?.what_works?.map((point, idx) => (
                             <li key={idx} className="flex items-start gap-3 p-3 rounded-lg" style={{backgroundColor: 'var(--bg-secondary)'}}>
                               <span className="text-green-500 text-xl">✓</span>
                               <span className="flex-1">{point}</span>
@@ -1664,7 +1859,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                       </CardHeader>
                       <CardContent>
                         <ul className="space-y-3">
-                          {analyticsData.insights.critical_issues?.map((issue, idx) => (
+                          {analyticsData.insights?.critical_issues?.map((issue, idx) => (
                             <li key={idx} className="flex items-start gap-3 p-3 rounded-lg" style={{backgroundColor: 'var(--bg-secondary)'}}>
                               <span className="text-red-500 text-xl">⚠</span>
                               <span className="flex-1">{issue}</span>
@@ -1685,7 +1880,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                       </CardHeader>
                       <CardContent>
                         <ul className="space-y-3">
-                          {analyticsData.insights.immediate_actions?.map((action, idx) => (
+                          {analyticsData.insights?.immediate_actions?.map((action, idx) => (
                             <li key={idx} className="flex items-start gap-3 p-3 rounded-lg border-2 border-blue-500/20" style={{backgroundColor: 'var(--bg-secondary)'}}>
                               <span className="text-blue-500 font-bold text-lg">{idx + 1}</span>
                               <span className="flex-1 font-medium">{action}</span>
@@ -1705,7 +1900,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                       </CardHeader>
                       <CardContent>
                         <ul className="space-y-3">
-                          {analyticsData.insights.seo_optimization?.map((tip, idx) => (
+                          {analyticsData.insights?.seo_optimization?.map((tip, idx) => (
                             <li key={idx} className="flex items-start gap-3 p-3 rounded-lg" style={{backgroundColor: 'var(--bg-secondary)'}}>
                               <span className="text-yellow-500">🔍</span>
                               <span className="flex-1">{tip}</span>
@@ -1725,7 +1920,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                       </CardHeader>
                       <CardContent>
                         <ul className="space-y-3">
-                          {analyticsData.insights.content_strategy?.map((strategy, idx) => (
+                          {analyticsData.insights?.content_strategy?.map((strategy, idx) => (
                             <li key={idx} className="flex items-start gap-3 p-3 rounded-lg" style={{backgroundColor: 'var(--bg-secondary)'}}>
                               <span className="text-indigo-500">📹</span>
                               <span className="flex-1">{strategy}</span>
@@ -1746,7 +1941,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                       </CardHeader>
                       <CardContent>
                         <ul className="space-y-3">
-                          {analyticsData.insights.discoverability_tactics?.map((tactic, idx) => (
+                          {analyticsData.insights?.discoverability_tactics?.map((tactic, idx) => (
                             <li key={idx} className="flex items-start gap-3 p-3 rounded-lg" style={{backgroundColor: 'var(--bg-secondary)'}}>
                               <span className="text-cyan-500">🚀</span>
                               <span className="flex-1">{tactic}</span>
@@ -1767,7 +1962,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                       </CardHeader>
                       <CardContent>
                         <ul className="space-y-3">
-                          {analyticsData.insights.internet_money_lessons?.map((lesson, idx) => (
+                          {analyticsData.insights?.internet_money_lessons?.map((lesson, idx) => (
                             <li key={idx} className="flex items-start gap-3 p-3 rounded-lg" style={{backgroundColor: 'var(--bg-secondary)'}}>
                               <span className="text-pink-500">💎</span>
                               <span className="flex-1">{lesson}</span>
@@ -1973,8 +2168,9 @@ const Dashboard = ({ setIsAuthenticated }) => {
                           <div className="grid grid-cols-5 sm:grid-cols-8 lg:grid-cols-10 gap-2 mb-4">
                             {Object.entries(calendarData.calendar || {}).slice(0, 120).map(([date, statusData], index) => {
                               const dayNumber = index + 1;
-                              const status = typeof statusData === 'string' ? statusData : statusData.status;
-                              const activity = typeof statusData === 'object' ? statusData.activity : null;
+                              const safeStatusData = statusData && typeof statusData === "object" ? statusData : null;
+                              const status = typeof statusData === "string" ? statusData : (safeStatusData?.status || "future");
+                              const activity = safeStatusData?.activity || null;
 
                               const bgColor =
                                 status === 'completed' ? 'bg-green-500' :
@@ -2103,7 +2299,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
                     )}
 
                     {/* Load calendar on tab view */}
-                    {!calendarData && fetchCalendar()}
                   </>
                 )}
                 </div>
@@ -2225,3 +2420,4 @@ const Dashboard = ({ setIsAuthenticated }) => {
 };
 
 export default Dashboard;
+
