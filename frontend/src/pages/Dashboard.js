@@ -130,9 +130,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [generateForm, setGenerateForm] = useState({
     email: "",
     socials: "",
-    key: "",
-    bpm: "",
-    prices: "",
     additional_info: ""
   });
   const [loadingGenerate, setLoadingGenerate] = useState(false);
@@ -849,9 +846,16 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const handleGenerateDescription = async () => {
     setLoadingGenerate(true);
     try {
-      const response = await axios.post(`${API}/descriptions/generate`, generateForm);
+      const response = await axios.post(`${API}/descriptions/generate`, {
+        email: generateForm.email,
+        socials: generateForm.socials,
+        additional_info: generateForm.additional_info,
+        key: "",
+        bpm: "",
+        prices: "",
+      });
       setNewDescription({
-        title: `Generated - ${generateForm.key || generateForm.bpm || 'Beat'}`,
+        title: `Generated - Beat Description`,
         content: response.data.generated_description
       });
       toast.success("Description generated! You can edit and save it.");
@@ -1305,6 +1309,17 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                 ))}
                               </div>
 
+                              {Object.keys(tagDebug?.source_status || {}).length > 0 && (
+                                <div className="rounded-md border px-2 py-2 text-xs" style={{ borderColor: "var(--border-color)" }}>
+                                  <p className="font-semibold mb-1">Source Status</p>
+                                  {Object.entries(tagDebug?.source_status || {}).map(([key, value]) => (
+                                    <p key={key} style={{ color: "var(--text-secondary)" }}>
+                                      {key}: {String(value)}
+                                    </p>
+                                  ))}
+                                </div>
+                              )}
+
                               <div>
                                 <p className="text-xs font-semibold mb-1">Selected Tags (sample)</p>
                                 <div className="max-h-40 overflow-auto space-y-1 text-xs">
@@ -1476,78 +1491,245 @@ const Dashboard = ({ setIsAuthenticated }) => {
             />
           )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-              {/* Create/Save Description */}
-              <Card className="dashboard-card">
-                <CardHeader className="px-4 sm:px-6 py-4 sm:py-6">
-                  <CardTitle className="flex items-center gap-2 text-base sm:text-lg md:text-xl">
-                    <Save className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 flex-shrink-0" />
-                    <span>Create & Save Description</span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6 space-y-3 sm:space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="desc-title">Title</Label>
-                    <Input
-                      id="desc-title"
-                      placeholder="e.g., Trap Beat Template"
-                      value={newDescription.title}
-                      onChange={(e) => setNewDescription({ ...newDescription, title: e.target.value })}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && newDescription.content.trim()) {
-                          e.preventDefault();
-                          handleSaveDescription();
-                        }
-                      }}
-                      data-testid="desc-title-input"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="desc-content">Content</Label>
-                    <Textarea
-                      id="desc-content"
-                      placeholder="Write your description here..."
-                      rows={8}
-                      value={newDescription.content}
-                      onChange={(e) => setNewDescription({ ...newDescription, content: e.target.value })}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey && newDescription.title.trim()) {
-                          e.preventDefault();
-                          handleSaveDescription();
-                        }
-                      }}
-                      data-testid="desc-content-input"
-                    />
-                    <p className="text-xs" style={{color: 'var(--text-secondary)'}}>
-                      Press Enter to save. Use Shift+Enter for a new line.
+            <Card className="dashboard-card description-studio-hero">
+              <CardContent className="px-4 sm:px-6 py-4 sm:py-5">
+                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                  <div>
+                    <p className="text-xs uppercase tracking-widest font-semibold" style={{ color: "var(--text-secondary)" }}>
+                      Description Studio
+                    </p>
+                    <h3 className="text-lg sm:text-2xl font-bold" style={{ color: "var(--text-primary)" }}>
+                      Write faster. Sound bigger. Stay consistent.
+                    </h3>
+                    <p className="text-xs sm:text-sm mt-1" style={{ color: "var(--text-secondary)" }}>
+                      Build scroll-stopping descriptions with AI tools, then keep your best templates ready to deploy.
                     </p>
                   </div>
-                  <Button
-                    onClick={handleSaveDescription}
-                    className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
-                    disabled={loadingDescriptions}
-                    data-testid="save-desc-btn"
-                  >
-                    Save Description
-                  </Button>
-                </CardContent>
-              </Card>
+                  <div className="grid grid-cols-3 gap-2 w-full lg:w-auto">
+                    <div className="description-stat-chip">
+                      <p className="description-stat-value">{descriptions.length}</p>
+                      <p className="description-stat-label">Saved</p>
+                    </div>
+                    <div className="description-stat-chip">
+                      <p className="description-stat-value">{newDescription.content.trim() ? newDescription.content.trim().split(/\s+/).filter(Boolean).length : 0}</p>
+                      <p className="description-stat-label">Draft Words</p>
+                    </div>
+                    <div className="description-stat-chip">
+                      <p className="description-stat-value">{Math.max(5, Math.round(((newDescription.content.trim() ? newDescription.content.trim().split(/\s+/).filter(Boolean).length : 0) / 3) || 0))}s</p>
+                      <p className="description-stat-label">Read Time</p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
-              {/* AI Tools */}
-              <div className="space-y-6">
-                {/* Refine Description */}
-              <Card className="dashboard-card">
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 sm:gap-6">
+              <div className="xl:col-span-7 space-y-4 sm:space-y-6">
+                <Card className="dashboard-card description-tool-card">
+                  <CardHeader className="px-4 sm:px-6 py-4 sm:py-6">
+                    <CardTitle className="flex items-center gap-2 text-base sm:text-lg md:text-xl">
+                      <Save className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 flex-shrink-0" />
+                      <span>Create & Save Description</span>
+                    </CardTitle>
+                    <CardDescription>Build your reusable template, then save it in one click.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6 space-y-3 sm:space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {[
+                        "🔥 Instant vibe hook",
+                        "🎧 Lease CTA line",
+                        "📌 Socials closer",
+                        "⚡ Producer stamp opener",
+                      ].map((hook) => (
+                        <button
+                          key={hook}
+                          type="button"
+                          className="description-hook-chip"
+                          onClick={() => {
+                            const text = hook.replace(/^.\s/, "");
+                            setNewDescription((prev) => ({
+                              ...prev,
+                              content: prev.content ? `${text}\n${prev.content}` : text,
+                            }));
+                          }}
+                        >
+                          {hook}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="desc-title">Title</Label>
+                      <Input
+                        id="desc-title"
+                        placeholder="e.g., Trap Beat Template"
+                        value={newDescription.title}
+                        onChange={(e) => setNewDescription({ ...newDescription, title: e.target.value })}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && newDescription.content.trim()) {
+                            e.preventDefault();
+                            handleSaveDescription();
+                          }
+                        }}
+                        data-testid="desc-title-input"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="desc-content">Content</Label>
+                      <Textarea
+                        id="desc-content"
+                        placeholder="Write your description here..."
+                        rows={9}
+                        value={newDescription.content}
+                        onChange={(e) => setNewDescription({ ...newDescription, content: e.target.value })}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.shiftKey && newDescription.title.trim()) {
+                            e.preventDefault();
+                            handleSaveDescription();
+                          }
+                        }}
+                        data-testid="desc-content-input"
+                      />
+                      <div className="flex justify-between items-center text-xs">
+                        <p style={{color: 'var(--text-secondary)'}}>
+                          Press Enter to save. Use Shift+Enter for a new line.
+                        </p>
+                        <p style={{color: 'var(--text-secondary)'}}>
+                          {(newDescription.content || "").length} chars
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      onClick={handleSaveDescription}
+                      className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+                      disabled={loadingDescriptions}
+                      data-testid="save-desc-btn"
+                    >
+                      Save Description
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                <Card className="dashboard-card producer-card">
+                  <CardHeader>
+                    <CardTitle>Saved Descriptions ({descriptions.length})</CardTitle>
+                    <CardDescription>Tap any description body to expand/collapse quickly.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {descriptions.length === 0 ? (
+                      <p className="text-center py-8" style={{color: 'var(--text-secondary)'}} data-testid="no-descriptions-msg">No saved descriptions yet. Create one above!</p>
+                    ) : (
+                      <div className="space-y-3" data-testid="descriptions-list">
+                        {descriptions.map((desc) => {
+                          const isExpanded = expandedDescriptions.has(desc.id);
+                          const preview = desc.content.substring(0, 150);
+                          const showPreview = !isExpanded && desc.content.length > 150;
+                          const words = desc.content.trim() ? desc.content.trim().split(/\s+/).filter(Boolean).length : 0;
+
+                          return (
+                            <div key={desc.id} className="description-entry-card" data-testid={`desc-item-${desc.id}`}>
+                              <div className="flex items-start justify-between gap-3 mb-2">
+                                <div className="min-w-0">
+                                  <h3 className="font-semibold truncate" style={{color: 'var(--text-primary)'}}>{desc.title}</h3>
+                                  <p className="text-xs" style={{ color: "var(--text-secondary)" }}>{words} words</p>
+                                </div>
+                                <div className="flex gap-2">
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => copyDescription(desc.content)}
+                                    data-testid={`copy-desc-${desc.id}`}
+                                  >
+                                    <Copy className="h-4 w-4" />
+                                  </Button>
+                                  <Dialog>
+                                    <DialogTrigger asChild>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => setEditingDesc(desc)}
+                                        data-testid={`edit-desc-${desc.id}`}
+                                      >
+                                        <Edit className="h-4 w-4" />
+                                      </Button>
+                                    </DialogTrigger>
+                                    <DialogContent>
+                                      <DialogHeader>
+                                        <DialogTitle>Edit Description</DialogTitle>
+                                        <DialogDescription>Make changes to your description</DialogDescription>
+                                      </DialogHeader>
+                                      {editingDesc && (
+                                        <div className="space-y-4">
+                                          <Input
+                                            value={editingDesc.title}
+                                            onChange={(e) => setEditingDesc({ ...editingDesc, title: e.target.value })}
+                                            data-testid="edit-title-input"
+                                          />
+                                          <Textarea
+                                            rows={8}
+                                            value={editingDesc.content}
+                                            onChange={(e) => setEditingDesc({ ...editingDesc, content: e.target.value })}
+                                            data-testid="edit-content-input"
+                                          />
+                                          <Button onClick={handleUpdateDescription} className="w-full" data-testid="update-desc-btn">
+                                            Save Changes
+                                          </Button>
+                                        </div>
+                                      )}
+                                    </DialogContent>
+                                  </Dialog>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                    onClick={() => handleDeleteDescription(desc.id)}
+                                    data-testid={`delete-desc-${desc.id}`}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </div>
+                              <div
+                                className="text-sm whitespace-pre-wrap cursor-pointer"
+                                style={{ color: "var(--text-primary)" }}
+                                onClick={() => toggleDescriptionExpand(desc.id)}
+                              >
+                                {showPreview ? (
+                                  <>
+                                    {preview}...
+                                    <span className="description-expand-hint">Click to expand</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    {desc.content}
+                                    {desc.content.length > 150 && (
+                                      <span className="description-expand-hint block mt-2">Click to collapse</span>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="xl:col-span-5 space-y-4 sm:space-y-6">
+                <Card className="dashboard-card description-tool-card">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <Sparkles className="h-5 w-5 text-blue-600" />
                       AI Refine
                     </CardTitle>
-                    <CardDescription>Improve your existing description</CardDescription>
+                    <CardDescription>Paste your text and let AI sharpen clarity + conversion.</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <Textarea
                       placeholder="Paste your description to refine..."
-                      className="resize-y min-h-[120px] max-h-[400px]"
+                      className="resize-y min-h-[140px] max-h-[420px]"
                       value={refineText}
                       onChange={(e) => setRefineText(e.target.value)}
                       data-testid="refine-text-input"
@@ -1563,14 +1745,13 @@ const Dashboard = ({ setIsAuthenticated }) => {
                   </CardContent>
                 </Card>
 
-              {/* Generate Description */}
-              <Card className="dashboard-card">
+                <Card className="dashboard-card description-tool-card">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <Plus className="h-5 w-5 text-blue-600" />
                       AI Generate
                     </CardTitle>
-                    <CardDescription>Generate from beat details</CardDescription>
+                    <CardDescription>Build a full description from beat metadata and sales info.</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <Input
@@ -1585,26 +1766,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
                       onChange={(e) => setGenerateForm({ ...generateForm, socials: e.target.value })}
                       data-testid="gen-socials-input"
                     />
-                    <div className="grid grid-cols-2 gap-2">
-                      <Input
-                        placeholder="Key"
-                        value={generateForm.key}
-                        onChange={(e) => setGenerateForm({ ...generateForm, key: e.target.value })}
-                        data-testid="gen-key-input"
-                      />
-                      <Input
-                        placeholder="BPM"
-                        value={generateForm.bpm}
-                        onChange={(e) => setGenerateForm({ ...generateForm, bpm: e.target.value })}
-                        data-testid="gen-bpm-input"
-                      />
-                    </div>
-                    <Input
-                      placeholder="Prices"
-                      value={generateForm.prices}
-                      onChange={(e) => setGenerateForm({ ...generateForm, prices: e.target.value })}
-                      data-testid="gen-prices-input"
-                    />
                     <Textarea
                       placeholder="Additional info"
                       rows={2}
@@ -1612,6 +1773,9 @@ const Dashboard = ({ setIsAuthenticated }) => {
                       onChange={(e) => setGenerateForm({ ...generateForm, additional_info: e.target.value })}
                       data-testid="gen-additional-input"
                     />
+                    <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                      Key, BPM, and pricing are now handled in Upload Studio after your beat is loaded.
+                    </p>
                     <Button
                       onClick={handleGenerateDescription}
                       className="w-full"
@@ -1624,107 +1788,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
                 </Card>
               </div>
             </div>
-
-            {/* Saved Descriptions */}
-            <Card className="dashboard-card producer-card">
-              <CardHeader>
-                <CardTitle>Saved Descriptions ({descriptions.length})</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {descriptions.length === 0 ? (
-                  <p className="text-center py-8" style={{color: 'var(--text-secondary)'}} data-testid="no-descriptions-msg">No saved descriptions yet. Create one above!</p>
-                ) : (
-                  <div className="space-y-3" data-testid="descriptions-list">
-                    {descriptions.map((desc) => {
-                      const isExpanded = expandedDescriptions.has(desc.id);
-                      const preview = desc.content.substring(0, 150);
-                      const showPreview = !isExpanded && desc.content.length > 150;
-
-                      return (
-                        <div key={desc.id} className="p-4 rounded-lg bg-black/20 dark:bg-black/40 backdrop-blur-sm" data-testid={`desc-item-${desc.id}`}>
-                          <div className="flex items-start justify-between mb-2">
-                            <h3 className="font-semibold" style={{color: 'var(--text-primary)'}}>{desc.title}</h3>
-                            <div className="flex gap-2">
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => copyDescription(desc.content)}
-                                data-testid={`copy-desc-${desc.id}`}
-                              >
-                                <Copy className="h-4 w-4" />
-                              </Button>
-                              <Dialog>
-                                <DialogTrigger asChild>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => setEditingDesc(desc)}
-                                    data-testid={`edit-desc-${desc.id}`}
-                                  >
-                                    <Edit className="h-4 w-4" />
-                                  </Button>
-                                </DialogTrigger>
-                                <DialogContent>
-                                  <DialogHeader>
-                                    <DialogTitle>Edit Description</DialogTitle>
-                                    <DialogDescription>Make changes to your description</DialogDescription>
-                                  </DialogHeader>
-                                  {editingDesc && (
-                                    <div className="space-y-4">
-                                      <Input
-                                        value={editingDesc.title}
-                                        onChange={(e) => setEditingDesc({ ...editingDesc, title: e.target.value })}
-                                        data-testid="edit-title-input"
-                                      />
-                                      <Textarea
-                                        rows={8}
-                                        value={editingDesc.content}
-                                        onChange={(e) => setEditingDesc({ ...editingDesc, content: e.target.value })}
-                                        data-testid="edit-content-input"
-                                      />
-                                      <Button onClick={handleUpdateDescription} className="w-full" data-testid="update-desc-btn">
-                                        Save Changes
-                                      </Button>
-                                    </div>
-                                  )}
-                                </DialogContent>
-                              </Dialog>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                                onClick={() => handleDeleteDescription(desc.id)}
-                                data-testid={`delete-desc-${desc.id}`}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </div>
-                          <div
-                            className="text-sm text-slate-600 whitespace-pre-wrap cursor-pointer"
-                            onClick={() => toggleDescriptionExpand(desc.id)}
-                          >
-                            {showPreview ? (
-                              <>
-                                {preview}...
-                                <span className="text-blue-600 font-medium ml-2">Click to expand</span>
-                              </>
-                            ) : (
-                              <>
-                                {desc.content}
-                                {desc.content.length > 150 && (
-                                  <span className="text-blue-600 font-medium ml-2 block mt-2">Click to collapse</span>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
           </TabsContent>
 
           {/* YouTube Upload Tab (Refactored) */}

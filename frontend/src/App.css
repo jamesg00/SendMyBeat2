@@ -200,6 +200,98 @@ h1, h2, h3, h4, h5, h6 {
   animation: slideIn 0.35s ease-out;
 }
 
+/* Description Studio */
+.description-studio-hero {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  background:
+    radial-gradient(circle at 14% 10%, color-mix(in srgb, var(--accent-primary) 16%, transparent), transparent 40%),
+    radial-gradient(circle at 82% 90%, color-mix(in srgb, var(--accent-secondary) 15%, transparent), transparent 42%),
+    var(--card-bg);
+}
+
+.description-studio-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--accent-primary) 10%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--accent-secondary) 10%, transparent) 1px, transparent 1px);
+  background-size: 22px 22px;
+  opacity: 0.22;
+}
+
+.description-stat-chip {
+  position: relative;
+  z-index: 1;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-secondary) 82%, transparent);
+  padding: 8px 10px;
+  text-align: center;
+}
+
+.description-stat-value {
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--text-primary);
+}
+
+.description-stat-label {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.description-tool-card {
+  border: 1px solid var(--border-color);
+  background:
+    linear-gradient(160deg, color-mix(in srgb, var(--card-bg) 88%, transparent), color-mix(in srgb, var(--bg-secondary) 84%, transparent));
+}
+
+.description-hook-chip {
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--bg-secondary) 78%, transparent);
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.description-hook-chip:hover {
+  transform: translateY(-1px);
+  border-color: var(--accent-primary);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--accent-primary) 18%, transparent);
+}
+
+.description-entry-card {
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 14px;
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--bg-secondary) 82%, transparent), color-mix(in srgb, var(--card-bg) 88%, transparent));
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+}
+
+.description-entry-card:hover {
+  transform: translateY(-1px);
+  border-color: var(--accent-secondary);
+  box-shadow: 0 12px 24px color-mix(in srgb, var(--shadow) 75%, transparent);
+}
+
+.description-expand-hint {
+  margin-left: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-primary);
+}
+
 /* Upload Studio slider system */
 .studio-slider {
   --slider-accent: #8b5cf6;

@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Drawer, DrawerContent, DrawerTrigger, DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter } from "@/components/ui/drawer";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import AudioVisualizer from "@/lib/AudioVisualizer";
 import {
   AUDIO_EXTENSIONS,
@@ -66,6 +67,10 @@ const UploadStudio = ({
   const [uploadTitle, setUploadTitle] = useState("");
   const [selectedDescriptionId, setSelectedDescriptionId] = useState("");
   const [uploadDescriptionText, setUploadDescriptionText] = useState("");
+  const [uploadBeatKey, setUploadBeatKey] = useState("");
+  const [uploadBeatBpm, setUploadBeatBpm] = useState("");
+  const [showBeatMetaDialog, setShowBeatMetaDialog] = useState(false);
+  const [beatMetaPromptShown, setBeatMetaPromptShown] = useState(false);
   const [selectedTagsId, setSelectedTagsId] = useState("");
   const [privacyStatus, setPrivacyStatus] = useState("public");
 
@@ -136,6 +141,20 @@ const UploadStudio = ({
     const mins = Math.floor(totalSeconds / 60);
     const secs = totalSeconds % 60;
     return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  const buildUploadDescriptionWithMetadata = () => {
+    const base = (uploadDescriptionText || "").trim();
+    const key = (uploadBeatKey || "").trim();
+    const bpm = (uploadBeatBpm || "").trim();
+
+    const metaParts = [];
+    if (bpm) metaParts.push(`BPM: ${bpm}`);
+    if (key) metaParts.push(`Key: ${key}`);
+
+    if (!metaParts.length) return base;
+    if (!base) return metaParts.join(" | ");
+    return `${base}\n\n${metaParts.join(" | ")}`;
   };
 
   const getDistance = (touch1, touch2) => {
@@ -385,15 +404,16 @@ const UploadStudio = ({
     formData.append('file', file);
     try {
       const response = await axios.post(`${API}/upload/audio`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
         onUploadProgress: (p) => setUploadProgress(Math.round((p.loaded * 100) / p.total))
       });
       setAudioFile(file);
       setAudioFileId(response.data.file_id);
+      setBeatMetaPromptShown(false);
       setAudioPreviewUrl(URL.createObjectURL(file));
       toast.success("Audio ready!");
     } catch (error) {
-      toast.error("Failed to upload audio");
+      const detail = error?.response?.data?.detail;
+      toast.error(typeof detail === "string" ? detail : "Failed to upload audio");
     } finally {
       setUploadingAudio(false);
     }
@@ -406,10 +426,10 @@ const UploadStudio = ({
     formData.append('file', file);
     try {
       const response = await axios.post(`${API}/upload/image`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
       });
       setImageFile(file);
       setImageFileId(response.data.file_id);
+      setBeatMetaPromptShown(false);
       const url = URL.createObjectURL(file);
       setImagePreviewUrl(url);
       const img = new Image();
@@ -422,7 +442,8 @@ const UploadStudio = ({
       setCenterLockEnabled(false);
       toast.success("Image ready!");
     } catch (error) {
-      toast.error("Failed to upload image");
+      const detail = error?.response?.data?.detail;
+      toast.error(typeof detail === "string" ? detail : "Failed to upload image");
     } finally {
       setUploadingImage(false);
     }
@@ -639,7 +660,7 @@ const UploadStudio = ({
     formData.append('audio_file_id', audioFileId);
     formData.append('image_file_id', imageFileId);
     formData.append('remove_watermark', removeWatermark);
-    formData.append('description_override', uploadDescriptionText);
+    formData.append('description_override', buildUploadDescriptionWithMetadata());
     formData.append('aspect_ratio', videoAspectRatio);
     formData.append('image_scale', String(lockImageScale ? imageScaleX : (imageScaleX + imageScaleY) / 2));
     formData.append('image_scale_x', String(imageScaleX));
@@ -686,6 +707,13 @@ const UploadStudio = ({
       setStudioOpen(true);
     }
   }, [audioFile, imageFile]);
+
+  useEffect(() => {
+    if (!audioFileId || !imageFileId) return;
+    if (beatMetaPromptShown) return;
+    setShowBeatMetaDialog(true);
+    setBeatMetaPromptShown(true);
+  }, [audioFileId, imageFileId, beatMetaPromptShown]);
 
   // --- Controls Markup ---
   const controlsMarkup = (
@@ -973,6 +1001,36 @@ const UploadStudio = ({
              </div>
          )}
       </div>
+      <Dialog open={showBeatMetaDialog} onOpenChange={setShowBeatMetaDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Set Beat Metadata</DialogTitle>
+            <DialogDescription>
+              Add BPM and Key once now. We will append it to your upload description automatically.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              placeholder="BPM (e.g. 140)"
+              value={uploadBeatBpm}
+              onChange={(e) => setUploadBeatBpm(e.target.value)}
+            />
+            <Input
+              placeholder="Key (e.g. C# Min)"
+              value={uploadBeatKey}
+              onChange={(e) => setUploadBeatKey(e.target.value)}
+            />
+            <div className="flex gap-2">
+              <Button className="flex-1" onClick={() => setShowBeatMetaDialog(false)}>
+                Save & Continue
+              </Button>
+              <Button variant="outline" className="flex-1" onClick={() => setShowBeatMetaDialog(false)}>
+                Skip
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

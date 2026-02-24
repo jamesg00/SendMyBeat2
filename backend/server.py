@@ -28,6 +28,7 @@ import stripe
 import requests
 import re
 import subprocess
+import html
 from urllib.parse import urlencode
 from itsdangerous import URLSafeSerializer, BadSignature
 from models_spotlight import (
@@ -118,7 +119,8 @@ oauth = OAuth()
 api_router = APIRouter(prefix="/api")
 
 # Create uploads directory
-UPLOADS_DIR = Path("/app/uploads")
+# Use env override when provided; default to backend-local path for dev compatibility.
+UPLOADS_DIR = Path(os.environ.get("UPLOADS_DIR", str(ROOT_DIR / "uploads")))
 UPLOADS_DIR.mkdir(exist_ok=True)
 
 # ============ Cost Tracking Constants ============
@@ -1784,6 +1786,48 @@ def _fetch_soundcloud_track_seeds(artist_name: str) -> list[str]:
         return []
 
 
+def _fetch_youtube_track_seeds_no_api(artist_name: str) -> list[str]:
+    if not artist_name:
+        return []
+
+    try:
+        response = requests.get(
+            "https://www.youtube.com/results",
+            params={"search_query": f"{artist_name} official audio"},
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                              "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+            },
+            timeout=10,
+        )
+        response.raise_for_status()
+        text = response.text
+
+        # Parse common YouTube title patterns from initial page payload.
+        raw_titles = re.findall(r'"title"\s*:\s*\{\s*"runs"\s*:\s*\[\s*\{\s*"text"\s*:\s*"([^"]+)"', text)
+        if not raw_titles:
+            raw_titles = re.findall(r'"title"\s*:\s*\{\s*"simpleText"\s*:\s*"([^"]+)"', text)
+
+        seeds: list[str] = []
+        seen: set[str] = set()
+        for raw in raw_titles[:60]:
+            title = html.unescape(raw.replace("\\u0026", "&"))
+            seed = _extract_song_seed(title, artist_name)
+            if not seed:
+                continue
+            key = seed.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            seeds.append(seed)
+            if len(seeds) >= 12:
+                break
+        return seeds
+    except Exception as e:
+        logging.warning(f"YouTube no-key enrichment failed: {str(e)}")
+        return []
+
+
 @api_router.post("/tags/generate", response_model=TagGenerationResponse)
 async def generate_tags(request: TagGenerationRequest, current_user: dict = Depends(get_current_user)):
     try:
@@ -1795,6 +1839,11 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
         
         # Search YouTube for artist's popular songs
         youtube_type_beat_tags: list[str] = []
+        source_status = {
+            "youtube": "missing",
+            "spotify": "missing",
+            "soundcloud": "missing",
+        }
         try:
             # Get user's YouTube credentials if available for search
             user = await db.users.find_one({"id": current_user['id']})
@@ -1802,11 +1851,13 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
                 credentials_dict = user['youtube_token']
                 credentials = Credentials(**credentials_dict)
                 youtube = build('youtube', 'v3', credentials=credentials)
+                source_status["youtube"] = "youtube_oauth"
             else:
                 youtube_api_key = os.environ.get("YOUTUBE_API_KEY") or os.environ.get("GOOGLE_API_KEY")
                 if not youtube_api_key:
-                    raise RuntimeError("Missing YOUTUBE_API_KEY/GOOGLE_API_KEY for public YouTube search.")
+                    raise RuntimeError("Missing YOUTUBE_API_KEY/GOOGLE_API_KEY")
                 youtube = build('youtube', 'v3', developerKey=youtube_api_key)
+                source_status["youtube"] = "youtube_api_key"
             
             # Search for artist's popular songs
             search_response = youtube.search().list(
@@ -1829,7 +1880,9 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
             logging.info(f"Found {len(youtube_type_beat_tags)} YouTube song variations for {artist_name}")
         except Exception as e:
             logging.warning(f"YouTube search for popular songs failed: {str(e)}")
-            # Continue without YouTube search results
+            fallback_youtube_seeds = await asyncio.to_thread(_fetch_youtube_track_seeds_no_api, artist_name)
+            youtube_type_beat_tags = [f"{seed} type beat" for seed in fallback_youtube_seeds]
+            source_status["youtube"] = "youtube_web_fallback" if fallback_youtube_seeds else "youtube_failed"
 
         spotify_seeds, soundcloud_seeds = await asyncio.gather(
             asyncio.to_thread(_fetch_spotify_track_seeds, artist_name),
@@ -1838,6 +1891,8 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
 
         spotify_type_beat_tags = [f"{seed} type beat" for seed in spotify_seeds]
         soundcloud_type_beat_tags = [f"{seed} type beat" for seed in soundcloud_seeds]
+        source_status["spotify"] = "spotify_ok" if spotify_type_beat_tags else "spotify_missing_or_failed"
+        source_status["soundcloud"] = "soundcloud_ok" if soundcloud_type_beat_tags else "soundcloud_missing_or_failed"
         
         llm_provider = request.llm_provider.lower() if request.llm_provider else None
         if llm_provider not in (None, "openai", "grok"):
@@ -1881,6 +1936,7 @@ STRICT RULES:
 7) Avoid low-value producer-only terms unless directly relevant: "free download", "no copyright", "fl studio", "logic pro", "ableton".
 8) Return STRICT JSON only in this schema:
 {{"tags":["tag1","tag2","tag3"]}}
+9) If song-based candidates are provided, include at least 10 tags directly based on those song/title candidates.
 
 Required diversity mix (approximate):
 - 20-24 core artist/search intent tags
@@ -1994,6 +2050,7 @@ Optional candidate inspirations from YouTube/Spotify/SoundCloud/custom inputs:
         debug_info = {
             "query": request.query,
             "artist_seed": artist_name,
+            "source_status": source_status,
             "source_counts": source_counts,
             "top_up_used": len(final_tags) > llm_selected_count,
             "selected_tags": selected_tags_debug,
@@ -2371,6 +2428,9 @@ Return only the complete description."""
 async def upload_audio(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
     """Upload audio file (MP3, WAV, etc.)"""
     try:
+        if not file or not file.filename:
+            raise HTTPException(status_code=400, detail="No audio file provided.")
+
         # Validate file type - audio only
         allowed_extensions = ['.mp3', '.wav', '.m4a', '.flac', '.ogg']
         file_ext = Path(file.filename).suffix.lower()
@@ -2406,7 +2466,8 @@ async def upload_audio(file: UploadFile = File(...), current_user: dict = Depend
         await db.uploads.insert_one(upload_doc)
         
         return {"file_id": file_id, "filename": file.filename}
-        
+    except HTTPException:
+        raise
     except Exception as e:
         logging.error(f"Audio upload error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to upload audio: {str(e)}")
@@ -2415,6 +2476,9 @@ async def upload_audio(file: UploadFile = File(...), current_user: dict = Depend
 async def upload_image(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
     """Upload image file (JPG, PNG, etc.)"""
     try:
+        if not file or not file.filename:
+            raise HTTPException(status_code=400, detail="No image file provided.")
+
         # Validate file type
         allowed_extensions = ['.jpg', '.jpeg', '.png', '.webp', '.webm']
         file_ext = Path(file.filename).suffix.lower()
@@ -2450,7 +2514,8 @@ async def upload_image(file: UploadFile = File(...), current_user: dict = Depend
         await db.uploads.insert_one(upload_doc)
         
         return {"file_id": file_id, "filename": file.filename}
-        
+    except HTTPException:
+        raise
     except Exception as e:
         logging.error(f"Image upload error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to upload image: {str(e)}")
