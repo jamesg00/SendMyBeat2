@@ -1606,6 +1606,12 @@ _LOW_INTENT_EXACT_TAGS = {
     "chill beat", "rap beat", "trap beat",
 }
 
+_GENERIC_BEAT_MODIFIERS = {
+    "vibe", "energy", "flow", "sound", "street", "club", "wavy",
+    "banger", "hard", "emotional", "melodic", "dark", "sad", "hype",
+    "inspired", "style", "producer",
+}
+
 
 def _clean_tag_text(value: str) -> str:
     clean = (value or "").strip().strip(",").strip('"').strip("'")
@@ -1681,6 +1687,31 @@ def _append_unique_tags(base_tags: list[str], extra_tags: list[str], max_tags: i
             break
 
     return final_tags
+
+
+def _is_generic_artist_modifier_tag(tag: str, artist_name: str, seed_tokens: set[str]) -> bool:
+    key = _tag_exact_key(tag)
+    if not key:
+        return True
+
+    tokens = key.split()
+    if len(tokens) < 3:
+        return False
+
+    artist_parts = [p for p in _tag_exact_key(artist_name).split() if p]
+    if artist_parts and not all(part in tokens for part in artist_parts):
+        return False
+
+    # If tag includes any known song/project token, keep it.
+    if seed_tokens and any(token in seed_tokens for token in tokens):
+        return False
+
+    # Drop artist + generic modifier + beat style patterns.
+    if "beat" not in tokens:
+        return False
+    if any(mod in tokens for mod in _GENERIC_BEAT_MODIFIERS):
+        return True
+    return False
 
 
 def _extract_song_seed(title: str, artist_name: str = "") -> str:
@@ -1893,6 +1924,13 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
         soundcloud_type_beat_tags = [f"{seed} type beat" for seed in soundcloud_seeds]
         source_status["spotify"] = "spotify_ok" if spotify_type_beat_tags else "spotify_missing_or_failed"
         source_status["soundcloud"] = "soundcloud_ok" if soundcloud_type_beat_tags else "soundcloud_missing_or_failed"
+
+        source_seed_tokens: set[str] = set()
+        for seed in [*youtube_type_beat_tags, *spotify_type_beat_tags, *soundcloud_type_beat_tags]:
+            for token in _tag_exact_key(seed).split():
+                if token in _TAG_NOISE_WORDS or len(token) <= 2:
+                    continue
+                source_seed_tokens.add(token)
         
         llm_provider = request.llm_provider.lower() if request.llm_provider else None
         if llm_provider not in (None, "openai", "grok"):
@@ -1917,6 +1955,11 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
                     candidate_source_map[key] = source_name
 
         unique_candidate_pool = _append_unique_tags([], candidate_pool, max_tags=80)
+        source_priority_pool = []
+        for candidate in unique_candidate_pool:
+            source = candidate_source_map.get(_tag_exact_key(candidate), "")
+            if source in {"youtube", "spotify", "soundcloud"}:
+                source_priority_pool.append(candidate)
 
         candidate_tags_text = ", ".join(unique_candidate_pool[:80]) if unique_candidate_pool else "None"
         prompt = f"""Create ONE refined YouTube tag set for: "{request.query}".
@@ -1937,6 +1980,7 @@ STRICT RULES:
 8) Return STRICT JSON only in this schema:
 {{"tags":["tag1","tag2","tag3"]}}
 9) If song-based candidates are provided, include at least 10 tags directly based on those song/title candidates.
+10) Avoid generic artist+modifier tags like "artist emotional beat", "artist vibe beat", "artist flow beat" unless tied to a real song/project reference.
 
 Required diversity mix (approximate):
 - 20-24 core artist/search intent tags
@@ -2021,9 +2065,19 @@ Optional candidate inspirations from YouTube/Spotify/SoundCloud/custom inputs:
             )
 
         for tag in [t for t in parsed_tags if isinstance(t, str)]:
+            if _is_generic_artist_modifier_tag(tag, artist_name, source_seed_tokens):
+                if len(dropped_debug) < 80:
+                    dropped_debug.append({"tag": _clean_tag_text(tag), "reason": "generic_artist_modifier"})
+                continue
             try_push_tag(tag, "llm", "llm_high_intent", max_tags=80)
 
         llm_selected_count = len(final_tags)
+
+        # Force song/project seed coverage before broader top-up.
+        for seed_tag in source_priority_pool:
+            try_push_tag(seed_tag, candidate_source_map.get(_tag_exact_key(seed_tag), "source"), "song_seed_priority", max_tags=80)
+            if len([t for t in selected_tags_debug if t.get("reason") == "song_seed_priority"]) >= 20:
+                break
 
         # If model under-returns, top up carefully from candidate pool
         if len(final_tags) < 50:
