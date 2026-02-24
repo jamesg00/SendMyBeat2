@@ -216,6 +216,44 @@ def _get_vision_model_for_provider(provider_name: str) -> str:
     return os.environ.get("LLM_VISION_MODEL") or os.environ.get("LLM_MODEL", "gpt-4o")
 
 
+def _parse_llm_json_response(raw_text: str) -> dict:
+    text = (raw_text or "").strip()
+    if not text:
+        raise ValueError("Empty model response")
+
+    # 1) Best case: already valid JSON
+    try:
+        parsed = json.loads(text)
+        if isinstance(parsed, dict):
+            return parsed
+    except Exception:
+        pass
+
+    # 2) JSON in markdown fence
+    fenced = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text, re.IGNORECASE)
+    if fenced:
+        candidate = fenced.group(1).strip()
+        try:
+            parsed = json.loads(candidate)
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            pass
+
+    # 3) First JSON object in free-form text
+    first_brace = text.find("{")
+    last_brace = text.rfind("}")
+    if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
+        candidate = text[first_brace:last_brace + 1]
+        # Mild cleanup for common LLM issue: trailing commas in objects/arrays
+        candidate = re.sub(r",\s*([}\]])", r"\1", candidate)
+        parsed = json.loads(candidate)
+        if isinstance(parsed, dict):
+            return parsed
+
+    raise ValueError("No JSON object found in model response")
+
+
 async def llm_chat(
     system_message: str,
     user_message: str,
@@ -2766,7 +2804,7 @@ If tags look stuffed or irrelevant, explicitly say so and recommend a smaller, h
                 end = response_text.find('```', start)
                 response_text = response_text[start:end].strip()
             
-            analysis = json.loads(response_text)
+            analysis = _parse_llm_json_response(response_text)
             
             return BeatAnalysisResponse(**analysis)
             
