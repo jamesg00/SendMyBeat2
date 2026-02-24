@@ -140,6 +140,12 @@ HOSTING_COST = float(os.environ.get("HOSTING_COST_USD", 3.50))
 # Grok-2 pricing (approximate): $2.00/M input, $10.00/M output
 GROK_INPUT_COST = 2.0 / 1_000_000
 GROK_OUTPUT_COST = 10.0 / 1_000_000
+FREE_DAILY_AI_CREDITS = int(os.environ.get("FREE_DAILY_AI_CREDITS", "2"))
+FREE_DAILY_UPLOAD_CREDITS = int(os.environ.get("FREE_DAILY_UPLOAD_CREDITS", "1"))
+PLUS_MONTHLY_AI_CREDITS = int(os.environ.get("PLUS_MONTHLY_AI_CREDITS", "220"))
+PLUS_MONTHLY_UPLOAD_CREDITS = int(os.environ.get("PLUS_MONTHLY_UPLOAD_CREDITS", "90"))
+PLUS_MONTHLY_LLM_COST_CAP_USD = float(os.environ.get("PLUS_MONTHLY_LLM_COST_CAP_USD", "3.25"))
+PLUS_NET_REVENUE_USD = float(os.environ.get("PLUS_NET_REVENUE_USD", "4.56"))
 
 # ============ LLM Helper ============
 _llm_client = None
@@ -659,16 +665,19 @@ class CheckinResponse(BaseModel):
 
 class SubscriptionStatus(BaseModel):
     is_subscribed: bool
-    plan: Literal["free", "pro"]
+    plan: Literal["free", "plus", "max"]
     daily_credits_remaining: int
     daily_credits_total: int
     upload_credits_remaining: int
     upload_credits_total: int
     resets_at: Optional[str] = None
+    monthly_llm_cost_usd: Optional[float] = None
+    cost_guardrail_hit: Optional[bool] = None
 
 class CheckoutSessionRequest(BaseModel):
     success_url: str
     cancel_url: str
+    plan: Literal["plus", "max"] = "plus"
 
 class ThemeGenerateRequest(BaseModel):
     prompt: str = ""
@@ -691,10 +700,61 @@ class BeatHelperQueueCreateRequest(BaseModel):
     auto_upload_if_no_response: bool = False
     notify_channel: Literal["none", "email", "sms", "email_sms"] = "email"
     privacy_status: Literal["public", "unlisted", "private"] = "public"
+    generated_title_override: Optional[str] = None
+    template_id: Optional[str] = None
 
 
 class BeatHelperQueueUpdateRequest(BaseModel):
     status: Literal["queued", "pending_approval", "approved", "skipped", "expired"]
+
+
+class BeatHelperQueueEditRequest(BaseModel):
+    generated_title: Optional[str] = None
+    target_artist: Optional[str] = None
+    beat_type: Optional[str] = None
+    generated_description: Optional[str] = None
+    generated_tags: Optional[List[str]] = None
+    context_tags: Optional[List[str]] = None
+    beat_file_id: Optional[str] = None
+    image_file_id: Optional[str] = None
+    notify_channel: Optional[Literal["none", "email", "sms", "email_sms"]] = None
+    privacy_status: Optional[Literal["public", "unlisted", "private"]] = None
+    approval_timeout_hours: Optional[int] = None
+    auto_upload_if_no_response: Optional[bool] = None
+    template_id: Optional[str] = None
+
+
+class BeatHelperContactSettingsRequest(BaseModel):
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    email_enabled: bool = False
+    sms_enabled: bool = False
+
+
+class BeatHelperTagTemplateCreateRequest(BaseModel):
+    name: str
+    tags: List[str] = []
+
+
+class BeatHelperTagTemplateUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    tags: Optional[List[str]] = None
+
+
+class BeatHelperAssistTitleRequest(BaseModel):
+    target_artist: str
+    beat_type: str
+    current_title: Optional[str] = None
+    context_tags: List[str] = []
+
+
+class BeatHelperUserResponseRequest(BaseModel):
+    action: Literal["approve", "skip", "change"]
+    generated_title: Optional[str] = None
+    target_artist: Optional[str] = None
+    beat_type: Optional[str] = None
+    beat_file_id: Optional[str] = None
+    image_file_id: Optional[str] = None
 
 
 THEME_ALLOWED_VARIABLES = {
@@ -763,6 +823,54 @@ def _sanitize_theme_variables(raw_variables: Any) -> Dict[str, str]:
 
 
 # ============ Subscription Helper Functions ============
+def _current_month_key() -> str:
+    now = datetime.now(timezone.utc)
+    return f"{now.year:04d}-{now.month:02d}"
+
+
+async def _get_user_monthly_llm_cost(user_id: str) -> float:
+    now = datetime.now(timezone.utc)
+    start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    result = await db.usage_logs.aggregate([
+        {"$match": {"user_id": user_id, "timestamp": {"$gte": start}}},
+        {"$group": {"_id": None, "total_cost": {"$sum": "$cost"}}}
+    ]).to_list(1)
+    if not result:
+        return 0.0
+    return float(result[0].get("total_cost") or 0.0)
+
+
+def _resolve_subscription_plan(user_doc: dict) -> str:
+    if not user_doc:
+        return "free"
+    is_active = bool(user_doc.get('stripe_subscription_id')) and user_doc.get('subscription_status') == 'active'
+    if not is_active:
+        return "free"
+    plan = (user_doc.get("subscription_plan") or "").strip().lower()
+    if plan in {"plus", "max"}:
+        return plan
+    return "plus"
+
+
+async def _ensure_plus_usage_month(user_id: str, user_doc: dict) -> dict:
+    current_month = _current_month_key()
+    stored_month = (user_doc.get("plus_usage_month") or "").strip()
+    if stored_month == current_month:
+        return user_doc
+    await db.users.update_one(
+        {"id": user_id},
+        {"$set": {
+            "plus_usage_month": current_month,
+            "plus_monthly_ai_used": 0,
+            "plus_monthly_upload_used": 0,
+        }}
+    )
+    user_doc["plus_usage_month"] = current_month
+    user_doc["plus_monthly_ai_used"] = 0
+    user_doc["plus_monthly_upload_used"] = 0
+    return user_doc
+
+
 async def get_user_subscription_status(user_id: str) -> dict:
     """Get user's subscription and credit status"""
     user_doc = await db.users.find_one({"id": user_id})
@@ -771,27 +879,50 @@ async def get_user_subscription_status(user_id: str) -> dict:
         return {
             "is_subscribed": False, 
             "credits_remaining": 0, 
-            "credits_total": 2,
+            "credits_total": FREE_DAILY_AI_CREDITS,
             "upload_credits_remaining": 0,
-            "upload_credits_total": 2
+            "upload_credits_total": FREE_DAILY_UPLOAD_CREDITS,
+            "plan": "free",
+            "monthly_llm_cost_usd": 0.0,
+            "cost_guardrail_hit": False,
         }
     
-    # Check if user has active subscription
-    is_subscribed = user_doc.get('stripe_subscription_id') and user_doc.get('subscription_status') == 'active'
-    
-    # Pro users get unlimited (represented as -1)
-    if is_subscribed:
+    plan = _resolve_subscription_plan(user_doc)
+
+    if plan == "max":
         return {
             "is_subscribed": True,
-            "plan": "pro",
+            "plan": "max",
             "credits_remaining": -1,  # Unlimited
             "credits_total": -1,
             "upload_credits_remaining": -1,  # Unlimited uploads
             "upload_credits_total": -1,
-            "resets_at": None
+            "resets_at": None,
+            "monthly_llm_cost_usd": await _get_user_monthly_llm_cost(user_id),
+            "cost_guardrail_hit": False,
+        }
+
+    if plan == "plus":
+        user_doc = await _ensure_plus_usage_month(user_id, user_doc)
+        ai_used = int(user_doc.get("plus_monthly_ai_used") or 0)
+        upload_used = int(user_doc.get("plus_monthly_upload_used") or 0)
+        llm_cost = await _get_user_monthly_llm_cost(user_id)
+        cost_guardrail_hit = llm_cost >= PLUS_MONTHLY_LLM_COST_CAP_USD
+        ai_remaining = max(0, PLUS_MONTHLY_AI_CREDITS - ai_used)
+        upload_remaining = max(0, PLUS_MONTHLY_UPLOAD_CREDITS - upload_used)
+        return {
+            "is_subscribed": True,
+            "plan": "plus",
+            "credits_remaining": ai_remaining,
+            "credits_total": PLUS_MONTHLY_AI_CREDITS,
+            "upload_credits_remaining": upload_remaining,
+            "upload_credits_total": PLUS_MONTHLY_UPLOAD_CREDITS,
+            "resets_at": None,
+            "monthly_llm_cost_usd": round(llm_cost, 4),
+            "cost_guardrail_hit": cost_guardrail_hit,
         }
     
-    # Free users get 3 AI generations + 3 uploads per day
+    # Free users get reduced daily credits
     today = datetime.now(timezone.utc).date()
     usage_date = user_doc.get('daily_usage_date')
     
@@ -818,8 +949,8 @@ async def get_user_subscription_status(user_id: str) -> dict:
         credits_used = user_doc.get('daily_usage_count', 0)
         uploads_used = user_doc.get('daily_upload_count', 0)
     
-    credits_remaining = max(0, 3 - credits_used)
-    upload_credits_remaining = max(0, 3 - uploads_used)
+    credits_remaining = max(0, FREE_DAILY_AI_CREDITS - credits_used)
+    upload_credits_remaining = max(0, FREE_DAILY_UPLOAD_CREDITS - uploads_used)
     
     # Calculate reset time (midnight UTC)
     tomorrow = today + timedelta(days=1)
@@ -829,21 +960,36 @@ async def get_user_subscription_status(user_id: str) -> dict:
         "is_subscribed": False,
         "plan": "free",
         "credits_remaining": credits_remaining,
-        "credits_total": 3,
+        "credits_total": FREE_DAILY_AI_CREDITS,
         "upload_credits_remaining": upload_credits_remaining,
-        "upload_credits_total": 3,
-        "resets_at": resets_at
+        "upload_credits_total": FREE_DAILY_UPLOAD_CREDITS,
+        "resets_at": resets_at,
+        "monthly_llm_cost_usd": await _get_user_monthly_llm_cost(user_id),
+        "cost_guardrail_hit": False,
     }
 
 async def check_and_use_credit(user_id: str, consume: bool = True) -> bool:
     """Check if user has credits and optionally use one. Returns True if allowed."""
     status = await get_user_subscription_status(user_id)
     
-    # Pro users always have access
-    if status['is_subscribed']:
+    # Max users always have access
+    if status['plan'] == "max":
         return True
     
-    # Free users need credits
+    # Plus metering guardrail
+    if status['plan'] == "plus":
+        if status.get("cost_guardrail_hit"):
+            return False
+        if status['credits_remaining'] <= 0:
+            return False
+        if consume:
+            await db.users.update_one(
+                {"id": user_id},
+                {"$inc": {"plus_monthly_ai_used": 1}}
+            )
+        return True
+
+    # Free users need daily credits
     if status['credits_remaining'] <= 0:
         return False
     
@@ -859,7 +1005,13 @@ async def check_and_use_credit(user_id: str, consume: bool = True) -> bool:
 async def consume_credit(user_id: str) -> None:
     """Consume one credit for free users after a successful operation."""
     status = await get_user_subscription_status(user_id)
-    if status['is_subscribed']:
+    if status['plan'] == "max":
+        return
+    if status['plan'] == "plus":
+        await db.users.update_one(
+            {"id": user_id},
+            {"$inc": {"plus_monthly_ai_used": 1}}
+        )
         return
     await db.users.update_one(
         {"id": user_id},
@@ -870,11 +1022,20 @@ async def check_and_use_upload_credit(user_id: str) -> bool:
     """Check if user has upload credits and use one. Returns True if successful."""
     status = await get_user_subscription_status(user_id)
     
-    # Pro users always have access
-    if status['is_subscribed']:
+    # Max users always have access
+    if status['plan'] == "max":
         return True
     
-    # Free users need upload credits
+    if status['plan'] == "plus":
+        if status['upload_credits_remaining'] <= 0:
+            return False
+        await db.users.update_one(
+            {"id": user_id},
+            {"$inc": {"plus_monthly_upload_used": 1}}
+        )
+        return True
+
+    # Free users need daily upload credits
     if status['upload_credits_remaining'] <= 0:
         return False
     
@@ -894,10 +1055,14 @@ async def ensure_has_credit(user_id: str, feature_name: str = "generations") -> 
     has_credit = await check_and_use_credit(user_id, consume=False)
     if not has_credit:
         status = await get_user_subscription_status(user_id)
+        guardrail_hit = bool(status.get("cost_guardrail_hit"))
+        message = f"Limit reached. Upgrade your plan for more {feature_name}."
+        if guardrail_hit:
+            message = "Your Plus monthly AI cost guardrail was reached. Upgrade to Max for unlimited usage."
         raise HTTPException(
             status_code=402,
             detail={
-                "message": f"Daily limit reached. Upgrade to Pro for unlimited {feature_name}!",
+                "message": message,
                 "resets_at": status.get('resets_at')
             }
         )
@@ -1069,8 +1234,28 @@ def _build_beathelper_approval_message(item: dict) -> str:
     return (
         f"BeatHelper wants to upload: '{title}'.\n"
         f"Style target: {artist}\n"
+        f"Tags: {', '.join((item.get('generated_tags') or [])[:8])}\n"
+        f"Template: {(item.get('template_name') or 'default')}\n"
         "Reply in dashboard: Approve, Skip, or Choose another beat."
     )
+
+
+def _normalize_tag_list(raw_tags: list[str] | None, limit: int = 40) -> list[str]:
+    tags = raw_tags or []
+    cleaned: list[str] = []
+    seen = set()
+    for tag in tags:
+        value = re.sub(r"\s+", " ", str(tag or "").strip())
+        if not value:
+            continue
+        key = value.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        cleaned.append(value)
+        if len(cleaned) >= limit:
+            break
+    return cleaned
 
 
 def _send_email_notification(to_email: str, subject: str, message: str) -> bool:
@@ -1892,25 +2077,39 @@ async def get_subscription_status(current_user: dict = Depends(get_current_user)
         daily_credits_total=status['credits_total'],
         upload_credits_remaining=status['upload_credits_remaining'],
         upload_credits_total=status['upload_credits_total'],
-        resets_at=status.get('resets_at')
+        resets_at=status.get('resets_at'),
+        monthly_llm_cost_usd=status.get("monthly_llm_cost_usd"),
+        cost_guardrail_hit=status.get("cost_guardrail_hit"),
     )
 
 @api_router.post("/subscription/create-checkout")
 async def create_checkout_session(request: CheckoutSessionRequest, current_user: dict = Depends(get_current_user)):
     """Create Stripe checkout session"""
     try:
+        selected_plan = (request.plan or "plus").strip().lower()
+        if selected_plan not in {"plus", "max"}:
+            selected_plan = "plus"
+        plus_price_id = os.environ.get("STRIPE_PRICE_ID_PLUS") or os.environ.get("STRIPE_PRICE_ID")
+        max_price_id = os.environ.get("STRIPE_PRICE_ID_MAX")
+        if selected_plan == "max" and not max_price_id:
+            raise HTTPException(status_code=500, detail="Missing STRIPE_PRICE_ID_MAX")
+        chosen_price_id = max_price_id if selected_plan == "max" else plus_price_id
+        if not chosen_price_id:
+            raise HTTPException(status_code=500, detail="Missing Stripe price configuration")
+
         checkout_session = stripe.checkout.Session.create(
             customer_email=current_user.get('email'),
             client_reference_id=current_user['id'],
             line_items=[{
-                'price': os.environ['STRIPE_PRICE_ID'],
+                'price': chosen_price_id,
                 'quantity': 1,
             }],
             mode='subscription',
             success_url=request.success_url,
             cancel_url=request.cancel_url,
             metadata={
-                'user_id': current_user['id']
+                'user_id': current_user['id'],
+                'plan': selected_plan,
             }
         )
         
@@ -1939,6 +2138,9 @@ async def stripe_webhook(request: Request):
     if event['type'] == 'checkout.session.completed':
         session = event['data']['object']
         user_id = session.get('client_reference_id') or session.get('metadata', {}).get('user_id')
+        plan = (session.get('metadata', {}).get('plan') or "plus").strip().lower()
+        if plan not in {"plus", "max"}:
+            plan = "plus"
         
         if user_id:
             # Activate subscription
@@ -1949,6 +2151,7 @@ async def stripe_webhook(request: Request):
                     "stripe_customer_id": session.get('customer'),
                     "stripe_subscription_id": subscription_id,
                     "subscription_status": "active",
+                    "subscription_plan": plan,
                     "subscribed_at": datetime.now(timezone.utc).isoformat()
                 }}
             )
@@ -1957,13 +2160,25 @@ async def stripe_webhook(request: Request):
     elif event['type'] == 'customer.subscription.updated':
         subscription = event['data']['object']
         customer_id = subscription['customer']
+        items = (((subscription.get("items") or {}).get("data")) or [])
+        active_price_ids = {((it.get("price") or {}).get("id") or "").strip() for it in items}
+        plus_price_id = os.environ.get("STRIPE_PRICE_ID_PLUS") or os.environ.get("STRIPE_PRICE_ID", "")
+        max_price_id = os.environ.get("STRIPE_PRICE_ID_MAX", "")
+        plan = "plus"
+        if max_price_id and max_price_id in active_price_ids:
+            plan = "max"
+        elif plus_price_id and plus_price_id in active_price_ids:
+            plan = "plus"
         
         # Find user by customer ID
         user_doc = await db.users.find_one({"stripe_customer_id": customer_id})
         if user_doc:
             await db.users.update_one(
                 {"id": user_doc['id']},
-                {"$set": {"subscription_status": subscription['status']}}
+                {"$set": {
+                    "subscription_status": subscription['status'],
+                    "subscription_plan": plan,
+                }}
             )
     
     elif event['type'] == 'customer.subscription.deleted':
@@ -1977,7 +2192,8 @@ async def stripe_webhook(request: Request):
                 {"id": user_doc['id']},
                 {"$set": {
                     "subscription_status": "cancelled",
-                    "stripe_subscription_id": None
+                    "stripe_subscription_id": None,
+                    "subscription_plan": "free",
                 }}
             )
     
@@ -1988,7 +2204,8 @@ async def get_subscription_config():
     """Get Stripe configuration for frontend"""
     return {
         "publishable_key": os.environ.get('STRIPE_PUBLISHABLE_KEY'),
-        "price_id": os.environ['STRIPE_PRICE_ID']
+        "price_id_plus": os.environ.get("STRIPE_PRICE_ID_PLUS") or os.environ.get("STRIPE_PRICE_ID"),
+        "price_id_max": os.environ.get("STRIPE_PRICE_ID_MAX"),
     }
 
 @api_router.post("/subscription/portal")
@@ -3065,6 +3282,35 @@ async def beathelper_get_uploads(current_user: dict = Depends(get_current_user))
     return {"audio_uploads": audio, "image_uploads": images}
 
 
+@api_router.get("/beat-helper/image/{file_id}/preview")
+async def beathelper_get_image_preview(file_id: str, current_user: dict = Depends(get_current_user)):
+    await _ensure_pro_user(current_user, "BeatHelper")
+    upload = await db.uploads.find_one({
+        "id": file_id.strip(),
+        "user_id": current_user["id"],
+        "file_type": "image",
+    })
+    if not upload:
+        raise HTTPException(status_code=404, detail="Image not found.")
+
+    path = Path(upload.get("file_path", ""))
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Image file missing on server.")
+
+    image_bytes = path.read_bytes()
+    ext = path.suffix.lower()
+    mime = "image/jpeg"
+    if ext == ".png":
+        mime = "image/png"
+    elif ext == ".webp":
+        mime = "image/webp"
+    elif ext == ".webm":
+        mime = "image/webm"
+
+    data_url = f"data:{mime};base64,{base64.b64encode(image_bytes).decode('utf-8')}"
+    return {"file_id": upload.get("id"), "filename": upload.get("original_filename"), "data_url": data_url}
+
+
 @api_router.get("/beat-helper/queue")
 async def beathelper_get_queue(current_user: dict = Depends(get_current_user)):
     await _ensure_pro_user(current_user, "BeatHelper")
@@ -3075,133 +3321,377 @@ async def beathelper_get_queue(current_user: dict = Depends(get_current_user)):
     return items
 
 
+@api_router.get("/beat-helper/contact-settings")
+async def beathelper_get_contact_settings(current_user: dict = Depends(get_current_user)):
+    await _ensure_pro_user(current_user, "BeatHelper")
+    user_doc = await db.users.find_one(
+        {"id": current_user["id"]},
+        {"_id": 0, "email": 1, "phone": 1, "reminder_email_enabled": 1, "reminder_sms_enabled": 1}
+    )
+    return {
+        "email": (user_doc or {}).get("email") or "",
+        "phone": (user_doc or {}).get("phone") or "",
+        "email_enabled": bool((user_doc or {}).get("reminder_email_enabled")),
+        "sms_enabled": bool((user_doc or {}).get("reminder_sms_enabled")),
+    }
+
+
+@api_router.put("/beat-helper/contact-settings")
+async def beathelper_update_contact_settings(
+    request: BeatHelperContactSettingsRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    await _ensure_pro_user(current_user, "BeatHelper")
+    email = (request.email or "").strip()
+    phone = re.sub(r"\s+", "", (request.phone or "").strip())
+    if email and "@" not in email:
+        raise HTTPException(status_code=400, detail="Invalid email format.")
+    if phone and not re.match(r"^\+?[0-9]{7,15}$", phone):
+        raise HTTPException(status_code=400, detail="Invalid phone format. Use digits with optional leading +.")
+
+    await db.users.update_one(
+        {"id": current_user["id"]},
+        {"$set": {
+            "email": email or None,
+            "phone": phone or None,
+            "reminder_email_enabled": bool(request.email_enabled),
+            "reminder_sms_enabled": bool(request.sms_enabled),
+        }}
+    )
+
+    username = (current_user.get("username") or "producer").strip()
+    confirmation_subject = "BeatHelper notifications enabled"
+    confirmation_message = (
+        f"Hey {username}, BeatHelper notifications are now enabled for your account.\n\n"
+        "You will receive beat queue updates on this channel based on your selected settings.\n"
+        "If this was not you, update your notification settings in dashboard immediately."
+    )
+    sms_message = (
+        f"BeatHelper: Notifications enabled for @{username}. "
+        "You will receive beat queue updates on this number."
+    )
+
+    email_confirmation_sent = False
+    sms_confirmation_sent = False
+    if request.email_enabled and email:
+        email_confirmation_sent = _send_email_notification(email, confirmation_subject, confirmation_message)
+    if request.sms_enabled and phone:
+        sms_confirmation_sent = _send_sms_notification(phone, sms_message)
+
+    await db.users.update_one(
+        {"id": current_user["id"]},
+        {"$set": {
+            "beathelper_contact_confirmation_sent_at": _safe_iso_now(),
+            "beathelper_contact_confirmation_status": {
+                "email_enabled": bool(request.email_enabled),
+                "sms_enabled": bool(request.sms_enabled),
+                "email_confirmation_sent": bool(email_confirmation_sent),
+                "sms_confirmation_sent": bool(sms_confirmation_sent),
+            },
+        }}
+    )
+
+    return {
+        "success": True,
+        "confirmation": {
+            "email_enabled": bool(request.email_enabled),
+            "sms_enabled": bool(request.sms_enabled),
+            "email_confirmation_sent": bool(email_confirmation_sent),
+            "sms_confirmation_sent": bool(sms_confirmation_sent),
+        }
+    }
+
+
+@api_router.get("/beat-helper/tag-templates")
+async def beathelper_get_tag_templates(current_user: dict = Depends(get_current_user)):
+    await _ensure_pro_user(current_user, "BeatHelper")
+    templates = await db.beat_helper_tag_templates.find(
+        {"user_id": current_user["id"]},
+        {"_id": 0}
+    ).sort("updated_at", -1).to_list(200)
+    return templates
+
+
+@api_router.post("/beat-helper/tag-templates")
+async def beathelper_create_tag_template(
+    request: BeatHelperTagTemplateCreateRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    await _ensure_pro_user(current_user, "BeatHelper")
+    name = (request.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Template name is required.")
+    tags = _normalize_tag_list(request.tags, limit=80)
+    template = {
+        "id": str(uuid.uuid4()),
+        "user_id": current_user["id"],
+        "name": name[:80],
+        "tags": tags,
+        "created_at": _safe_iso_now(),
+        "updated_at": _safe_iso_now(),
+    }
+    await db.beat_helper_tag_templates.insert_one(template)
+    return template
+
+
+@api_router.patch("/beat-helper/tag-templates/{template_id}")
+async def beathelper_update_tag_template(
+    template_id: str,
+    request: BeatHelperTagTemplateUpdateRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    await _ensure_pro_user(current_user, "BeatHelper")
+    updates: dict = {"updated_at": _safe_iso_now()}
+    if request.name is not None:
+        name = request.name.strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Template name cannot be empty.")
+        updates["name"] = name[:80]
+    if request.tags is not None:
+        updates["tags"] = _normalize_tag_list(request.tags, limit=80)
+
+    result = await db.beat_helper_tag_templates.update_one(
+        {"id": template_id, "user_id": current_user["id"]},
+        {"$set": updates},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Template not found.")
+    return {"success": True}
+
+
+@api_router.delete("/beat-helper/tag-templates/{template_id}")
+async def beathelper_delete_tag_template(template_id: str, current_user: dict = Depends(get_current_user)):
+    await _ensure_pro_user(current_user, "BeatHelper")
+    result = await db.beat_helper_tag_templates.delete_one({"id": template_id, "user_id": current_user["id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Template not found.")
+    return {"success": True}
+
+
+@api_router.post("/beat-helper/assist-title")
+async def beathelper_assist_title(
+    request: BeatHelperAssistTitleRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    await _ensure_pro_user(current_user, "BeatHelper")
+    target_artist = request.target_artist.strip()
+    beat_type = request.beat_type.strip()
+    if not target_artist or not beat_type:
+        raise HTTPException(status_code=400, detail="target_artist and beat_type are required.")
+
+    current_title = (request.current_title or "").strip()
+    prompt = (
+        "Generate 5 high-converting YouTube type beat titles.\n"
+        f"Artist: {target_artist}\n"
+        f"Beat Type: {beat_type}\n"
+        f"Current title: {current_title or 'none'}\n"
+        f"Context tags: {', '.join(request.context_tags[:20]) if request.context_tags else 'none'}\n"
+        "Rules: no BPM, no key, <= 100 chars each, plain text.\n"
+        "Return JSON: {\"titles\": [\"...\", \"...\", ...]}"
+    )
+    try:
+        raw = await llm_chat(
+            system_message="You are a YouTube SEO assistant for producers. Output JSON only.",
+            user_message=prompt,
+            temperature=0.5,
+            user_id=current_user["id"],
+        )
+        parsed = _parse_llm_json_response(raw)
+        titles = parsed.get("titles") if isinstance(parsed.get("titles"), list) else []
+        cleaned = []
+        seen = set()
+        for title in titles:
+            value = re.sub(r"\s+", " ", str(title or "").strip())
+            if not value:
+                continue
+            key = value.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            cleaned.append(value[:100])
+            if len(cleaned) >= 5:
+                break
+        if not cleaned:
+            cleaned = [f"{target_artist} Type Beat - {beat_type.title()} Instrumental"]
+        return {"titles": cleaned}
+    except Exception:
+        return {"titles": [f"{target_artist} Type Beat - {beat_type.title()} Instrumental"]}
+
+
 @api_router.post("/beat-helper/queue")
 async def beathelper_create_queue_item(
     request: BeatHelperQueueCreateRequest,
     current_user: dict = Depends(get_current_user),
 ):
-    await _ensure_pro_user(current_user, "BeatHelper")
+    try:
+        await _ensure_pro_user(current_user, "BeatHelper")
 
-    beat_file = await db.uploads.find_one({
-        "id": request.beat_file_id,
-        "user_id": current_user["id"],
-        "file_type": "audio",
-    })
-    if not beat_file:
-        raise HTTPException(status_code=404, detail="Beat audio file not found.")
+        if not request.beat_file_id.strip():
+            raise HTTPException(status_code=400, detail="beat_file_id is required.")
+        if not request.target_artist.strip() or not request.beat_type.strip():
+            raise HTTPException(status_code=400, detail="target_artist and beat_type are required.")
 
-    image_file_id = (request.image_file_id or "").strip()
-    image_file = None
-    if image_file_id:
-        image_file = await db.uploads.find_one({
-            "id": image_file_id,
+        beat_file = await db.uploads.find_one({
+            "id": request.beat_file_id,
             "user_id": current_user["id"],
-            "file_type": "image",
+            "file_type": "audio",
         })
-        if not image_file:
-            raise HTTPException(status_code=404, detail="Selected thumbnail image not found.")
+        if not beat_file:
+            raise HTTPException(status_code=404, detail="Beat audio file not found.")
 
-    if not image_file and request.ai_choose_image:
-        ai_query = f"{request.target_artist} type beat {request.beat_type}".strip()
-        image_suggestions = await generate_image_suggestions(
-            ImageGenerateRequest(title=ai_query, tags=request.context_tags or [], k=1),
-            current_user,
-        )
-        if image_suggestions.results:
-            chosen = image_suggestions.results[0]
-            imported = await upload_image_from_url(
-                UploadImageFromUrlRequest(
-                    image_url=chosen.image_url,
-                    original_filename=f"{request.target_artist}-ai-thumb.jpg",
-                ),
-                current_user,
-            )
-            image_file_id = imported.get("file_id")
+        image_file_id = (request.image_file_id or "").strip()
+        image_file = None
+        if image_file_id:
             image_file = await db.uploads.find_one({
                 "id": image_file_id,
                 "user_id": current_user["id"],
                 "file_type": "image",
             })
+            if not image_file:
+                raise HTTPException(status_code=404, detail="Selected thumbnail image not found.")
 
-    if not image_file:
-        raise HTTPException(
-            status_code=400,
-            detail="A thumbnail is required. Pick one manually or enable AI image selection."
+        if not image_file and request.ai_choose_image:
+            ai_query = f"{request.target_artist} type beat {request.beat_type}".strip()
+            image_suggestions = await generate_image_suggestions(
+                ImageGenerateRequest(title=ai_query, tags=request.context_tags or [], k=1),
+                current_user,
+            )
+            if image_suggestions.results:
+                chosen = image_suggestions.results[0]
+                imported = await upload_image_from_url(
+                    UploadImageFromUrlRequest(
+                        image_url=chosen.image_url,
+                        original_filename=f"{request.target_artist}-ai-thumb.jpg",
+                    ),
+                    current_user,
+                )
+                image_file_id = imported.get("file_id")
+                image_file = await db.uploads.find_one({
+                    "id": image_file_id,
+                    "user_id": current_user["id"],
+                    "file_type": "image",
+                })
+
+        if not image_file:
+            raise HTTPException(
+                status_code=400,
+                detail="A thumbnail is required. Pick one manually or enable AI image selection."
+            )
+
+        duplicate_beat = await db.beat_helper_queue.find_one({
+            "user_id": current_user["id"],
+            "status": {"$in": ["queued", "pending_approval", "approved"]},
+            "beat_file_id": request.beat_file_id,
+        })
+        if duplicate_beat:
+            raise HTTPException(status_code=409, detail="This beat is already queued.")
+
+        duplicate_image = await db.beat_helper_queue.find_one({
+            "user_id": current_user["id"],
+            "status": {"$in": ["queued", "pending_approval", "approved"]},
+            "image_file_id": image_file.get("id"),
+        })
+        if duplicate_image:
+            raise HTTPException(status_code=409, detail="This thumbnail is already used in another active queue item.")
+
+        approval_timeout_hours = max(1, min(72, int(request.approval_timeout_hours or BEATHELPER_DEFAULT_APPROVAL_TIMEOUT_HOURS)))
+        notify_channel = (request.notify_channel or BEATHELPER_DEFAULT_NOTIFY_CHANNEL or "email").strip().lower()
+        if notify_channel not in {"none", "email", "sms", "email_sms"}:
+            notify_channel = "email"
+
+        metadata = await _generate_beathelper_metadata(
+            target_artist=request.target_artist,
+            beat_type=request.beat_type,
+            context_tags=request.context_tags or [],
+            user_id=current_user["id"],
         )
+        template_id = (request.template_id or "").strip()
+        template_doc = None
+        if template_id:
+            template_doc = await db.beat_helper_tag_templates.find_one(
+                {"id": template_id, "user_id": current_user["id"]},
+                {"_id": 0}
+            )
+            if template_doc:
+                metadata["tags"] = _normalize_tag_list((template_doc.get("tags") or []) + (metadata.get("tags") or []))
 
-    approval_timeout_hours = max(1, min(72, int(request.approval_timeout_hours or BEATHELPER_DEFAULT_APPROVAL_TIMEOUT_HOURS)))
-    notify_channel = (request.notify_channel or BEATHELPER_DEFAULT_NOTIFY_CHANNEL or "email").strip().lower()
-    if notify_channel not in {"none", "email", "sms", "email_sms"}:
-        notify_channel = "email"
+        description_id = str(uuid.uuid4())
+        description_doc = {
+            "id": description_id,
+            "user_id": current_user["id"],
+            "title": f"BeatHelper - {metadata['title'][:80]}",
+            "content": metadata["description"],
+            "is_ai_generated": True,
+            "created_at": _safe_iso_now(),
+            "updated_at": _safe_iso_now(),
+        }
+        await db.descriptions.insert_one(description_doc)
 
-    metadata = await _generate_beathelper_metadata(
-        target_artist=request.target_artist,
-        beat_type=request.beat_type,
-        context_tags=request.context_tags or [],
-        user_id=current_user["id"],
-    )
+        tags_id = str(uuid.uuid4())
+        tags_doc = {
+            "id": tags_id,
+            "user_id": current_user["id"],
+            "query": f"{request.target_artist} {request.beat_type}".strip(),
+            "tags": metadata["tags"],
+            "created_at": _safe_iso_now(),
+        }
+        await db.tag_generations.insert_one(tags_doc)
 
-    description_id = str(uuid.uuid4())
-    description_doc = {
-        "id": description_id,
-        "user_id": current_user["id"],
-        "title": f"BeatHelper - {metadata['title'][:80]}",
-        "content": metadata["description"],
-        "is_ai_generated": True,
-        "created_at": _safe_iso_now(),
-        "updated_at": _safe_iso_now(),
-    }
-    await db.descriptions.insert_one(description_doc)
+        best_hour_utc = await _estimate_best_upload_hour_utc(current_user["id"])
+        now_utc = datetime.now(timezone.utc)
+        scheduled_for = now_utc.replace(hour=best_hour_utc, minute=0, second=0, microsecond=0)
+        if scheduled_for <= now_utc:
+            scheduled_for = scheduled_for + timedelta(days=1)
 
-    tags_id = str(uuid.uuid4())
-    tags_doc = {
-        "id": tags_id,
-        "user_id": current_user["id"],
-        "query": f"{request.target_artist} {request.beat_type}".strip(),
-        "tags": metadata["tags"],
-        "created_at": _safe_iso_now(),
-    }
-    await db.tag_generations.insert_one(tags_doc)
+        item_id = str(uuid.uuid4())
+        queue_doc = {
+            "id": item_id,
+            "user_id": current_user["id"],
+            "status": "queued",
+            "beat_file_id": request.beat_file_id,
+            "beat_original_filename": beat_file.get("original_filename"),
+            "image_file_id": image_file.get("id"),
+            "image_original_filename": image_file.get("original_filename"),
+            "target_artist": request.target_artist.strip(),
+            "beat_type": request.beat_type.strip(),
+            "context_tags": request.context_tags or [],
+            "ai_choose_image": bool(request.ai_choose_image),
+            "approval_timeout_hours": approval_timeout_hours,
+            "auto_upload_if_no_response": bool(request.auto_upload_if_no_response),
+            "notify_channel": notify_channel,
+            "privacy_status": request.privacy_status,
+            "best_upload_hour_utc": int(best_hour_utc),
+            "scheduled_for_utc": scheduled_for.isoformat(),
+            "generated_title": metadata["title"],
+            "generated_tags": metadata["tags"],
+            "generated_description": metadata["description"],
+            "template_id": template_id or None,
+            "template_name": (template_doc or {}).get("name"),
+            "description_id": description_id,
+            "tags_id": tags_id,
+            "created_at": _safe_iso_now(),
+            "updated_at": _safe_iso_now(),
+            "approval_requested_at": None,
+            "approval_expires_at": None,
+            "last_notification_status": "none",
+        }
 
-    best_hour_utc = await _estimate_best_upload_hour_utc(current_user["id"])
-    now_utc = datetime.now(timezone.utc)
-    scheduled_for = now_utc.replace(hour=best_hour_utc, minute=0, second=0, microsecond=0)
-    if scheduled_for <= now_utc:
-        scheduled_for = scheduled_for + timedelta(days=1)
+        override_title = (request.generated_title_override or "").strip()
+        if override_title:
+            queue_doc["generated_title"] = override_title[:100]
+            description_doc["title"] = f"BeatHelper - {override_title[:80]}"
+            await db.descriptions.update_one(
+                {"id": description_id, "user_id": current_user["id"]},
+                {"$set": {"title": description_doc["title"], "updated_at": _safe_iso_now()}},
+            )
 
-    item_id = str(uuid.uuid4())
-    queue_doc = {
-        "id": item_id,
-        "user_id": current_user["id"],
-        "status": "queued",
-        "beat_file_id": request.beat_file_id,
-        "beat_original_filename": beat_file.get("original_filename"),
-        "image_file_id": image_file.get("id"),
-        "image_original_filename": image_file.get("original_filename"),
-        "target_artist": request.target_artist.strip(),
-        "beat_type": request.beat_type.strip(),
-        "context_tags": request.context_tags or [],
-        "ai_choose_image": bool(request.ai_choose_image),
-        "approval_timeout_hours": approval_timeout_hours,
-        "auto_upload_if_no_response": bool(request.auto_upload_if_no_response),
-        "notify_channel": notify_channel,
-        "privacy_status": request.privacy_status,
-        "best_upload_hour_utc": int(best_hour_utc),
-        "scheduled_for_utc": scheduled_for.isoformat(),
-        "generated_title": metadata["title"],
-        "generated_tags": metadata["tags"],
-        "generated_description": metadata["description"],
-        "description_id": description_id,
-        "tags_id": tags_id,
-        "created_at": _safe_iso_now(),
-        "updated_at": _safe_iso_now(),
-        "approval_requested_at": None,
-        "approval_expires_at": None,
-        "last_notification_status": "none",
-    }
-
-    await db.beat_helper_queue.insert_one(queue_doc)
-    return queue_doc
+        await db.beat_helper_queue.insert_one(queue_doc)
+        return queue_doc
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"beathelper_create_queue_item error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to queue beat: {str(e)}")
 
 
 @api_router.post("/beat-helper/queue/{item_id}/request-approval")
@@ -3309,6 +3799,175 @@ async def beathelper_update_queue_item(
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Queue item not found.")
     return {"success": True}
+
+
+@api_router.post("/beat-helper/queue/{item_id}/respond")
+async def beathelper_respond_to_request(
+    item_id: str,
+    request: BeatHelperUserResponseRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    await _ensure_pro_user(current_user, "BeatHelper")
+    if request.action == "approve":
+        return await beathelper_approve_and_upload(item_id=item_id, current_user=current_user)
+    if request.action == "skip":
+        await db.beat_helper_queue.update_one(
+            {"id": item_id, "user_id": current_user["id"]},
+            {"$set": {"status": "skipped", "updated_at": _safe_iso_now()}},
+        )
+        return {"success": True, "status": "skipped"}
+
+    # change
+    patch_payload = BeatHelperQueueEditRequest(
+        generated_title=request.generated_title,
+        target_artist=request.target_artist,
+        beat_type=request.beat_type,
+        beat_file_id=request.beat_file_id,
+        image_file_id=request.image_file_id,
+    )
+    return await beathelper_edit_queue_item(
+        item_id=item_id,
+        request=patch_payload,
+        current_user=current_user,
+    )
+
+
+@api_router.patch("/beat-helper/queue/{item_id}/edit")
+async def beathelper_edit_queue_item(
+    item_id: str,
+    request: BeatHelperQueueEditRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    await _ensure_pro_user(current_user, "BeatHelper")
+    item = await db.beat_helper_queue.find_one({"id": item_id, "user_id": current_user["id"]}, {"_id": 0})
+    if not item:
+        raise HTTPException(status_code=404, detail="Queue item not found.")
+
+    updates: dict[str, Any] = {"updated_at": _safe_iso_now()}
+
+    if request.beat_file_id:
+        beat_doc = await db.uploads.find_one({
+            "id": request.beat_file_id,
+            "user_id": current_user["id"],
+            "file_type": "audio",
+        })
+        if not beat_doc:
+            raise HTTPException(status_code=404, detail="Selected beat audio not found.")
+        duplicate_beat = await db.beat_helper_queue.find_one({
+            "id": {"$ne": item_id},
+            "user_id": current_user["id"],
+            "status": {"$in": ["queued", "pending_approval", "approved"]},
+            "beat_file_id": request.beat_file_id,
+        })
+        if duplicate_beat:
+            raise HTTPException(status_code=409, detail="This beat is already queued elsewhere.")
+        updates["beat_file_id"] = request.beat_file_id
+        updates["beat_original_filename"] = beat_doc.get("original_filename")
+
+    if request.image_file_id:
+        image_doc = await db.uploads.find_one({
+            "id": request.image_file_id,
+            "user_id": current_user["id"],
+            "file_type": "image",
+        })
+        if not image_doc:
+            raise HTTPException(status_code=404, detail="Selected image not found.")
+        duplicate_image = await db.beat_helper_queue.find_one({
+            "id": {"$ne": item_id},
+            "user_id": current_user["id"],
+            "status": {"$in": ["queued", "pending_approval", "approved"]},
+            "image_file_id": request.image_file_id,
+        })
+        if duplicate_image:
+            raise HTTPException(status_code=409, detail="This thumbnail is already used in another active queue item.")
+        updates["image_file_id"] = request.image_file_id
+        updates["image_original_filename"] = image_doc.get("original_filename")
+
+    if request.generated_title is not None:
+        title = request.generated_title.strip()
+        if not title:
+            raise HTTPException(status_code=400, detail="Title cannot be empty.")
+        updates["generated_title"] = title[:100]
+
+    if request.target_artist is not None:
+        artist = request.target_artist.strip()
+        if not artist:
+            raise HTTPException(status_code=400, detail="Artist cannot be empty.")
+        updates["target_artist"] = artist
+
+    if request.beat_type is not None:
+        beat_type = request.beat_type.strip()
+        if not beat_type:
+            raise HTTPException(status_code=400, detail="Beat type cannot be empty.")
+        updates["beat_type"] = beat_type
+
+    if request.generated_description is not None:
+        updates["generated_description"] = request.generated_description.strip()
+
+    if request.generated_tags is not None:
+        updates["generated_tags"] = _normalize_tag_list(request.generated_tags, limit=80)
+
+    if request.context_tags is not None:
+        updates["context_tags"] = _normalize_tag_list(request.context_tags, limit=50)
+
+    if request.notify_channel is not None:
+        updates["notify_channel"] = request.notify_channel
+
+    if request.privacy_status is not None:
+        updates["privacy_status"] = request.privacy_status
+
+    if request.approval_timeout_hours is not None:
+        updates["approval_timeout_hours"] = max(1, min(72, int(request.approval_timeout_hours)))
+
+    if request.auto_upload_if_no_response is not None:
+        updates["auto_upload_if_no_response"] = bool(request.auto_upload_if_no_response)
+
+    if request.template_id is not None:
+        template_id = (request.template_id or "").strip()
+        if not template_id:
+            updates["template_id"] = None
+            updates["template_name"] = None
+        else:
+            template_doc = await db.beat_helper_tag_templates.find_one(
+                {"id": template_id, "user_id": current_user["id"]},
+                {"_id": 0}
+            )
+            if not template_doc:
+                raise HTTPException(status_code=404, detail="Tag template not found.")
+            updates["template_id"] = template_id
+            updates["template_name"] = template_doc.get("name")
+            if request.generated_tags is None:
+                updates["generated_tags"] = _normalize_tag_list(
+                    (template_doc.get("tags") or []) + (item.get("generated_tags") or []),
+                    limit=80,
+                )
+
+    await db.beat_helper_queue.update_one(
+        {"id": item_id, "user_id": current_user["id"]},
+        {"$set": updates},
+    )
+
+    # Keep linked docs in sync for upload behavior.
+    set_desc = {}
+    if "generated_description" in updates:
+        set_desc["content"] = updates["generated_description"]
+    if "generated_title" in updates:
+        set_desc["title"] = f"BeatHelper - {updates['generated_title'][:80]}"
+    if set_desc:
+        set_desc["updated_at"] = _safe_iso_now()
+        await db.descriptions.update_one(
+            {"id": item.get("description_id"), "user_id": current_user["id"]},
+            {"$set": set_desc},
+        )
+
+    if "generated_tags" in updates:
+        await db.tag_generations.update_one(
+            {"id": item.get("tags_id"), "user_id": current_user["id"]},
+            {"$set": {"tags": updates["generated_tags"]}},
+        )
+
+    refreshed = await db.beat_helper_queue.find_one({"id": item_id, "user_id": current_user["id"]}, {"_id": 0})
+    return {"success": True, "item": refreshed}
 
 
 @api_router.delete("/beat-helper/queue/{item_id}")
@@ -4861,6 +5520,43 @@ async def get_admin_costs(current_user: dict = Depends(get_current_user)):
     usage_stats = await db.usage_logs.aggregate(pipeline).to_list(None)
 
     llm_total = sum(stat["total_cost"] for stat in usage_stats)
+    per_user_stats = await db.usage_logs.aggregate([
+        {"$match": {"timestamp": {"$gte": start_of_month}}},
+        {"$group": {
+            "_id": "$user_id",
+            "total_cost": {"$sum": "$cost"},
+            "requests": {"$sum": 1},
+            "tokens_in": {"$sum": "$tokens_in"},
+            "tokens_out": {"$sum": "$tokens_out"},
+        }},
+        {"$sort": {"total_cost": -1}},
+        {"$limit": 25},
+    ]).to_list(None)
+
+    user_ids = [row.get("_id") for row in per_user_stats if row.get("_id") and row.get("_id") != "system"]
+    users = await db.users.find({"id": {"$in": user_ids}}, {"_id": 0, "id": 1, "username": 1, "subscription_plan": 1, "subscription_status": 1}).to_list(None)
+    users_by_id = {u["id"]: u for u in users}
+    top_user_costs = []
+    for row in per_user_stats:
+        uid = row.get("_id")
+        user_doc = users_by_id.get(uid, {})
+        plan = _resolve_subscription_plan(user_doc) if user_doc else ("system" if uid == "system" else "free")
+        cost = float(row.get("total_cost") or 0.0)
+        estimated_revenue = 0.0
+        if plan == "plus":
+            estimated_revenue = PLUS_NET_REVENUE_USD
+        elif plan == "max":
+            estimated_revenue = 10.95  # rough net after stripe fees on $12
+        top_user_costs.append({
+            "user_id": uid,
+            "username": user_doc.get("username"),
+            "plan": plan,
+            "requests": int(row.get("requests") or 0),
+            "total_cost": round(cost, 4),
+            "estimated_plan_revenue": round(estimated_revenue, 4),
+            "estimated_margin": round(estimated_revenue - cost, 4),
+            "unprofitable": bool(estimated_revenue > 0 and cost > estimated_revenue),
+        })
 
     return {
         "month": now.strftime("%B %Y"),
@@ -4868,6 +5564,7 @@ async def get_admin_costs(current_user: dict = Depends(get_current_user)):
         "llm_cost": round(llm_total, 4),
         "total_estimated_cost": round(HOSTING_COST + llm_total, 4),
         "details": usage_stats,
+        "top_user_costs": top_user_costs,
         "currency": "USD",
         "note": "Estimates based on usage. Hosting cost is fixed."
     }

@@ -182,17 +182,28 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [beatHelperUploads, setBeatHelperUploads] = useState({ audio_uploads: [], image_uploads: [] });
   const [beatHelperQueue, setBeatHelperQueue] = useState([]);
   const [loadingBeatHelper, setLoadingBeatHelper] = useState(false);
+  const [beatHelperImagePreview, setBeatHelperImagePreview] = useState("");
+  const [loadingBeatHelperPreview, setLoadingBeatHelperPreview] = useState(false);
+  const [beatHelperQueueImagePreviews, setBeatHelperQueueImagePreviews] = useState({});
+  const [beatHelperContact, setBeatHelperContact] = useState({ email: "", phone: "", email_enabled: false, sms_enabled: false });
+  const [beatHelperTemplates, setBeatHelperTemplates] = useState([]);
+  const [newTemplateName, setNewTemplateName] = useState("");
+  const [newTemplateTags, setNewTemplateTags] = useState("");
+  const [editingQueueById, setEditingQueueById] = useState({});
+  const [assistTitlesById, setAssistTitlesById] = useState({});
   const [beatHelperForm, setBeatHelperForm] = useState({
     beat_file_id: "",
     image_file_id: "",
     beat_type: "",
     target_artist: "",
+    generated_title_override: "",
     context_tags: "",
     ai_choose_image: false,
     approval_timeout_hours: 12,
     auto_upload_if_no_response: false,
     notify_channel: "email",
     privacy_status: "public",
+    template_id: "",
   });
 
   const [joiningTagsLoading, setJoiningTagsLoading] = useState(false);
@@ -203,9 +214,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const isPro = !!subscriptionStatus?.is_subscribed;
   const isAdmin = ADMIN_USERNAMES.has((user?.username || "").toLowerCase());
   const visibleTabs = DASHBOARD_TABS.filter((tab) => !tab.proOnly || isPro);
-  const adsUnlocked = generatedTags.length > 0 || (tagHistory?.length || 0) > 0;
-  const adEligibleTabs = ["tags", "descriptions"].includes(activeTab);
-  const adContentReady = adsUnlocked;
+  const adEligibleTabs = ["tags", "descriptions", "upload", "analytics", "grow", "beathelper"].includes(activeTab);
   const activeTabIndex = Math.max(0, visibleTabs.findIndex((tab) => tab.value === activeTab));
   const activeTabLabel = visibleTabs[activeTabIndex]?.label || "Tags";
   const desktopTabHighlightStyle = {
@@ -216,10 +225,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
     subscriptionStatus &&
     !subscriptionStatus.is_subscribed &&
     userLoaded &&
-    descriptionsLoaded &&
-    tagHistoryLoaded &&
-    adEligibleTabs &&
-    adContentReady
+    adEligibleTabs
   );
 
   const healthScoreRaw = analyticsData?.insights?.channel_health_score || "";
@@ -338,6 +344,36 @@ const Dashboard = ({ setIsAuthenticated }) => {
     }
   }, [activeTab, isPro]);
 
+  useEffect(() => {
+    const selectedImageId = (beatHelperForm.image_file_id || "").trim();
+    if (!selectedImageId) {
+      setBeatHelperImagePreview("");
+      return;
+    }
+    let cancelled = false;
+    const loadPreview = async () => {
+      try {
+        setLoadingBeatHelperPreview(true);
+        const response = await axios.get(`${API}/beat-helper/image/${selectedImageId}/preview`);
+        if (!cancelled) {
+          setBeatHelperImagePreview(response?.data?.data_url || "");
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setBeatHelperImagePreview("");
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingBeatHelperPreview(false);
+        }
+      }
+    };
+    loadPreview();
+    return () => {
+      cancelled = true;
+    };
+  }, [beatHelperForm.image_file_id]);
+
   const fetchUser = async () => {
     try {
       const response = await axios.get(`${API}/auth/me`);
@@ -396,12 +432,75 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const fetchBeatHelperData = async () => {
     setLoadingBeatHelper(true);
     try {
-      const [uploadsRes, queueRes] = await Promise.all([
+      const [uploadsRes, queueRes, contactRes, templatesRes] = await Promise.allSettled([
         axios.get(`${API}/beat-helper/uploads`),
         axios.get(`${API}/beat-helper/queue`),
+        axios.get(`${API}/beat-helper/contact-settings`),
+        axios.get(`${API}/beat-helper/tag-templates`),
       ]);
-      setBeatHelperUploads(uploadsRes.data || { audio_uploads: [], image_uploads: [] });
-      setBeatHelperQueue(Array.isArray(queueRes.data) ? queueRes.data : []);
+
+      const uploadsData = uploadsRes.status === "fulfilled"
+        ? uploadsRes.value?.data
+        : { audio_uploads: [], image_uploads: [] };
+      const queueData = queueRes.status === "fulfilled"
+        ? queueRes.value?.data
+        : [];
+      const contactData = contactRes.status === "fulfilled"
+        ? contactRes.value?.data
+        : { email: "", phone: "", email_enabled: false, sms_enabled: false };
+      const templatesData = templatesRes.status === "fulfilled"
+        ? templatesRes.value?.data
+        : [];
+
+      setBeatHelperUploads(uploadsData || { audio_uploads: [], image_uploads: [] });
+      const queueItems = Array.isArray(queueData) ? queueData : [];
+      setBeatHelperQueue(queueItems);
+      setBeatHelperContact(contactData || { email: "", phone: "", email_enabled: false, sms_enabled: false });
+      setBeatHelperTemplates(Array.isArray(templatesData) ? templatesData : []);
+
+      const uniqueImageIds = [...new Set(
+        queueItems
+          .map((item) => (item?.image_file_id || "").trim())
+          .filter(Boolean)
+      )];
+      if (uniqueImageIds.length === 0) {
+        setBeatHelperQueueImagePreviews({});
+      } else {
+        const previewPairs = await Promise.all(
+          uniqueImageIds.map(async (fileId) => {
+            try {
+              const response = await axios.get(`${API}/beat-helper/image/${fileId}/preview`);
+              return [fileId, response?.data?.data_url || ""];
+            } catch (error) {
+              return [fileId, ""];
+            }
+          })
+        );
+        setBeatHelperQueueImagePreviews(Object.fromEntries(previewPairs));
+      }
+
+      const hardFailure = [uploadsRes, queueRes].find(
+        (result) => result.status === "rejected"
+      );
+      if (hardFailure) {
+        const status = hardFailure?.reason?.response?.status;
+        const detail = hardFailure?.reason?.response?.data?.detail;
+        if (status === 402) {
+          toast.error(typeof detail === "string" ? detail : "BeatHelper is a Pro feature.");
+        } else if (status === 401) {
+          toast.error("Session expired. Please log in again.");
+        } else {
+          toast.error(typeof detail === "string" ? detail : "Failed to load core BeatHelper data");
+        }
+      }
+
+      // Soft failures (older backend / partial deploy) should not break the whole tab.
+      [contactRes, templatesRes].forEach((result, idx) => {
+        if (result.status === "rejected") {
+          const endpoint = idx === 0 ? "contact-settings" : "tag-templates";
+          console.warn(`BeatHelper optional endpoint failed: ${endpoint}`, result.reason);
+        }
+      });
     } catch (error) {
       const detail = error?.response?.data?.detail;
       if (error?.response?.status === 402) {
@@ -435,6 +534,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
         image_file_id: beatHelperForm.image_file_id || null,
         beat_type: beatHelperForm.beat_type.trim(),
         target_artist: beatHelperForm.target_artist.trim(),
+        generated_title_override: beatHelperForm.generated_title_override.trim() || null,
         context_tags: beatHelperForm.context_tags
           .split(",")
           .map((t) => t.trim())
@@ -444,12 +544,19 @@ const Dashboard = ({ setIsAuthenticated }) => {
         auto_upload_if_no_response: !!beatHelperForm.auto_upload_if_no_response,
         notify_channel: beatHelperForm.notify_channel,
         privacy_status: beatHelperForm.privacy_status,
+        template_id: beatHelperForm.template_id || null,
       });
       toast.success("Beat queued in BeatHelper");
+      setBeatHelperImagePreview("");
       await fetchBeatHelperData();
     } catch (error) {
       const detail = error?.response?.data?.detail;
-      toast.error(typeof detail === "string" ? detail : "Failed to queue beat");
+      const message = typeof detail === "string"
+        ? detail
+        : detail && typeof detail === "object"
+          ? JSON.stringify(detail)
+          : (error?.message || "Failed to queue beat");
+      toast.error(message);
     } finally {
       setLoadingBeatHelper(false);
     }
@@ -504,12 +611,110 @@ const Dashboard = ({ setIsAuthenticated }) => {
     }
   };
 
-  const handleUpgrade = async () => {
+  const handleBeatHelperSaveContact = async () => {
+    try {
+      const response = await axios.put(`${API}/beat-helper/contact-settings`, beatHelperContact);
+      const confirmation = response?.data?.confirmation || {};
+      const emailStatus = confirmation.email_enabled
+        ? (confirmation.email_confirmation_sent ? "email confirmation sent" : "email confirmation failed")
+        : "email disabled";
+      const smsStatus = confirmation.sms_enabled
+        ? (confirmation.sms_confirmation_sent ? "SMS confirmation sent" : "SMS confirmation failed")
+        : "SMS disabled";
+      toast.success(`BeatHelper contact settings saved (${emailStatus}, ${smsStatus})`);
+    } catch (error) {
+      const detail = error?.response?.data?.detail;
+      toast.error(typeof detail === "string" ? detail : "Failed to save contact settings");
+    }
+  };
+
+  const handleBeatHelperCreateTemplate = async () => {
+    const name = newTemplateName.trim();
+    if (!name) {
+      toast.error("Template name is required");
+      return;
+    }
+    try {
+      await axios.post(`${API}/beat-helper/tag-templates`, {
+        name,
+        tags: newTemplateTags.split(",").map((t) => t.trim()).filter(Boolean),
+      });
+      setNewTemplateName("");
+      setNewTemplateTags("");
+      toast.success("Tag template created");
+      await fetchBeatHelperData();
+    } catch (error) {
+      const detail = error?.response?.data?.detail;
+      toast.error(typeof detail === "string" ? detail : "Failed to create template");
+    }
+  };
+
+  const startEditBeatHelperItem = (item) => {
+    setEditingQueueById((prev) => ({
+      ...prev,
+      [item.id]: {
+        generated_title: item.generated_title || "",
+        target_artist: item.target_artist || "",
+        beat_type: item.beat_type || "",
+        generated_description: item.generated_description || "",
+        generated_tags_text: (item.generated_tags || []).join(", "),
+        beat_file_id: item.beat_file_id || "",
+        image_file_id: item.image_file_id || "",
+        template_id: item.template_id || "",
+      },
+    }));
+  };
+
+  const handleBeatHelperAssistTitle = async (itemId) => {
+    const edit = editingQueueById[itemId];
+    if (!edit) return;
+    try {
+      const response = await axios.post(`${API}/beat-helper/assist-title`, {
+        target_artist: edit.target_artist,
+        beat_type: edit.beat_type,
+        current_title: edit.generated_title,
+        context_tags: (edit.generated_tags_text || "").split(",").map((t) => t.trim()).filter(Boolean),
+      });
+      setAssistTitlesById((prev) => ({ ...prev, [itemId]: response?.data?.titles || [] }));
+    } catch (error) {
+      toast.error("Failed to get title suggestions");
+    }
+  };
+
+  const handleBeatHelperSaveEdit = async (itemId) => {
+    const edit = editingQueueById[itemId];
+    if (!edit) return;
+    try {
+      await axios.patch(`${API}/beat-helper/queue/${itemId}/edit`, {
+        generated_title: edit.generated_title,
+        target_artist: edit.target_artist,
+        beat_type: edit.beat_type,
+        generated_description: edit.generated_description,
+        generated_tags: (edit.generated_tags_text || "").split(",").map((t) => t.trim()).filter(Boolean),
+        beat_file_id: edit.beat_file_id || undefined,
+        image_file_id: edit.image_file_id || undefined,
+        template_id: edit.template_id || undefined,
+      });
+      toast.success("Queue item updated");
+      setEditingQueueById((prev) => {
+        const next = { ...prev };
+        delete next[itemId];
+        return next;
+      });
+      await fetchBeatHelperData();
+    } catch (error) {
+      const detail = error?.response?.data?.detail;
+      toast.error(typeof detail === "string" ? detail : "Failed to update queue item");
+    }
+  };
+
+  const handleUpgrade = async (plan = "plus") => {
     setUpgradingSubscription(true);
     try {
       const response = await axios.post(`${API}/subscription/create-checkout`, {
         success_url: `${window.location.origin}/dashboard?upgraded=true`,
-        cancel_url: `${window.location.origin}/dashboard`
+        cancel_url: `${window.location.origin}/dashboard`,
+        plan,
       });
 
       // Redirect to Stripe checkout
@@ -1132,7 +1337,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
               {/* Show Pro badge for subscribed users */}
               {subscriptionStatus && subscriptionStatus.is_subscribed && (
                 <div className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-gradient-to-r from-[var(--accent-primary)] to-[var(--accent-secondary)] text-white font-semibold text-xs sm:text-sm whitespace-nowrap">
-                  Pro Member
+                  {subscriptionStatus.plan === "max" ? "Max Member" : "Plus Member"}
                 </div>
               )}
 
@@ -1191,6 +1396,9 @@ const Dashboard = ({ setIsAuthenticated }) => {
           <SubscriptionBanner
             creditsRemaining={subscriptionStatus.daily_credits_remaining}
             uploadCreditsRemaining={subscriptionStatus.upload_credits_remaining}
+            creditsTotal={subscriptionStatus.daily_credits_total}
+            uploadsTotal={subscriptionStatus.upload_credits_total}
+            plan={subscriptionStatus.plan}
             resetsAt={subscriptionStatus.resets_at}
             isSubscribed={subscriptionStatus.is_subscribed}
             onUpgrade={() => setShowUpgradeModal(true)}
@@ -1265,6 +1473,13 @@ const Dashboard = ({ setIsAuthenticated }) => {
             ))}
           </TabsList>
 
+          {canShowAds && !["tags", "descriptions"].includes(activeTab) && (
+            <AdBanner
+              isSubscribed={subscriptionStatus.is_subscribed}
+              style={{ marginBottom: "12px" }}
+            />
+          )}
+
           {/* BeatHelper Tab (Pro) */}
           <TabsContent value="beathelper" className="space-y-6 dashboard-section">
             {!isPro ? (
@@ -1329,6 +1544,20 @@ const Dashboard = ({ setIsAuthenticated }) => {
                             ))}
                           </SelectContent>
                         </Select>
+                        {loadingBeatHelperPreview && (
+                          <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                            Loading image preview...
+                          </p>
+                        )}
+                        {beatHelperImagePreview && (
+                          <div className="rounded-lg border p-2" style={{ borderColor: "var(--border-color)", background: "var(--bg-secondary)" }}>
+                            <img
+                              src={beatHelperImagePreview}
+                              alt="Selected thumbnail preview"
+                              className="w-full max-h-44 object-contain rounded-md"
+                            />
+                          </div>
+                        )}
                         <label className="flex items-center gap-2 text-sm">
                           <input
                             type="checkbox"
@@ -1356,6 +1585,33 @@ const Dashboard = ({ setIsAuthenticated }) => {
                             placeholder="e.g. rage"
                           />
                         </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Title Override (optional)</Label>
+                        <Input
+                          value={beatHelperForm.generated_title_override}
+                          onChange={(e) => setBeatHelperForm((prev) => ({ ...prev, generated_title_override: e.target.value }))}
+                          placeholder="If blank, AI generates title"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Tag Template (optional)</Label>
+                        <Select
+                          value={beatHelperForm.template_id || "none"}
+                          onValueChange={(value) => setBeatHelperForm((prev) => ({ ...prev, template_id: value === "none" ? "" : value }))}
+                        >
+                          <SelectTrigger><SelectValue placeholder="Select template" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">No template</SelectItem>
+                            {beatHelperTemplates.map((template) => (
+                              <SelectItem key={template.id} value={template.id}>
+                                {template.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
 
                       <div className="space-y-2">
@@ -1428,6 +1684,81 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         </Button>
                       </div>
                     </form>
+
+                    <div className="mt-6 pt-4 border-t" style={{ borderColor: "var(--border-color)" }}>
+                      <p className="font-semibold mb-3">Notification Contact</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="space-y-2">
+                          <Label>Email</Label>
+                          <Input
+                            value={beatHelperContact.email || ""}
+                            onChange={(e) => setBeatHelperContact((prev) => ({ ...prev, email: e.target.value }))}
+                            placeholder="you@domain.com"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Phone</Label>
+                          <Input
+                            value={beatHelperContact.phone || ""}
+                            onChange={(e) => setBeatHelperContact((prev) => ({ ...prev, phone: e.target.value }))}
+                            placeholder="+15551234567"
+                          />
+                        </div>
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-4 text-sm">
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={!!beatHelperContact.email_enabled}
+                            onChange={(e) => setBeatHelperContact((prev) => ({ ...prev, email_enabled: e.target.checked }))}
+                          />
+                          Enable email
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={!!beatHelperContact.sms_enabled}
+                            onChange={(e) => setBeatHelperContact((prev) => ({ ...prev, sms_enabled: e.target.checked }))}
+                          />
+                          Enable SMS
+                        </label>
+                      </div>
+                      <Button className="mt-3" variant="outline" onClick={handleBeatHelperSaveContact}>
+                        Save Contact Settings
+                      </Button>
+                    </div>
+
+                    <div className="mt-6 pt-4 border-t" style={{ borderColor: "var(--border-color)" }}>
+                      <p className="font-semibold mb-3">Tag Templates</p>
+                      <div className="space-y-2">
+                        <Input
+                          value={newTemplateName}
+                          onChange={(e) => setNewTemplateName(e.target.value)}
+                          placeholder="Template name (e.g. Uzi Rage Core)"
+                        />
+                        <Textarea
+                          rows={2}
+                          value={newTemplateTags}
+                          onChange={(e) => setNewTemplateTags(e.target.value)}
+                          placeholder="tag1, tag2, tag3"
+                        />
+                        <Button variant="outline" onClick={handleBeatHelperCreateTemplate}>
+                          Save Template
+                        </Button>
+                      </div>
+                      {beatHelperTemplates.length > 0 && (
+                        <div className="mt-3 space-y-2">
+                          {beatHelperTemplates.slice(0, 8).map((template) => (
+                            <div key={template.id} className="p-2 rounded border text-xs" style={{ borderColor: "var(--border-color)" }}>
+                              <p className="font-semibold">{template.name}</p>
+                              <p style={{ color: "var(--text-secondary)" }}>
+                                {(template.tags || []).slice(0, 8).join(", ")}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
 
@@ -1449,6 +1780,125 @@ const Dashboard = ({ setIsAuthenticated }) => {
                     ) : (
                       beatHelperQueue.map((item) => (
                         <div key={item.id} className="p-3 rounded-lg border" style={{ borderColor: "var(--border-color)", background: "var(--bg-secondary)" }}>
+                          {beatHelperQueueImagePreviews[item.image_file_id] && (
+                            <div className="mb-3 rounded-lg border p-2" style={{ borderColor: "var(--border-color)", background: "var(--bg-primary)" }}>
+                              <img
+                                src={beatHelperQueueImagePreviews[item.image_file_id]}
+                                alt={item.image_original_filename || "Queued thumbnail"}
+                                className="w-full max-h-44 object-contain rounded-md"
+                              />
+                            </div>
+                          )}
+                          {editingQueueById[item.id] ? (
+                            <div className="space-y-2 mb-3">
+                              <Input
+                                value={editingQueueById[item.id].generated_title}
+                                onChange={(e) => setEditingQueueById((prev) => ({
+                                  ...prev,
+                                  [item.id]: { ...prev[item.id], generated_title: e.target.value },
+                                }))}
+                                placeholder="Title"
+                              />
+                              <div className="grid grid-cols-2 gap-2">
+                                <Input
+                                  value={editingQueueById[item.id].target_artist}
+                                  onChange={(e) => setEditingQueueById((prev) => ({
+                                    ...prev,
+                                    [item.id]: { ...prev[item.id], target_artist: e.target.value },
+                                  }))}
+                                  placeholder="Artist"
+                                />
+                                <Input
+                                  value={editingQueueById[item.id].beat_type}
+                                  onChange={(e) => setEditingQueueById((prev) => ({
+                                    ...prev,
+                                    [item.id]: { ...prev[item.id], beat_type: e.target.value },
+                                  }))}
+                                  placeholder="Beat type"
+                                />
+                              </div>
+                              <Textarea
+                                rows={2}
+                                value={editingQueueById[item.id].generated_tags_text}
+                                onChange={(e) => setEditingQueueById((prev) => ({
+                                  ...prev,
+                                  [item.id]: { ...prev[item.id], generated_tags_text: e.target.value },
+                                }))}
+                                placeholder="Comma separated tags"
+                              />
+                              <Textarea
+                                rows={3}
+                                value={editingQueueById[item.id].generated_description}
+                                onChange={(e) => setEditingQueueById((prev) => ({
+                                  ...prev,
+                                  [item.id]: { ...prev[item.id], generated_description: e.target.value },
+                                }))}
+                                placeholder="Description"
+                              />
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                <Select
+                                  value={editingQueueById[item.id].beat_file_id}
+                                  onValueChange={(value) => setEditingQueueById((prev) => ({
+                                    ...prev,
+                                    [item.id]: { ...prev[item.id], beat_file_id: value },
+                                  }))}
+                                >
+                                  <SelectTrigger><SelectValue placeholder="Beat" /></SelectTrigger>
+                                  <SelectContent>
+                                    {beatHelperUploads.audio_uploads.map((file) => (
+                                      <SelectItem key={file.id} value={file.id}>{file.original_filename}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <Select
+                                  value={editingQueueById[item.id].image_file_id}
+                                  onValueChange={(value) => setEditingQueueById((prev) => ({
+                                    ...prev,
+                                    [item.id]: { ...prev[item.id], image_file_id: value },
+                                  }))}
+                                >
+                                  <SelectTrigger><SelectValue placeholder="Image" /></SelectTrigger>
+                                  <SelectContent>
+                                    {beatHelperUploads.image_uploads.map((file) => (
+                                      <SelectItem key={file.id} value={file.id}>{file.original_filename}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <Select
+                                  value={editingQueueById[item.id].template_id || "none"}
+                                  onValueChange={(value) => setEditingQueueById((prev) => ({
+                                    ...prev,
+                                    [item.id]: { ...prev[item.id], template_id: value === "none" ? "" : value },
+                                  }))}
+                                >
+                                  <SelectTrigger><SelectValue placeholder="Template" /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="none">No template</SelectItem>
+                                    {beatHelperTemplates.map((template) => (
+                                      <SelectItem key={template.id} value={template.id}>{template.name}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              {assistTitlesById[item.id]?.length > 0 && (
+                                <div className="flex flex-wrap gap-2">
+                                  {assistTitlesById[item.id].map((title) => (
+                                    <button
+                                      key={title}
+                                      className="px-2 py-1 rounded border text-xs"
+                                      style={{ borderColor: "var(--border-color)" }}
+                                      onClick={() => setEditingQueueById((prev) => ({
+                                        ...prev,
+                                        [item.id]: { ...prev[item.id], generated_title: title },
+                                      }))}
+                                    >
+                                      {title}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ) : null}
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0">
                               <p className="font-semibold truncate">{item.generated_title || item.beat_original_filename}</p>
@@ -1457,6 +1907,9 @@ const Dashboard = ({ setIsAuthenticated }) => {
                               </p>
                               <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
                                 Scheduled (UTC): {item.scheduled_for_utc || "n/a"}
+                              </p>
+                              <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
+                                Tags: {(item.generated_tags || []).slice(0, 6).join(", ")}
                               </p>
                             </div>
                           </div>
@@ -1470,6 +1923,31 @@ const Dashboard = ({ setIsAuthenticated }) => {
                             <Button size="sm" variant="outline" onClick={() => handleBeatHelperSetStatus(item.id, "skipped")}>
                               Skip
                             </Button>
+                            {editingQueueById[item.id] ? (
+                              <>
+                                <Button size="sm" variant="outline" onClick={() => handleBeatHelperAssistTitle(item.id)}>
+                                  AI Titles
+                                </Button>
+                                <Button size="sm" onClick={() => handleBeatHelperSaveEdit(item.id)}>
+                                  Save Edit
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setEditingQueueById((prev) => {
+                                    const next = { ...prev };
+                                    delete next[item.id];
+                                    return next;
+                                  })}
+                                >
+                                  Cancel
+                                </Button>
+                              </>
+                            ) : (
+                              <Button size="sm" variant="outline" onClick={() => startEditBeatHelperItem(item)}>
+                                Edit
+                              </Button>
+                            )}
                             <Button size="sm" variant="destructive" onClick={() => handleBeatHelperDelete(item.id)}>
                               Remove
                             </Button>

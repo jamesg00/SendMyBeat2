@@ -54,9 +54,26 @@ const AdBanner = ({
     env: process.env.NODE_ENV 
   });
 
-  // Hide slot entirely if not configured to avoid empty space
+  // House ad fallback if AdSense is not configured yet.
   if (!isAdSenseConfigured) {
-    return null;
+    return (
+      <div
+        className="ad-container rounded-lg border p-3"
+        style={{
+          ...style,
+          borderColor: "var(--border-color)",
+          background: "var(--bg-secondary)"
+        }}
+      >
+        <p className="text-xs uppercase tracking-wide mb-1" style={{ color: "var(--text-secondary)" }}>
+          Sponsored
+        </p>
+        <p className="text-sm font-semibold">Need more credits today?</p>
+        <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
+          Upgrade to SendMyBeat Plus or Max to unlock more AI generations and uploads.
+        </p>
+      </div>
+    );
   }
 
   // Real AdSense code - Will show in both dev and production
