@@ -265,6 +265,11 @@ def _clean_artist_candidate(text: str) -> str:
 def _extract_artist_queries(title: str, tags: list[str]) -> list[str]:
     candidates: list[str] = []
     pool = [title or ""] + (tags or [])
+    stop_words = {
+        "type", "beat", "instrumental", "prod", "producer", "free", "download",
+        "trap", "drill", "rage", "phonk", "melodic", "dark", "hard", "viral",
+        "2022", "2023", "2024", "2025", "2026"
+    }
 
     for raw in pool:
         s = (raw or "").lower().strip()
@@ -280,10 +285,28 @@ def _extract_artist_queries(title: str, tags: list[str]) -> list[str]:
                 c = _clean_artist_candidate(part.title())
                 if c:
                     candidates.append(c)
+            continue
+
+        # e.g. "lil uzi vert beat", "drake instrumental", "future x metro"
+        if re.search(r"\b(beat|instrumental)\b", s):
+            left = re.split(r"\b(beat|instrumental)\b", s, maxsplit=1)[0]
+            parts = re.split(r"\s+x\s+|,|/|&| feat\.?| ft\.? ", left)
+            for part in parts:
+                c = _clean_artist_candidate(part.title())
+                if c:
+                    candidates.append(c)
+            continue
+
+        # Tag fallback: keep likely name tokens only
+        words = [w for w in re.split(r"\s+", s) if w and w not in stop_words and not w.isdigit()]
+        if 1 <= len(words) <= 4:
+            c = _clean_artist_candidate(" ".join(words).title())
+            if c:
+                candidates.append(c)
 
     # Fallback to first words of title if no type-beat pattern
     if not candidates:
-        title_words = re.split(r"\s+", (title or "").strip())
+        title_words = [w for w in re.split(r"\s+", (title or "").strip()) if w]
         fallback = _clean_artist_candidate(" ".join(title_words[:3]).title())
         if fallback:
             candidates.append(fallback)
@@ -3313,9 +3336,22 @@ async def generate_image_suggestions(
             raise HTTPException(status_code=400, detail="title or tags are required.")
 
         artists = _extract_artist_queries(title, tags)
-        query = " ".join(artists) if artists else title
+        query = artists[0] if artists else title
         if not query:
             raise HTTPException(status_code=400, detail="Could not infer artist query from title/tags.")
+
+        query_variants: list[str] = []
+        for a in artists:
+            if a:
+                query_variants.append(a)
+                query_variants.append(f"{a} artist")
+                query_variants.append(f"{a} rapper")
+        if title:
+            query_variants.append(title.strip())
+        query_variants.append(query.strip())
+        # Deduplicate while preserving order
+        seen_q = set()
+        query_variants = [q for q in query_variants if q and not (q.lower() in seen_q or seen_q.add(q.lower()))]
 
         results: list[dict] = []
 
@@ -3323,30 +3359,33 @@ async def generate_image_suggestions(
         pexels_key = os.environ.get("PEXELS_API_KEY")
         if pexels_key:
             try:
-                pexels_resp = requests.get(
-                    "https://api.pexels.com/v1/search",
-                    params={"query": query, "per_page": k, "orientation": "landscape"},
-                    headers={"Authorization": pexels_key},
-                    timeout=15,
-                )
-                if pexels_resp.status_code < 400:
-                    payload = pexels_resp.json()
-                    for photo in payload.get("photos", []):
-                        src = photo.get("src", {})
-                        image_url = src.get("large2x") or src.get("large") or src.get("original")
-                        thumb_url = src.get("medium") or src.get("small") or image_url
-                        if not image_url:
-                            continue
-                        results.append({
-                            "id": f"pexels-{photo.get('id')}",
-                            "image_url": image_url,
-                            "thumbnail_url": thumb_url,
-                            "artist": artists[0] if artists else None,
-                            "query_used": query,
-                            "source": "pexels",
-                            "credit_name": (photo.get("photographer") or "Pexels Photographer"),
-                            "credit_url": photo.get("photographer_url"),
-                        })
+                for qv in query_variants[:3]:
+                    if len(results) >= k:
+                        break
+                    pexels_resp = requests.get(
+                        "https://api.pexels.com/v1/search",
+                        params={"query": qv, "per_page": max(3, k), "orientation": "landscape"},
+                        headers={"Authorization": pexels_key},
+                        timeout=15,
+                    )
+                    if pexels_resp.status_code < 400:
+                        payload = pexels_resp.json()
+                        for photo in payload.get("photos", []):
+                            src = photo.get("src", {})
+                            image_url = src.get("large2x") or src.get("large") or src.get("original")
+                            thumb_url = src.get("medium") or src.get("small") or image_url
+                            if not image_url:
+                                continue
+                            results.append({
+                                "id": f"pexels-{photo.get('id')}",
+                                "image_url": image_url,
+                                "thumbnail_url": thumb_url,
+                                "artist": artists[0] if artists else None,
+                                "query_used": qv,
+                                "source": "pexels",
+                                "credit_name": (photo.get("photographer") or "Pexels Photographer"),
+                                "credit_url": photo.get("photographer_url"),
+                            })
             except Exception as e:
                 logging.warning(f"Pexels image search failed: {str(e)}")
 
@@ -3354,64 +3393,104 @@ async def generate_image_suggestions(
         if len(results) < k and os.environ.get("PIXABAY_API_KEY"):
             try:
                 needed = k - len(results)
-                px_resp = requests.get(
-                    "https://pixabay.com/api/",
-                    params={
-                        "key": os.environ.get("PIXABAY_API_KEY"),
-                        "q": query,
-                        "image_type": "photo",
-                        "per_page": needed,
-                        "safesearch": "true",
-                    },
-                    timeout=15,
-                )
-                if px_resp.status_code < 400:
-                    payload = px_resp.json()
-                    for hit in payload.get("hits", []):
-                        image_url = hit.get("largeImageURL") or hit.get("webformatURL")
-                        thumb_url = hit.get("previewURL") or hit.get("webformatURL") or image_url
-                        if not image_url:
-                            continue
-                        results.append({
-                            "id": f"pixabay-{hit.get('id')}",
-                            "image_url": image_url,
-                            "thumbnail_url": thumb_url,
-                            "artist": artists[0] if artists else None,
-                            "query_used": query,
-                            "source": "pixabay",
-                            "credit_name": hit.get("user"),
-                            "credit_url": f"https://pixabay.com/users/{hit.get('user', '')}/" if hit.get("user") else None,
-                        })
+                for qv in query_variants[:3]:
+                    if len(results) >= k:
+                        break
+                    needed = k - len(results)
+                    px_resp = requests.get(
+                        "https://pixabay.com/api/",
+                        params={
+                            "key": os.environ.get("PIXABAY_API_KEY"),
+                            "q": qv,
+                            "image_type": "photo",
+                            "per_page": max(3, needed),
+                            "safesearch": "true",
+                        },
+                        timeout=15,
+                    )
+                    if px_resp.status_code < 400:
+                        payload = px_resp.json()
+                        for hit in payload.get("hits", []):
+                            image_url = hit.get("largeImageURL") or hit.get("webformatURL")
+                            thumb_url = hit.get("previewURL") or hit.get("webformatURL") or image_url
+                            if not image_url:
+                                continue
+                            results.append({
+                                "id": f"pixabay-{hit.get('id')}",
+                                "image_url": image_url,
+                                "thumbnail_url": thumb_url,
+                                "artist": artists[0] if artists else None,
+                                "query_used": qv,
+                                "source": "pixabay",
+                                "credit_name": hit.get("user"),
+                                "credit_url": f"https://pixabay.com/users/{hit.get('user', '')}/" if hit.get("user") else None,
+                            })
             except Exception as e:
                 logging.warning(f"Pixabay image search failed: {str(e)}")
 
         # 3) Deezer fallback (no key): artist photos
         if len(results) < k:
             try:
-                needed = k - len(results)
-                dz_resp = requests.get(
-                    "https://api.deezer.com/search/artist",
-                    params={"q": query},
-                    timeout=10,
-                )
-                if dz_resp.status_code < 400:
-                    payload = dz_resp.json()
-                    for artist in payload.get("data", [])[:needed]:
-                        image_url = artist.get("picture_xl") or artist.get("picture_big") or artist.get("picture_medium")
-                        if not image_url:
-                            continue
-                        results.append({
-                            "id": f"deezer-{artist.get('id')}",
-                            "image_url": image_url,
-                            "thumbnail_url": artist.get("picture_medium") or image_url,
-                            "artist": artist.get("name"),
-                            "query_used": query,
-                            "source": "deezer",
-                            "credit_name": artist.get("name"),
-                            "credit_url": artist.get("link"),
-                        })
+                for qv in query_variants[:4]:
+                    if len(results) >= k:
+                        break
+                    needed = k - len(results)
+                    dz_resp = requests.get(
+                        "https://api.deezer.com/search/artist",
+                        params={"q": qv},
+                        timeout=10,
+                    )
+                    if dz_resp.status_code < 400:
+                        payload = dz_resp.json()
+                        for artist in payload.get("data", [])[:max(2, needed)]:
+                            image_url = artist.get("picture_xl") or artist.get("picture_big") or artist.get("picture_medium")
+                            if not image_url:
+                                continue
+                            results.append({
+                                "id": f"deezer-{artist.get('id')}",
+                                "image_url": image_url,
+                                "thumbnail_url": artist.get("picture_medium") or image_url,
+                                "artist": artist.get("name"),
+                                "query_used": qv,
+                                "source": "deezer",
+                                "credit_name": artist.get("name"),
+                                "credit_url": artist.get("link"),
+                            })
             except Exception as e:
                 logging.warning(f"Deezer image search failed: {str(e)}")
+
+        # 4) iTunes fallback (no key): reliable for popular artists via album artwork
+        if len(results) < k:
+            try:
+                for qv in query_variants[:4]:
+                    if len(results) >= k:
+                        break
+                    needed = k - len(results)
+                    it_resp = requests.get(
+                        "https://itunes.apple.com/search",
+                        params={"term": qv, "entity": "song", "limit": max(6, needed * 3)},
+                        timeout=12,
+                    )
+                    if it_resp.status_code < 400:
+                        payload = it_resp.json()
+                        for item in payload.get("results", []):
+                            image_url = item.get("artworkUrl100")
+                            if not image_url:
+                                continue
+                            image_url = image_url.replace("100x100bb", "1200x1200bb")
+                            thumb_url = item.get("artworkUrl100")
+                            results.append({
+                                "id": f"itunes-{item.get('trackId') or item.get('collectionId')}",
+                                "image_url": image_url,
+                                "thumbnail_url": thumb_url or image_url,
+                                "artist": item.get("artistName"),
+                                "query_used": qv,
+                                "source": "itunes",
+                                "credit_name": item.get("artistName"),
+                                "credit_url": item.get("artistViewUrl") or item.get("trackViewUrl"),
+                            })
+            except Exception as e:
+                logging.warning(f"iTunes image search failed: {str(e)}")
 
         deduped: list[dict] = []
         seen = set()
