@@ -1,34 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap');
 
-/* Light Mode - White & Green */
-:root:not(.dark) {
-  --bg-primary: #f7fff9 !important;
-  --bg-secondary: #ecfff2 !important;
-  --bg-tertiary: #dcffe6 !important;
-  --text-primary: #0d1a12 !important;
-  --text-secondary: #00aa2b !important;
-  --accent-primary: #00cc33 !important;
-  --accent-secondary: #39ff14 !important;
-  --border-color: #b9eac7 !important;
-  --card-bg: #fafffb !important;
-  --shadow: rgba(0, 64, 24, 0.12) !important;
-  --glow: rgba(0, 255, 65, 0.35) !important;
-}
-
-/* Dark Mode - Black & Green */
-body.dark, .dark {
-  --bg-primary: #0d0208 !important;
-  --bg-secondary: #1a1a1a !important;
-  --bg-tertiary: #2a2a2a !important;
-  --text-primary: #00ff41 !important;
-  --text-secondary: #00cc33 !important;
-  --accent-primary: #00ff41 !important;
-  --accent-secondary: #39ff14 !important;
-  --border-color: #2a2a2a !important;
-  --card-bg: #1a1a1a !important;
-  --shadow: rgba(0, 0, 0, 0.5) !important;
-  --glow: rgba(0, 255, 65, 0.5) !important;
-}
 
 * {
   margin: 0;

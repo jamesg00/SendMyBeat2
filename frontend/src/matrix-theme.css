@@ -15,7 +15,7 @@
   --matrix-black: #0d0208;
   --matrix-dark: #1a1a1a;
   --matrix-darker: #0a0a0a;
-  --matrix-white: #eef4ef;
+  --matrix-white: #f7fff9; /* Updated to match refined App.css value */
 }
 
 /* Karmatic Arcade font ONLY for SendMyBeat brand */
@@ -24,38 +24,63 @@
   letter-spacing: 3px;
 }
 
-/* Matrix arcade font for everything else */
-body, h1, h2, h3, h4, h5, h6, p, div, span, button {
-  font-family: 'Courier New', 'Courier', monospace !important;
+/* Matrix arcade font for everything else - Scoped to Matrix Theme */
+body[data-theme="matrix"],
+body[data-theme="matrix"] h1,
+body[data-theme="matrix"] h2,
+body[data-theme="matrix"] h3,
+body[data-theme="matrix"] h4,
+body[data-theme="matrix"] h5,
+body[data-theme="matrix"] h6,
+body[data-theme="matrix"] p,
+body[data-theme="matrix"] div,
+body[data-theme="matrix"] span,
+body[data-theme="matrix"] button {
+  font-family: 'Courier New', 'Courier', monospace;
   letter-spacing: 1px;
 }
 
 /* Light Mode - White & Green */
-:root, body {
-  --bg-primary: var(--matrix-white) !important;
-  --bg-secondary: #e3ebe3 !important;
-  --bg-tertiary: #d6e1d6 !important;
-  --text-primary: #102015 !important;
-  --text-secondary: #00cc33 !important;
-  --accent: var(--matrix-green-dark) !important;
-  --accent-primary: var(--matrix-green-dark) !important;
-  --accent-secondary: var(--matrix-green) !important;
-  background-color: var(--matrix-white) !important;
-  color: #102015 !important;
+body[data-theme="matrix"] {
+  --bg-primary: #f7fff9;
+  --bg-secondary: #ecfff2;
+  --bg-tertiary: #dcffe6;
+  --text-primary: #0d1a12;
+  --text-secondary: #00aa2b;
+  --accent-primary: #00cc33;
+  --accent-secondary: #39ff14;
+  --border-color: #b9eac7;
+  --card-bg: #fafffb;
+  --shadow: rgba(0, 64, 24, 0.12);
+  --glow: rgba(0, 255, 65, 0.35);
+
+  /* Legacy variables for backward compatibility */
+  --accent: var(--accent-primary);
+
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
 }
 
 /* Dark Mode - Black & Green */
-.dark, .dark body, html.dark body {
-  --bg-primary: var(--matrix-black) !important;
-  --bg-secondary: var(--matrix-dark) !important;
-  --bg-tertiary: var(--matrix-darker) !important;
-  --text-primary: var(--matrix-green) !important;
-  --text-secondary: var(--matrix-green-dark) !important;
-  --accent: var(--matrix-green-light) !important;
-  --accent-primary: var(--matrix-green) !important;
-  --accent-secondary: var(--matrix-green-light) !important;
-  background-color: var(--matrix-black) !important;
-  color: var(--matrix-green) !important;
+body[data-theme="matrix"].dark,
+html.dark body[data-theme="matrix"] {
+  --bg-primary: #0d0208;
+  --bg-secondary: #1a1a1a;
+  --bg-tertiary: #2a2a2a;
+  --text-primary: #00ff41;
+  --text-secondary: #00cc33;
+  --accent-primary: #00ff41;
+  --accent-secondary: #39ff14;
+  --border-color: #2a2a2a;
+  --card-bg: #1a1a1a;
+  --shadow: rgba(0, 0, 0, 0.5);
+  --glow: rgba(0, 255, 65, 0.5);
+
+  /* Legacy variables for backward compatibility */
+  --accent: var(--accent-secondary);
+
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
 }
 
 /* RGB Hover Effect - ARCADE STYLE */
@@ -106,20 +131,27 @@ body, h1, h2, h3, h4, h5, h6, p, div, span, button {
 }
 
 /* Cyber Grid Background - Light and Dark versions */
-.dark .cyber-grid, .dark body, .dark .App, html.dark body, html.dark .App {
-  background-color: var(--matrix-black) !important;
+/* Scoped to Matrix Theme */
+body[data-theme="matrix"].dark .cyber-grid,
+body[data-theme="matrix"].dark,
+body[data-theme="matrix"].dark .App,
+html.dark body[data-theme="matrix"],
+html.dark body[data-theme="matrix"] .App {
+  background-color: var(--matrix-black);
   background-image: 
     linear-gradient(rgba(0, 255, 65, 0.1) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 255, 65, 0.1) 1px, transparent 1px) !important;
-  background-size: 20px 20px !important;
+    linear-gradient(90deg, rgba(0, 255, 65, 0.1) 1px, transparent 1px);
+  background-size: 20px 20px;
 }
 
-.cyber-grid, body, .App {
-  background-color: var(--matrix-white) !important;
+body[data-theme="matrix"] .cyber-grid,
+body[data-theme="matrix"],
+body[data-theme="matrix"] .App {
+  background-color: var(--matrix-white);
   background-image: 
     linear-gradient(rgba(0, 204, 51, 0.15) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 204, 51, 0.15) 1px, transparent 1px) !important;
-  background-size: 20px 20px !important;
+    linear-gradient(90deg, rgba(0, 204, 51, 0.15) 1px, transparent 1px);
+  background-size: 20px 20px;
 }
 
 /* Gaming Card Style - Light and Dark */
