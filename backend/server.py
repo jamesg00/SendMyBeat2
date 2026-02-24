@@ -3224,14 +3224,42 @@ Return STRICT JSON with this exact schema:
         )
 
         try:
-            analysis = json.loads(response_text)
+            try:
+                analysis = _parse_llm_json_response(response_text)
+            except Exception:
+                repair_prompt = f"""Convert the following thumbnail analysis into STRICT JSON only.
+Do not add commentary. Return exactly one JSON object with this schema:
+{{
+  "score": 0-100,
+  "verdict": "one short sentence",
+  "strengths": ["..."],
+  "issues": ["..."],
+  "suggestions": ["..."],
+  "text_overlay_suggestion": "short text idea for the thumbnail",
+  "branding_suggestion": "one short branding tweak"
+}}
+
+If a field is missing, infer a safe value.
+
+RAW INPUT:
+{response_text}
+"""
+                normalized_text = await llm_chat(
+                    system_message="You convert LLM outputs into strict valid JSON objects.",
+                    user_message=repair_prompt,
+                    temperature=0.0,
+                    max_tokens=500,
+                    provider=(llm_provider or ("openai" if os.environ.get("OPENAI_API_KEY") else None)),
+                    user_id=current_user.get("id"),
+                )
+                analysis = _parse_llm_json_response(normalized_text)
             if await request.is_disconnected():
                 logging.info("Thumbnail check canceled by client; skipping credit use.")
                 return ThumbnailCheckResponse(**analysis)
             await consume_credit(current_user['id'])
             return ThumbnailCheckResponse(**analysis)
         except Exception as e:
-            logging.error(f"Failed to parse thumbnail analysis: {str(e)}")
+            logging.error(f"Failed to parse thumbnail analysis: {str(e)} | raw_response={response_text[:1200]}")
             if await request.is_disconnected():
                 logging.info("Thumbnail check canceled by client; skipping credit use.")
                 return ThumbnailCheckResponse(
