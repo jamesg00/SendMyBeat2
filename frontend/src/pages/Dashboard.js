@@ -529,7 +529,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
     }
     try {
       setLoadingBeatHelper(true);
-      await axios.post(`${API}/beat-helper/queue`, {
+      const fullPayload = {
         beat_file_id: beatHelperForm.beat_file_id,
         image_file_id: beatHelperForm.image_file_id || null,
         beat_type: beatHelperForm.beat_type.trim(),
@@ -545,11 +545,42 @@ const Dashboard = ({ setIsAuthenticated }) => {
         notify_channel: beatHelperForm.notify_channel,
         privacy_status: beatHelperForm.privacy_status,
         template_id: beatHelperForm.template_id || null,
-      });
+      };
+      await axios.post(`${API}/beat-helper/queue`, fullPayload);
       toast.success("Beat queued in BeatHelper");
       setBeatHelperImagePreview("");
       await fetchBeatHelperData();
     } catch (error) {
+      const noResponse = !error?.response;
+      if (noResponse) {
+        try {
+          // Backward-compatible retry for mixed backend deploys.
+          await axios.post(`${API}/beat-helper/queue`, {
+            beat_file_id: beatHelperForm.beat_file_id,
+            image_file_id: beatHelperForm.image_file_id || null,
+            beat_type: beatHelperForm.beat_type.trim(),
+            target_artist: beatHelperForm.target_artist.trim(),
+            context_tags: beatHelperForm.context_tags.split(",").map((t) => t.trim()).filter(Boolean),
+            ai_choose_image: !!beatHelperForm.ai_choose_image,
+            approval_timeout_hours: Number(beatHelperForm.approval_timeout_hours) || 12,
+            auto_upload_if_no_response: !!beatHelperForm.auto_upload_if_no_response,
+            notify_channel: beatHelperForm.notify_channel,
+            privacy_status: beatHelperForm.privacy_status,
+          });
+          toast.success("Beat queued in BeatHelper");
+          setBeatHelperImagePreview("");
+          await fetchBeatHelperData();
+          return;
+        } catch (retryError) {
+          const retryDetail = retryError?.response?.data?.detail;
+          const retryMessage = typeof retryDetail === "string"
+            ? retryDetail
+            : retryError?.message || "Network error: backend unavailable or not updated";
+          toast.error(retryMessage);
+          return;
+        }
+      }
+
       const detail = error?.response?.data?.detail;
       const message = typeof detail === "string"
         ? detail
