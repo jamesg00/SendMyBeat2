@@ -67,6 +67,7 @@ JWT_EXPIRATION = int(os.environ['JWT_EXPIRATION_MINUTES'])
 # Reminder configuration
 REMINDER_SECRET = os.environ.get('REMINDER_SECRET', JWT_SECRET)
 BACKEND_URL = os.environ.get('BACKEND_URL', 'https://api.sendmybeat.com')
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://www.sendmybeat.com")
 CREATOR_USER_ID = os.environ.get("CREATOR_USER_ID", "").strip()
 CREATOR_USERNAME = os.environ.get("CREATOR_USERNAME", "deadat18").strip().lower()
 ADMIN_USERNAMES = {
@@ -85,6 +86,8 @@ TEXTBELT_API_KEY = os.environ.get('TEXTBELT_API_KEY')
 REMINDER_SERIALIZER = URLSafeSerializer(REMINDER_SECRET)
 BEATHELPER_DEFAULT_APPROVAL_TIMEOUT_HOURS = int(os.environ.get("BEATHELPER_DEFAULT_APPROVAL_TIMEOUT_HOURS", "12"))
 BEATHELPER_DEFAULT_NOTIFY_CHANNEL = os.environ.get("BEATHELPER_DEFAULT_NOTIFY_CHANNEL", "email").strip().lower()
+BEATHELPER_SCHEDULER_INTERVAL_SECONDS = int(os.environ.get("BEATHELPER_SCHEDULER_INTERVAL_SECONDS", "300"))
+BEATHELPER_AUTO_DISPATCH_ENABLED = os.environ.get("BEATHELPER_AUTO_DISPATCH_ENABLED", "true").strip().lower() == "true"
 
 # Google OAuth Configuration
 GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', 'your_google_client_id_here')
@@ -150,6 +153,7 @@ PLUS_NET_REVENUE_USD = float(os.environ.get("PLUS_NET_REVENUE_USD", "4.56"))
 # ============ LLM Helper ============
 _llm_client = None
 _llm_config = None
+_beathelper_scheduler_task: asyncio.Task | None = None
 
 
 async def track_llm_usage(user_id: str | None, usage_type: str, prompt_tokens: int, completion_tokens: int):
@@ -1293,6 +1297,212 @@ def _send_sms_notification(to_phone: str, message: str) -> bool:
         return resp.status_code < 400
     except Exception:
         return False
+
+
+async def _dispatch_beathelper_approval_request(item: dict, user_doc: dict, source: str = "manual") -> dict:
+    user_id = (user_doc or {}).get("id")
+    if not user_id:
+        return {"success": False, "status": "failed", "detail": "Missing user id"}
+
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(hours=max(1, int(item.get("approval_timeout_hours", BEATHELPER_DEFAULT_APPROVAL_TIMEOUT_HOURS))))
+    subject = "BeatHelper approval request"
+    message = _build_beathelper_approval_message(item)
+
+    email = (user_doc or {}).get("email") or ""
+    phone = (user_doc or {}).get("phone") or ""
+    notify_channel = (item.get("notify_channel") or "none").lower()
+
+    email_sent = False
+    sms_sent = False
+    if notify_channel in {"email", "email_sms"}:
+        email_sent = _send_email_notification(email, subject, message)
+    if notify_channel in {"sms", "email_sms"}:
+        sms_sent = _send_sms_notification(phone, message)
+
+    if notify_channel == "none":
+        notification_status = "none"
+    else:
+        notification_status = "sent" if (email_sent or sms_sent) else "failed"
+
+    await db.beat_helper_queue.update_one(
+        {"id": item["id"], "user_id": user_id},
+        {"$set": {
+            "status": "pending_approval",
+            "approval_requested_at": now.isoformat(),
+            "approval_expires_at": expires_at.isoformat(),
+            "last_notification_status": notification_status,
+            "last_notification_source": source,
+            "updated_at": _safe_iso_now(),
+        }}
+    )
+
+    return {
+        "success": True,
+        "status": notification_status,
+        "approval_expires_at": expires_at.isoformat(),
+    }
+
+
+async def _process_expired_beathelper_pending_items() -> dict:
+    now = datetime.now(timezone.utc)
+    pending_items = await db.beat_helper_queue.find(
+        {"status": "pending_approval"},
+        {"_id": 0}
+    ).to_list(2000)
+
+    expired_count = 0
+    auto_uploaded = 0
+    for item in pending_items:
+        expires_raw = (item.get("approval_expires_at") or "").strip()
+        if not expires_raw:
+            continue
+        try:
+            expires_at = datetime.fromisoformat(expires_raw.replace("Z", "+00:00"))
+        except Exception:
+            continue
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if expires_at > now:
+            continue
+
+        expired_count += 1
+        if item.get("auto_upload_if_no_response"):
+            try:
+                user_doc = await db.users.find_one({"id": item.get("user_id")}, {"_id": 0, "id": 1, "username": 1})
+                if user_doc:
+                    await beathelper_approve_and_upload(
+                        item_id=item["id"],
+                        current_user={"id": user_doc["id"], "username": user_doc.get("username", "")},
+                    )
+                    auto_uploaded += 1
+                    continue
+            except Exception as e:
+                logging.warning(f"BeatHelper auto-upload on expiry failed for {item.get('id')}: {str(e)}")
+
+        await db.beat_helper_queue.update_one(
+            {"id": item["id"], "user_id": item.get("user_id")},
+            {"$set": {"status": "expired", "updated_at": _safe_iso_now()}}
+        )
+
+    return {"expired": expired_count, "auto_uploaded": auto_uploaded}
+
+
+async def _dispatch_daily_beathelper_for_user(user_id: str, source: str = "daily_auto") -> dict:
+    user_doc = await db.users.find_one(
+        {"id": user_id},
+        {
+            "_id": 0,
+            "id": 1,
+            "username": 1,
+            "email": 1,
+            "phone": 1,
+            "reminder_email_enabled": 1,
+            "reminder_sms_enabled": 1,
+            "beathelper_last_dispatch_date": 1,
+            "beathelper_last_dispatch_at": 1,
+            "beathelper_last_no_queue_reminder_date": 1,
+            "beathelper_last_no_queue_reminder_at": 1,
+        }
+    )
+    if not user_doc:
+        return {"dispatched": False, "reason": "user_missing"}
+
+    status = await get_user_subscription_status(user_id)
+    if not status.get("is_subscribed"):
+        return {"dispatched": False, "reason": "not_subscribed"}
+
+    today = datetime.now(timezone.utc).date().isoformat()
+    if source == "daily_auto" and (user_doc.get("beathelper_last_dispatch_date") or "") == today:
+        return {"dispatched": False, "reason": "already_dispatched_today"}
+
+    queued_items = await db.beat_helper_queue.find(
+        {"user_id": user_id, "status": "queued"},
+        {"_id": 0}
+    ).to_list(500)
+    if not queued_items:
+        reminder_subject = "BeatHelper queue is empty"
+        reminder_message = (
+            f"Hey @{user_doc.get('username') or 'producer'}, your BeatHelper queue is empty today.\n\n"
+            "Add new beats so BeatHelper can send you daily upload approvals.\n"
+            f"Open dashboard: {FRONTEND_URL}/dashboard"
+        )
+        sms_message = (
+            f"BeatHelper: no beats queued today. Add beats here: {FRONTEND_URL}/dashboard"
+        )
+
+        email_enabled = bool(user_doc.get("reminder_email_enabled"))
+        sms_enabled = bool(user_doc.get("reminder_sms_enabled"))
+        email = (user_doc.get("email") or "").strip()
+        phone = (user_doc.get("phone") or "").strip()
+
+        email_sent = False
+        sms_sent = False
+        if email_enabled and email:
+            email_sent = _send_email_notification(email, reminder_subject, reminder_message)
+        if sms_enabled and phone:
+            sms_sent = _send_sms_notification(phone, sms_message)
+
+        if source == "daily_auto":
+            await db.users.update_one(
+                {"id": user_id},
+                {"$set": {
+                    "beathelper_last_dispatch_date": today,
+                    "beathelper_last_dispatch_at": _safe_iso_now(),
+                    "beathelper_last_no_queue_reminder_date": today,
+                    "beathelper_last_no_queue_reminder_at": _safe_iso_now(),
+                }}
+            )
+
+        reminder_status = "none"
+        if email_enabled or sms_enabled:
+            reminder_status = "sent" if (email_sent or sms_sent) else "failed"
+        return {
+            "dispatched": False,
+            "reason": "no_queued_items",
+            "reminder_status": reminder_status,
+            "email_enabled": email_enabled,
+            "sms_enabled": sms_enabled,
+            "email_sent": email_sent,
+            "sms_sent": sms_sent,
+        }
+
+    chosen = random.choice(queued_items)
+    result = await _dispatch_beathelper_approval_request(chosen, user_doc, source=source)
+    if source == "daily_auto":
+        await db.users.update_one(
+            {"id": user_id},
+            {"$set": {
+                "beathelper_last_dispatch_date": today,
+                "beathelper_last_dispatch_at": _safe_iso_now(),
+            }}
+        )
+    return {"dispatched": True, "item_id": chosen.get("id"), **result}
+
+
+async def _run_beathelper_daily_scheduler_once() -> dict:
+    expired_result = await _process_expired_beathelper_pending_items()
+    user_ids = await db.beat_helper_queue.distinct("user_id", {"status": "queued"})
+    dispatched = 0
+    for user_id in user_ids:
+        try:
+            result = await _dispatch_daily_beathelper_for_user(user_id, source="daily_auto")
+            if result.get("dispatched"):
+                dispatched += 1
+        except Exception as e:
+            logging.warning(f"BeatHelper daily dispatch failed for user {user_id}: {str(e)}")
+    return {"users_dispatched": dispatched, **expired_result}
+
+
+async def _beathelper_scheduler_loop():
+    while True:
+        try:
+            result = await _run_beathelper_daily_scheduler_once()
+            if result.get("users_dispatched") or result.get("expired"):
+                logging.info(f"BeatHelper scheduler tick: {result}")
+        except Exception as e:
+            logging.error(f"BeatHelper scheduler loop error: {str(e)}")
+        await asyncio.sleep(max(60, BEATHELPER_SCHEDULER_INTERVAL_SECONDS))
 
 
 # ============ Auth Routes ============
@@ -3700,46 +3910,28 @@ async def beathelper_request_approval(item_id: str, current_user: dict = Depends
     item = await db.beat_helper_queue.find_one({"id": item_id, "user_id": current_user["id"]})
     if not item:
         raise HTTPException(status_code=404, detail="Queue item not found.")
-
-    now = datetime.now(timezone.utc)
-    expires_at = now + timedelta(hours=max(1, int(item.get("approval_timeout_hours", BEATHELPER_DEFAULT_APPROVAL_TIMEOUT_HOURS))))
-    subject = "BeatHelper approval request"
-    message = _build_beathelper_approval_message(item)
-
-    user_doc = await db.users.find_one({"id": current_user["id"]}, {"_id": 0, "email": 1, "phone": 1})
-    email = (user_doc or {}).get("email") or ""
-    phone = (user_doc or {}).get("phone") or ""
-    notify_channel = (item.get("notify_channel") or "none").lower()
-
-    email_sent = False
-    sms_sent = False
-    if notify_channel in {"email", "email_sms"}:
-        email_sent = _send_email_notification(email, subject, message)
-    if notify_channel in {"sms", "email_sms"}:
-        sms_sent = _send_sms_notification(phone, message)
-
-    if notify_channel == "none":
-        notification_status = "none"
-    else:
-        notification_status = "sent" if (email_sent or sms_sent) else "failed"
-
-    await db.beat_helper_queue.update_one(
-        {"id": item_id, "user_id": current_user["id"]},
-        {"$set": {
-            "status": "pending_approval",
-            "approval_requested_at": now.isoformat(),
-            "approval_expires_at": expires_at.isoformat(),
-            "last_notification_status": notification_status,
-            "updated_at": _safe_iso_now(),
-        }}
-    )
+    user_doc = await db.users.find_one(
+        {"id": current_user["id"]},
+        {"_id": 0, "id": 1, "username": 1, "email": 1, "phone": 1}
+    ) or {"id": current_user["id"], "username": current_user.get("username", "")}
+    dispatch_result = await _dispatch_beathelper_approval_request(item, user_doc, source="manual")
 
     return {
         "success": True,
-        "status": notification_status,
-        "approval_expires_at": expires_at.isoformat(),
+        "status": dispatch_result.get("status", "failed"),
+        "approval_expires_at": dispatch_result.get("approval_expires_at"),
         "message": "Approval request sent. Beat will not upload until approved unless auto-upload is enabled.",
     }
+
+
+@api_router.post("/beat-helper/dispatch-daily-now")
+async def beathelper_dispatch_daily_now(current_user: dict = Depends(get_current_user)):
+    """Manual trigger so user can test SMS/email dispatch immediately."""
+    await _ensure_pro_user(current_user, "BeatHelper")
+    result = await _dispatch_daily_beathelper_for_user(current_user["id"], source="manual_test")
+    if not result.get("dispatched"):
+        return {"success": False, **result}
+    return {"success": True, **result}
 
 
 @api_router.post("/beat-helper/queue/{item_id}/approve-upload")
@@ -5588,6 +5780,17 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+@app.on_event("startup")
+async def startup_background_tasks():
+    global _beathelper_scheduler_task
+    if BEATHELPER_AUTO_DISPATCH_ENABLED and _beathelper_scheduler_task is None:
+        _beathelper_scheduler_task = asyncio.create_task(_beathelper_scheduler_loop())
+        logger.info("BeatHelper daily scheduler started")
+
 @app.on_event("shutdown")
 async def shutdown_db_client():
+    global _beathelper_scheduler_task
+    if _beathelper_scheduler_task:
+        _beathelper_scheduler_task.cancel()
+        _beathelper_scheduler_task = None
     client.close()

@@ -642,6 +642,21 @@ const Dashboard = ({ setIsAuthenticated }) => {
     }
   };
 
+  const handleBeatHelperDispatchNow = async () => {
+    try {
+      const response = await axios.post(`${API}/beat-helper/dispatch-daily-now`);
+      if (response?.data?.success) {
+        toast.success("Daily approval dispatch sent");
+      } else {
+        toast.error(`Dispatch skipped: ${response?.data?.reason || "no eligible queued beat"}`);
+      }
+      await fetchBeatHelperData();
+    } catch (error) {
+      const detail = error?.response?.data?.detail;
+      toast.error(typeof detail === "string" ? detail : "Failed to trigger daily dispatch");
+    }
+  };
+
   const handleBeatHelperSaveContact = async () => {
     try {
       const response = await axios.put(`${API}/beat-helper/contact-settings`, beatHelperContact);
@@ -1712,6 +1727,9 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         </Button>
                         <Button type="button" variant="outline" onClick={fetchBeatHelperData} disabled={loadingBeatHelper}>
                           Refresh
+                        </Button>
+                        <Button type="button" variant="outline" onClick={handleBeatHelperDispatchNow} disabled={loadingBeatHelper}>
+                          Send Today's Approval Now
                         </Button>
                       </div>
                     </form>
