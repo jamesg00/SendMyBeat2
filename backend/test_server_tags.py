@@ -23,7 +23,14 @@ os.environ["GROK_API_KEY"] = "mock_grok_key"
 # Mock dependencies that run on import
 with patch("motor.motor_asyncio.AsyncIOMotorClient"), \
      patch("stripe.api_key"):
-    from backend.server import generate_tags, TagGenerationRequest, update_tag_history, TagHistoryUpdateRequest
+    from backend.server import (
+        generate_tags,
+        TagGenerationRequest,
+        update_tag_history,
+        TagHistoryUpdateRequest,
+        join_tags_ai,
+        TagJoinRequest,
+    )
 
 @pytest.mark.asyncio
 async def test_generate_tags_success():
@@ -214,3 +221,49 @@ async def test_update_tag_history_tracks_removed_tags():
         assert response.tags == ["tag1", "tag3"]
         assert response.excluded_tags == ["tag2"]
         mock_db.tag_generations.update_one.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_join_tags_ai_enriches_and_filters_excluded_tags():
+    mock_user = {"id": "user123", "username": "testuser"}
+    request_data = TagJoinRequest(
+        queries=["drake type beat", "future type beat"],
+        candidate_tags=["drake type beat", "future type beat", "dark trap beat"],
+        max_tags=30,
+    )
+
+    mock_cursor = MagicMock()
+    mock_cursor.to_list = AsyncMock(return_value=[{"excluded_tags": ["dark trap beat"]}])
+
+    with patch("backend.server.ensure_has_credit", new_callable=AsyncMock) as mock_credit, \
+         patch("backend.server.consume_credit", new_callable=AsyncMock) as mock_consume_credit, \
+         patch("backend.server._collect_join_source_candidates", new_callable=AsyncMock) as mock_collect, \
+         patch("backend.server.llm_chat", new_callable=AsyncMock) as mock_llm_chat, \
+         patch("backend.server.db") as mock_db:
+
+        mock_db.tag_generations.find.return_value = mock_cursor
+        mock_collect.return_value = (
+            ["drake x future type beat", "monster type beat", "future drake type beat"],
+            {
+                "drake x future type beat": "youtube_titles",
+                "monster type beat": "youtube_tracks",
+                "future drake type beat": "query_combo",
+            },
+            {"drake:youtube_titles": "ok"},
+        )
+        mock_llm_chat.return_value = json.dumps({
+            "tags": [
+                "drake x future type beat",
+                "dark trap beat",
+                "monster type beat",
+                "future drake type beat",
+            ]
+        })
+
+        response = await join_tags_ai(request_data, current_user=mock_user)
+
+        assert "drake x future type beat" in response.tags
+        assert "monster type beat" in response.tags
+        assert "dark trap beat" not in response.tags
+        mock_credit.assert_awaited_once_with("user123", "generations")
+        mock_consume_credit.assert_awaited_once_with("user123")

@@ -11,7 +11,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import axios from "axios";
 import { API } from "@/App";
 import { toast } from "sonner";
-import { Music, Sparkles, Save, LogOut, Copy, Trash2, Edit, Plus, Youtube, CheckCircle2, AlertCircle, Target, ChevronLeft, ChevronRight, DollarSign, Link, Bot, Clock3, Wand2, Send } from "lucide-react";
+import { Music, Sparkles, Save, LogOut, Copy, Trash2, Edit, Plus, Youtube, CheckCircle2, AlertCircle, Target, ChevronLeft, ChevronRight, DollarSign, Link } from "lucide-react";
 import DarkModeToggle from "@/components/DarkModeToggle";
 import SubscriptionBanner from "@/components/SubscriptionBanner";
 import UpgradeModal from "@/components/UpgradeModal";
@@ -19,6 +19,7 @@ import AdBanner from "@/components/AdBanner";
 import ProgressBar from "@/components/ProgressBar";
 import ThemeCustomizer from "@/components/ThemeCustomizer";
 import UploadStudio from "@/components/UploadStudio";
+import BeatHelperStudio from "@/components/BeatHelperStudio";
 import { clearAuthToken } from "@/lib/auth";
 
 const TAG_LIMIT = 120;
@@ -188,6 +189,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [beatHelperQueueImagePreviews, setBeatHelperQueueImagePreviews] = useState({});
   const [beatHelperContact, setBeatHelperContact] = useState({ email: "", phone: "", email_enabled: false, sms_enabled: false });
   const [beatHelperTemplates, setBeatHelperTemplates] = useState([]);
+  const [beatHelperImageSearchQuery, setBeatHelperImageSearchQuery] = useState("");
+  const [beatHelperImageResults, setBeatHelperImageResults] = useState([]);
+  const [loadingBeatHelperImageSearch, setLoadingBeatHelperImageSearch] = useState(false);
+  const [importingBeatHelperImageUrl, setImportingBeatHelperImageUrl] = useState("");
   const [newTemplateName, setNewTemplateName] = useState("");
   const [newTemplateTags, setNewTemplateTags] = useState("");
   const [editingQueueById, setEditingQueueById] = useState({});
@@ -615,6 +620,71 @@ const Dashboard = ({ setIsAuthenticated }) => {
     }
   };
 
+  const handleBeatHelperImageSearch = async ({ autoBuild = false } = {}) => {
+    try {
+      setLoadingBeatHelperImageSearch(true);
+      const payload = {
+        search_query: autoBuild ? "" : beatHelperImageSearchQuery.trim(),
+        target_artist: beatHelperForm.target_artist.trim(),
+        beat_type: beatHelperForm.beat_type.trim(),
+        generated_title_override: beatHelperForm.generated_title_override.trim(),
+        context_tags: beatHelperForm.context_tags
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean),
+        k: 8,
+      };
+      const response = await axios.post(`${API}/beat-helper/image-search`, payload);
+      setBeatHelperImageResults(Array.isArray(response?.data?.results) ? response.data.results : []);
+      if (!autoBuild && beatHelperImageSearchQuery.trim()) {
+        return;
+      }
+      setBeatHelperImageSearchQuery(response?.data?.query_used || "");
+    } catch (error) {
+      const detail = error?.response?.data?.detail;
+      toast.error(typeof detail === "string" ? detail : "Failed to search web images");
+    } finally {
+      setLoadingBeatHelperImageSearch(false);
+    }
+  };
+
+  const handleBeatHelperImportSearchImage = async (result) => {
+    const imageUrl = (result?.image_url || "").trim();
+    if (!imageUrl) {
+      toast.error("Image URL is missing");
+      return;
+    }
+
+    try {
+      setImportingBeatHelperImageUrl(imageUrl);
+      const filenameSeed = [
+        beatHelperForm.target_artist.trim(),
+        beatHelperForm.beat_type.trim(),
+        "web-thumb",
+      ].filter(Boolean).join("-").toLowerCase().replace(/[^a-z0-9-]+/g, "-");
+      const response = await axios.post(`${API}/upload/image-from-url`, {
+        image_url: imageUrl,
+        original_filename: `${filenameSeed || "beathelper"}-${Date.now()}.jpg`,
+      });
+      const nextImageFileId = response?.data?.file_id || "";
+      if (!nextImageFileId) {
+        throw new Error("Import response missing file_id");
+      }
+      setBeatHelperForm((prev) => ({
+        ...prev,
+        image_file_id: nextImageFileId,
+        ai_choose_image: false,
+      }));
+      toast.success("Web image added to BeatHelper");
+      await fetchBeatHelperData();
+    } catch (error) {
+      const detail = error?.response?.data?.detail;
+      toast.error(typeof detail === "string" ? detail : "Failed to import selected image");
+    } finally {
+      setImportingBeatHelperImageUrl("");
+    }
+  };
+
   const handleBeatHelperRequestApproval = async (itemId) => {
     try {
       await axios.post(`${API}/beat-helper/queue/${itemId}/request-approval`);
@@ -679,9 +749,26 @@ const Dashboard = ({ setIsAuthenticated }) => {
     }
   };
 
-  const handleBeatHelperSaveContact = async () => {
+  const handleBeatHelperCleanupUploads = async () => {
     try {
-      const response = await axios.put(`${API}/beat-helper/contact-settings`, beatHelperContact);
+      setLoadingBeatHelper(true);
+      const response = await axios.post(`${API}/beat-helper/uploads/cleanup`);
+      const deletedAudio = Number(response?.data?.deleted_audio_uploads || 0);
+      const deletedImages = Number(response?.data?.deleted_image_uploads || 0);
+      toast.success(`Removed ${deletedAudio} audio file(s) and ${deletedImages} image(s) not in queue`);
+      await fetchBeatHelperData();
+    } catch (error) {
+      const detail = error?.response?.data?.detail;
+      toast.error(typeof detail === "string" ? detail : "Failed to clean orphan uploads");
+    } finally {
+      setLoadingBeatHelper(false);
+    }
+  };
+
+  const handleBeatHelperSaveContact = async (contactOverride = null) => {
+    try {
+      const payload = contactOverride || beatHelperContact;
+      const response = await axios.put(`${API}/beat-helper/contact-settings`, payload);
       const confirmation = response?.data?.confirmation || {};
       const emailStatus = confirmation.email_enabled
         ? (confirmation.email_confirmation_sent ? "email confirmation sent" : "email confirmation failed")
@@ -1563,477 +1650,46 @@ const Dashboard = ({ setIsAuthenticated }) => {
                 </CardContent>
               </Card>
             ) : (
-              <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] gap-4 sm:gap-6">
-                <Card className="dashboard-card">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Bot className="h-5 w-5 text-[var(--accent-primary)]" />
-                      BeatHelper Queue
-                    </CardTitle>
-                    <CardDescription>
-                      Pair one beat with one thumbnail. If no thumbnail is selected, AI can choose one for you.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <form onSubmit={handleBeatHelperQueue} className="space-y-4">
-                      <div className="space-y-2">
-                        <Label>Beat Audio (1)</Label>
-                        <Select
-                          value={beatHelperForm.beat_file_id}
-                          onValueChange={(value) => setBeatHelperForm((prev) => ({ ...prev, beat_file_id: value }))}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select uploaded beat audio" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {beatHelperUploads.audio_uploads.map((file) => (
-                              <SelectItem key={file.id} value={file.id}>
-                                {file.original_filename}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Thumbnail Image (1)</Label>
-                        <Select
-                          value={beatHelperForm.image_file_id}
-                          onValueChange={(value) => setBeatHelperForm((prev) => ({ ...prev, image_file_id: value }))}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select uploaded thumbnail image" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {beatHelperUploads.image_uploads.map((file) => (
-                              <SelectItem key={file.id} value={file.id}>
-                                {file.original_filename}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {loadingBeatHelperPreview && (
-                          <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                            Loading image preview...
-                          </p>
-                        )}
-                        {beatHelperImagePreview && (
-                          <div className="rounded-lg border p-2" style={{ borderColor: "var(--border-color)", background: "var(--bg-secondary)" }}>
-                            <img
-                              src={beatHelperImagePreview}
-                              alt="Selected thumbnail preview"
-                              className="w-full max-h-44 object-contain rounded-md"
-                            />
-                          </div>
-                        )}
-                        <label className="flex items-center gap-2 text-sm">
-                          <input
-                            type="checkbox"
-                            checked={beatHelperForm.ai_choose_image}
-                            onChange={(e) => setBeatHelperForm((prev) => ({ ...prev, ai_choose_image: e.target.checked }))}
-                          />
-                          Use AI image when no thumbnail is selected
-                        </label>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div className="space-y-2">
-                          <Label>Target Artist</Label>
-                          <Input
-                            value={beatHelperForm.target_artist}
-                            onChange={(e) => setBeatHelperForm((prev) => ({ ...prev, target_artist: e.target.value }))}
-                            placeholder="e.g. Lil Uzi Vert"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Beat Type</Label>
-                          <Input
-                            value={beatHelperForm.beat_type}
-                            onChange={(e) => setBeatHelperForm((prev) => ({ ...prev, beat_type: e.target.value }))}
-                            placeholder="e.g. rage"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Title Override (optional)</Label>
-                        <Input
-                          value={beatHelperForm.generated_title_override}
-                          onChange={(e) => setBeatHelperForm((prev) => ({ ...prev, generated_title_override: e.target.value }))}
-                          placeholder="If blank, AI generates title"
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Tag Template (optional)</Label>
-                        <Select
-                          value={beatHelperForm.template_id || "none"}
-                          onValueChange={(value) => setBeatHelperForm((prev) => ({ ...prev, template_id: value === "none" ? "" : value }))}
-                        >
-                          <SelectTrigger><SelectValue placeholder="Select template" /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">No template</SelectItem>
-                            {beatHelperTemplates.map((template) => (
-                              <SelectItem key={template.id} value={template.id}>
-                                {template.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Context Tags (optional, comma-separated)</Label>
-                        <Input
-                          value={beatHelperForm.context_tags}
-                          onChange={(e) => setBeatHelperForm((prev) => ({ ...prev, context_tags: e.target.value }))}
-                          placeholder="baby pluto, pink tape, melodic rage"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <div className="space-y-2">
-                          <Label>Auto-skip hours</Label>
-                          <Input
-                            type="number"
-                            min="1"
-                            max="72"
-                            value={beatHelperForm.approval_timeout_hours}
-                            onChange={(e) => setBeatHelperForm((prev) => ({ ...prev, approval_timeout_hours: e.target.value }))}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Notify via</Label>
-                          <Select
-                            value={beatHelperForm.notify_channel}
-                            onValueChange={(value) => setBeatHelperForm((prev) => ({ ...prev, notify_channel: value }))}
-                          >
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="none">None</SelectItem>
-                              <SelectItem value="email">Email</SelectItem>
-                              <SelectItem value="sms">SMS</SelectItem>
-                              <SelectItem value="email_sms">Email + SMS</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Privacy</Label>
-                          <Select
-                            value={beatHelperForm.privacy_status}
-                            onValueChange={(value) => setBeatHelperForm((prev) => ({ ...prev, privacy_status: value }))}
-                          >
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="public">Public</SelectItem>
-                              <SelectItem value="unlisted">Unlisted</SelectItem>
-                              <SelectItem value="private">Private</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-
-                      <label className="flex items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={beatHelperForm.auto_upload_if_no_response}
-                          onChange={(e) => setBeatHelperForm((prev) => ({ ...prev, auto_upload_if_no_response: e.target.checked }))}
-                        />
-                        Auto-upload if no response (toggleable)
-                      </label>
-
-                      <div className="flex gap-2">
-                        <Button type="submit" disabled={loadingBeatHelper} className="gap-2">
-                          <Wand2 className="h-4 w-4" />
-                          {loadingBeatHelper ? "Queuing..." : "Queue Beat"}
-                        </Button>
-                        <Button type="button" variant="outline" onClick={fetchBeatHelperData} disabled={loadingBeatHelper}>
-                          Refresh
-                        </Button>
-                        <Button type="button" variant="outline" onClick={handleBeatHelperDispatchNow} disabled={loadingBeatHelper}>
-                          Send Today's Approval Now
-                        </Button>
-                      </div>
-                    </form>
-
-                    <div className="mt-6 pt-4 border-t" style={{ borderColor: "var(--border-color)" }}>
-                      <p className="font-semibold mb-3">Notification Contact</p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div className="space-y-2">
-                          <Label>Email</Label>
-                          <Input
-                            value={beatHelperContact.email || ""}
-                            onChange={(e) => setBeatHelperContact((prev) => ({ ...prev, email: e.target.value }))}
-                            placeholder="you@domain.com"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Phone</Label>
-                          <Input
-                            value={beatHelperContact.phone || ""}
-                            onChange={(e) => setBeatHelperContact((prev) => ({ ...prev, phone: e.target.value }))}
-                            placeholder="+15551234567"
-                          />
-                        </div>
-                      </div>
-                      <div className="mt-2 flex flex-wrap gap-4 text-sm">
-                        <label className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={!!beatHelperContact.email_enabled}
-                            onChange={(e) => setBeatHelperContact((prev) => ({ ...prev, email_enabled: e.target.checked }))}
-                          />
-                          Enable email
-                        </label>
-                        <label className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={!!beatHelperContact.sms_enabled}
-                            onChange={(e) => setBeatHelperContact((prev) => ({ ...prev, sms_enabled: e.target.checked }))}
-                          />
-                          Enable SMS
-                        </label>
-                      </div>
-                      <Button className="mt-3" variant="outline" onClick={handleBeatHelperSaveContact}>
-                        Save Contact Settings
-                      </Button>
-                    </div>
-
-                    <div className="mt-6 pt-4 border-t" style={{ borderColor: "var(--border-color)" }}>
-                      <p className="font-semibold mb-3">Tag Templates</p>
-                      <div className="space-y-2">
-                        <Input
-                          value={newTemplateName}
-                          onChange={(e) => setNewTemplateName(e.target.value)}
-                          placeholder="Template name (e.g. Uzi Rage Core)"
-                        />
-                        <Textarea
-                          rows={2}
-                          value={newTemplateTags}
-                          onChange={(e) => setNewTemplateTags(e.target.value)}
-                          placeholder="tag1, tag2, tag3"
-                        />
-                        <Button variant="outline" onClick={handleBeatHelperCreateTemplate}>
-                          Save Template
-                        </Button>
-                      </div>
-                      {beatHelperTemplates.length > 0 && (
-                        <div className="mt-3 space-y-2">
-                          {beatHelperTemplates.slice(0, 8).map((template) => (
-                            <div key={template.id} className="p-2 rounded border text-xs" style={{ borderColor: "var(--border-color)" }}>
-                              <p className="font-semibold">{template.name}</p>
-                              <p style={{ color: "var(--text-secondary)" }}>
-                                {(template.tags || []).slice(0, 8).join(", ")}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="dashboard-card">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Clock3 className="h-5 w-5 text-[var(--accent-primary)]" />
-                      Queued Beats
-                    </CardTitle>
-                    <CardDescription>
-                      Smart time scheduling is applied automatically from your channel activity.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    {beatHelperQueue.length === 0 ? (
-                      <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-                        No queued beats yet.
-                      </p>
-                    ) : (
-                      beatHelperQueue.map((item) => (
-                        <div key={item.id} className="p-3 rounded-lg border" style={{ borderColor: "var(--border-color)", background: "var(--bg-secondary)" }}>
-                          {beatHelperQueueImagePreviews[item.image_file_id] && (
-                            <div className="mb-3 rounded-lg border p-2" style={{ borderColor: "var(--border-color)", background: "var(--bg-primary)" }}>
-                              <img
-                                src={beatHelperQueueImagePreviews[item.image_file_id]}
-                                alt={item.image_original_filename || "Queued thumbnail"}
-                                className="w-full max-h-44 object-contain rounded-md"
-                              />
-                            </div>
-                          )}
-                          {editingQueueById[item.id] ? (
-                            <div className="space-y-2 mb-3">
-                              <Input
-                                value={editingQueueById[item.id].generated_title}
-                                onChange={(e) => setEditingQueueById((prev) => ({
-                                  ...prev,
-                                  [item.id]: { ...prev[item.id], generated_title: e.target.value },
-                                }))}
-                                placeholder="Title"
-                              />
-                              <div className="grid grid-cols-2 gap-2">
-                                <Input
-                                  value={editingQueueById[item.id].target_artist}
-                                  onChange={(e) => setEditingQueueById((prev) => ({
-                                    ...prev,
-                                    [item.id]: { ...prev[item.id], target_artist: e.target.value },
-                                  }))}
-                                  placeholder="Artist"
-                                />
-                                <Input
-                                  value={editingQueueById[item.id].beat_type}
-                                  onChange={(e) => setEditingQueueById((prev) => ({
-                                    ...prev,
-                                    [item.id]: { ...prev[item.id], beat_type: e.target.value },
-                                  }))}
-                                  placeholder="Beat type"
-                                />
-                              </div>
-                              <Textarea
-                                rows={2}
-                                value={editingQueueById[item.id].generated_tags_text}
-                                onChange={(e) => setEditingQueueById((prev) => ({
-                                  ...prev,
-                                  [item.id]: { ...prev[item.id], generated_tags_text: e.target.value },
-                                }))}
-                                placeholder="Comma separated tags"
-                              />
-                              <Textarea
-                                rows={3}
-                                value={editingQueueById[item.id].generated_description}
-                                onChange={(e) => setEditingQueueById((prev) => ({
-                                  ...prev,
-                                  [item.id]: { ...prev[item.id], generated_description: e.target.value },
-                                }))}
-                                placeholder="Description"
-                              />
-                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                                <Select
-                                  value={editingQueueById[item.id].beat_file_id}
-                                  onValueChange={(value) => setEditingQueueById((prev) => ({
-                                    ...prev,
-                                    [item.id]: { ...prev[item.id], beat_file_id: value },
-                                  }))}
-                                >
-                                  <SelectTrigger><SelectValue placeholder="Beat" /></SelectTrigger>
-                                  <SelectContent>
-                                    {beatHelperUploads.audio_uploads.map((file) => (
-                                      <SelectItem key={file.id} value={file.id}>{file.original_filename}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                                <Select
-                                  value={editingQueueById[item.id].image_file_id}
-                                  onValueChange={(value) => setEditingQueueById((prev) => ({
-                                    ...prev,
-                                    [item.id]: { ...prev[item.id], image_file_id: value },
-                                  }))}
-                                >
-                                  <SelectTrigger><SelectValue placeholder="Image" /></SelectTrigger>
-                                  <SelectContent>
-                                    {beatHelperUploads.image_uploads.map((file) => (
-                                      <SelectItem key={file.id} value={file.id}>{file.original_filename}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                                <Select
-                                  value={editingQueueById[item.id].template_id || "none"}
-                                  onValueChange={(value) => setEditingQueueById((prev) => ({
-                                    ...prev,
-                                    [item.id]: { ...prev[item.id], template_id: value === "none" ? "" : value },
-                                  }))}
-                                >
-                                  <SelectTrigger><SelectValue placeholder="Template" /></SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="none">No template</SelectItem>
-                                    {beatHelperTemplates.map((template) => (
-                                      <SelectItem key={template.id} value={template.id}>{template.name}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              {assistTitlesById[item.id]?.length > 0 && (
-                                <div className="flex flex-wrap gap-2">
-                                  {assistTitlesById[item.id].map((title) => (
-                                    <button
-                                      key={title}
-                                      className="px-2 py-1 rounded border text-xs"
-                                      style={{ borderColor: "var(--border-color)" }}
-                                      onClick={() => setEditingQueueById((prev) => ({
-                                        ...prev,
-                                        [item.id]: { ...prev[item.id], generated_title: title },
-                                      }))}
-                                    >
-                                      {title}
-                                    </button>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          ) : null}
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <p className="font-semibold truncate">{item.generated_title || item.beat_original_filename}</p>
-                              <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                                {item.target_artist} · {item.beat_type} · status: {item.status}
-                              </p>
-                              <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
-                                Scheduled (UTC): {item.scheduled_for_utc || "n/a"}
-                              </p>
-                              <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
-                                Tags: {(item.generated_tags || []).slice(0, 6).join(", ")}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            <Button size="sm" variant="outline" onClick={() => handleBeatHelperRequestApproval(item.id)} className="gap-1">
-                              <Send className="h-3 w-3" /> Request Approval
-                            </Button>
-                            <Button size="sm" onClick={() => handleBeatHelperApproveUpload(item.id)}>
-                              Approve + Upload
-                            </Button>
-                            <Button size="sm" variant="outline" onClick={() => handleBeatHelperSetStatus(item.id, "skipped")}>
-                              Skip
-                            </Button>
-                            {editingQueueById[item.id] ? (
-                              <>
-                                <Button size="sm" variant="outline" onClick={() => handleBeatHelperAssistTitle(item.id)}>
-                                  AI Titles
-                                </Button>
-                                <Button size="sm" onClick={() => handleBeatHelperSaveEdit(item.id)}>
-                                  Save Edit
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => setEditingQueueById((prev) => {
-                                    const next = { ...prev };
-                                    delete next[item.id];
-                                    return next;
-                                  })}
-                                >
-                                  Cancel
-                                </Button>
-                              </>
-                            ) : (
-                              <Button size="sm" variant="outline" onClick={() => startEditBeatHelperItem(item)}>
-                                Edit
-                              </Button>
-                            )}
-                            <Button size="sm" variant="destructive" onClick={() => handleBeatHelperDelete(item.id)}>
-                              Remove
-                            </Button>
-                            {item.video_url && (
-                              <Button size="sm" variant="outline" onClick={() => window.open(item.video_url, "_blank")}>
-                                Open Video
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
+              <BeatHelperStudio
+                loadingBeatHelper={loadingBeatHelper}
+                beatHelperUploads={beatHelperUploads}
+                beatHelperQueue={beatHelperQueue}
+                beatHelperImagePreview={beatHelperImagePreview}
+                loadingBeatHelperPreview={loadingBeatHelperPreview}
+                beatHelperQueueImagePreviews={beatHelperQueueImagePreviews}
+                beatHelperContact={beatHelperContact}
+                setBeatHelperContact={setBeatHelperContact}
+                beatHelperTemplates={beatHelperTemplates}
+                beatHelperImageSearchQuery={beatHelperImageSearchQuery}
+                setBeatHelperImageSearchQuery={setBeatHelperImageSearchQuery}
+                beatHelperImageResults={beatHelperImageResults}
+                loadingBeatHelperImageSearch={loadingBeatHelperImageSearch}
+                importingBeatHelperImageUrl={importingBeatHelperImageUrl}
+                beatHelperForm={beatHelperForm}
+                setBeatHelperForm={setBeatHelperForm}
+                newTemplateName={newTemplateName}
+                setNewTemplateName={setNewTemplateName}
+                newTemplateTags={newTemplateTags}
+                setNewTemplateTags={setNewTemplateTags}
+                editingQueueById={editingQueueById}
+                setEditingQueueById={setEditingQueueById}
+                assistTitlesById={assistTitlesById}
+                handleBeatHelperQueue={handleBeatHelperQueue}
+                fetchBeatHelperData={fetchBeatHelperData}
+                handleBeatHelperDispatchNow={handleBeatHelperDispatchNow}
+                handleBeatHelperCleanupUploads={handleBeatHelperCleanupUploads}
+                handleBeatHelperImageSearch={handleBeatHelperImageSearch}
+                handleBeatHelperImportSearchImage={handleBeatHelperImportSearchImage}
+                handleBeatHelperSaveContact={handleBeatHelperSaveContact}
+                handleBeatHelperCreateTemplate={handleBeatHelperCreateTemplate}
+                handleBeatHelperRequestApproval={handleBeatHelperRequestApproval}
+                handleBeatHelperApproveUpload={handleBeatHelperApproveUpload}
+                handleBeatHelperSetStatus={handleBeatHelperSetStatus}
+                handleBeatHelperDelete={handleBeatHelperDelete}
+                startEditBeatHelperItem={startEditBeatHelperItem}
+                handleBeatHelperAssistTitle={handleBeatHelperAssistTitle}
+                handleBeatHelperSaveEdit={handleBeatHelperSaveEdit}
+              />
             )}
           </TabsContent>
 

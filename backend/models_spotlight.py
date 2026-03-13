@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, ConfigDict
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
 import uuid
 
@@ -14,8 +14,8 @@ class ProducerProfile(BaseModel):
     role_tag: Optional[str] = None
     bio: str = ""
     top_beat_url: Optional[str] = None
-    social_links: dict = {} # { "instagram": "url", "youtube": "url" }
-    tags: List[str] = []
+    social_links: Dict[str, Any] = Field(default_factory=dict) # { "instagram": "url", "youtube": "url" }
+    tags: List[str] = Field(default_factory=list)
     verification_status: str = "none"  # none | pending | approved | rejected
     verification_note: Optional[str] = None
     verification_applied_at: Optional[datetime] = None
@@ -24,6 +24,8 @@ class ProducerProfile(BaseModel):
     likes: int = 0
     views: int = 0
     featured: bool = False
+    google_connected: bool = False
+    spotlight_eligible: bool = False
     current_streak: int = 0
     longest_streak: int = 0
     total_days_completed: int = 0

@@ -34,6 +34,8 @@ from itsdangerous import URLSafeSerializer, BadSignature
 import socket
 import ipaddress
 from cryptography.fernet import Fernet, InvalidToken as FernetInvalidToken
+from io import BytesIO
+from PIL import Image, ImageOps
 from models_spotlight import (
     ProducerProfile,
     ProducerProfileUpdate,
@@ -792,9 +794,21 @@ class TagJoinRequest(BaseModel):
     candidate_tags: List[str]
     max_tags: int = 120
     llm_provider: Optional[str] = None  # "openai" or "grok"
+    enrich_from_sources: bool = True
 
 class TagJoinResponse(BaseModel):
     tags: List[str]
+
+
+class ProducerImageCleanupResponse(BaseModel):
+    scanned_profiles: int
+    updated_profiles: int
+    failed_profiles: int
+    avatars_recompressed: int
+    banners_recompressed: int
+    legacy_avatars_replaced: int
+    avatar_bytes_saved: int
+    banner_bytes_saved: int
 
 class TagGenerationResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -888,6 +902,14 @@ class ImageGenerateResponse(BaseModel):
     query_used: str
     detected_artists: List[str]
     results: List[GeneratedImageResult]
+
+class BeatHelperImageSearchRequest(BaseModel):
+    search_query: Optional[str] = None
+    target_artist: Optional[str] = None
+    beat_type: Optional[str] = None
+    generated_title_override: Optional[str] = None
+    context_tags: List[str] = []
+    k: int = 8
 
 class UploadImageFromUrlRequest(BaseModel):
     image_url: str
@@ -1067,6 +1089,269 @@ def _sanitize_theme_variables(raw_variables: Any) -> Dict[str, str]:
             continue
         safe[key] = value.strip()
     return safe
+
+
+def _dedupe_generated_image_results(results: list[dict], k: int) -> list[dict]:
+    deduped: list[dict] = []
+    seen = set()
+    for item in results:
+        url = (item.get("image_url") or "").strip()
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        deduped.append(item)
+        if len(deduped) >= k:
+            break
+    return deduped
+
+
+def _build_image_query_variants(title: str, tags: list[str], limit: int = 8) -> tuple[list[str], list[str], str]:
+    artists = _extract_artist_queries(title, tags)
+    query = artists[0] if artists else title.strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="Could not infer artist query from title/tags.")
+
+    query_variants: list[str] = []
+    for artist_name in artists:
+        if not artist_name:
+            continue
+        query_variants.extend([
+            artist_name,
+            f"{artist_name} rapper",
+            f"{artist_name} artist",
+            f"{artist_name} portrait",
+            f"{artist_name} press photo",
+        ])
+    if title.strip():
+        query_variants.append(title.strip())
+    query_variants.append(query.strip())
+
+    seen_q = set()
+    filtered: list[str] = []
+    for variant in query_variants:
+        normalized = re.sub(r"\s+", " ", (variant or "").strip())
+        if not normalized:
+            continue
+        key = normalized.lower()
+        if key in seen_q:
+            continue
+        seen_q.add(key)
+        filtered.append(normalized)
+        if len(filtered) >= limit:
+            break
+    return artists, filtered, query
+
+
+def _search_bing_image_results(query_variants: list[str], artists: list[str], k: int) -> list[dict]:
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+        )
+    }
+    results: list[dict] = []
+
+    for qv in query_variants[:4]:
+        if len(results) >= k:
+            break
+        try:
+            response = requests.get(
+                "https://www.bing.com/images/search",
+                params={"q": qv, "form": "HDRSC3", "first": "1"},
+                headers=headers,
+                timeout=15,
+            )
+            if response.status_code >= 400:
+                continue
+
+            html_body = response.text or ""
+            matches = re.findall(
+                r'murl&quot;:&quot;(.*?)&quot;.*?turl&quot;:&quot;(.*?)&quot;',
+                html_body,
+                flags=re.IGNORECASE | re.DOTALL,
+            )
+            if not matches:
+                matches = re.findall(
+                    r'"murl":"(.*?)".*?"turl":"(.*?)"',
+                    html_body,
+                    flags=re.IGNORECASE | re.DOTALL,
+                )
+
+            for image_url, thumb_url in matches:
+                image_url = html.unescape(image_url).replace("\\/", "/").strip()
+                thumb_url = html.unescape(thumb_url).replace("\\/", "/").strip()
+                if not image_url.startswith(("http://", "https://")):
+                    continue
+                results.append({
+                    "id": f"bing-{uuid.uuid4().hex[:12]}",
+                    "image_url": image_url,
+                    "thumbnail_url": thumb_url or image_url,
+                    "artist": artists[0] if artists else None,
+                    "query_used": qv,
+                    "source": "bing-images",
+                    "credit_name": "Web image",
+                    "credit_url": f"https://www.bing.com/images/search?q={urlencode({'': qv})[1:]}",
+                })
+                if len(results) >= k:
+                    break
+        except Exception as exc:
+            logging.warning(f"Bing image search failed for '{qv}': {str(exc)}")
+
+    return results
+
+
+def _search_catalog_artist_images(query_variants: list[str], artists: list[str], k: int) -> list[dict]:
+    results: list[dict] = []
+
+    try:
+        for qv in query_variants[:4]:
+            if len(results) >= k:
+                break
+            needed = k - len(results)
+            dz_resp = requests.get(
+                "https://api.deezer.com/search/artist",
+                params={"q": qv},
+                timeout=10,
+            )
+            if dz_resp.status_code >= 400:
+                continue
+            payload = dz_resp.json()
+            for artist in payload.get("data", [])[:max(2, needed)]:
+                image_url = artist.get("picture_xl") or artist.get("picture_big") or artist.get("picture_medium")
+                if not image_url:
+                    continue
+                results.append({
+                    "id": f"deezer-{artist.get('id')}",
+                    "image_url": image_url,
+                    "thumbnail_url": artist.get("picture_medium") or image_url,
+                    "artist": artist.get("name"),
+                    "query_used": qv,
+                    "source": "deezer",
+                    "credit_name": artist.get("name"),
+                    "credit_url": artist.get("link"),
+                })
+                if len(results) >= k:
+                    break
+    except Exception as exc:
+        logging.warning(f"Deezer image search failed: {str(exc)}")
+
+    try:
+        for qv in query_variants[:4]:
+            if len(results) >= k:
+                break
+            needed = k - len(results)
+            it_resp = requests.get(
+                "https://itunes.apple.com/search",
+                params={"term": qv, "entity": "song", "limit": max(6, needed * 3)},
+                timeout=12,
+            )
+            if it_resp.status_code >= 400:
+                continue
+            payload = it_resp.json()
+            for item in payload.get("results", []):
+                image_url = item.get("artworkUrl100")
+                if not image_url:
+                    continue
+                image_url = image_url.replace("100x100bb", "1200x1200bb")
+                thumb_url = item.get("artworkUrl100")
+                results.append({
+                    "id": f"itunes-{item.get('trackId') or item.get('collectionId')}",
+                    "image_url": image_url,
+                    "thumbnail_url": thumb_url or image_url,
+                    "artist": item.get("artistName"),
+                    "query_used": qv,
+                    "source": "itunes",
+                    "credit_name": item.get("artistName"),
+                    "credit_url": item.get("artistViewUrl") or item.get("trackViewUrl"),
+                })
+                if len(results) >= k:
+                    break
+    except Exception as exc:
+        logging.warning(f"iTunes image search failed: {str(exc)}")
+
+    return results
+
+
+def _search_stock_image_results(query_variants: list[str], artists: list[str], k: int) -> list[dict]:
+    results: list[dict] = []
+    pexels_key = os.environ.get("PEXELS_API_KEY")
+
+    if pexels_key:
+        try:
+            for qv in query_variants[:3]:
+                if len(results) >= k:
+                    break
+                pexels_resp = requests.get(
+                    "https://api.pexels.com/v1/search",
+                    params={"query": qv, "per_page": max(3, k), "orientation": "landscape"},
+                    headers={"Authorization": pexels_key},
+                    timeout=15,
+                )
+                if pexels_resp.status_code >= 400:
+                    continue
+                payload = pexels_resp.json()
+                for photo in payload.get("photos", []):
+                    src = photo.get("src", {})
+                    image_url = src.get("large2x") or src.get("large") or src.get("original")
+                    thumb_url = src.get("medium") or src.get("small") or image_url
+                    if not image_url:
+                        continue
+                    results.append({
+                        "id": f"pexels-{photo.get('id')}",
+                        "image_url": image_url,
+                        "thumbnail_url": thumb_url,
+                        "artist": artists[0] if artists else None,
+                        "query_used": qv,
+                        "source": "pexels",
+                        "credit_name": (photo.get("photographer") or "Pexels Photographer"),
+                        "credit_url": photo.get("photographer_url"),
+                    })
+                    if len(results) >= k:
+                        break
+        except Exception as exc:
+            logging.warning(f"Pexels image search failed: {str(exc)}")
+
+    if len(results) < k and os.environ.get("PIXABAY_API_KEY"):
+        try:
+            for qv in query_variants[:2]:
+                if len(results) >= k:
+                    break
+                needed = k - len(results)
+                px_resp = requests.get(
+                    "https://pixabay.com/api/",
+                    params={
+                        "key": os.environ.get("PIXABAY_API_KEY"),
+                        "q": qv,
+                        "image_type": "photo",
+                        "per_page": max(3, needed),
+                        "safesearch": "true",
+                    },
+                    timeout=15,
+                )
+                if px_resp.status_code >= 400:
+                    continue
+                payload = px_resp.json()
+                for hit in payload.get("hits", []):
+                    image_url = hit.get("largeImageURL") or hit.get("webformatURL")
+                    thumb_url = hit.get("previewURL") or hit.get("webformatURL") or image_url
+                    if not image_url:
+                        continue
+                    results.append({
+                        "id": f"pixabay-{hit.get('id')}",
+                        "image_url": image_url,
+                        "thumbnail_url": thumb_url,
+                        "artist": artists[0] if artists else None,
+                        "query_used": qv,
+                        "source": "pixabay",
+                        "credit_name": hit.get("user"),
+                        "credit_url": f"https://pixabay.com/users/{hit.get('user', '')}/" if hit.get("user") else None,
+                    })
+                    if len(results) >= k:
+                        break
+        except Exception as exc:
+            logging.warning(f"Pixabay image search failed: {str(exc)}")
+
+    return results
 
 
 # ============ Subscription Helper Functions ============
@@ -2843,6 +3128,29 @@ async def _cleanup_unreferenced_beathelper_uploads(user_id: str, upload_ids: lis
         await db.uploads.delete_one({"id": upload_id, "user_id": user_id})
 
 
+async def _cleanup_all_unqueued_uploads(user_id: str) -> dict[str, int]:
+    queue_refs = await _beathelper_queue_upload_refs(user_id)
+    uploads = await db.uploads.find(
+        {"user_id": user_id, "file_type": {"$in": ["audio", "image"]}},
+        {"_id": 0, "id": 1, "file_type": 1, "file_path": 1},
+    ).to_list(5000)
+
+    deleted_audio = 0
+    deleted_images = 0
+    for upload_doc in uploads:
+        upload_id = str(upload_doc.get("id") or "").strip()
+        if not upload_id or upload_id in queue_refs:
+            continue
+        _delete_upload_file(upload_doc)
+        await db.uploads.delete_one({"id": upload_id, "user_id": user_id})
+        if upload_doc.get("file_type") == "audio":
+            deleted_audio += 1
+        elif upload_doc.get("file_type") == "image":
+            deleted_images += 1
+
+    return {"deleted_audio_uploads": deleted_audio, "deleted_image_uploads": deleted_images}
+
+
 def _is_generic_artist_modifier_tag(tag: str, artist_name: str, seed_tokens: set[str]) -> bool:
     key = _tag_exact_key(tag)
     if not key:
@@ -3011,6 +3319,161 @@ def _fetch_youtube_track_seeds_no_api(artist_name: str) -> list[str]:
     except Exception as e:
         logging.warning(f"YouTube no-key enrichment failed: {str(e)}")
         return []
+
+
+def _extract_typebeat_title_candidate(title: str, query: str) -> str:
+    clean = html.unescape((title or "").replace("\\u0026", "&"))
+    clean = re.sub(r"\[[^\]]*\]|\([^\)]*\)", " ", clean)
+    clean = re.split(r"\||•|prod by|producer:", clean, maxsplit=1, flags=re.IGNORECASE)[0]
+    clean = re.sub(r"\b(official|audio|video|lyrics|free for profit|free)\b", " ", clean, flags=re.IGNORECASE)
+    clean = re.sub(r"\b20\d{2}\b", " ", clean)
+    clean = re.sub(r"\s+", " ", clean).strip(" -_,")
+    if not clean:
+        return ""
+
+    lowered = clean.lower()
+    query_key = _normalize_artist_query(query)
+    if "type beat" not in lowered:
+        if query_key and query_key not in lowered:
+            return ""
+        clean = f"{clean} type beat"
+    clean = _clean_tag_text(clean)
+    if len(clean) > 72:
+        return ""
+    return clean
+
+
+def _fetch_youtube_typebeat_tags_no_api(query: str, limit: int = 18) -> list[str]:
+    if not query:
+        return []
+
+    try:
+        response = requests.get(
+            "https://www.youtube.com/results",
+            params={"search_query": f"{query} type beat"},
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                    "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+                )
+            },
+            timeout=10,
+        )
+        response.raise_for_status()
+        text = response.text
+
+        raw_titles = re.findall(r'"title"\s*:\s*\{\s*"runs"\s*:\s*\[\s*\{\s*"text"\s*:\s*"([^"]+)"', text)
+        if not raw_titles:
+            raw_titles = re.findall(r'"title"\s*:\s*\{\s*"simpleText"\s*:\s*"([^"]+)"', text)
+
+        candidates: list[str] = []
+        for raw_title in raw_titles[:80]:
+            candidate = _extract_typebeat_title_candidate(raw_title, query)
+            if candidate:
+                candidates.append(candidate)
+            if len(candidates) >= limit * 3:
+                break
+        return _append_unique_tags([], candidates, max_tags=limit)
+    except Exception as exc:
+        logging.warning(f"YouTube type-beat scrape failed for '{query}': {str(exc)}")
+        return []
+
+
+def _build_join_query_candidates(queries: list[str]) -> list[str]:
+    normalized_queries = [
+        _clean_tag_text(_normalize_artist_query(query))
+        for query in queries
+        if _clean_tag_text(_normalize_artist_query(query))
+    ]
+    unique_queries = _append_unique_tags([], [f"{query} type beat" for query in normalized_queries], max_tags=18)
+    combos: list[str] = []
+    for query in normalized_queries:
+        combos.extend([
+            f"{query} type beat",
+            f"{query} type beat 2026",
+            f"{query} style type beat",
+        ])
+    if len(normalized_queries) >= 2:
+        for idx in range(len(normalized_queries)):
+            for jdx in range(idx + 1, len(normalized_queries)):
+                left = normalized_queries[idx]
+                right = normalized_queries[jdx]
+                combos.extend([
+                    f"{left} x {right} type beat",
+                    f"{left} and {right} type beat",
+                    f"{left} {right} type beat",
+                ])
+    return _append_unique_tags(unique_queries, combos, max_tags=36)
+
+
+async def _collect_join_source_candidates(queries: list[str]) -> tuple[list[str], dict[str, str], dict[str, str]]:
+    candidate_pool: list[str] = []
+    candidate_source_map: dict[str, str] = {}
+    source_debug: dict[str, str] = {}
+
+    query_seed_tags = _build_join_query_candidates(queries)
+    for tag in query_seed_tags:
+        candidate_pool.append(tag)
+        key = _tag_exact_key(tag)
+        if key and key not in candidate_source_map:
+            candidate_source_map[key] = "query_combo"
+
+    artist_queries = [
+        _clean_tag_text(_normalize_artist_query(query))
+        for query in queries
+        if _clean_tag_text(_normalize_artist_query(query))
+    ]
+
+    async def gather_for_query(query: str) -> tuple[list[str], list[str], list[str], list[str]]:
+        youtube_titles_task = asyncio.to_thread(_fetch_youtube_typebeat_tags_no_api, query, 18)
+        youtube_seed_task = asyncio.to_thread(_fetch_youtube_track_seeds_no_api, query)
+        spotify_seed_task = asyncio.to_thread(_fetch_spotify_track_seeds, query)
+        soundcloud_seed_task = asyncio.to_thread(_fetch_soundcloud_track_seeds, query)
+        return await asyncio.gather(
+            youtube_titles_task,
+            youtube_seed_task,
+            spotify_seed_task,
+            soundcloud_seed_task,
+        )
+
+    per_query_results = await asyncio.gather(*(gather_for_query(query) for query in artist_queries)) if artist_queries else []
+    for artist_query, result in zip(artist_queries, per_query_results):
+        youtube_title_tags, youtube_seeds, spotify_seeds, soundcloud_seeds = result
+        source_debug[f"{artist_query}:youtube_titles"] = "ok" if youtube_title_tags else "empty"
+        source_debug[f"{artist_query}:youtube_tracks"] = "ok" if youtube_seeds else "empty"
+        source_debug[f"{artist_query}:spotify"] = "ok" if spotify_seeds else "empty"
+        source_debug[f"{artist_query}:soundcloud"] = "ok" if soundcloud_seeds else "empty"
+
+        source_groups = [
+            ("youtube_titles", youtube_title_tags[:18]),
+            ("youtube_tracks", [f"{seed} type beat" for seed in youtube_seeds[:12]]),
+            ("spotify_tracks", [f"{seed} type beat" for seed in spotify_seeds[:10]]),
+            ("soundcloud_tracks", [f"{seed} type beat" for seed in soundcloud_seeds[:10]]),
+        ]
+        for source_name, tags in source_groups:
+            for tag in tags:
+                candidate_pool.append(tag)
+                key = _tag_exact_key(tag)
+                if key and key not in candidate_source_map:
+                    candidate_source_map[key] = source_name
+
+    return _append_unique_tags([], candidate_pool, max_tags=120), candidate_source_map, source_debug
+
+
+def _parse_llm_json_tags(response_text: str) -> list[str]:
+    clean = (response_text or "").strip()
+    if "```json" in clean:
+        start = clean.find("```json") + 7
+        end = clean.find("```", start)
+        clean = clean[start:end].strip()
+    elif "```" in clean:
+        start = clean.find("```") + 3
+        end = clean.find("```", start)
+        clean = clean[start:end].strip()
+
+    parsed = json.loads(clean)
+    tags = parsed.get("tags", []) if isinstance(parsed, dict) else []
+    return [tag for tag in tags if isinstance(tag, str)]
 
 
 @api_router.post("/tags/generate", response_model=TagGenerationResponse)
@@ -3486,55 +3949,137 @@ async def join_tags_ai(request: TagJoinRequest, current_user: dict = Depends(get
     if llm_provider not in (None, "openai", "grok"):
         raise HTTPException(status_code=400, detail="Invalid llm_provider. Use 'openai' or 'grok'.")
 
+    query_keys = [_normalize_query_key(query) for query in request.queries]
+    prior_generations = await db.tag_generations.find(
+        {"user_id": current_user["id"], "query_key": {"$in": query_keys}},
+        {"_id": 0, "excluded_tags": 1},
+    ).to_list(150)
+    excluded_tag_keys = {
+        _tag_exact_key(tag)
+        for doc in prior_generations
+        for tag in (doc.get("excluded_tags") or [])
+        if _tag_exact_key(tag)
+    }
+
+    query_summary = " x ".join([_clean_tag_text(_normalize_artist_query(query)) or query for query in request.queries])
     candidate_tags = [t.strip() for t in request.candidate_tags if t and t.strip()]
-    unique_candidates = _append_unique_tags([], candidate_tags, max_tags=max_tags)
+    user_candidates = _append_unique_tags([], candidate_tags, max_tags=max_tags)
+    source_candidates: list[str] = []
+    source_map: dict[str, str] = {}
+    source_debug: dict[str, str] = {}
+    if request.enrich_from_sources:
+        source_candidates, source_map, source_debug = await _collect_join_source_candidates(request.queries)
 
-    query_summary = " x ".join(request.queries)
-    target_output = min(max_tags, 70)
-    prompt = f"""You are a YouTube SEO expert for beat producers.
-We are combining tags from multiple artists to create ONE optimized set of tags.
+    candidate_pool = _append_unique_tags([], source_candidates + user_candidates, max_tags=120)
+    candidate_source_map: dict[str, str] = {}
+    for tag in source_candidates:
+        key = _tag_exact_key(tag)
+        if key and key not in candidate_source_map:
+            candidate_source_map[key] = source_map.get(key, "source")
+    for tag in user_candidates:
+        key = _tag_exact_key(tag)
+        if key and key not in candidate_source_map:
+            candidate_source_map[key] = "user_candidate"
 
-Artists/queries: {request.queries}
+    seed_tokens: set[str] = set()
+    for tag in source_candidates:
+        for token in _tag_exact_key(tag).split():
+            if token in _TAG_NOISE_WORDS or len(token) <= 2:
+                continue
+            seed_tokens.add(token)
+
+    target_output = min(max_tags, 75)
+    prompt = f"""You are building a certified YouTube growth tag set for producers.
+We are combining multiple artist lanes into ONE high-intent tag algorithm.
+
+Artists / lanes:
+{chr(10).join(f"- {query}" for query in request.queries)}
+
+Mission:
+- Maximize discoverability for a crossover "{query_summary} type beat".
+- Prefer tags people actually search on YouTube.
+- Use song/project/era/title references from the source candidates when they are strong.
 
 Rules:
-1) Select ONLY from the candidate tag list provided.
-2) Return about {target_output} tags (max {max_tags}). Never exceed {max_tags}.
-3) Prefer high-intent, relevant tags for a "{query_summary} type beat".
-4) Avoid tag stuffing or near-duplicate variations.
-5) Remove weak/generic terms and keep strongest discoverability tags only.
-6) Keep tags short (2-5 words) with a few long-tail searches when useful.
-7) Never keep both wording swaps that share the same base meaning (e.g., "x beat" vs "x instrumental" vs "x type beat").
+1) Return about {target_output} tags, never more than {max_tags}.
+2) Prioritize the strongest source-derived tags first: YouTube type-beat titles, song/title seeds, crossover artist tags, then user candidates.
+3) Include at least 12 source-derived tags if enough quality source candidates exist.
+4) Avoid weak filler like "vibe", "music", "instrumental music", "type beat instrumental", "hard beat", "fire beat".
+5) Avoid near-duplicates and wording swaps with the same search meaning.
+6) Keep the final set balanced:
+   - core artist intent
+   - crossover artist intent
+   - song / project / era influence
+   - subgenre / mood / tempo
+   - a few strong long-tail searches
+7) You may synthesize better tags beyond the provided candidates, but only when they are clearly stronger and highly relevant.
+8) Return STRICT JSON only:
+{{"tags":["tag1","tag2","tag3"]}}
 
-Candidate tags:
-{", ".join(unique_candidates)}
-
-Return STRICT JSON:
-{{ "tags": ["tag1", "tag2", "..."] }}
+Candidate pool:
+{", ".join(candidate_pool[:120])}
 """
 
     response = await llm_chat(
-        system_message="You pick the best, most relevant tags without stuffing. Return JSON only.",
+        system_message="You are an elite YouTube SEO system for producers. Build a high-intent final tag list only. Return strict JSON.",
         user_message=prompt,
         provider=llm_provider,
     )
 
     try:
-        response_text = response.strip()
-        if '```json' in response_text:
-            start = response_text.find('```json') + 7
-            end = response_text.find('```', start)
-            response_text = response_text[start:end].strip()
-        elif '```' in response_text:
-            start = response_text.find('```') + 3
-            end = response_text.find('```', start)
-            response_text = response_text[start:end].strip()
+        ai_tags = _parse_llm_json_tags(response)
 
-        parsed = json.loads(response_text)
-        tags = parsed.get("tags", [])
-        if not isinstance(tags, list):
-            tags = []
+        final_tags: list[str] = []
+        final_exact_keys: set[str] = set()
+        seen_exact: set[str] = set()
+        seen_semantic: set[str] = set()
 
-        final_tags = _append_unique_tags([], [t for t in tags if isinstance(t, str)], max_tags=max_tags)
+        def try_push_tag(raw_tag: str) -> None:
+            if len(final_tags) >= max_tags:
+                return
+            clean = _clean_tag_text(raw_tag)
+            if not clean or _is_low_intent_tag(clean):
+                return
+            exact_key = _tag_exact_key(clean)
+            semantic_key = _tag_semantic_key(clean)
+            if not exact_key or exact_key in excluded_tag_keys:
+                return
+            if semantic_key and semantic_key in seen_semantic:
+                return
+            if _is_generic_artist_modifier_tag(clean, query_summary, seed_tokens):
+                return
+            seen_exact.add(exact_key)
+            final_exact_keys.add(exact_key)
+            if semantic_key:
+                seen_semantic.add(semantic_key)
+            final_tags.append(clean)
+
+        for tag in ai_tags:
+            try_push_tag(tag)
+
+        source_hits = 0
+        for tag in source_candidates:
+            exact_key = _tag_exact_key(tag)
+            if exact_key in final_exact_keys:
+                if exact_key and candidate_source_map.get(exact_key, "").startswith(("youtube", "spotify", "soundcloud")):
+                    source_hits += 1
+                continue
+            if source_hits >= 18 and len(final_tags) >= target_output:
+                break
+            before_count = len(final_tags)
+            try_push_tag(tag)
+            if len(final_tags) > before_count and candidate_source_map.get(exact_key, "").startswith(("youtube", "spotify", "soundcloud")):
+                source_hits += 1
+
+        for tag in user_candidates:
+            if len(final_tags) >= max(50, min(target_output, max_tags)):
+                break
+            try_push_tag(tag)
+
+        for tag in candidate_pool:
+            if len(final_tags) >= max(50, min(target_output, max_tags)):
+                break
+            try_push_tag(tag)
 
         if not final_tags:
             raise ValueError("No tags returned from AI")
@@ -3542,7 +4087,10 @@ Return STRICT JSON:
         await consume_credit(current_user['id'])
         return TagJoinResponse(tags=final_tags)
     except Exception as e:
-        logging.error(f"Failed to parse AI joined tags: {str(e)}")
+        logging.error(
+            f"Failed to parse AI joined tags: {str(e)} | "
+            f"queries={request.queries} | source_debug={source_debug}"
+        )
         raise HTTPException(status_code=500, detail="Failed to join tags with AI.")
 
 
@@ -3846,13 +4394,24 @@ async def get_my_uploads(current_user: dict = Depends(get_current_user)):
 @api_router.get("/beat-helper/uploads")
 async def beathelper_get_uploads(current_user: dict = Depends(get_current_user)):
     await _ensure_pro_user(current_user, "BeatHelper")
+    await _cleanup_all_unqueued_uploads(current_user["id"])
+    queue_refs = await _beathelper_queue_upload_refs(current_user["id"])
+    if not queue_refs:
+        return {"audio_uploads": [], "image_uploads": []}
     uploads = await db.uploads.find(
-        {"user_id": current_user["id"]},
+        {"user_id": current_user["id"], "id": {"$in": list(queue_refs)}},
         {"_id": 0, "id": 1, "original_filename": 1, "file_type": 1, "uploaded_at": 1}
     ).sort("uploaded_at", -1).to_list(500)
     audio = [item for item in uploads if item.get("file_type") == "audio"]
     images = [item for item in uploads if item.get("file_type") == "image"]
     return {"audio_uploads": audio, "image_uploads": images}
+
+
+@api_router.post("/beat-helper/uploads/cleanup")
+async def beathelper_cleanup_uploads(current_user: dict = Depends(get_current_user)):
+    await _ensure_pro_user(current_user, "BeatHelper")
+    result = await _cleanup_all_unqueued_uploads(current_user["id"])
+    return {"success": True, **result}
 
 
 @api_router.get("/beat-helper/image/{file_id}/preview")
@@ -4722,29 +5281,147 @@ If tags look stuffed or irrelevant, explicitly say so and recommend a smaller, h
 
 
 # ============ Producer Spotlight Routes ============
-async def _profile_with_role_tag(profile_doc: dict) -> ProducerProfile:
-    user_doc = await db.users.find_one({"id": profile_doc.get("user_id")}) or {}
+SPOTLIGHT_PROFILE_PROJECTION = {
+    "_id": 0,
+    "user_id": 1,
+    "username": 1,
+    "avatar_url": 1,
+    "bio": 1,
+    "top_beat_url": 1,
+    "social_links": 1,
+    "tags": 1,
+    "verification_status": 1,
+    "likes": 1,
+    "views": 1,
+    "featured": 1,
+    "created_at": 1,
+    "updated_at": 1,
+}
+SPOTLIGHT_ALL_PRODUCERS_LIMIT = 120
+DEFAULT_SPOTLIGHT_AVATAR_URL = (
+    "data:image/svg+xml;utf8,%0A%20%20%20%20%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20240%20240%22%20fill%3D%22none%22%3E%0A%20%20%20%20%20%20%3Cdefs%3E%0A%20%20%20%20%20%20%20%20%3CradialGradient%20id%3D%22bgGlow%22%20cx%3D%2250%25%22%20cy%3D%2246%25%22%20r%3D%2254%25%22%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%232d7dff%22%20stop-opacity%3D%220.95%22%20/%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cstop%20offset%3D%2272%25%22%20stop-color%3D%22%232d7dff%22%20stop-opacity%3D%220.12%22%20/%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%232d7dff%22%20stop-opacity%3D%220%22%20/%3E%0A%20%20%20%20%20%20%20%20%3C/radialGradient%3E%0A%20%20%20%20%20%20%20%20%3ClinearGradient%20id%3D%22headFill%22%20x1%3D%2250%25%22%20y1%3D%2214%25%22%20x2%3D%2250%25%22%20y2%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23c5ebff%22%20/%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cstop%20offset%3D%2258%25%22%20stop-color%3D%22%234fa7ff%22%20/%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%237cecff%22%20/%3E%0A%20%20%20%20%20%20%20%20%3C/linearGradient%3E%0A%20%20%20%20%20%20%20%20%3ClinearGradient%20id%3D%22bodyFill%22%20x1%3D%2250%25%22%20y1%3D%2210%25%22%20x2%3D%2250%25%22%20y2%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23c5ebff%22%20/%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cstop%20offset%3D%2248%25%22%20stop-color%3D%22%234fa7ff%22%20/%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%237cecff%22%20/%3E%0A%20%20%20%20%20%20%20%20%3C/linearGradient%3E%0A%20%20%20%20%20%20%20%20%3ClinearGradient%20id%3D%22gloss%22%20x1%3D%2218%25%22%20y1%3D%2216%25%22%20x2%3D%2278%25%22%20y2%3D%2278%25%22%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23ffffff%22%20stop-opacity%3D%220.88%22%20/%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%23ffffff%22%20stop-opacity%3D%220%22%20/%3E%0A%20%20%20%20%20%20%20%20%3C/linearGradient%3E%0A%20%20%20%20%20%20%3C/defs%3E%0A%20%20%20%20%20%20%3Crect%20width%3D%22240%22%20height%3D%22240%22%20fill%3D%22url(%23bgGlow)%22%20/%3E%0A%20%20%20%20%20%20%3Cg%20filter%3D%22drop-shadow(0%200%2016px%20%232d7dff)%22%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22120%22%20cy%3D%2260%22%20r%3D%2234%22%20fill%3D%22url(%23headFill)%22%20stroke%3D%22%230b42d9%22%20stroke-width%3D%224%22%20/%3E%0A%20%20%20%20%20%20%20%20%3Cpath%20d%3D%22M61%20190c0-42%2026-72%2059-72s59%2030%2059%2072c0%208-6%2014-14%2016-17%205-33%208-45%208s-28-3-45-8c-8-2-14-8-14-16Z%22%20fill%3D%22url(%23bodyFill)%22%20stroke%3D%22%230b42d9%22%20stroke-width%3D%224%22%20stroke-linejoin%3D%22round%22%20/%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22120%22%20cy%3D%22118%22%20rx%3D%2242%22%20ry%3D%2212%22%20fill%3D%22%230b42d9%22%20opacity%3D%220.16%22%20/%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22120%22%20cy%3D%2242%22%20rx%3D%2220%22%20ry%3D%2210%22%20fill%3D%22url(%23gloss)%22%20opacity%3D%220.7%22%20/%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%2288%22%20cy%3D%22150%22%20rx%3D%2218%22%20ry%3D%2256%22%20fill%3D%22url(%23gloss)%22%20opacity%3D%220.3%22%20transform%3D%22rotate(8%2088%20150)%22%20/%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22152%22%20cy%3D%22150%22%20rx%3D%2218%22%20ry%3D%2256%22%20fill%3D%22url(%23gloss)%22%20opacity%3D%220.3%22%20transform%3D%22rotate(-8%20152%20150)%22%20/%3E%0A%20%20%20%20%20%20%3C/g%3E%0A%20%20%20%20%3C/svg%3E%0A%20%20"
+)
+
+
+def _spotlight_role_tag(profile_doc: dict, user_doc: dict) -> str:
     username = (profile_doc.get("username") or user_doc.get("username") or "").strip()
     username_lc = username.lower()
-
-    role_tag = "Newbie"
     is_creator = (
         (CREATOR_USER_ID and profile_doc.get("user_id") == CREATOR_USER_ID)
         or (CREATOR_USERNAME and username_lc == CREATOR_USERNAME)
     )
-
     if is_creator:
-        role_tag = "Creator"
-    elif profile_doc.get("verification_status") == "approved":
-        role_tag = "Verified"
-    elif user_doc.get("stripe_subscription_id") and user_doc.get("subscription_status") == "active":
-        role_tag = "Pro"
+        return "Creator"
+    if profile_doc.get("verification_status") == "approved":
+        return "Verified"
+    if user_doc.get("stripe_subscription_id") and user_doc.get("subscription_status") == "active":
+        return "Pro"
+    return "Newbie"
+
+
+def _is_legacy_spotlight_avatar_url(value: str) -> bool:
+    raw = (value or "").strip().lower()
+    return "api.dicebear.com" in raw or "dicebear.com" in raw
+
+
+def _normalize_spotlight_avatar_url(value: str | None) -> str:
+    raw = (value or "").strip()
+    if not raw or _is_legacy_spotlight_avatar_url(raw):
+        return DEFAULT_SPOTLIGHT_AVATAR_URL
+    return raw
+
+
+async def _build_spotlight_profiles(profile_docs: list[dict], growth_by_user: dict[str, dict]) -> list[ProducerProfile]:
+    if not profile_docs:
+        return []
+
+    user_ids = [doc.get("user_id") for doc in profile_docs if doc.get("user_id")]
+    user_rows = await db.users.find(
+        {"id": {"$in": user_ids}},
+        {"_id": 0, "id": 1, "username": 1, "stripe_subscription_id": 1, "subscription_status": 1},
+    ).to_list(len(user_ids) or 1)
+    user_by_id = {row.get("id"): row for row in user_rows}
+    connected_rows = await db.youtube_connections.find(
+        {"user_id": {"$in": user_ids}},
+        {"_id": 0, "user_id": 1},
+    ).to_list(len(user_ids) or 1)
+    connected_user_ids = {row.get("user_id") for row in connected_rows if row.get("user_id")}
+
+    profiles: list[ProducerProfile] = []
+    for profile_doc in profile_docs:
+        if profile_doc.get("user_id") not in connected_user_ids:
+            continue
+        user_doc = user_by_id.get(profile_doc.get("user_id"), {})
+        payload = dict(profile_doc)
+        payload["username"] = (payload.get("username") or user_doc.get("username") or "producer").strip()
+        payload["avatar_url"] = _normalize_spotlight_avatar_url(payload.get("avatar_url"))
+        payload["role_tag"] = _spotlight_role_tag(profile_doc, user_doc)
+        payload["verification_status"] = payload.get("verification_status") or "none"
+        payload["google_connected"] = True
+        payload["spotlight_eligible"] = True
+        profile = ProducerProfile(**payload)
+        profiles.append(_attach_growth_to_profile(profile, growth_by_user))
+    return profiles
+
+
+def _image_data_url_from_bytes(
+    image_bytes: bytes,
+    *,
+    max_dimensions: tuple[int, int],
+    fit: Literal["cover", "contain"] = "contain",
+    quality: int = 82,
+) -> str:
+    try:
+        image = Image.open(BytesIO(image_bytes))
+        image = ImageOps.exif_transpose(image)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid image file.") from exc
+
+    if fit == "cover":
+        image = ImageOps.fit(image, max_dimensions, method=Image.Resampling.LANCZOS)
+    else:
+        image.thumbnail(max_dimensions, Image.Resampling.LANCZOS)
+
+    if image.mode not in ("RGB", "RGBA"):
+        image = image.convert("RGBA" if "A" in image.getbands() else "RGB")
+
+    output = BytesIO()
+    image.save(output, format="WEBP", quality=quality, method=6)
+    return f"data:image/webp;base64,{base64.b64encode(output.getvalue()).decode('utf-8')}"
+
+
+def _decode_image_data_url(data_url: str) -> bytes:
+    raw = (data_url or "").strip()
+    if not raw.startswith("data:image/") or ";base64," not in raw:
+        raise ValueError("Not a supported image data URL.")
+    encoded = raw.split(";base64,", 1)[1]
+    return base64.b64decode(encoded)
+
+
+async def _spotlight_google_status(user_id: str) -> tuple[bool, bool]:
+    if not user_id:
+        return False, False
+    connection = await db.youtube_connections.find_one(
+        {"user_id": user_id},
+        {"_id": 0, "user_id": 1},
+    )
+    connected = bool(connection)
+    return connected, connected
+
+
+async def _profile_with_role_tag(profile_doc: dict) -> ProducerProfile:
+    user_doc = await db.users.find_one({"id": profile_doc.get("user_id")}) or {}
+    username = (profile_doc.get("username") or user_doc.get("username") or "").strip()
+    google_connected, spotlight_eligible = await _spotlight_google_status(profile_doc.get("user_id"))
 
     payload = dict(profile_doc)
     payload["username"] = username or profile_doc.get("username") or "producer"
-    payload["role_tag"] = role_tag
+    payload["avatar_url"] = _normalize_spotlight_avatar_url(payload.get("avatar_url"))
+    payload["role_tag"] = _spotlight_role_tag(profile_doc, user_doc)
     if not payload.get("verification_status"):
         payload["verification_status"] = "none"
+    payload["google_connected"] = google_connected
+    payload["spotlight_eligible"] = spotlight_eligible
     return ProducerProfile(**payload)
 
 
@@ -4916,7 +5593,13 @@ def _fetch_channel_top_viewed_beats(youtube_url: str, top_k: int = 5) -> tuple[l
 @api_router.get("/producers/spotlight", response_model=SpotlightResponse)
 async def get_producer_spotlight():
     """Get featured, trending, and new producers for the spotlight page"""
-    all_profiles = await db.producer_profiles.find().to_list(5000)
+    all_profiles, growth_rows = await asyncio.gather(
+        db.producer_profiles.find({}, SPOTLIGHT_PROFILE_PROJECTION).to_list(5000),
+        db.growth_streaks.find(
+            {},
+            {"_id": 0, "user_id": 1, "current_streak": 1, "longest_streak": 1, "total_days_completed": 1},
+        ).to_list(5000),
+    )
     if not all_profiles:
         return SpotlightResponse(
             featured_producers=[],
@@ -4925,7 +5608,6 @@ async def get_producer_spotlight():
             all_producers=[],
         )
 
-    growth_rows = await db.growth_streaks.find({}, {"_id": 0, "user_id": 1, "current_streak": 1, "total_days_completed": 1}).to_list(5000)
     growth_by_user = {g.get("user_id"): g for g in growth_rows}
 
     def trending_score(profile: dict) -> float:
@@ -4952,14 +5634,13 @@ async def get_producer_spotlight():
         return 0.0
 
     new_producers = sorted(all_profiles, key=created_at_ts, reverse=True)[:12]
-
-    featured_profiles = [_attach_growth_to_profile(await _profile_with_role_tag(p), growth_by_user) for p in featured]
-    trending_profiles = [_attach_growth_to_profile(await _profile_with_role_tag(p), growth_by_user) for p in trending]
-    new_profiles = [_attach_growth_to_profile(await _profile_with_role_tag(p), growth_by_user) for p in new_producers]
-    all_network_profiles = [
-        _attach_growth_to_profile(await _profile_with_role_tag(p), growth_by_user)
-        for p in sorted(all_profiles, key=trending_score, reverse=True)
-    ]
+    ranked_profiles = sorted(all_profiles, key=trending_score, reverse=True)
+    featured_profiles, trending_profiles, new_profiles, all_network_profiles = await asyncio.gather(
+        _build_spotlight_profiles(featured, growth_by_user),
+        _build_spotlight_profiles(trending, growth_by_user),
+        _build_spotlight_profiles(new_producers, growth_by_user),
+        _build_spotlight_profiles(ranked_profiles[:SPOTLIGHT_ALL_PRODUCERS_LIMIT], growth_by_user),
+    )
 
     return SpotlightResponse(
         featured_producers=featured_profiles,
@@ -4982,6 +5663,14 @@ async def get_my_producer_profile(current_user: dict = Depends(get_current_user)
         )
         await db.producer_profiles.insert_one(profile.model_dump())
         return await _profile_with_role_tag(profile.model_dump())
+
+    normalized_avatar = _normalize_spotlight_avatar_url(profile.get("avatar_url"))
+    if normalized_avatar != (profile.get("avatar_url") or ""):
+        profile["avatar_url"] = normalized_avatar
+        await db.producer_profiles.update_one(
+            {"user_id": current_user["id"]},
+            {"$set": {"avatar_url": normalized_avatar, "updated_at": datetime.now(timezone.utc)}},
+        )
 
     return await _profile_with_role_tag(profile)
 
@@ -5063,6 +5752,13 @@ async def update_my_producer_profile(
     current_user: dict = Depends(get_current_user)
 ):
     """Update current user's producer profile"""
+    google_connected, _ = await _spotlight_google_status(current_user["id"])
+    if not google_connected:
+        raise HTTPException(
+            status_code=403,
+            detail="Connect your Google/YouTube account before joining Producer Spotlight.",
+        )
+
     # Build update dict
     update_fields = {}
     if update_data.bio is not None:
@@ -5112,7 +5808,12 @@ async def upload_producer_avatar(
     if len(image_bytes) > MAX_SIZE:
         raise HTTPException(status_code=400, detail="Image too large. Max size is 2MB.")
 
-    avatar_data_url = f"data:{file.content_type};base64,{base64.b64encode(image_bytes).decode('utf-8')}"
+    avatar_data_url = _image_data_url_from_bytes(
+        image_bytes,
+        max_dimensions=(256, 256),
+        fit="cover",
+        quality=80,
+    )
 
     await db.producer_profiles.update_one(
         {"user_id": current_user["id"]},
@@ -5140,13 +5841,92 @@ async def upload_producer_banner(
     if len(image_bytes) > MAX_SIZE:
         raise HTTPException(status_code=400, detail="Image too large. Max size is 4MB.")
 
-    banner_data_url = f"data:{file.content_type};base64,{base64.b64encode(image_bytes).decode('utf-8')}"
+    banner_data_url = _image_data_url_from_bytes(
+        image_bytes,
+        max_dimensions=(1440, 360),
+        fit="contain",
+        quality=78,
+    )
     await db.producer_profiles.update_one(
         {"user_id": current_user["id"]},
         {"$set": {"banner_url": banner_data_url, "updated_at": datetime.now(timezone.utc)}},
         upsert=True
     )
     return {"banner_url": banner_data_url}
+
+
+@api_router.post("/admin/producers/cleanup-images", response_model=ProducerImageCleanupResponse)
+async def cleanup_producer_images(current_user: dict = Depends(get_current_user)):
+    if not _is_admin_user(current_user):
+        raise HTTPException(status_code=403, detail="Admin access required.")
+
+    profiles = await db.producer_profiles.find(
+        {
+            "$or": [
+                {"avatar_url": {"$regex": r"^data:image/"}},
+                {"banner_url": {"$regex": r"^data:image/"}},
+            ]
+        },
+        {"_id": 0, "user_id": 1, "avatar_url": 1, "banner_url": 1},
+    ).to_list(5000)
+
+    stats = {
+        "scanned_profiles": len(profiles),
+        "updated_profiles": 0,
+        "failed_profiles": 0,
+        "avatars_recompressed": 0,
+        "banners_recompressed": 0,
+        "legacy_avatars_replaced": 0,
+        "avatar_bytes_saved": 0,
+        "banner_bytes_saved": 0,
+    }
+
+    for profile in profiles:
+        updates: dict[str, Any] = {}
+        try:
+            avatar_url = str(profile.get("avatar_url") or "").strip()
+            if _is_legacy_spotlight_avatar_url(avatar_url):
+                updates["avatar_url"] = DEFAULT_SPOTLIGHT_AVATAR_URL
+                stats["legacy_avatars_replaced"] += 1
+            elif avatar_url.startswith("data:image/"):
+                original_size = len(avatar_url.encode("utf-8"))
+                avatar_bytes = _decode_image_data_url(avatar_url)
+                recompressed_avatar = _image_data_url_from_bytes(
+                    avatar_bytes,
+                    max_dimensions=(256, 256),
+                    fit="cover",
+                    quality=80,
+                )
+                updates["avatar_url"] = recompressed_avatar
+                stats["avatars_recompressed"] += 1
+                stats["avatar_bytes_saved"] += max(0, original_size - len(recompressed_avatar.encode("utf-8")))
+
+            banner_url = str(profile.get("banner_url") or "").strip()
+            if banner_url.startswith("data:image/"):
+                original_size = len(banner_url.encode("utf-8"))
+                banner_bytes = _decode_image_data_url(banner_url)
+                recompressed_banner = _image_data_url_from_bytes(
+                    banner_bytes,
+                    max_dimensions=(1440, 360),
+                    fit="contain",
+                    quality=78,
+                )
+                updates["banner_url"] = recompressed_banner
+                stats["banners_recompressed"] += 1
+                stats["banner_bytes_saved"] += max(0, original_size - len(recompressed_banner.encode("utf-8")))
+
+            if updates:
+                updates["updated_at"] = datetime.now(timezone.utc)
+                await db.producer_profiles.update_one(
+                    {"user_id": profile.get("user_id")},
+                    {"$set": updates},
+                )
+                stats["updated_profiles"] += 1
+        except Exception as exc:
+            stats["failed_profiles"] += 1
+            logging.warning(f"Producer image cleanup failed for {profile.get('user_id')}: {str(exc)}")
+
+    return ProducerImageCleanupResponse(**stats)
 
 
 @api_router.post("/producers/verification/apply", response_model=ProducerProfile)
@@ -5359,182 +6139,72 @@ async def generate_image_suggestions(
         if not title and not tags:
             raise HTTPException(status_code=400, detail="title or tags are required.")
 
-        artists = _extract_artist_queries(title, tags)
-        query = artists[0] if artists else title
-        if not query:
-            raise HTTPException(status_code=400, detail="Could not infer artist query from title/tags.")
-
-        query_variants: list[str] = []
-        for a in artists:
-            if a:
-                query_variants.append(a)
-                query_variants.append(f"{a} artist")
-                query_variants.append(f"{a} rapper")
-        if title:
-            query_variants.append(title.strip())
-        query_variants.append(query.strip())
-        # Deduplicate while preserving order
-        seen_q = set()
-        query_variants = [q for q in query_variants if q and not (q.lower() in seen_q or seen_q.add(q.lower()))]
-
+        artists, query_variants, query = _build_image_query_variants(title, tags)
         results: list[dict] = []
-
-        # 1) Pexels (preferred when key exists)
-        pexels_key = os.environ.get("PEXELS_API_KEY")
-        if pexels_key:
-            try:
-                for qv in query_variants[:3]:
-                    if len(results) >= k:
-                        break
-                    pexels_resp = requests.get(
-                        "https://api.pexels.com/v1/search",
-                        params={"query": qv, "per_page": max(3, k), "orientation": "landscape"},
-                        headers={"Authorization": pexels_key},
-                        timeout=15,
-                    )
-                    if pexels_resp.status_code < 400:
-                        payload = pexels_resp.json()
-                        for photo in payload.get("photos", []):
-                            src = photo.get("src", {})
-                            image_url = src.get("large2x") or src.get("large") or src.get("original")
-                            thumb_url = src.get("medium") or src.get("small") or image_url
-                            if not image_url:
-                                continue
-                            results.append({
-                                "id": f"pexels-{photo.get('id')}",
-                                "image_url": image_url,
-                                "thumbnail_url": thumb_url,
-                                "artist": artists[0] if artists else None,
-                                "query_used": qv,
-                                "source": "pexels",
-                                "credit_name": (photo.get("photographer") or "Pexels Photographer"),
-                                "credit_url": photo.get("photographer_url"),
-                            })
-            except Exception as e:
-                logging.warning(f"Pexels image search failed: {str(e)}")
-
-        # 2) Pixabay fallback
-        if len(results) < k and os.environ.get("PIXABAY_API_KEY"):
-            try:
-                needed = k - len(results)
-                for qv in query_variants[:3]:
-                    if len(results) >= k:
-                        break
-                    needed = k - len(results)
-                    px_resp = requests.get(
-                        "https://pixabay.com/api/",
-                        params={
-                            "key": os.environ.get("PIXABAY_API_KEY"),
-                            "q": qv,
-                            "image_type": "photo",
-                            "per_page": max(3, needed),
-                            "safesearch": "true",
-                        },
-                        timeout=15,
-                    )
-                    if px_resp.status_code < 400:
-                        payload = px_resp.json()
-                        for hit in payload.get("hits", []):
-                            image_url = hit.get("largeImageURL") or hit.get("webformatURL")
-                            thumb_url = hit.get("previewURL") or hit.get("webformatURL") or image_url
-                            if not image_url:
-                                continue
-                            results.append({
-                                "id": f"pixabay-{hit.get('id')}",
-                                "image_url": image_url,
-                                "thumbnail_url": thumb_url,
-                                "artist": artists[0] if artists else None,
-                                "query_used": qv,
-                                "source": "pixabay",
-                                "credit_name": hit.get("user"),
-                                "credit_url": f"https://pixabay.com/users/{hit.get('user', '')}/" if hit.get("user") else None,
-                            })
-            except Exception as e:
-                logging.warning(f"Pixabay image search failed: {str(e)}")
-
-        # 3) Deezer fallback (no key): artist photos
+        results.extend(_search_bing_image_results(query_variants, artists, k))
         if len(results) < k:
-            try:
-                for qv in query_variants[:4]:
-                    if len(results) >= k:
-                        break
-                    needed = k - len(results)
-                    dz_resp = requests.get(
-                        "https://api.deezer.com/search/artist",
-                        params={"q": qv},
-                        timeout=10,
-                    )
-                    if dz_resp.status_code < 400:
-                        payload = dz_resp.json()
-                        for artist in payload.get("data", [])[:max(2, needed)]:
-                            image_url = artist.get("picture_xl") or artist.get("picture_big") or artist.get("picture_medium")
-                            if not image_url:
-                                continue
-                            results.append({
-                                "id": f"deezer-{artist.get('id')}",
-                                "image_url": image_url,
-                                "thumbnail_url": artist.get("picture_medium") or image_url,
-                                "artist": artist.get("name"),
-                                "query_used": qv,
-                                "source": "deezer",
-                                "credit_name": artist.get("name"),
-                                "credit_url": artist.get("link"),
-                            })
-            except Exception as e:
-                logging.warning(f"Deezer image search failed: {str(e)}")
-
-        # 4) iTunes fallback (no key): reliable for popular artists via album artwork
+            results.extend(_search_catalog_artist_images(query_variants, artists, k))
         if len(results) < k:
-            try:
-                for qv in query_variants[:4]:
-                    if len(results) >= k:
-                        break
-                    needed = k - len(results)
-                    it_resp = requests.get(
-                        "https://itunes.apple.com/search",
-                        params={"term": qv, "entity": "song", "limit": max(6, needed * 3)},
-                        timeout=12,
-                    )
-                    if it_resp.status_code < 400:
-                        payload = it_resp.json()
-                        for item in payload.get("results", []):
-                            image_url = item.get("artworkUrl100")
-                            if not image_url:
-                                continue
-                            image_url = image_url.replace("100x100bb", "1200x1200bb")
-                            thumb_url = item.get("artworkUrl100")
-                            results.append({
-                                "id": f"itunes-{item.get('trackId') or item.get('collectionId')}",
-                                "image_url": image_url,
-                                "thumbnail_url": thumb_url or image_url,
-                                "artist": item.get("artistName"),
-                                "query_used": qv,
-                                "source": "itunes",
-                                "credit_name": item.get("artistName"),
-                                "credit_url": item.get("artistViewUrl") or item.get("trackViewUrl"),
-                            })
-            except Exception as e:
-                logging.warning(f"iTunes image search failed: {str(e)}")
-
-        deduped: list[dict] = []
-        seen = set()
-        for item in results:
-            url = (item.get("image_url") or "").strip()
-            if not url or url in seen:
-                continue
-            seen.add(url)
-            deduped.append(item)
+            results.extend(_search_stock_image_results(query_variants, artists, k))
 
         return ImageGenerateResponse(
             query_used=query,
             detected_artists=artists,
-            results=deduped[:k]
+            results=_dedupe_generated_image_results(results, k)
         )
     except HTTPException:
         raise
     except Exception as e:
         logging.error(f"generate_image_suggestions error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to generate image suggestions: {str(e)}")
+
+
+@api_router.post("/beat-helper/image-search", response_model=ImageGenerateResponse)
+async def beathelper_search_images(
+    request: BeatHelperImageSearchRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    try:
+        await _ensure_pro_user(current_user, "BeatHelper")
+
+        parts = [
+            (request.search_query or "").strip(),
+            (request.generated_title_override or "").strip(),
+            (request.target_artist or "").strip(),
+            f"{(request.target_artist or '').strip()} {((request.beat_type or '').strip())} type beat".strip(),
+        ]
+        title = next((part for part in parts if part), "")
+        tags = [tag for tag in (request.context_tags or []) if isinstance(tag, str) and tag.strip()]
+        if not title and not tags:
+            raise HTTPException(status_code=400, detail="Provide a search query, title, artist, or context tags.")
+
+        smart_title = title
+        if not (request.search_query or "").strip() and (request.target_artist or "").strip():
+            artist_name = (request.target_artist or "").strip()
+            beat_type = (request.beat_type or "").strip()
+            context_hint = tags[0] if tags else ""
+            smart_title = " ".join(
+                value for value in [
+                    artist_name,
+                    beat_type,
+                    "type beat cover art",
+                    context_hint,
+                ] if value
+            ).strip()
+
+        return await generate_image_suggestions(
+            ImageGenerateRequest(
+                title=smart_title,
+                tags=tags,
+                k=max(1, min(int(request.k or 8), 12)),
+            ),
+            current_user,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logging.error(f"beathelper_search_images error: {str(exc)}")
+        raise HTTPException(status_code=500, detail="Failed to search BeatHelper images.")
 
 
 # ============ Thumbnail Checker Route ============

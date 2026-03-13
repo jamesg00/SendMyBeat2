@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+﻿import React, { useState, useEffect, useMemo } from "react";
 import axios from "axios";
 import { API } from "@/App";
 import { useNavigate } from "react-router-dom";
@@ -11,17 +11,53 @@ import { Trophy, Star, TrendingUp, Music, User, Globe, Youtube, Instagram, Twitt
 import DarkModeToggle from "@/components/DarkModeToggle";
 import { toast } from "sonner";
 
+const createGlossyAvatarDataUrl = ({ rim, shell, glow, inner, highlight }) => {
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" fill="none">
+      <defs>
+        <radialGradient id="bgGlow" cx="50%" cy="46%" r="54%">
+          <stop offset="0%" stop-color="${glow}" stop-opacity="0.95" />
+          <stop offset="72%" stop-color="${glow}" stop-opacity="0.12" />
+          <stop offset="100%" stop-color="${glow}" stop-opacity="0" />
+        </radialGradient>
+        <linearGradient id="headFill" x1="50%" y1="14%" x2="50%" y2="100%">
+          <stop offset="0%" stop-color="${highlight}" />
+          <stop offset="58%" stop-color="${shell}" />
+          <stop offset="100%" stop-color="${inner}" />
+        </linearGradient>
+        <linearGradient id="bodyFill" x1="50%" y1="10%" x2="50%" y2="100%">
+          <stop offset="0%" stop-color="${highlight}" />
+          <stop offset="48%" stop-color="${shell}" />
+          <stop offset="100%" stop-color="${inner}" />
+        </linearGradient>
+        <linearGradient id="gloss" x1="18%" y1="16%" x2="78%" y2="78%">
+          <stop offset="0%" stop-color="#ffffff" stop-opacity="0.88" />
+          <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+        </linearGradient>
+      </defs>
+      <rect width="240" height="240" fill="url(#bgGlow)" />
+      <g filter="drop-shadow(0 0 16px ${glow})">
+        <circle cx="120" cy="60" r="34" fill="url(#headFill)" stroke="${rim}" stroke-width="4" />
+        <path d="M61 190c0-42 26-72 59-72s59 30 59 72c0 8-6 14-14 16-17 5-33 8-45 8s-28-3-45-8c-8-2-14-8-14-16Z" fill="url(#bodyFill)" stroke="${rim}" stroke-width="4" stroke-linejoin="round" />
+        <ellipse cx="120" cy="118" rx="42" ry="12" fill="${rim}" opacity="0.16" />
+        <ellipse cx="120" cy="42" rx="20" ry="10" fill="url(#gloss)" opacity="0.7" />
+        <ellipse cx="88" cy="150" rx="18" ry="56" fill="url(#gloss)" opacity="0.3" transform="rotate(8 88 150)" />
+        <ellipse cx="152" cy="150" rx="18" ry="56" fill="url(#gloss)" opacity="0.3" transform="rotate(-8 152 150)" />
+      </g>
+    </svg>
+  `;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+};
+
 const AVATAR_CHOICES = [
-  { id: "1", label: "VHS Kid", url: "https://api.dicebear.com/9.x/pixel-art/svg?seed=vhs-kid-2010" },
-  { id: "2", label: "Neon Coder", url: "https://api.dicebear.com/9.x/pixel-art/svg?seed=neon-coder-arcade" },
-  { id: "3", label: "Skater", url: "https://api.dicebear.com/9.x/pixel-art/svg?seed=retro-skater-808" },
-  { id: "4", label: "Glitch", url: "https://api.dicebear.com/9.x/pixel-art/svg?seed=glitchboy-oldweb" },
-  { id: "5", label: "Cyber DJ", url: "https://api.dicebear.com/9.x/pixel-art/svg?seed=cyber-dj-mixtape" },
-  { id: "6", label: "Arcade Pro", url: "https://api.dicebear.com/9.x/pixel-art/svg?seed=arcade-producer-2012" },
-  { id: "7", label: "Lowpoly", url: "https://api.dicebear.com/9.x/pixel-art/svg?seed=lowpoly-hero-green" },
-  { id: "8", label: "CRT Wave", url: "https://api.dicebear.com/9.x/pixel-art/svg?seed=crt-wave-vibes" },
-  { id: "9", label: "Bit Boss", url: "https://api.dicebear.com/9.x/pixel-art/svg?seed=bit-boss-producer" }
+  { id: "1", label: "Blue Glow", url: createGlossyAvatarDataUrl({ rim: "#0b42d9", shell: "#4fa7ff", glow: "#2d7dff", inner: "#7cecff", highlight: "#c5ebff" }) },
+  { id: "2", label: "Red Glow", url: createGlossyAvatarDataUrl({ rim: "#8f0011", shell: "#ff2641", glow: "#ff3048", inner: "#ff8b93", highlight: "#ffe0e4" }) },
+  { id: "3", label: "Green Glow", url: createGlossyAvatarDataUrl({ rim: "#0d6c08", shell: "#65dd2f", glow: "#63f53d", inner: "#b5ff98", highlight: "#ebffd9" }) },
+  { id: "4", label: "Orange Glow", url: createGlossyAvatarDataUrl({ rim: "#a64f00", shell: "#ffab1f", glow: "#ff8d18", inner: "#ffd36c", highlight: "#fff0bf" }) },
+  { id: "5", label: "Gold Glow", url: createGlossyAvatarDataUrl({ rim: "#b57b00", shell: "#ffd432", glow: "#ffbd20", inner: "#ffe98b", highlight: "#fff8d2" }) },
+  { id: "6", label: "Purple Glow", url: createGlossyAvatarDataUrl({ rim: "#6e1fcf", shell: "#b659ff", glow: "#a246ff", inner: "#deb0ff", highlight: "#f4e4ff" }) },
 ];
+const DEFAULT_AVATAR_URL = AVATAR_CHOICES[0].url;
 
 export default function ProducerSpotlight() {
   const navigate = useNavigate();
@@ -34,12 +70,16 @@ export default function ProducerSpotlight() {
   const [spotlightApiMissing, setSpotlightApiMissing] = useState(false);
   const [profileApiMissing, setProfileApiMissing] = useState(false);
   const [applyingVerification, setApplyingVerification] = useState(false);
+  const [youtubeConnected, setYouTubeConnected] = useState(false);
+  const [connectingYouTube, setConnectingYouTube] = useState(false);
   const [selectedProducer, setSelectedProducer] = useState(null);
   const [producerStats, setProducerStats] = useState(null);
+  const [producerStatsCache, setProducerStatsCache] = useState({});
   const [loadingProducerStats, setLoadingProducerStats] = useState(false);
   const [producerStatsOpen, setProducerStatsOpen] = useState(false);
   const [activeView, setActiveView] = useState("trending");
   const [showAllOpen, setShowAllOpen] = useState(false);
+  const [spotlightLiteMode, setSpotlightLiteMode] = useState(false);
   const [verificationForm, setVerificationForm] = useState({
     stage_name: "",
     main_platform_url: "",
@@ -47,7 +87,7 @@ export default function ProducerSpotlight() {
     reason: ""
   });
   const [editForm, setEditForm] = useState({
-    avatar_url: AVATAR_CHOICES[0].url,
+    avatar_url: DEFAULT_AVATAR_URL,
     banner_url: "",
     bio: "",
     top_beat_url: "",
@@ -60,6 +100,20 @@ export default function ProducerSpotlight() {
   useEffect(() => {
     fetchSpotlight();
     fetchMyProfile();
+    checkYouTubeConnection();
+  }, []);
+
+  useEffect(() => {
+    const updateLiteMode = () => {
+      const mobile = window.innerWidth < 1024;
+      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const lowPowerDevice = typeof navigator.hardwareConcurrency === "number" && navigator.hardwareConcurrency <= 4;
+      setSpotlightLiteMode(mobile || reducedMotion || lowPowerDevice);
+    };
+
+    updateLiteMode();
+    window.addEventListener("resize", updateLiteMode);
+    return () => window.removeEventListener("resize", updateLiteMode);
   }, []);
 
   const fetchSpotlight = async () => {
@@ -81,9 +135,10 @@ export default function ProducerSpotlight() {
     try {
       const response = await axios.get(`${API}/producers/me`);
       setMyProfile(response.data);
+      setYouTubeConnected(Boolean(response.data?.google_connected));
       setProfileApiMissing(false);
       setEditForm({
-        avatar_url: response.data.avatar_url || AVATAR_CHOICES[0].url,
+        avatar_url: response.data.avatar_url || DEFAULT_AVATAR_URL,
         banner_url: response.data.banner_url || "",
         bio: response.data.bio || "",
         top_beat_url: response.data.top_beat_url || "",
@@ -100,7 +155,37 @@ export default function ProducerSpotlight() {
     }
   };
 
+  const checkYouTubeConnection = async () => {
+    try {
+      const response = await axios.get(`${API}/youtube/status`);
+      setYouTubeConnected(Boolean(response.data?.connected));
+    } catch (error) {
+      console.error("Failed to check YouTube connection", error);
+      setYouTubeConnected(false);
+    }
+  };
+
+  const connectYouTube = async () => {
+    setConnectingYouTube(true);
+    try {
+      const response = await axios.get(`${API}/youtube/auth-url`);
+      if (response.data?.auth_url) {
+        window.location.href = response.data.auth_url;
+        return;
+      }
+      toast.error("Failed to connect Google account");
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Failed to connect Google account");
+    } finally {
+      setConnectingYouTube(false);
+    }
+  };
+
   const handleUpdateProfile = async () => {
+    if (!youtubeConnected) {
+      toast.error("Connect your Google/YouTube account before joining Producer Spotlight.");
+      return;
+    }
     setSavingProfile(true);
     try {
       const updateData = {
@@ -234,17 +319,53 @@ export default function ProducerSpotlight() {
     if (!producer?.user_id) return;
     setSelectedProducer(producer);
     setProducerStatsOpen(true);
+    const cachedStats = producerStatsCache[producer.user_id];
+    if (cachedStats) {
+      setProducerStats(cachedStats);
+      setLoadingProducerStats(false);
+      return;
+    }
     setLoadingProducerStats(true);
     setProducerStats(null);
     try {
       const response = await axios.get(`${API}/producers/${producer.user_id}/stats`);
       setProducerStats(response.data);
+      setProducerStatsCache((prev) => ({ ...prev, [producer.user_id]: response.data }));
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Failed to load producer stats.");
     } finally {
       setLoadingProducerStats(false);
     }
   };
+
+  const allProducers = useMemo(() => spotlightData?.all_producers || [], [spotlightData]);
+  const streakLeaders = useMemo(
+    () => [...allProducers]
+      .sort((a, b) => (b.total_days_completed || 0) - (a.total_days_completed || 0) || (b.current_streak || 0) - (a.current_streak || 0))
+      .slice(0, 18),
+    [allProducers]
+  );
+  const visibleNetwork = useMemo(() => allProducers.slice(0, 16), [allProducers]);
+  const visibleTrending = useMemo(
+    () => (spotlightLiteMode ? (spotlightData?.trending_producers || []).slice(0, 9) : (spotlightData?.trending_producers || [])),
+    [spotlightData, spotlightLiteMode]
+  );
+  const visibleNew = useMemo(
+    () => (spotlightLiteMode ? (spotlightData?.new_producers || []).slice(0, 9) : (spotlightData?.new_producers || [])),
+    [spotlightData, spotlightLiteMode]
+  );
+  const visibleFeatured = useMemo(
+    () => (spotlightLiteMode ? (spotlightData?.featured_producers || []).slice(0, 4) : (spotlightData?.featured_producers || [])),
+    [spotlightData, spotlightLiteMode]
+  );
+  const visibleStreaks = useMemo(
+    () => (spotlightLiteMode ? streakLeaders.slice(0, 9) : streakLeaders),
+    [streakLeaders, spotlightLiteMode]
+  );
+  const visibleNetworkGrid = useMemo(
+    () => (spotlightLiteMode ? visibleNetwork.slice(0, 8) : visibleNetwork),
+    [visibleNetwork, spotlightLiteMode]
+  );
 
   if (loading) {
     return (
@@ -256,85 +377,105 @@ export default function ProducerSpotlight() {
 
   const ProducerCard = ({ producer, badge }) => (
     <Card
-      className={`producer-card overflow-hidden cursor-pointer transition-transform hover:-translate-y-1 ${producer.featured ? 'border-2 border-yellow-500 shadow-[0_0_20px_rgba(234,179,8,0.3)]' : ''}`}
+      className={`producer-card h-full cursor-pointer border border-white/10 bg-[color:var(--card-bg)]/90 backdrop-blur-sm transition-all duration-200 hover:-translate-y-1 hover:border-emerald-400/60 hover:shadow-[0_18px_50px_rgba(16,185,129,0.14)] ${producer.featured ? "border-yellow-400/60 shadow-[0_0_24px_rgba(250,204,21,0.18)]" : ""}`}
       onClick={() => openProducerStats(producer)}
     >
-      <div
-        className="h-24 bg-gradient-to-r from-purple-500 to-blue-600 relative"
-        style={producer.banner_url ? {
-          backgroundImage: `linear-gradient(120deg, rgba(0,0,0,0.35), rgba(0,0,0,0.15)), url(${producer.banner_url})`,
-          backgroundSize: "cover",
-          backgroundPosition: "center"
-        } : undefined}
-      >
-        {badge && (
-          <div className="absolute top-2 right-2 bg-yellow-400 text-black px-2 py-1 rounded-full text-xs font-bold flex items-center gap-1 shadow-lg">
-            {badge === 'featured' && <Star className="h-3 w-3 fill-black" />}
-            {badge === 'trending' && <TrendingUp className="h-3 w-3" />}
-            {badge === 'new' && <Sparkles className="h-3 w-3" />}
-            {badge.toUpperCase()}
-          </div>
-        )}
-      </div>
-      <CardContent className="pt-0 relative">
-        <div className="flex justify-between items-end -mt-10 mb-4 px-2">
-          <div className="h-20 w-20 rounded-full border-4 border-background bg-slate-200 flex items-center justify-center overflow-hidden">
-             {producer.avatar_url ? (
-               <img src={producer.avatar_url} alt={`${producer.username} avatar`} className="h-full w-full object-cover" />
-             ) : (
-               <User className="h-10 w-10 text-slate-400" />
-             )}
-          </div>
-          <div className="flex gap-2 mb-1">
-            {producer.social_links?.youtube && (
-              <a href={producer.social_links.youtube} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="p-2 rounded-full bg-red-600 text-white hover:scale-110 transition-transform">
-                <Youtube className="h-4 w-4" />
-              </a>
-            )}
-            {producer.social_links?.instagram && (
-              <a href={producer.social_links.instagram} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="p-2 rounded-full bg-pink-600 text-white hover:scale-110 transition-transform">
-                <Instagram className="h-4 w-4" />
-              </a>
+      <CardContent className="p-4">
+        <div className="flex items-start gap-4">
+          <div className="relative flex-shrink-0">
+            <div className="h-16 w-16 rounded-2xl border border-white/10 bg-slate-200/80 flex items-center justify-center overflow-hidden shadow-lg">
+              <img
+                src={producer.avatar_url || DEFAULT_AVATAR_URL}
+                alt={`${producer.username} avatar`}
+                className="h-full w-full object-cover"
+                loading="lazy"
+              />
+            </div>
+            {badge && (
+              <div className="absolute -bottom-2 left-2 inline-flex items-center gap-1 rounded-full bg-zinc-950/90 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-100 shadow-lg">
+                {badge === "featured" && <Star className="h-3 w-3 fill-current" />}
+                {badge === "trending" && <TrendingUp className="h-3 w-3" />}
+                {badge === "new" && <Sparkles className="h-3 w-3" />}
+                {badge}
+              </div>
             )}
           </div>
-        </div>
 
-        <div className="space-y-2">
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="font-bold text-lg">{producer.username}</h3>
-              <span
-                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-semibold ${getRoleTagClass(producer.role_tag)} ${
-                  producer.role_tag === "Creator" ? "creator-badge-epic" : ""
-                }`}
-              >
-                {getRoleTagIcon(producer.role_tag)}
-                {producer.role_tag || "Newbie"}
+          <div className="min-w-0 flex-1 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="truncate text-base font-bold">{producer.username}</h3>
+                  {producer.social_links?.youtube && (
+                    <a href={producer.social_links.youtube} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-red-600/90 text-white transition-transform hover:scale-105">
+                      <Youtube className="h-3.5 w-3.5" />
+                    </a>
+                  )}
+                  {producer.social_links?.instagram && (
+                    <a href={producer.social_links.instagram} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-pink-600/90 text-white transition-transform hover:scale-105">
+                      <Instagram className="h-3.5 w-3.5" />
+                    </a>
+                  )}
+                  {producer.social_links?.twitter && (
+                    <a href={producer.social_links.twitter} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-sky-500/90 text-white transition-transform hover:scale-105">
+                      <Twitter className="h-3.5 w-3.5" />
+                    </a>
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-semibold ${getRoleTagClass(producer.role_tag)} ${
+                      producer.role_tag === "Creator" ? "creator-badge-epic" : ""
+                    }`}
+                  >
+                    {getRoleTagIcon(producer.role_tag)}
+                    {producer.role_tag || "Newbie"}
+                  </span>
+                  <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
+                    {producer.tags.slice(0, 2).join(" / ") || "Open for collabs"}
+                  </p>
+                </div>
+              </div>
+
+              <span className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300">
+                View card
               </span>
             </div>
-            <p className="text-xs text-muted-foreground">{producer.tags.slice(0, 3).join(" • ")}</p>
+
+            <p className="line-clamp-2 text-sm text-muted-foreground">
+              {producer.bio || "No bio yet."}
+            </p>
+
+            <div className="flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+              <span className="rounded-full border border-white/10 px-2 py-1">
+                {producer.total_days_completed || 0} days
+              </span>
+              <span className="rounded-full border border-white/10 px-2 py-1">
+                {producer.current_streak || 0} streak
+              </span>
+              <span className="rounded-full border border-white/10 px-2 py-1">
+                {producer.views || 0} views
+              </span>
+            </div>
+
+            {producer.top_beat_url && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2 hover:border-primary"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const raw = (producer.top_beat_url || "").trim();
+                  if (!raw) return;
+                  const url = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+                  window.open(url, "_blank", "noopener,noreferrer");
+                }}
+              >
+                <Music className="h-4 w-4 text-primary" />
+                Top beat
+              </Button>
+            )}
           </div>
-
-          <p className="text-sm text-muted-foreground line-clamp-2 min-h-[40px]">
-            {producer.bio || "No bio yet."}
-          </p>
-
-          {producer.top_beat_url && (
-            <Button
-              variant="outline"
-              className="w-full mt-2 gap-2 group hover:border-primary"
-              onClick={(e) => {
-                e.stopPropagation();
-                const raw = (producer.top_beat_url || "").trim();
-                if (!raw) return;
-                const url = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
-                window.open(url, "_blank", "noopener,noreferrer");
-              }}
-            >
-              <Music className="h-4 w-4 text-primary group-hover:animate-bounce" />
-              Listen to Top Beat
-            </Button>
-          )}
         </div>
       </CardContent>
     </Card>
@@ -351,11 +492,7 @@ export default function ProducerSpotlight() {
     >
       <div className="flex items-center gap-2">
         <div className="h-10 w-10 rounded-full overflow-hidden bg-slate-200 flex items-center justify-center">
-          {producer.avatar_url ? (
-            <img src={producer.avatar_url} alt={producer.username} className="h-full w-full object-cover" />
-          ) : (
-            <User className="h-5 w-5 text-slate-400" />
-          )}
+          <img src={producer.avatar_url || DEFAULT_AVATAR_URL} alt={producer.username} className="h-full w-full object-cover" loading="lazy" />
         </div>
         <div className="min-w-0">
           <p className="font-semibold truncate">{producer.username}</p>
@@ -367,28 +504,22 @@ export default function ProducerSpotlight() {
     </button>
   );
 
-  const allProducers = spotlightData?.all_producers || [];
-  const streakLeaders = [...allProducers]
-    .sort((a, b) => (b.total_days_completed || 0) - (a.total_days_completed || 0) || (b.current_streak || 0) - (a.current_streak || 0))
-    .slice(0, 18);
-  const visibleNetwork = allProducers.slice(0, 12);
-
   return (
-    <div className="spotlight-parallax-bg relative min-h-screen overflow-hidden">
-      <div
-        className="spotlight-grid-layer"
-        aria-hidden="true"
-      />
-      <div className="spotlight-fire-ambient" aria-hidden="true">
-        <div className="spotlight-fire-veil veil-top" />
-        <div className="spotlight-fire-veil veil-bottom" />
-        <div className="spotlight-ember ember-a" />
-        <div className="spotlight-ember ember-b" />
-        <div className="spotlight-ember ember-c" />
-        <div className="spotlight-ember ember-d" />
-        <div className="spotlight-ember ember-e" />
-      </div>
-      <div className="spotlight-heat-haze" aria-hidden="true" />
+    <div className={`spotlight-parallax-bg relative min-h-screen overflow-hidden ${spotlightLiteMode ? "spotlight-lite" : ""}`}>
+      <div className="spotlight-grid-layer" aria-hidden="true" />
+      {!spotlightLiteMode && (
+        <div className="spotlight-aero-backdrop" aria-hidden="true">
+          <div className="spotlight-aero-orb orb-a" />
+          <div className="spotlight-aero-orb orb-b" />
+          <div className="spotlight-aero-orb orb-c" />
+          <div className="spotlight-aero-orb orb-d" />
+          <div className="spotlight-aero-rings ring-a" />
+          <div className="spotlight-aero-rings ring-b" />
+          <div className="spotlight-aero-gloss" />
+          <div className="spotlight-aero-wave wave-a" />
+          <div className="spotlight-aero-wave wave-b" />
+        </div>
+      )}
       <div className="relative z-10 container mx-auto px-4 py-8 space-y-12 text-[var(--text-primary)]">
         <DarkModeToggle />
         <div className="flex items-center justify-start">
@@ -403,19 +534,32 @@ export default function ProducerSpotlight() {
       </div>
 
       {/* Hero Section */}
-      <div className="text-center space-y-4">
-        <h1 className="text-4xl md:text-5xl font-bold gradient-text">Producer Spotlight</h1>
-        <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-          Discover the next wave of talent. Connect, collaborate, and get inspired by the SendMyBeat community.
+      <div className="spotlight-hero-shell text-center space-y-5">
+        <div className="spotlight-hero-chip">SendMyBeat Network OS</div>
+        <h1 className="spotlight-aero-title text-4xl md:text-6xl font-bold">Producer Spotlight</h1>
+        <p className="text-lg text-sky-950/90 dark:text-cyan-50 max-w-2xl mx-auto">
+          Discover the next wave of talent inside a glossy cybernetic producer network built for collabs, momentum, and visibility.
         </p>
+        {!youtubeConnected && (
+          <div className="mx-auto max-w-2xl rounded-2xl border border-cyan-200/70 bg-white/55 px-4 py-3 text-sm font-medium text-sky-950 shadow-lg backdrop-blur dark:border-cyan-300/20 dark:bg-cyan-950/30 dark:text-cyan-50">
+            Producer Spotlight now requires a connected Google / YouTube account. Existing profiles stay hidden until the account is connected.
+          </div>
+        )}
+        <div className="spotlight-hero-marquee">
+          <span>cyber aero profiles</span>
+          <span>artist network</span>
+          <span>open sessions</span>
+          <span>daily streaks</span>
+          <span>top beat lanes</span>
+        </div>
 
         <Dialog open={isEditing} onOpenChange={setIsEditing}>
           <DialogTrigger asChild>
-            <Button size="lg" className="btn-modern mt-4">
-              {myProfile?.bio ? "Edit My Profile" : "Join the Spotlight"}
+            <Button size="lg" className="btn-modern mt-4 spotlight-aero-cta">
+              {youtubeConnected ? (myProfile?.bio ? "Edit My Profile" : "Join the Spotlight") : "Connect Google to Join"}
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto bg-[var(--card-bg)] border border-[var(--border-color)]">
+          <DialogContent className="w-[calc(100vw-1rem)] max-w-2xl max-h-[85vh] overflow-y-auto bg-[var(--card-bg)] border border-[var(--border-color)] p-4 sm:p-6">
             <DialogHeader>
               <DialogTitle>Your Producer Profile</DialogTitle>
               <DialogDescription>
@@ -423,6 +567,17 @@ export default function ProducerSpotlight() {
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
+              {!youtubeConnected && (
+                <div className="rounded-2xl border border-cyan-200/70 bg-cyan-50/70 p-4 text-sm text-sky-950 dark:border-cyan-300/20 dark:bg-cyan-950/30 dark:text-cyan-50">
+                  <p className="font-semibold">Connect Google / YouTube first</p>
+                  <p className="mt-1">
+                    Producer Spotlight only works for connected accounts. This also applies to people who already joined before this requirement.
+                  </p>
+                  <Button type="button" className="mt-3 spotlight-aero-cta" onClick={connectYouTube} disabled={connectingYouTube}>
+                    {connectingYouTube ? "Connecting..." : "Connect Google Account"}
+                  </Button>
+                </div>
+              )}
               <div className="grid gap-2">
                 <label>Profile Picture</label>
                 <div className="flex items-center gap-3">
@@ -587,8 +742,8 @@ export default function ProducerSpotlight() {
                 )}
               </div>
               <div className="sticky bottom-0 pt-3 pb-1 bg-[var(--card-bg)]">
-                <Button onClick={handleUpdateProfile} className="w-full" disabled={savingProfile}>
-                  {savingProfile ? "Saving..." : "Save Profile"}
+                <Button onClick={handleUpdateProfile} className="w-full" disabled={savingProfile || !youtubeConnected}>
+                  {savingProfile ? "Saving..." : youtubeConnected ? "Save Profile" : "Connect Google to Continue"}
                 </Button>
               </div>
             </div>
@@ -603,17 +758,43 @@ export default function ProducerSpotlight() {
       </div>
 
       <section className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <Card className="spotlight-aero-panel border-white/10 bg-[color:var(--card-bg)]/80">
+            <CardHeader className="pb-2">
+              <CardDescription>Network Size</CardDescription>
+              <CardTitle className="text-2xl">{allProducers.length}</CardTitle>
+            </CardHeader>
+          </Card>
+          <Card className="spotlight-aero-panel border-white/10 bg-[color:var(--card-bg)]/80">
+            <CardHeader className="pb-2">
+              <CardDescription>Trending Now</CardDescription>
+              <CardTitle className="text-2xl">{spotlightData?.trending_producers?.length || 0}</CardTitle>
+            </CardHeader>
+          </Card>
+          <Card className="spotlight-aero-panel border-white/10 bg-[color:var(--card-bg)]/80">
+            <CardHeader className="pb-2">
+              <CardDescription>New This Week</CardDescription>
+              <CardTitle className="text-2xl">{spotlightData?.new_producers?.length || 0}</CardTitle>
+            </CardHeader>
+          </Card>
+          <Card className="spotlight-aero-panel border-white/10 bg-[color:var(--card-bg)]/80">
+            <CardHeader className="pb-2">
+              <CardDescription>Featured</CardDescription>
+              <CardTitle className="text-2xl">{spotlightData?.featured_producers?.length || 0}</CardTitle>
+            </CardHeader>
+          </Card>
+        </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant={activeView === "trending" ? "default" : "outline"} onClick={() => setActiveView("trending")}>
+          <Button className="spotlight-tab" variant={activeView === "trending" ? "default" : "outline"} onClick={() => setActiveView("trending")}>
             Trending
           </Button>
-          <Button variant={activeView === "new" ? "default" : "outline"} onClick={() => setActiveView("new")}>
+          <Button className="spotlight-tab" variant={activeView === "new" ? "default" : "outline"} onClick={() => setActiveView("new")}>
             New Users
           </Button>
-          <Button variant={activeView === "streaks" ? "default" : "outline"} onClick={() => setActiveView("streaks")}>
+          <Button className="spotlight-tab" variant={activeView === "streaks" ? "default" : "outline"} onClick={() => setActiveView("streaks")}>
             Streak Leaders
           </Button>
-          <Button variant={activeView === "network" ? "default" : "outline"} onClick={() => setActiveView("network")}>
+          <Button className="spotlight-tab" variant={activeView === "network" ? "default" : "outline"} onClick={() => setActiveView("network")}>
             Network
           </Button>
         </div>
@@ -626,8 +807,8 @@ export default function ProducerSpotlight() {
             <Trophy className="h-6 w-6 text-yellow-500" />
             <h2 className="text-2xl font-bold">Featured Producers</h2>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {spotlightData.featured_producers.map(p => (
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            {visibleFeatured.map(p => (
               <ProducerCard key={p.user_id} producer={p} badge="featured" />
             ))}
           </div>
@@ -640,9 +821,9 @@ export default function ProducerSpotlight() {
             <TrendingUp className="h-6 w-6 text-blue-500" />
             <h2 className="text-2xl font-bold">Trending Now</h2>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
             {spotlightData?.trending_producers.length > 0 ? (
-              spotlightData.trending_producers.map(p => (
+              visibleTrending.map(p => (
                 <ProducerCard key={p.user_id} producer={p} badge="trending" />
               ))
             ) : (
@@ -660,8 +841,8 @@ export default function ProducerSpotlight() {
             <Sparkles className="h-6 w-6 text-purple-500" />
             <h2 className="text-2xl font-bold">New Users</h2>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {(spotlightData?.new_producers || []).map(p => (
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+            {visibleNew.map(p => (
               <ProducerCard key={p.user_id} producer={p} badge="new" />
             ))}
           </div>
@@ -674,8 +855,8 @@ export default function ProducerSpotlight() {
             <Flame className="h-6 w-6 text-orange-500" />
             <h2 className="text-2xl font-bold">Streak Leaders (Ranked by Days)</h2>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {streakLeaders.map((p, idx) => (
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+            {visibleStreaks.map((p, idx) => (
               <ProducerCard key={`streak-${p.user_id}`} producer={{ ...p, featured: idx < 3 }} badge={idx < 3 ? "featured" : undefined} />
             ))}
           </div>
@@ -691,8 +872,8 @@ export default function ProducerSpotlight() {
             </div>
             <Button variant="outline" onClick={() => setShowAllOpen(true)}>Show All</Button>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {visibleNetwork.map((p) => (
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-4">
+            {visibleNetworkGrid.map((p) => (
               <ProducerCard key={`all-${p.user_id}`} producer={p} />
             ))}
           </div>
@@ -701,7 +882,7 @@ export default function ProducerSpotlight() {
       </div>
 
       <Dialog open={showAllOpen} onOpenChange={setShowAllOpen}>
-        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto bg-[var(--card-bg)] border border-[var(--border-color)]">
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-4xl max-h-[85vh] overflow-y-auto bg-[var(--card-bg)] border border-[var(--border-color)] p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle>All Producers</DialogTitle>
             <DialogDescription>Click any producer card to open full stats and top content.</DialogDescription>
@@ -715,7 +896,7 @@ export default function ProducerSpotlight() {
       </Dialog>
 
       <Dialog open={producerStatsOpen} onOpenChange={setProducerStatsOpen}>
-        <DialogContent className="max-w-2xl bg-[var(--card-bg)] border border-[var(--border-color)]">
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-2xl bg-[var(--card-bg)] border border-[var(--border-color)] p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle>{selectedProducer?.username || "Producer"} Stats</DialogTitle>
             <DialogDescription>
@@ -830,3 +1011,6 @@ function Sparkles(props) {
     </svg>
   )
 }
+
+
+

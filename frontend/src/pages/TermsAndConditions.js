@@ -7,7 +7,7 @@ const TermsAndConditions = () => {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen cyber-grid scanline-effect" style={{backgroundColor: 'var(--bg-primary)'}}>
+    <div className="min-h-screen cyber-grid scanline-effect" style={{ backgroundColor: "var(--bg-primary)", color: "var(--text-primary)" }}>
       <div className="container mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-6 md:py-8 max-w-4xl">
         <div className="flex justify-between items-center mb-6 sm:mb-8">
           <Button
@@ -21,15 +21,15 @@ const TermsAndConditions = () => {
           <DarkModeToggle />
         </div>
 
-        <div className="game-card p-4 sm:p-6 md:p-8 lg:p-12">
+        <div className="game-card p-4 sm:p-6 md:p-8 lg:p-12" style={{ color: "var(--text-primary)" }}>
           <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-4 sm:mb-6 text-center brand-text matrix-glow rgb-hover">
             Terms and Conditions
           </h1>
-          <p className="text-xs sm:text-sm mb-6 sm:mb-8 text-center matrix-glow">
+          <p className="text-xs sm:text-sm mb-6 sm:mb-8 text-center matrix-glow" style={{ color: "var(--text-secondary)" }}>
             Last Updated: January 2025
           </p>
 
-          <div className="space-y-6 sm:space-y-8 matrix-glow text-sm sm:text-base">
+          <div className="space-y-6 sm:space-y-8 matrix-glow text-sm sm:text-base" style={{ color: "var(--text-primary)" }}>
             <section>
               <h2 className="text-xl sm:text-2xl font-semibold mb-3 matrix-glow">
                 1. Acceptance of Terms
@@ -198,7 +198,7 @@ const TermsAndConditions = () => {
           </div>
 
           <div className="mt-12 pt-8 border-t border-gray-200 dark:border-gray-700">
-            <p className="text-center text-sm text-gray-600 dark:text-gray-400">
+            <p className="text-center text-sm" style={{ color: "var(--text-secondary)" }}>
               By using SendMyBeat.com, you acknowledge that you have read, understood, and agree to be bound by these Terms and Conditions.
             </p>
           </div>
