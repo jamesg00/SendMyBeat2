@@ -5741,12 +5741,15 @@ async def get_producer_stats(user_id: str, current_user: dict = Depends(get_curr
     if channel_top_beats:
         # Prefer real channel top beats for spotlight.
         top_beats = channel_top_beats
+    spotlight_views = int(profile.get("views") or 0)
+    if channel_perf.get("total_views"):
+        spotlight_views = int(channel_perf.get("total_views") or 0)
 
     return {
         "profile": profile_with_role.model_dump(),
         "stats": {
             "likes": int(profile.get("likes") or 0),
-            "views": int(profile.get("views") or 0),
+            "views": spotlight_views,
             "current_streak": int((growth or {}).get("current_streak") or 0),
             "longest_streak": int((growth or {}).get("longest_streak") or 0),
             "total_days_completed": int((growth or {}).get("total_days_completed") or 0),
