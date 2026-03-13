@@ -164,7 +164,13 @@ const QueueCard = ({
   <div className="rounded-3xl border p-4 sm:p-5" style={{ borderColor: "var(--border-color)", background: "color-mix(in srgb, var(--bg-secondary) 88%, transparent)" }}>
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-[160px_minmax(0,1fr)]">
       <div className="overflow-hidden rounded-2xl border" style={{ borderColor: "var(--border-color)", background: "var(--bg-primary)" }}>
-        {preview ? <img src={preview} alt={item.image_original_filename || "Queued thumbnail"} className="h-40 w-full object-cover" /> : <div className="flex h-40 items-center justify-center text-xs" style={{ color: "var(--text-secondary)" }}>No preview</div>}
+        {preview?.kind === "video" ? (
+          <video src={preview.src} className="h-40 w-full object-cover" muted playsInline autoPlay loop />
+        ) : preview?.src ? (
+          <img src={preview.src} alt={item.image_original_filename || "Queued thumbnail"} className="h-40 w-full object-cover" />
+        ) : (
+          <div className="flex h-40 items-center justify-center text-xs" style={{ color: "var(--text-secondary)" }}>No preview</div>
+        )}
       </div>
       <div className="min-w-0 space-y-4">
         <div className="min-w-0">
@@ -338,7 +344,7 @@ export default function BeatHelperStudio(props) {
     () => formatUploadLabel(beatHelperUploads.audio_uploads.find((file) => file.id === beatHelperForm.beat_file_id)),
     [beatHelperForm.beat_file_id, beatHelperUploads.audio_uploads]
   );
-  const selectedImageLabel = useMemo(
+const selectedImageLabel = useMemo(
     () => formatUploadLabel(beatHelperUploads.image_uploads.find((file) => file.id === beatHelperForm.image_file_id)),
     [beatHelperForm.image_file_id, beatHelperUploads.image_uploads]
   );
@@ -443,7 +449,7 @@ export default function BeatHelperStudio(props) {
             <CardContent className="space-y-5 pt-6">
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
                 <div className="rounded-2xl border px-4 py-3" style={{ borderColor: "var(--border-color)", background: "rgba(255,255,255,0.035)" }}><p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: "var(--text-secondary)" }}>Selected Beat</p><p className="mt-2 truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{beatHelperForm.beat_file_id ? selectedAudioLabel : "None yet"}</p></div>
-                <div className="rounded-2xl border px-4 py-3" style={{ borderColor: "var(--border-color)", background: "rgba(255,255,255,0.035)" }}><p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: "var(--text-secondary)" }}>Selected Thumbnail</p><p className="mt-2 truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{beatHelperForm.image_file_id ? selectedImageLabel : beatHelperForm.ai_choose_image ? "AI fallback enabled" : "None yet"}</p></div>
+                <div className="rounded-2xl border px-4 py-3" style={{ borderColor: "var(--border-color)", background: "rgba(255,255,255,0.035)" }}><p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: "var(--text-secondary)" }}>Selected Visual</p><p className="mt-2 truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{beatHelperForm.image_file_id ? selectedImageLabel : beatHelperForm.ai_choose_image ? "AI fallback enabled" : "None yet"}</p></div>
                 <div className="rounded-2xl border px-4 py-3" style={{ borderColor: "var(--border-color)", background: "rgba(255,255,255,0.035)" }}><p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: "var(--text-secondary)" }}>Target</p><p className="mt-2 truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{beatHelperForm.target_artist?.trim() || "No artist yet"}</p></div>
                 <div className="rounded-2xl border px-4 py-3" style={{ borderColor: "var(--border-color)", background: "rgba(255,255,255,0.035)" }}><p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: "var(--text-secondary)" }}>Beat Type</p><p className="mt-2 truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{beatHelperForm.beat_type?.trim() || "No beat type yet"}</p></div>
               </div>
@@ -452,7 +458,7 @@ export default function BeatHelperStudio(props) {
                 <StudioSection title="Assets" description="Drag in your beat and thumbnail here, or pick from your existing BeatHelper-safe uploads." badge={`${beatHelperUploads.audio_uploads.length} audio / ${beatHelperUploads.image_uploads.length} image`} open={openSections.assets} onOpenChange={(value) => setSectionOpen("assets", value)}>
                   <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
                     <AssetDropzone title="Beat Audio" subtitle="MP3, WAV, M4A, FLAC, or OGG" accept=".mp3,.wav,.m4a,.flac,.ogg,audio/*" loading={uploadingBeatHelperAudio} files={beatHelperUploads.audio_uploads} selectedFileId={beatHelperForm.beat_file_id} onSelect={(value) => setBeatHelperForm((prev) => ({ ...prev, beat_file_id: value }))} onFileUpload={handleBeatHelperAudioUpload} emptyLabel="Select BeatHelper audio" />
-                    <AssetDropzone title="Thumbnail Image" subtitle="JPG, PNG, WEBP, or WEBM" accept=".jpg,.jpeg,.png,.webp,.webm,image/*" loading={uploadingBeatHelperImage} files={beatHelperUploads.image_uploads} selectedFileId={beatHelperForm.image_file_id} onSelect={(value) => setBeatHelperForm((prev) => ({ ...prev, image_file_id: value, ai_choose_image: false }))} onFileUpload={handleBeatHelperImageUpload} emptyLabel="Select BeatHelper thumbnail" />
+                    <AssetDropzone title="Visual" subtitle="JPG, PNG, WEBP, WEBM, MP4, or MOV" accept=".jpg,.jpeg,.png,.webp,.webm,.mp4,.mov,.m4v,image/*,video/webm,video/mp4,video/quicktime" loading={uploadingBeatHelperImage} files={beatHelperUploads.image_uploads} selectedFileId={beatHelperForm.image_file_id} onSelect={(value) => setBeatHelperForm((prev) => ({ ...prev, image_file_id: value, ai_choose_image: false }))} onFileUpload={handleBeatHelperImageUpload} emptyLabel="Select BeatHelper visual" />
                   </div>
                   <label className="mt-4 flex items-center gap-2 text-sm" style={{ color: "var(--text-secondary)" }}><input type="checkbox" checked={beatHelperForm.ai_choose_image} onChange={(e) => setBeatHelperForm((prev) => ({ ...prev, ai_choose_image: e.target.checked }))} />Use AI image if no thumbnail is selected</label>
                 </StudioSection>
@@ -568,7 +574,15 @@ export default function BeatHelperStudio(props) {
           <CardContent className="p-0">
             <div className="border-b px-4 py-4 sm:px-5" style={{ borderColor: "var(--border-color)", background: "rgba(255,255,255,0.02)" }}>
               <div className="overflow-hidden rounded-3xl border" style={{ borderColor: "var(--border-color)", background: "var(--bg-primary)" }}>
-                {beatHelperImagePreview ? <img src={beatHelperImagePreview} alt="BeatHelper selected thumbnail preview" className="h-[240px] w-full object-cover" /> : loadingBeatHelperPreview ? <div className="flex h-[240px] items-center justify-center gap-2 text-sm" style={{ color: "var(--text-secondary)" }}><LoaderCircle className="h-4 w-4 animate-spin" />Loading preview...</div> : <div className="flex h-[240px] flex-col items-center justify-center gap-2 text-center text-sm" style={{ color: "var(--text-secondary)" }}><ImageIcon className="h-8 w-8 opacity-60" /><span>Select an image or let AI choose one.</span></div>}
+                {beatHelperImagePreview?.kind === "video" ? (
+                  <video src={beatHelperImagePreview.src} className="h-[240px] w-full object-cover" muted playsInline autoPlay loop controls />
+                ) : beatHelperImagePreview?.src ? (
+                  <img src={beatHelperImagePreview.src} alt="BeatHelper selected visual preview" className="h-[240px] w-full object-cover" />
+                ) : loadingBeatHelperPreview ? (
+                  <div className="flex h-[240px] items-center justify-center gap-2 text-sm" style={{ color: "var(--text-secondary)" }}><LoaderCircle className="h-4 w-4 animate-spin" />Loading preview...</div>
+                ) : (
+                  <div className="flex h-[240px] flex-col items-center justify-center gap-2 text-center text-sm" style={{ color: "var(--text-secondary)" }}><ImageIcon className="h-8 w-8 opacity-60" /><span>Select a visual or let AI choose one.</span></div>
+                )}
               </div>
             </div>
             {queued === 0 ? (

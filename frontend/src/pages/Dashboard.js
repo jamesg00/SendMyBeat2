@@ -88,6 +88,20 @@ const normalizeGrowthData = (raw) => {
   };
 };
 
+const EMPTY_BEATHELPER_PREVIEW = null;
+
+const normalizeBeatHelperPreview = (payload) => {
+  if (!payload || typeof payload !== "object") return null;
+  if (payload.kind === "video" && payload.preview_url) {
+    const src = String(payload.preview_url).startsWith("http") ? payload.preview_url : `${API}${payload.preview_url}`;
+    return { kind: "video", src };
+  }
+  if (payload.data_url) {
+    return { kind: "image", src: payload.data_url };
+  }
+  return null;
+};
+
 const normalizeCalendarData = (raw) => {
   if (!raw || typeof raw !== "object") return null;
   return {
@@ -184,7 +198,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [beatHelperUploads, setBeatHelperUploads] = useState({ audio_uploads: [], image_uploads: [] });
   const [beatHelperQueue, setBeatHelperQueue] = useState([]);
   const [loadingBeatHelper, setLoadingBeatHelper] = useState(false);
-  const [beatHelperImagePreview, setBeatHelperImagePreview] = useState("");
+  const [beatHelperImagePreview, setBeatHelperImagePreview] = useState(EMPTY_BEATHELPER_PREVIEW);
   const [loadingBeatHelperPreview, setLoadingBeatHelperPreview] = useState(false);
   const [beatHelperQueueImagePreviews, setBeatHelperQueueImagePreviews] = useState({});
   const [uploadingBeatHelperAudio, setUploadingBeatHelperAudio] = useState(false);
@@ -373,7 +387,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
   useEffect(() => {
     const selectedImageId = (beatHelperForm.image_file_id || "").trim();
     if (!selectedImageId) {
-      setBeatHelperImagePreview("");
+      setBeatHelperImagePreview(EMPTY_BEATHELPER_PREVIEW);
       return;
     }
     const cachedPreview = beatHelperPreviewCacheRef.current[selectedImageId];
@@ -388,7 +402,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
         setLoadingBeatHelperPreview(true);
         const response = await axios.get(`${API}/beat-helper/image/${selectedImageId}/preview`);
         if (!cancelled) {
-          const nextPreview = response?.data?.data_url || "";
+          const nextPreview = normalizeBeatHelperPreview(response?.data);
           if (nextPreview) {
             beatHelperPreviewCacheRef.current[selectedImageId] = nextPreview;
           }
@@ -396,7 +410,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
         }
       } catch (error) {
         if (!cancelled) {
-          setBeatHelperImagePreview("");
+          setBeatHelperImagePreview(EMPTY_BEATHELPER_PREVIEW);
         }
       } finally {
         if (!cancelled) {
@@ -530,13 +544,13 @@ const Dashboard = ({ setIsAuthenticated }) => {
                 return [fileId, beatHelperPreviewCacheRef.current[fileId]];
               }
               const response = await axios.get(`${API}/beat-helper/image/${fileId}/preview`);
-              const nextPreview = response?.data?.data_url || "";
+              const nextPreview = normalizeBeatHelperPreview(response?.data);
               if (nextPreview) {
                 beatHelperPreviewCacheRef.current[fileId] = nextPreview;
               }
               return [fileId, nextPreview];
             } catch (error) {
-              return [fileId, ""];
+              return [fileId, EMPTY_BEATHELPER_PREVIEW];
             }
           })
         );
@@ -612,7 +626,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
       };
       await axios.post(`${API}/beat-helper/queue`, fullPayload);
       toast.success("Beat queued in BeatHelper");
-      setBeatHelperImagePreview("");
+      setBeatHelperImagePreview(EMPTY_BEATHELPER_PREVIEW);
       await fetchBeatHelperData();
     } catch (error) {
       const noResponse = !error?.response;
@@ -632,7 +646,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
             privacy_status: beatHelperForm.privacy_status,
           });
           toast.success("Beat queued in BeatHelper");
-          setBeatHelperImagePreview("");
+          setBeatHelperImagePreview(EMPTY_BEATHELPER_PREVIEW);
           await fetchBeatHelperData();
           return;
         } catch (retryError) {
@@ -673,6 +687,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
       if (!nextFileId) {
         throw new Error("Upload response missing file_id");
       }
+      await axios.post(`${API}/beat-helper/uploads/stage`, { file_id: nextFileId });
       setBeatHelperForm((prev) => ({ ...prev, beat_file_id: nextFileId }));
       await fetchBeatHelperData();
       toast.success("Beat audio added to BeatHelper");
@@ -696,6 +711,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
       if (!nextFileId) {
         throw new Error("Upload response missing file_id");
       }
+      await axios.post(`${API}/beat-helper/uploads/stage`, { file_id: nextFileId });
       setBeatHelperForm((prev) => ({
         ...prev,
         image_file_id: nextFileId,
@@ -761,6 +777,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
       if (!nextImageFileId) {
         throw new Error("Import response missing file_id");
       }
+      await axios.post(`${API}/beat-helper/uploads/stage`, { file_id: nextImageFileId });
       setBeatHelperForm((prev) => ({
         ...prev,
         image_file_id: nextImageFileId,

@@ -1,4 +1,5 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, UploadFile, File, Form, Request
+from fastapi.responses import FileResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -567,22 +568,34 @@ def _store_uploaded_image_bytes(
 ) -> dict:
     file_id = str(uuid.uuid4())
     ext = (file_ext or "").lower()
-    if ext not in [".jpg", ".jpeg", ".png", ".webp", ".webm"]:
+    if ext not in [".jpg", ".jpeg", ".png", ".webp", ".webm", ".mp4", ".mov", ".m4v"]:
         ext = ".jpg"
     filename = f"{file_id}{ext}"
     file_path = UPLOADS_DIR / filename
     with open(file_path, "wb") as buffer:
         buffer.write(image_bytes)
+    media_kind = "video" if ext in {".webm", ".mp4", ".mov", ".m4v"} else "image"
     upload_doc = {
         "id": file_id,
         "user_id": current_user_id,
         "original_filename": original_filename,
         "stored_filename": filename,
         "file_type": "image",
+        "media_kind": media_kind,
         "file_path": str(file_path),
         "uploaded_at": datetime.now(timezone.utc).isoformat()
     }
     return {"file_id": file_id, "filename": original_filename, "upload_doc": upload_doc}
+
+
+def _visual_kind_from_upload(upload_doc: dict | None) -> str:
+    if not upload_doc:
+        return "image"
+    explicit = str(upload_doc.get("media_kind") or "").strip().lower()
+    if explicit in {"image", "video"}:
+        return explicit
+    path_suffix = Path(str(upload_doc.get("file_path") or "")).suffix.lower()
+    return "video" if path_suffix in {".webm", ".mp4", ".mov", ".m4v"} else "image"
 
 
 async def llm_chat(
@@ -1008,6 +1021,10 @@ class BeatHelperTagTemplateCreateRequest(BaseModel):
 class BeatHelperTagTemplateUpdateRequest(BaseModel):
     name: Optional[str] = None
     tags: Optional[List[str]] = None
+
+
+class BeatHelperStageUploadRequest(BaseModel):
+    file_id: str
 
 
 class BeatHelperAssistTitleRequest(BaseModel):
@@ -3146,7 +3163,7 @@ async def _cleanup_unreferenced_beathelper_uploads(user_id: str, upload_ids: lis
 async def _cleanup_all_unqueued_uploads(user_id: str) -> dict[str, int]:
     queue_refs = await _beathelper_queue_upload_refs(user_id)
     uploads = await db.uploads.find(
-        {"user_id": user_id, "file_type": {"$in": ["audio", "image"]}},
+        {"user_id": user_id, "file_type": {"$in": ["audio", "image"]}, "beathelper_managed": True},
         {"_id": 0, "id": 1, "file_type": 1, "file_path": 1},
     ).to_list(5000)
 
@@ -4332,17 +4349,17 @@ async def upload_audio(file: UploadFile = File(...), current_user: dict = Depend
 
 @api_router.post("/upload/image")
 async def upload_image(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
-    """Upload image file (JPG, PNG, etc.)"""
+    """Upload image or short visual file (JPG, PNG, WEBP, WEBM, MP4, MOV)."""
     try:
         if not file or not file.filename:
             raise HTTPException(status_code=400, detail="No image file provided.")
 
         # Validate file type
-        allowed_extensions = ['.jpg', '.jpeg', '.png', '.webp', '.webm']
+        allowed_extensions = ['.jpg', '.jpeg', '.png', '.webp', '.webm', '.mp4', '.mov', '.m4v']
         file_ext = Path(file.filename).suffix.lower()
         
         if file_ext not in allowed_extensions:
-            raise HTTPException(status_code=400, detail="Invalid image file format. Allowed: JPG, PNG, WEBP, WEBM")
+            raise HTTPException(status_code=400, detail="Invalid visual format. Allowed: JPG, PNG, WEBP, WEBM, MP4, MOV")
         
         image_bytes = await file.read()
         if not image_bytes:
@@ -4382,6 +4399,9 @@ async def upload_image_from_url(payload: UploadImageFromUrlRequest, current_user
             "image/png": ".png",
             "image/webp": ".webp",
             "image/webm": ".webm",
+            "video/webm": ".webm",
+            "video/mp4": ".mp4",
+            "video/quicktime": ".mov",
         }
         file_ext = ext_map.get(content_type.split(";")[0].strip(), Path(urlparse(image_url).path).suffix.lower() or ".jpg")
         original_filename = (payload.original_filename or f"ai-generated{file_ext}").strip()
@@ -4417,17 +4437,36 @@ async def get_my_uploads(current_user: dict = Depends(get_current_user)):
 @api_router.get("/beat-helper/uploads")
 async def beathelper_get_uploads(current_user: dict = Depends(get_current_user)):
     await _ensure_pro_user(current_user, "BeatHelper")
-    await _cleanup_all_unqueued_uploads(current_user["id"])
     queue_refs = await _beathelper_queue_upload_refs(current_user["id"])
-    if not queue_refs:
-        return {"audio_uploads": [], "image_uploads": []}
     uploads = await db.uploads.find(
-        {"user_id": current_user["id"], "id": {"$in": list(queue_refs)}},
-        {"_id": 0, "id": 1, "original_filename": 1, "file_type": 1, "uploaded_at": 1}
+        {
+            "user_id": current_user["id"],
+            "$or": [
+                {"id": {"$in": list(queue_refs) or ["__none__"]}},
+                {"beathelper_managed": True},
+            ],
+        },
+        {"_id": 0, "id": 1, "original_filename": 1, "file_type": 1, "uploaded_at": 1, "media_kind": 1}
     ).sort("uploaded_at", -1).to_list(500)
     audio = [item for item in uploads if item.get("file_type") == "audio"]
     images = [item for item in uploads if item.get("file_type") == "image"]
     return {"audio_uploads": audio, "image_uploads": images}
+
+
+@api_router.post("/beat-helper/uploads/stage")
+async def beathelper_stage_upload(payload: BeatHelperStageUploadRequest, current_user: dict = Depends(get_current_user)):
+    await _ensure_pro_user(current_user, "BeatHelper")
+    file_id = (payload.file_id or "").strip()
+    if not file_id:
+        raise HTTPException(status_code=400, detail="file_id is required.")
+    upload = await db.uploads.find_one(
+        {"id": file_id, "user_id": current_user["id"], "file_type": {"$in": ["audio", "image"]}},
+        {"_id": 0, "id": 1},
+    )
+    if not upload:
+        raise HTTPException(status_code=404, detail="Upload not found.")
+    await _mark_uploads_as_beathelper_managed(current_user["id"], [file_id])
+    return {"success": True, "file_id": file_id}
 
 
 @api_router.post("/beat-helper/uploads/cleanup")
@@ -4452,14 +4491,45 @@ async def beathelper_get_image_preview(file_id: str, current_user: dict = Depend
     if not path.exists():
         raise HTTPException(status_code=404, detail="Image file missing on server.")
 
+    visual_kind = _visual_kind_from_upload(upload)
+    if visual_kind == "video":
+        return {
+            "file_id": upload.get("id"),
+            "filename": upload.get("original_filename"),
+            "kind": "video",
+            "preview_url": f"/api/beat-helper/visual/{upload.get('id')}/stream",
+        }
+
     image_bytes = path.read_bytes()
-    data_url = _image_data_url_from_bytes(
-        image_bytes,
-        max_dimensions=(480, 480),
-        fit="contain",
-        quality=72,
-    )
-    return {"file_id": upload.get("id"), "filename": upload.get("original_filename"), "data_url": data_url}
+    data_url = _image_data_url_from_bytes(image_bytes, max_dimensions=(480, 480), fit="contain", quality=72)
+    return {"file_id": upload.get("id"), "filename": upload.get("original_filename"), "kind": "image", "data_url": data_url}
+
+
+@api_router.get("/beat-helper/visual/{file_id}/stream")
+async def beathelper_stream_visual(file_id: str, current_user: dict = Depends(get_current_user)):
+    await _ensure_pro_user(current_user, "BeatHelper")
+    upload = await db.uploads.find_one({
+        "id": file_id.strip(),
+        "user_id": current_user["id"],
+        "file_type": "image",
+    })
+    if not upload:
+        raise HTTPException(status_code=404, detail="Visual not found.")
+    path = Path(upload.get("file_path", ""))
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Visual file missing on server.")
+    ext = path.suffix.lower()
+    media_type = {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".webp": "image/webp",
+        ".webm": "video/webm",
+        ".mp4": "video/mp4",
+        ".mov": "video/quicktime",
+        ".m4v": "video/mp4",
+    }.get(ext, "application/octet-stream")
+    return FileResponse(path, media_type=media_type, filename=upload.get("original_filename") or path.name)
 
 
 @api_router.get("/beat-helper/queue")
@@ -6561,7 +6631,9 @@ async def upload_to_youtube(
         if not audio_file or not image_file:
             raise HTTPException(status_code=404, detail="Audio and image files are required")
         
-        # Create video from audio + image using ffmpeg
+        visual_kind = _visual_kind_from_upload(image_file)
+
+        # Create video from audio + image/video using ffmpeg
         video_filename = f"{uuid.uuid4()}.mp4"
         video_path = UPLOADS_DIR / video_filename
         
@@ -6667,26 +6739,46 @@ async def upload_to_youtube(
 
         audio_args = ['-c:a', 'copy'] if copy_audio else ['-c:a', 'aac', '-b:a', '320k', '-ar', '48000']
 
-        ffmpeg_cmd = [
-            ffmpeg_path,
-            '-loop', '1',
-            '-framerate', '0.5',  # 0.5fps for faster processing
-            '-i', image_file['file_path'],
-            '-i', audio_file['file_path'],
-            '-c:v', 'libx264',
-            '-preset', 'ultrafast',
-            '-crf', '28',
-            '-tune', 'stillimage',
-            *audio_args,
-            '-pix_fmt', 'yuv420p',
-            # Maintain aspect ratio with black letterboxing/pillarboxing like YouTube + optional watermark
-            '-vf', video_filter,
-            '-shortest',
-            '-movflags', '+faststart',
-            '-threads', '0',
-            '-y',
-            str(video_path)
-        ]
+        if visual_kind == "video":
+            ffmpeg_cmd = [
+                ffmpeg_path,
+                '-stream_loop', '-1',
+                '-i', image_file['file_path'],
+                '-i', audio_file['file_path'],
+                '-map', '0:v:0',
+                '-map', '1:a:0',
+                '-c:v', 'libx264',
+                '-preset', 'ultrafast',
+                '-crf', '28',
+                *audio_args,
+                '-pix_fmt', 'yuv420p',
+                '-vf', video_filter,
+                '-shortest',
+                '-movflags', '+faststart',
+                '-threads', '0',
+                '-y',
+                str(video_path)
+            ]
+        else:
+            ffmpeg_cmd = [
+                ffmpeg_path,
+                '-loop', '1',
+                '-framerate', '0.5',
+                '-i', image_file['file_path'],
+                '-i', audio_file['file_path'],
+                '-c:v', 'libx264',
+                '-preset', 'ultrafast',
+                '-crf', '28',
+                '-tune', 'stillimage',
+                *audio_args,
+                '-pix_fmt', 'yuv420p',
+                '-vf', video_filter,
+                '-shortest',
+                '-movflags', '+faststart',
+                '-threads', '0',
+                '-y',
+                str(video_path)
+            ]
         
         logging.info(f"Creating video with ffmpeg: {' '.join(ffmpeg_cmd)}")
         
