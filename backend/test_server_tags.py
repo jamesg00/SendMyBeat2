@@ -23,7 +23,7 @@ os.environ["GROK_API_KEY"] = "mock_grok_key"
 # Mock dependencies that run on import
 with patch("motor.motor_asyncio.AsyncIOMotorClient"), \
      patch("stripe.api_key"):
-    from backend.server import generate_tags, TagGenerationRequest
+    from backend.server import generate_tags, TagGenerationRequest, update_tag_history, TagHistoryUpdateRequest
 
 @pytest.mark.asyncio
 async def test_generate_tags_success():
@@ -157,3 +157,60 @@ async def test_generate_tags_youtube_search_failure():
         assert "tag1" in response.tags
         # Verify LLM was still called despite YouTube failure
         mock_llm_chat.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_generate_tags_excludes_previously_removed_tags():
+    mock_user = {"id": "user123", "username": "testuser"}
+    request_data = TagGenerationRequest(query="drake type beat")
+
+    mock_cursor = MagicMock()
+    mock_cursor.to_list = AsyncMock(return_value=[{"excluded_tags": ["tag2"]}])
+
+    with patch("backend.server.ensure_has_credit", new_callable=AsyncMock) as mock_credit, \
+         patch("backend.server.llm_chat", new_callable=AsyncMock) as mock_llm_chat, \
+         patch("backend.server.db") as mock_db, \
+         patch("backend.server.build") as mock_build:
+
+        mock_db.users.find_one = AsyncMock(return_value={})
+        mock_db.tag_generations.find.return_value = mock_cursor
+        mock_db.tag_generations.insert_one = AsyncMock()
+        mock_db.growth_streaks.find_one = AsyncMock(return_value=None)
+        mock_llm_chat.return_value = '{"tags": ["tag1", "tag2", "tag3"]}'
+        mock_build.side_effect = Exception("YouTube API Error")
+
+        response = await generate_tags(request_data, current_user=mock_user)
+
+        assert "tag2" not in response.tags
+        assert "tag1" in response.tags
+        assert "tag3" in response.tags
+        mock_credit.assert_awaited_once_with("user123", "generations")
+
+
+@pytest.mark.asyncio
+async def test_update_tag_history_tracks_removed_tags():
+    mock_user = {"id": "user123", "username": "testuser"}
+    request_data = TagHistoryUpdateRequest(tags=["tag1", "tag3"], excluded_tags=["tag2"])
+    existing_doc = {
+        "id": "tag-history-1",
+        "user_id": "user123",
+        "query": "drake type beat",
+        "tags": ["tag1", "tag2", "tag3"],
+        "excluded_tags": [],
+        "created_at": "2026-03-12T12:00:00+00:00",
+    }
+    updated_doc = {
+        **existing_doc,
+        "tags": ["tag1", "tag3"],
+        "excluded_tags": ["tag2"],
+    }
+
+    with patch("backend.server.db") as mock_db:
+        mock_db.tag_generations.find_one = AsyncMock(side_effect=[existing_doc, updated_doc])
+        mock_db.tag_generations.update_one = AsyncMock()
+
+        response = await update_tag_history("tag-history-1", request_data, current_user=mock_user)
+
+        assert response.tags == ["tag1", "tag3"]
+        assert response.excluded_tags == ["tag2"]
+        mock_db.tag_generations.update_one.assert_awaited_once()

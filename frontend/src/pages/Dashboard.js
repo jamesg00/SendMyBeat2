@@ -19,6 +19,7 @@ import AdBanner from "@/components/AdBanner";
 import ProgressBar from "@/components/ProgressBar";
 import ThemeCustomizer from "@/components/ThemeCustomizer";
 import UploadStudio from "@/components/UploadStudio";
+import { clearAuthToken } from "@/lib/auth";
 
 const TAG_LIMIT = 120;
 const TAG_HISTORY_LIMIT = 100;
@@ -407,6 +408,27 @@ const Dashboard = ({ setIsAuthenticated }) => {
     }
   };
 
+  const upsertTagHistoryItem = (item) => {
+    setTagHistory((prev) => {
+      const filtered = prev.filter((entry) => entry.id !== item.id);
+      return [item, ...filtered].slice(0, TAG_HISTORY_LIMIT);
+    });
+  };
+
+  const persistTagHistoryEdit = async ({ tagId, nextTags, removedTags = [] }) => {
+    if (!tagId) {
+      setGeneratedTags(nextTags);
+      return;
+    }
+
+    const response = await axios.patch(`${API}/tags/history/${tagId}`, {
+      tags: nextTags,
+      excluded_tags: removedTags,
+    });
+    setGeneratedTags(response.data?.tags || nextTags);
+    upsertTagHistoryItem(response.data);
+  };
+
   const checkYouTubeConnection = async () => {
     try {
       const response = await axios.get(`${API}/youtube/status`);
@@ -772,7 +794,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem("token");
+    clearAuthToken();
     setIsAuthenticated(false);
     toast.success("Logged out successfully");
   };
@@ -909,9 +931,11 @@ const Dashboard = ({ setIsAuthenticated }) => {
         { signal: controller.signal }
       );
       setGeneratedTags(response.data.tags);
+      setActiveTagHistoryId(response.data.id);
+      setSelectedTagHistoryIds([response.data.id]);
       setTagDebug(response.data?.debug || null);
+      upsertTagHistoryItem(response.data);
       toast.success(`Generated ${response.data.tags.length} tags! (AI + YouTube + Spotify + SoundCloud + custom tags)`);
-      fetchTagHistory();
 
       // Refresh credits after a short delay to ensure backend has updated
       setTimeout(() => {
@@ -1124,10 +1148,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
         query: joinLabel || "Joined Tags",
         tags: optimizedTags
       });
-      setTagHistory((prev) => {
-        const merged = [saveResponse.data, ...prev];
-        return merged.slice(0, TAG_HISTORY_LIMIT);
-      });
+      upsertTagHistoryItem(saveResponse.data);
+      setActiveTagHistoryId(saveResponse.data.id);
       setJoiningTagsProgress(100);
       toast.success(
         `AI joined ${selectedItems.length} generations! Optimized to ${optimizedTags.length} SEO tags.`
@@ -2144,12 +2166,22 @@ const Dashboard = ({ setIsAuthenticated }) => {
                           >
                             {tag}
                             <button
-                              onClick={(e) => {
+                              onClick={async (e) => {
                                 e.stopPropagation();
-                                setGeneratedTags(generatedTags.filter((_, i) => i !== index));
-                                setTagDebug(null);
-                                setShowTagDebug(false);
-                                toast.success("Tag removed");
+                                const removedTag = generatedTags[index];
+                                const nextTags = generatedTags.filter((_, i) => i !== index);
+                                try {
+                                  await persistTagHistoryEdit({
+                                    tagId: activeTagHistoryId,
+                                    nextTags,
+                                    removedTags: removedTag ? [removedTag] : [],
+                                  });
+                                  setTagDebug(null);
+                                  setShowTagDebug(false);
+                                  toast.success("Tag removed");
+                                } catch (error) {
+                                  toast.error("Failed to persist tag removal");
+                                }
                               }}
                               className="ml-2 text-red-500 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-700"
                               title="Delete tag"
@@ -2346,7 +2378,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                                 onClick={async (e) => {
                                   e.stopPropagation();
                                   try {
-                                    // Delete from tag history
+                                    await axios.delete(`${API}/tags/history/${item.id}`);
                                     const updatedHistory = tagHistory.filter(t => t.id !== item.id);
                                     setTagHistory(updatedHistory);
                                     setSelectedTagHistoryIds((prev) => {

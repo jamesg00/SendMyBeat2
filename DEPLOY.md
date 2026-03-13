@@ -84,15 +84,19 @@ You need to set up the configuration files.
    - Save and exit (Ctrl+X, Y, Enter).
 
 ### Frontend Configuration
-1. Create a frontend env file:
+1. Copy the example file:
+   ```bash
+   cp frontend/.env.example frontend/.env
+   ```
+2. Edit the file:
    ```bash
    nano frontend/.env
    ```
-2. Add the backend URL (replace with your server's domain/IP):
+3. Add the backend URL (replace with your server's domain/IP):
    ```
    REACT_APP_BACKEND_URL=https://api.sendmybeat.com
    ```
-   *(Note: If you haven't set up a custom domain for the backend yet, use `http://YOUR_STATIC_IP:8000`)*
+   *(For compatibility, the frontend also accepts `REACT_APP_API_BASE_URL`, but `REACT_APP_BACKEND_URL` is the primary variable. If you haven't set up a custom domain for the backend yet, use `http://YOUR_STATIC_IP:8000`)*
 
 3. Save and exit.
 
@@ -105,6 +109,7 @@ docker compose up -d --build
 ```
 
 - This will download MongoDB, build your backend, build your frontend, and start them all.
+- If you change `frontend/.env`, rebuild the frontend container because React embeds env vars at build time.
 - It might take 5-10 minutes the first time.
 
 ## Step 7: Access Your Site

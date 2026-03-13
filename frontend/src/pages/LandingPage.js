@@ -8,6 +8,7 @@ import axios from "axios";
 import { API } from "@/App";
 import { toast } from "sonner";
 import { Music, Upload, Users, Zap, Globe, Shield, ArrowRight, Play, Star, Youtube, Trophy } from "lucide-react";
+import { setAuthToken } from "@/lib/auth";
 
 const LandingPage = ({ setIsAuthenticated }) => {
   const [isLoginOpen, setIsLoginOpen] = useState(false);
@@ -26,8 +27,9 @@ const LandingPage = ({ setIsAuthenticated }) => {
         password
       });
 
-      localStorage.setItem("token", response.data.access_token);
+      setAuthToken(response.data.access_token);
       setIsAuthenticated(true);
+      setPassword("");
       toast.success(`Welcome ${authMode === "login" ? "back" : ""}!`);
     } catch (error) {
       toast.error(error.response?.data?.detail || "Authentication failed");

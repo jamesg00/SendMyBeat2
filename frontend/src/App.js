@@ -13,8 +13,10 @@ import About from "@/pages/About";
 import Footer from "@/components/Footer";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/lib/ThemeContext";
+import { clearAuthToken, getAuthToken } from "@/lib/auth";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const BACKEND_URL =
+  process.env.REACT_APP_BACKEND_URL || process.env.REACT_APP_API_BASE_URL;
 export const API = `${BACKEND_URL}/api`;
 const ADMIN_USERNAMES = new Set(
   (process.env.REACT_APP_ADMIN_USERNAMES || "deadat18")
@@ -26,7 +28,7 @@ const ADMIN_USERNAMES = new Set(
 // Axios interceptor for auth token
 axios.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -45,14 +47,14 @@ function App() {
 
   useEffect(() => {
     const checkAuth = async () => {
-      const token = localStorage.getItem("token");
+      const token = getAuthToken();
       if (token) {
         try {
           const me = await axios.get(`${API}/auth/me`);
           setCurrentUsername(me?.data?.username || "");
           setIsAuthenticated(true);
         } catch (error) {
-          localStorage.removeItem("token");
+          clearAuthToken();
           setIsAuthenticated(false);
           setCurrentUsername("");
         }

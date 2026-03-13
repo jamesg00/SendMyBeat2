@@ -81,20 +81,17 @@ OPENAI_API_KEY=your_openai_key
 GROK_API_KEY=your_grok_key
 GROK_BASE_URL=https://api.x.ai/v1
 GROK_MODEL=grok-4-1-fast-reasoning
-GROK_VISION_MODEL=grok-2-vision-latest
-OPENAI_VISION_MODEL=gpt-4o
-PEXELS_API_KEY=optional_for_generate_image_tool
-PIXABAY_API_KEY=optional_fallback_for_generate_image_tool
 ```
 
 ### Frontend (`frontend/.env`)
 ```
+REACT_APP_BACKEND_URL=https://api.sendmybeat.com
 REACT_APP_API_BASE_URL=https://api.sendmybeat.com
 REACT_APP_ADSENSE_CLIENT_ID=ca-pub-XXXXXXXXXXXX
 ```
 
 ## Deployment Notes
-- Frontend: Vercel (set `REACT_APP_*` env vars in Vercel).
+- Frontend: Vercel or Docker/static hosting (set `REACT_APP_*` env vars before building the frontend).
 - Backend: systemd service on a Linux instance.
 - AdSense:
   - Script tag in `frontend/public/index.html`

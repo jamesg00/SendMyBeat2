@@ -9,7 +9,7 @@ import logging
 import asyncio
 import random
 from pathlib import Path
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 from typing import List, Optional, Dict, Any, Literal
 import uuid
 from datetime import datetime, timezone, timedelta
@@ -29,8 +29,11 @@ import requests
 import re
 import subprocess
 import html
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse, urljoin
 from itsdangerous import URLSafeSerializer, BadSignature
+import socket
+import ipaddress
+from cryptography.fernet import Fernet, InvalidToken as FernetInvalidToken
 from models_spotlight import (
     ProducerProfile,
     ProducerProfileUpdate,
@@ -88,6 +91,15 @@ BEATHELPER_DEFAULT_APPROVAL_TIMEOUT_HOURS = int(os.environ.get("BEATHELPER_DEFAU
 BEATHELPER_DEFAULT_NOTIFY_CHANNEL = os.environ.get("BEATHELPER_DEFAULT_NOTIFY_CHANNEL", "email").strip().lower()
 BEATHELPER_SCHEDULER_INTERVAL_SECONDS = int(os.environ.get("BEATHELPER_SCHEDULER_INTERVAL_SECONDS", "300"))
 BEATHELPER_AUTO_DISPATCH_ENABLED = os.environ.get("BEATHELPER_AUTO_DISPATCH_ENABLED", "true").strip().lower() == "true"
+MAX_AUDIO_UPLOAD_BYTES = 200 * 1024 * 1024
+MAX_IMAGE_UPLOAD_BYTES = 12 * 1024 * 1024
+AUTH_RATE_LIMIT_WINDOW_SECONDS = 300
+AUTH_RATE_LIMIT_ATTEMPTS = 10
+YOUTUBE_TOKEN_ENCRYPTION_KEY = (
+    os.environ.get("YOUTUBE_TOKEN_ENCRYPTION_KEY")
+    or os.environ.get("APP_ENCRYPTION_KEY")
+    or ""
+).strip()
 
 # Google OAuth Configuration
 GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', 'your_google_client_id_here')
@@ -95,6 +107,7 @@ GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', 'your_google_clien
 
 # Security
 security = HTTPBearer()
+_rate_limit_buckets: dict[str, list[float]] = {}
 
 
 def build_cors_origins() -> list[str]:
@@ -118,13 +131,212 @@ def build_cors_origins() -> list[str]:
 
 CORS_ORIGINS = build_cors_origins()
 
+
+def _client_ip(request: Request) -> str:
+    forwarded_for = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+    real_ip = request.headers.get("x-real-ip", "").strip()
+    host = forwarded_for or real_ip or (request.client.host if request.client else "unknown")
+    return host or "unknown"
+
+
+def _check_rate_limit(bucket_key: str, limit: int, window_seconds: int) -> None:
+    now_ts = datetime.now(timezone.utc).timestamp()
+    hits = [ts for ts in _rate_limit_buckets.get(bucket_key, []) if now_ts - ts < window_seconds]
+    if len(hits) >= limit:
+        raise HTTPException(status_code=429, detail="Too many requests. Please wait and try again.")
+    hits.append(now_ts)
+    _rate_limit_buckets[bucket_key] = hits
+
+
+async def _check_rate_limit_persistent(bucket_key: str, limit: int, window_seconds: int) -> None:
+    _check_rate_limit(bucket_key, limit, window_seconds)
+    now = datetime.now(timezone.utc)
+    window_start = now - timedelta(seconds=window_seconds)
+    doc = await db.security_rate_limits.find_one({"key": bucket_key}, {"_id": 0, "count": 1, "window_started_at": 1})
+    if not doc:
+        await db.security_rate_limits.update_one(
+            {"key": bucket_key},
+            {"$set": {"key": bucket_key, "count": 1, "window_started_at": now.isoformat(), "updated_at": now.isoformat()}},
+            upsert=True,
+        )
+        return
+
+    started_at_raw = doc.get("window_started_at")
+    try:
+        started_at = datetime.fromisoformat(started_at_raw) if isinstance(started_at_raw, str) else now
+    except Exception:
+        started_at = now
+
+    if started_at < window_start:
+        await db.security_rate_limits.update_one(
+            {"key": bucket_key},
+            {"$set": {"count": 1, "window_started_at": now.isoformat(), "updated_at": now.isoformat()}},
+        )
+        return
+
+    count = int(doc.get("count") or 0) + 1
+    if count > limit:
+        raise HTTPException(status_code=429, detail="Too many requests. Please wait and try again.")
+    await db.security_rate_limits.update_one(
+        {"key": bucket_key},
+        {"$set": {"count": count, "updated_at": now.isoformat()}},
+    )
+
+
+def _is_production_like() -> bool:
+    return not any(origin.startswith("http://localhost") or origin.startswith("http://127.0.0.1") for origin in CORS_ORIGINS)
+
+
+def _validate_security_configuration() -> None:
+    weak_values = {
+        "JWT_SECRET_KEY": JWT_SECRET,
+        "SESSION_SECRET_KEY": os.environ.get("SESSION_SECRET_KEY", ""),
+    }
+    placeholders = {
+        "your-session-secret-key",
+        "replace_with_secure_random_value",
+        "changeme",
+        "change-me",
+        "secret",
+    }
+    for key, value in weak_values.items():
+        normalized = (value or "").strip().lower()
+        if len(value or "") < 16 or normalized in placeholders:
+            raise RuntimeError(f"Insecure {key} configured. Set a strong random secret before running this backend.")
+    if _is_production_like() and not YOUTUBE_TOKEN_ENCRYPTION_KEY:
+        logging.warning("YOUTUBE_TOKEN_ENCRYPTION_KEY / APP_ENCRYPTION_KEY is not set. YouTube tokens cannot be encrypted at rest.")
+
+
+def _validate_public_url(target_url: str) -> str:
+    parsed = urlparse((target_url or "").strip())
+    if parsed.scheme not in {"http", "https"}:
+        raise HTTPException(status_code=400, detail="URL must start with http:// or https://")
+    if not parsed.hostname:
+        raise HTTPException(status_code=400, detail="URL must include a hostname.")
+
+    try:
+        addr_info = socket.getaddrinfo(parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80))
+    except socket.gaierror:
+        raise HTTPException(status_code=400, detail="Could not resolve remote host.")
+
+    for _, _, _, _, sockaddr in addr_info:
+        ip_obj = ipaddress.ip_address(sockaddr[0])
+        if (
+            ip_obj.is_private
+            or ip_obj.is_loopback
+            or ip_obj.is_link_local
+            or ip_obj.is_multicast
+            or ip_obj.is_reserved
+            or ip_obj.is_unspecified
+        ):
+            raise HTTPException(status_code=400, detail="URL points to a private or unsupported network address.")
+
+    return parsed.geturl()
+
+
+def _fetch_remote_image_bytes(image_url: str, max_bytes: int = MAX_IMAGE_UPLOAD_BYTES) -> tuple[bytes, str]:
+    next_url = _validate_public_url(image_url)
+    headers = {"User-Agent": "SendMyBeat/1.0 (+https://sendmybeat.com)"}
+
+    for _ in range(4):
+        response = requests.get(
+            next_url,
+            timeout=20,
+            stream=True,
+            headers=headers,
+            allow_redirects=False,
+        )
+        if 300 <= response.status_code < 400:
+            redirect_target = response.headers.get("Location", "").strip()
+            if not redirect_target:
+                raise HTTPException(status_code=400, detail="Remote image redirect missing location.")
+            next_url = _validate_public_url(urljoin(next_url, redirect_target))
+            continue
+        if response.status_code >= 400:
+            raise HTTPException(status_code=400, detail=f"Failed to fetch image (HTTP {response.status_code}).")
+
+        content_type = (response.headers.get("Content-Type") or "").lower()
+        if "image/" not in content_type:
+            raise HTTPException(status_code=400, detail="URL does not point to an image.")
+
+        image_bytes = bytearray()
+        for chunk in response.iter_content(chunk_size=1024 * 1024):
+            if not chunk:
+                continue
+            image_bytes.extend(chunk)
+            if len(image_bytes) > max_bytes:
+                raise HTTPException(status_code=400, detail="Image is too large (max 12MB).")
+        if not image_bytes:
+            raise HTTPException(status_code=400, detail="Fetched image is empty.")
+        return bytes(image_bytes), content_type
+
+    raise HTTPException(status_code=400, detail="Too many redirects while fetching image.")
+
+
+def _get_token_cipher(require_key: bool = False) -> Fernet | None:
+    if not YOUTUBE_TOKEN_ENCRYPTION_KEY:
+        if require_key:
+            raise RuntimeError("Missing YOUTUBE_TOKEN_ENCRYPTION_KEY / APP_ENCRYPTION_KEY for YouTube token encryption.")
+        return None
+    try:
+        return Fernet(YOUTUBE_TOKEN_ENCRYPTION_KEY.encode("utf-8"))
+    except Exception as exc:
+        raise RuntimeError("Invalid YOUTUBE_TOKEN_ENCRYPTION_KEY / APP_ENCRYPTION_KEY. Must be a valid Fernet key.") from exc
+
+
+def _encrypt_secret_value(value: str | None) -> str | None:
+    if not value:
+        return None
+    cipher = _get_token_cipher(require_key=True)
+    return cipher.encrypt(value.encode("utf-8")).decode("utf-8")
+
+
+def _decrypt_secret_value(value: str | None) -> str | None:
+    if not value:
+        return None
+    cipher = _get_token_cipher(require_key=True)
+    try:
+        return cipher.decrypt(value.encode("utf-8")).decode("utf-8")
+    except FernetInvalidToken as exc:
+        raise RuntimeError("Failed to decrypt stored YouTube token. Check encryption key configuration.") from exc
+
+
+def _get_connection_token(connection: dict, field_name: str) -> str | None:
+    encrypted_field = connection.get(f"{field_name}_encrypted")
+    if encrypted_field:
+        return _decrypt_secret_value(encrypted_field)
+    return connection.get(field_name)
+
+
+def _build_google_credentials_from_connection(connection: dict) -> Credentials:
+    return Credentials(
+        token=_get_connection_token(connection, "access_token"),
+        refresh_token=_get_connection_token(connection, "refresh_token"),
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=GOOGLE_CLIENT_ID,
+        client_secret=GOOGLE_CLIENT_SECRET,
+    )
+
 # Create the main app without a prefix
 app = FastAPI()
+
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+    return response
 
 # Add session middleware for OAuth
 app.add_middleware(
     SessionMiddleware,
-    secret_key=os.environ.get('SESSION_SECRET_KEY', 'your-session-secret-key')
+    secret_key=os.environ.get('SESSION_SECRET_KEY', 'your-session-secret-key'),
+    same_site="lax",
+    https_only=_is_production_like(),
 )
 
 # OAuth setup
@@ -491,9 +703,35 @@ class UserRegister(BaseModel):
     username: str
     password: str
 
+    @field_validator("username")
+    @classmethod
+    def validate_username(cls, value: str) -> str:
+        normalized = re.sub(r"\s+", "", (value or "").strip().lower())
+        if not re.fullmatch(r"[a-z0-9_.-]{3,32}", normalized):
+            raise ValueError("Username must be 3-32 chars and use only letters, numbers, ., _, or -.")
+        return normalized
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value: str) -> str:
+        raw = value or ""
+        if len(raw) < 8 or len(raw) > 128:
+            raise ValueError("Password must be between 8 and 128 characters.")
+        if raw.strip() != raw:
+            raise ValueError("Password cannot start or end with spaces.")
+        return raw
+
 class UserLogin(BaseModel):
     username: str
     password: str
+
+    @field_validator("username")
+    @classmethod
+    def normalize_username(cls, value: str) -> str:
+        normalized = re.sub(r"\s+", "", (value or "").strip().lower())
+        if not normalized:
+            raise ValueError("Username is required.")
+        return normalized
 
 class ReminderSettingsRequest(BaseModel):
     email_enabled: bool = False
@@ -545,6 +783,10 @@ class TagHistorySaveRequest(BaseModel):
     query: str
     tags: List[str]
 
+class TagHistoryUpdateRequest(BaseModel):
+    tags: List[str]
+    excluded_tags: Optional[List[str]] = []
+
 class TagJoinRequest(BaseModel):
     queries: List[str]
     candidate_tags: List[str]
@@ -560,6 +802,7 @@ class TagGenerationResponse(BaseModel):
     user_id: str
     query: str
     tags: List[str]
+    excluded_tags: Optional[List[str]] = None
     debug: Optional[Dict[str, Any]] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -1507,7 +1750,8 @@ async def _beathelper_scheduler_loop():
 
 # ============ Auth Routes ============
 @api_router.post("/auth/register", response_model=TokenResponse)
-async def register(user_data: UserRegister):
+async def register(user_data: UserRegister, request: Request):
+    await _check_rate_limit_persistent(f"auth:register:{_client_ip(request)}", AUTH_RATE_LIMIT_ATTEMPTS, AUTH_RATE_LIMIT_WINDOW_SECONDS)
     # Check if user exists
     existing_user = await db.users.find_one({"username": user_data.username})
     if existing_user:
@@ -1531,7 +1775,8 @@ async def register(user_data: UserRegister):
     return TokenResponse(access_token=access_token, user=user)
 
 @api_router.post("/auth/login", response_model=TokenResponse)
-async def login(user_data: UserLogin):
+async def login(user_data: UserLogin, request: Request):
+    await _check_rate_limit_persistent(f"auth:login:{_client_ip(request)}", AUTH_RATE_LIMIT_ATTEMPTS, AUTH_RATE_LIMIT_WINDOW_SECONDS)
     # Find user
     user_doc = await db.users.find_one({"username": user_data.username})
     if not user_doc:
@@ -1661,9 +1906,11 @@ async def get_youtube_auth_url(current_user: dict = Depends(get_current_user)):
     return {"auth_url": auth_url}
 
 @api_router.post("/youtube/connect")
-async def connect_youtube(code: str = Form(...), current_user: dict = Depends(get_current_user)):
+async def connect_youtube(code: str = Form(...), current_user: dict = Depends(get_current_user), request: Request = None):
     """Exchange authorization code for tokens and store them"""
     try:
+        if request is not None:
+            await _check_rate_limit_persistent(f"youtube:connect:{current_user['id']}:{_client_ip(request)}", 12, 600)
         # Exchange code for tokens manually to avoid scope validation issues
         token_url = "https://oauth2.googleapis.com/token"
         data = {
@@ -1705,8 +1952,10 @@ async def connect_youtube(code: str = Form(...), current_user: dict = Depends(ge
                     "google_email": user_info.get('email'),
                     "profile_picture": user_info.get('picture'),  # Add profile picture
                     "name": user_info.get('name'),  # Add name
-                    "access_token": tokens['access_token'],
-                    "refresh_token": tokens.get('refresh_token'),
+                    "access_token": None,
+                    "refresh_token": None,
+                    "access_token_encrypted": _encrypt_secret_value(tokens['access_token']),
+                    "refresh_token_encrypted": _encrypt_secret_value(tokens.get('refresh_token')),
                     "token_expiry": token_expiry.isoformat(),
                     "connected_at": datetime.now(timezone.utc).isoformat()
                 }
@@ -1758,15 +2007,11 @@ async def get_youtube_analytics(current_user: dict = Depends(get_current_user)):
             raise HTTPException(status_code=400, detail="YouTube account not connected")
         
         # Build YouTube API client using stored tokens
-        creds = Credentials(
-            token=connection.get('access_token'),
-            refresh_token=connection.get('refresh_token'),
-            token_uri='https://oauth2.googleapis.com/token',
-            client_id=GOOGLE_CLIENT_ID,
-            client_secret=GOOGLE_CLIENT_SECRET,
-            scopes=['https://www.googleapis.com/auth/youtube.upload', 
-                    'https://www.googleapis.com/auth/youtube.readonly']
-        )
+        creds = _build_google_credentials_from_connection(connection)
+        creds.scopes = [
+            'https://www.googleapis.com/auth/youtube.upload',
+            'https://www.googleapis.com/auth/youtube.readonly',
+        ]
         
         # Refresh token if needed
         if creds.expired and creds.refresh_token:
@@ -1775,8 +2020,9 @@ async def get_youtube_analytics(current_user: dict = Depends(get_current_user)):
             await db.youtube_connections.update_one(
                 {"user_id": current_user['id']},
                 {"$set": {
-                    "access_token": creds.token,
-                    "token_expiry": datetime.now(timezone.utc) + timedelta(hours=1)
+                    "access_token": None,
+                    "access_token_encrypted": _encrypt_secret_value(creds.token),
+                    "token_expiry": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
                 }}
             )
         
@@ -2535,6 +2781,68 @@ def _append_unique_tags(base_tags: list[str], extra_tags: list[str], max_tags: i
     return final_tags
 
 
+def _normalize_query_key(query: str) -> str:
+    return re.sub(r"\s+", " ", (query or "").strip().lower())
+
+
+def _normalize_excluded_tags(raw_tags: list[str] | None, limit: int = 120) -> list[str]:
+    return _normalize_tag_list(raw_tags, limit=limit)
+
+
+async def _beathelper_queue_upload_refs(user_id: str) -> set[str]:
+    queue_docs = await db.beat_helper_queue.find(
+        {"user_id": user_id},
+        {"_id": 0, "beat_file_id": 1, "image_file_id": 1},
+    ).to_list(500)
+    refs: set[str] = set()
+    for doc in queue_docs:
+        beat_id = str(doc.get("beat_file_id") or "").strip()
+        image_id = str(doc.get("image_file_id") or "").strip()
+        if beat_id:
+            refs.add(beat_id)
+        if image_id:
+            refs.add(image_id)
+    return refs
+
+
+async def _mark_uploads_as_beathelper_managed(user_id: str, upload_ids: list[str]) -> None:
+    valid_ids = [value.strip() for value in upload_ids if value and value.strip()]
+    if not valid_ids:
+        return
+    await db.uploads.update_many(
+        {"id": {"$in": valid_ids}, "user_id": user_id},
+        {"$set": {"beathelper_managed": True, "beathelper_last_linked_at": _safe_iso_now()}},
+    )
+
+
+def _delete_upload_file(upload_doc: dict) -> None:
+    path_raw = str(upload_doc.get("file_path") or "").strip()
+    if not path_raw:
+        return
+    try:
+        path = Path(path_raw)
+        if path.exists():
+            path.unlink()
+    except Exception as exc:
+        logging.warning(f"Failed to delete upload file {path_raw}: {str(exc)}")
+
+
+async def _cleanup_unreferenced_beathelper_uploads(user_id: str, upload_ids: list[str]) -> None:
+    candidate_ids = [value.strip() for value in upload_ids if value and value.strip()]
+    if not candidate_ids:
+        return
+
+    queue_refs = await _beathelper_queue_upload_refs(user_id)
+    for upload_id in candidate_ids:
+        if upload_id in queue_refs:
+            continue
+        upload_doc = await db.uploads.find_one({"id": upload_id, "user_id": user_id}, {"_id": 0})
+        if not upload_doc or not upload_doc.get("beathelper_managed"):
+            continue
+        _delete_upload_file(upload_doc)
+        await db.uploads.delete_one({"id": upload_id, "user_id": user_id})
+
+
 def _is_generic_artist_modifier_tag(tag: str, artist_name: str, seed_tokens: set[str]) -> bool:
     key = _tag_exact_key(tag)
     if not key:
@@ -2710,6 +3018,18 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
     try:
         # Check if user has credits
         await ensure_has_credit(current_user['id'], "generations")
+
+        query_key = _normalize_query_key(request.query)
+        prior_generations = await db.tag_generations.find(
+            {"user_id": current_user["id"], "query_key": query_key},
+            {"_id": 0, "excluded_tags": 1},
+        ).to_list(50)
+        excluded_tag_keys = {
+            _tag_exact_key(tag)
+            for doc in prior_generations
+            for tag in (doc.get("excluded_tags") or [])
+            if _tag_exact_key(tag)
+        }
         
         # Extract artist name from query (e.g., "drake type beat" -> "drake")
         artist_name = _normalize_artist_query(request.query)
@@ -2889,6 +3209,10 @@ Optional candidate inspirations from YouTube/Spotify/SoundCloud/custom inputs:
             semantic_key = _tag_semantic_key(clean)
             if not exact_key:
                 return
+            if exact_key in excluded_tag_keys:
+                if len(dropped_debug) < 80:
+                    dropped_debug.append({"tag": clean, "reason": "user_removed_previously"})
+                return
             if exact_key in seen_exact:
                 if len(dropped_debug) < 80:
                     dropped_debug.append({"tag": clean, "reason": "duplicate_exact"})
@@ -2953,6 +3277,7 @@ Optional candidate inspirations from YouTube/Spotify/SoundCloud/custom inputs:
             "source_status": source_status,
             "source_counts": source_counts,
             "top_up_used": len(final_tags) > llm_selected_count,
+            "excluded_tags_applied": sorted(excluded_tag_keys),
             "selected_tags": selected_tags_debug,
             "dropped_tags": dropped_debug,
         }
@@ -2967,10 +3292,12 @@ Optional candidate inspirations from YouTube/Spotify/SoundCloud/custom inputs:
             user_id=current_user['id'],
             query=request.query,
             tags=final_tags,
+            excluded_tags=[],
             debug=debug_info,
         )
         
         tag_doc = tag_gen.model_dump()
+        tag_doc["query_key"] = query_key
         tag_doc['created_at'] = tag_doc['created_at'].isoformat()
         
         await db.tag_generations.insert_one(tag_doc)
@@ -3083,13 +3410,64 @@ async def save_tag_history(request: TagHistorySaveRequest, current_user: dict = 
     tag_gen = TagGenerationResponse(
         user_id=current_user['id'],
         query=request.query.strip(),
-        tags=unique_tags
+        tags=unique_tags,
+        excluded_tags=[],
     )
 
     tag_doc = tag_gen.model_dump()
+    tag_doc["query_key"] = _normalize_query_key(request.query)
     tag_doc['created_at'] = tag_doc['created_at'].isoformat()
     await db.tag_generations.insert_one(tag_doc)
     return tag_gen
+
+
+@api_router.patch("/tags/history/{tag_id}", response_model=TagGenerationResponse)
+async def update_tag_history(tag_id: str, request: TagHistoryUpdateRequest, current_user: dict = Depends(get_current_user)):
+    if not request.tags:
+        raise HTTPException(status_code=400, detail="Tags are required")
+
+    existing = await db.tag_generations.find_one({"id": tag_id, "user_id": current_user["id"]}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Tag generation not found")
+
+    unique_tags = _normalize_tag_list(request.tags, limit=120)
+    if not unique_tags:
+        raise HTTPException(status_code=400, detail="Tags are required")
+
+    excluded_existing = _normalize_excluded_tags(existing.get("excluded_tags"), limit=120)
+    excluded_added = _normalize_excluded_tags(request.excluded_tags, limit=120)
+    excluded_all = _append_unique_tags(excluded_existing, excluded_added, max_tags=120)
+
+    existing_tag_keys = {_tag_exact_key(tag) for tag in existing.get("tags", []) if _tag_exact_key(tag)}
+    new_tag_keys = {_tag_exact_key(tag) for tag in unique_tags if _tag_exact_key(tag)}
+    removed_from_existing = [
+        tag for tag in (existing.get("tags") or [])
+        if _tag_exact_key(tag) and _tag_exact_key(tag) not in new_tag_keys
+    ]
+    excluded_all = _append_unique_tags(excluded_all, removed_from_existing, max_tags=120)
+
+    await db.tag_generations.update_one(
+        {"id": tag_id, "user_id": current_user["id"]},
+        {
+            "$set": {
+                "tags": unique_tags,
+                "excluded_tags": excluded_all,
+            }
+        },
+    )
+
+    updated = await db.tag_generations.find_one({"id": tag_id, "user_id": current_user["id"]}, {"_id": 0})
+    if updated and isinstance(updated.get("created_at"), str):
+        updated["created_at"] = datetime.fromisoformat(updated["created_at"])
+    return TagGenerationResponse(**updated)
+
+
+@api_router.delete("/tags/history/{tag_id}")
+async def delete_tag_history(tag_id: str, current_user: dict = Depends(get_current_user)):
+    result = await db.tag_generations.delete_one({"id": tag_id, "user_id": current_user["id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Tag generation not found")
+    return {"message": "Tag generation deleted successfully"}
 
 
 @api_router.post("/tags/join-ai", response_model=TagJoinResponse)
@@ -3345,11 +3723,20 @@ async def upload_audio(file: UploadFile = File(...), current_user: dict = Depend
         
         # Save file with chunked reading for better performance
         chunk_size = 1024 * 1024  # 1MB chunks
+        total_bytes = 0
         with open(file_path, "wb") as buffer:
             while True:
                 chunk = await file.read(chunk_size)
                 if not chunk:
                     break
+                total_bytes += len(chunk)
+                if total_bytes > MAX_AUDIO_UPLOAD_BYTES:
+                    buffer.close()
+                    try:
+                        file_path.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+                    raise HTTPException(status_code=400, detail="Audio file is too large. Max size is 200MB.")
                 buffer.write(chunk)
         
         # Save metadata to database
@@ -3389,6 +3776,8 @@ async def upload_image(file: UploadFile = File(...), current_user: dict = Depend
         image_bytes = await file.read()
         if not image_bytes:
             raise HTTPException(status_code=400, detail="Empty image file.")
+        if len(image_bytes) > MAX_IMAGE_UPLOAD_BYTES:
+            raise HTTPException(status_code=400, detail="Image is too large. Max size is 12MB.")
 
         stored = _store_uploaded_image_bytes(
             current_user_id=current_user["id"],
@@ -3414,33 +3803,7 @@ async def upload_image_from_url(payload: UploadImageFromUrlRequest, current_user
         image_url = (payload.image_url or "").strip()
         if not image_url:
             raise HTTPException(status_code=400, detail="image_url is required.")
-        if not re.match(r"^https?://", image_url, re.IGNORECASE):
-            raise HTTPException(status_code=400, detail="image_url must start with http:// or https://")
-
-        resp = requests.get(
-            image_url,
-            timeout=20,
-            stream=True,
-            headers={"User-Agent": "SendMyBeat/1.0 (+https://sendmybeat.com)"},
-        )
-        if resp.status_code >= 400:
-            raise HTTPException(status_code=400, detail=f"Failed to fetch image (HTTP {resp.status_code}).")
-
-        content_type = (resp.headers.get("Content-Type") or "").lower()
-        if "image/" not in content_type:
-            raise HTTPException(status_code=400, detail="URL does not point to an image.")
-
-        max_bytes = 12 * 1024 * 1024  # 12MB
-        image_bytes = bytearray()
-        for chunk in resp.iter_content(chunk_size=1024 * 1024):
-            if not chunk:
-                continue
-            image_bytes.extend(chunk)
-            if len(image_bytes) > max_bytes:
-                raise HTTPException(status_code=400, detail="Image is too large (max 12MB).")
-
-        if not image_bytes:
-            raise HTTPException(status_code=400, detail="Fetched image is empty.")
+        image_bytes, content_type = _fetch_remote_image_bytes(image_url, max_bytes=MAX_IMAGE_UPLOAD_BYTES)
 
         ext_map = {
             "image/jpeg": ".jpg",
@@ -3449,14 +3812,14 @@ async def upload_image_from_url(payload: UploadImageFromUrlRequest, current_user
             "image/webp": ".webp",
             "image/webm": ".webm",
         }
-        file_ext = ext_map.get(content_type.split(";")[0].strip(), Path(image_url).suffix.lower() or ".jpg")
+        file_ext = ext_map.get(content_type.split(";")[0].strip(), Path(urlparse(image_url).path).suffix.lower() or ".jpg")
         original_filename = (payload.original_filename or f"ai-generated{file_ext}").strip()
         if not original_filename.lower().endswith(file_ext):
             original_filename = f"{Path(original_filename).stem}{file_ext}"
 
         stored = _store_uploaded_image_bytes(
             current_user_id=current_user["id"],
-            image_bytes=bytes(image_bytes),
+            image_bytes=image_bytes,
             file_ext=file_ext,
             original_filename=original_filename,
         )
@@ -3896,6 +4259,10 @@ async def beathelper_create_queue_item(
             )
 
         await db.beat_helper_queue.insert_one(queue_doc)
+        await _mark_uploads_as_beathelper_managed(
+            current_user["id"],
+            [request.beat_file_id, image_file.get("id") if image_file else ""],
+        )
         return queue_doc
     except HTTPException:
         raise
@@ -4037,6 +4404,8 @@ async def beathelper_edit_queue_item(
 
     updates: dict[str, Any] = {"updated_at": _safe_iso_now()}
 
+    old_upload_ids_to_cleanup: list[str] = []
+
     if request.beat_file_id:
         beat_doc = await db.uploads.find_one({
             "id": request.beat_file_id,
@@ -4053,6 +4422,9 @@ async def beathelper_edit_queue_item(
         })
         if duplicate_beat:
             raise HTTPException(status_code=409, detail="This beat is already queued elsewhere.")
+        previous_beat_id = str(item.get("beat_file_id") or "").strip()
+        if previous_beat_id and previous_beat_id != request.beat_file_id:
+            old_upload_ids_to_cleanup.append(previous_beat_id)
         updates["beat_file_id"] = request.beat_file_id
         updates["beat_original_filename"] = beat_doc.get("original_filename")
 
@@ -4072,6 +4444,9 @@ async def beathelper_edit_queue_item(
         })
         if duplicate_image:
             raise HTTPException(status_code=409, detail="This thumbnail is already used in another active queue item.")
+        previous_image_id = str(item.get("image_file_id") or "").strip()
+        if previous_image_id and previous_image_id != request.image_file_id:
+            old_upload_ids_to_cleanup.append(previous_image_id)
         updates["image_file_id"] = request.image_file_id
         updates["image_original_filename"] = image_doc.get("original_filename")
 
@@ -4139,6 +4514,14 @@ async def beathelper_edit_queue_item(
         {"$set": updates},
     )
 
+    new_upload_ids = []
+    if "beat_file_id" in updates:
+        new_upload_ids.append(updates["beat_file_id"])
+    if "image_file_id" in updates:
+        new_upload_ids.append(updates["image_file_id"])
+    await _mark_uploads_as_beathelper_managed(current_user["id"], new_upload_ids)
+    await _cleanup_unreferenced_beathelper_uploads(current_user["id"], old_upload_ids_to_cleanup)
+
     # Keep linked docs in sync for upload behavior.
     set_desc = {}
     if "generated_description" in updates:
@@ -4165,9 +4548,23 @@ async def beathelper_edit_queue_item(
 @api_router.delete("/beat-helper/queue/{item_id}")
 async def beathelper_delete_queue_item(item_id: str, current_user: dict = Depends(get_current_user)):
     await _ensure_pro_user(current_user, "BeatHelper")
+    item = await db.beat_helper_queue.find_one({"id": item_id, "user_id": current_user["id"]}, {"_id": 0})
+    if not item:
+        raise HTTPException(status_code=404, detail="Queue item not found.")
+
     result = await db.beat_helper_queue.delete_one({"id": item_id, "user_id": current_user["id"]})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Queue item not found.")
+
+    if item.get("description_id"):
+        await db.descriptions.delete_one({"id": item.get("description_id"), "user_id": current_user["id"]})
+    if item.get("tags_id"):
+        await db.tag_generations.delete_one({"id": item.get("tags_id"), "user_id": current_user["id"]})
+
+    await _cleanup_unreferenced_beathelper_uploads(
+        current_user["id"],
+        [item.get("beat_file_id", ""), item.get("image_file_id", "")],
+    )
     return {"success": True}
 
 
@@ -4197,13 +4594,7 @@ async def refresh_youtube_token(user_id: str) -> Credentials:
     
     # Create credentials WITHOUT expiry to avoid comparison issues
     # We'll manually check expiry ourselves
-    credentials = Credentials(
-        token=connection['access_token'],
-        refresh_token=connection.get('refresh_token'),
-        token_uri="https://oauth2.googleapis.com/token",
-        client_id=GOOGLE_CLIENT_ID,
-        client_secret=GOOGLE_CLIENT_SECRET
-    )
+    credentials = _build_google_credentials_from_connection(connection)
     
     # Manually check if we should refresh (token older than 50 minutes)
     should_refresh = False
@@ -4227,7 +4618,8 @@ async def refresh_youtube_token(user_id: str) -> Credentials:
             {"user_id": user_id},
             {
                 "$set": {
-                    "access_token": credentials.token,
+                    "access_token": None,
+                    "access_token_encrypted": _encrypt_secret_value(credentials.token),
                     "token_expiry": credentials.expiry.isoformat() if credentials.expiry else None,
                     "last_refreshed": datetime.now(timezone.utc).isoformat()
                 }
@@ -5783,6 +6175,7 @@ logger = logging.getLogger(__name__)
 @app.on_event("startup")
 async def startup_background_tasks():
     global _beathelper_scheduler_task
+    _validate_security_configuration()
     if BEATHELPER_AUTO_DISPATCH_ENABLED and _beathelper_scheduler_task is None:
         _beathelper_scheduler_task = asyncio.create_task(_beathelper_scheduler_loop())
         logger.info("BeatHelper daily scheduler started")
