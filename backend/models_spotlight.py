@@ -26,6 +26,8 @@ class ProducerProfile(BaseModel):
     featured: bool = False
     google_connected: bool = False
     spotlight_eligible: bool = False
+    spotlight_tier: str = "Bronze"
+    spotlight_score: int = 0
     current_streak: int = 0
     longest_streak: int = 0
     total_days_completed: int = 0

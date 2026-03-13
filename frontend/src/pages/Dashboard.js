@@ -187,6 +187,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [beatHelperImagePreview, setBeatHelperImagePreview] = useState("");
   const [loadingBeatHelperPreview, setLoadingBeatHelperPreview] = useState(false);
   const [beatHelperQueueImagePreviews, setBeatHelperQueueImagePreviews] = useState({});
+  const beatHelperPreviewCacheRef = useRef({});
   const [beatHelperContact, setBeatHelperContact] = useState({ email: "", phone: "", email_enabled: false, sms_enabled: false });
   const [beatHelperTemplates, setBeatHelperTemplates] = useState([]);
   const [beatHelperImageSearchQuery, setBeatHelperImageSearchQuery] = useState("");
@@ -276,6 +277,22 @@ const Dashboard = ({ setIsAuthenticated }) => {
       return `${x},${Math.max(4, Math.min(96, y))}`;
     }).join(" ")
     : "";
+  const growthToday = new Date().toISOString().split("T")[0];
+  const growthCheckedInToday = Boolean(growthData?.last_checkin_date === growthToday);
+  const growthCompletionPercent = Math.round(((growthData?.total_days_completed || 0) / 120) * 100);
+  const growthCurrentDay = Math.min(120, (growthData?.total_days_completed || 0) + 1);
+  const growthDaysRemaining = Math.max(0, 120 - (growthData?.total_days_completed || 0));
+  const growthRank = (growthData?.current_streak || 0) >= 60
+    ? "Mythic Run"
+    : (growthData?.current_streak || 0) >= 30
+      ? "Locked Legend"
+      : (growthData?.current_streak || 0) >= 14
+        ? "Momentum Beast"
+        : (growthData?.current_streak || 0) >= 7
+          ? "Rising Runner"
+          : "Starter Arc";
+  const nextGrowthMilestone = [7, 14, 30, 60, 90, 120].find((milestone) => milestone > (growthData?.total_days_completed || 0)) || 120;
+  const growthMilestoneGap = Math.max(0, nextGrowthMilestone - (growthData?.total_days_completed || 0));
 
   const goToPreviousTab = () => {
     const previousIndex = (activeTabIndex - 1 + visibleTabs.length) % visibleTabs.length;
@@ -356,13 +373,23 @@ const Dashboard = ({ setIsAuthenticated }) => {
       setBeatHelperImagePreview("");
       return;
     }
+    const cachedPreview = beatHelperPreviewCacheRef.current[selectedImageId];
+    if (cachedPreview) {
+      setBeatHelperImagePreview(cachedPreview);
+      setLoadingBeatHelperPreview(false);
+      return;
+    }
     let cancelled = false;
     const loadPreview = async () => {
       try {
         setLoadingBeatHelperPreview(true);
         const response = await axios.get(`${API}/beat-helper/image/${selectedImageId}/preview`);
         if (!cancelled) {
-          setBeatHelperImagePreview(response?.data?.data_url || "");
+          const nextPreview = response?.data?.data_url || "";
+          if (nextPreview) {
+            beatHelperPreviewCacheRef.current[selectedImageId] = nextPreview;
+          }
+          setBeatHelperImagePreview(nextPreview);
         }
       } catch (error) {
         if (!cancelled) {
@@ -496,8 +523,15 @@ const Dashboard = ({ setIsAuthenticated }) => {
         const previewPairs = await Promise.all(
           uniqueImageIds.map(async (fileId) => {
             try {
+              if (beatHelperPreviewCacheRef.current[fileId]) {
+                return [fileId, beatHelperPreviewCacheRef.current[fileId]];
+              }
               const response = await axios.get(`${API}/beat-helper/image/${fileId}/preview`);
-              return [fileId, response?.data?.data_url || ""];
+              const nextPreview = response?.data?.data_url || "";
+              if (nextPreview) {
+                beatHelperPreviewCacheRef.current[fileId] = nextPreview;
+              }
+              return [fileId, nextPreview];
             } catch (error) {
               return [fileId, ""];
             }
@@ -1469,14 +1503,22 @@ const Dashboard = ({ setIsAuthenticated }) => {
       <div className="glass-card mx-2 sm:mx-4 mt-2 sm:mt-4 rounded-xl sm:rounded-2xl border-0 dashboard-card">
         <div className="container mx-auto px-3 sm:px-4 md:px-6 pr-16 sm:pr-20 lg:pr-6 py-3 sm:py-4 dashboard-shell">
           <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 lg:gap-4">
-            <div className="flex items-center gap-2 sm:gap-3 md:gap-4 min-w-0">
+            <div className="flex flex-1 items-center gap-2 sm:gap-3 md:gap-4 min-w-0 max-w-full">
               <img src="/sendmybeat.png" alt="SendMyBeat" className="h-10 w-10 sm:h-12 sm:w-12 object-contain" />
-              <div className="min-w-0">
-                <h1 className="text-lg sm:text-xl md:text-2xl font-bold gradient-text">SendMyBeat</h1>
-                {user && <p className="text-xs sm:text-sm" style={{color: 'var(--text-secondary)'}}>Welcome back, {user.username}</p>}
+              <div className="min-w-0 flex-1">
+                <h1 className="text-lg sm:text-xl md:text-2xl font-bold gradient-text truncate">SendMyBeat</h1>
+                {user && (
+                  <p
+                    className="text-xs sm:text-sm truncate max-w-[180px] sm:max-w-[260px] md:max-w-[340px] lg:max-w-[420px]"
+                    style={{ color: "var(--text-secondary)" }}
+                    title={`Welcome back, ${user.username}`}
+                  >
+                    Welcome back, {user.username}
+                  </p>
+                )}
               </div>
             </div>
-            <div className="flex items-center gap-2 sm:gap-3 w-full lg:w-auto flex-wrap lg:flex-nowrap lg:justify-end">
+            <div className="flex items-center gap-2 sm:gap-3 w-full lg:w-auto flex-wrap lg:flex-nowrap lg:justify-end self-stretch lg:self-auto">
               {/* Show Upgrade button for free users */}
               {subscriptionStatus && !subscriptionStatus.is_subscribed && (
                 <Button
@@ -2789,117 +2831,179 @@ const Dashboard = ({ setIsAuthenticated }) => {
                 }}
               >
                 {!growthData?.challenge_start_date ? (
-                  <Card className="dashboard-card grow-quest-hero">
-                    <CardContent className="p-8 sm:p-12 text-center">
-                      <p className="text-5xl mb-4">🚀</p>
-                      <p className="text-xs uppercase tracking-[0.2em] mb-2" style={{ color: "var(--text-secondary)" }}>
-                        Challenge Mode
-                      </p>
-                      <h3 className="text-3xl sm:text-4xl font-extrabold mb-3 gradient-text">Grow in 120</h3>
-                      <p className="text-sm sm:text-base mb-6 max-w-2xl mx-auto" style={{ color: "var(--text-secondary)" }}>
-                        Turn your upload grind into a game. Stack streaks, clear daily missions, and push your channel for 120 straight days.
-                      </p>
-                      <Button
-                        onClick={handleStartChallenge}
-                        disabled={loadingGrowth}
-                        className="btn-modern text-base sm:text-lg py-6 px-12"
-                      >
-                        {loadingGrowth ? "Starting..." : "Start My 120-Day Quest"}
-                      </Button>
+                  <Card className="dashboard-card grow-quest-hero grow-gameboard-card">
+                    <CardContent className="p-8 sm:p-12">
+                      <div className="grow-gameboard-onboarding">
+                        <div className="grow-orbit grow-orbit-a" aria-hidden="true" />
+                        <div className="grow-orbit grow-orbit-b" aria-hidden="true" />
+                        <div className="grow-onboarding-copy text-center">
+                          <div className="grow-chip mx-auto">Challenge Mode</div>
+                          <h3 className="mt-4 text-3xl sm:text-5xl font-extrabold grow-game-title">Grow in 120</h3>
+                          <p className="mt-4 text-sm sm:text-base max-w-2xl mx-auto" style={{ color: "var(--text-secondary)" }}>
+                            Turn your upload routine into a streak machine. Hit the board every day, clear your mission, fill the quest map, and stack momentum until the whole run is complete.
+                          </p>
+                        </div>
+                        <div className="grow-onboarding-grid">
+                          <div className="grow-hype-card">
+                            <p className="grow-hype-label">Loop</p>
+                            <p className="grow-hype-value">Create</p>
+                            <p className="grow-hype-sub">Generate tags, sharpen descriptions, upload, repeat.</p>
+                          </div>
+                          <div className="grow-hype-card">
+                            <p className="grow-hype-label">Reward</p>
+                            <p className="grow-hype-value">Streaks</p>
+                            <p className="grow-hype-sub">Every check-in adds visible momentum and badge unlocks.</p>
+                          </div>
+                          <div className="grow-hype-card">
+                            <p className="grow-hype-label">Target</p>
+                            <p className="grow-hype-value">120 Days</p>
+                            <p className="grow-hype-sub">A full-season consistency run built for producers.</p>
+                          </div>
+                        </div>
+                        <div className="mt-8 flex flex-col items-center gap-3">
+                          <Button
+                            onClick={handleStartChallenge}
+                            disabled={loadingGrowth}
+                            className="btn-modern text-base sm:text-lg py-6 px-12 grow-claim-button"
+                          >
+                            {loadingGrowth ? "Loading Quest..." : "Start My 120-Day Run"}
+                          </Button>
+                          <p className="text-xs uppercase tracking-[0.2em]" style={{ color: "var(--text-secondary)" }}>
+                            Build the habit. Protect the streak. Finish the arc.
+                          </p>
+                        </div>
+                      </div>
                     </CardContent>
                   </Card>
                 ) : (
                   <div className="space-y-4 sm:space-y-6">
-                    <Card className="dashboard-card grow-quest-hero">
-                      <CardContent className="p-4 sm:p-6 space-y-4">
-                        <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3">
-                          <div>
-                            <p className="text-xs uppercase tracking-[0.2em]" style={{ color: "var(--text-secondary)" }}>
-                              Producer Quest Board
-                            </p>
-                            <h3 className="text-2xl sm:text-3xl font-extrabold gradient-text">
-                              Day {Math.min(120, (growthData.total_days_completed || 0) + 1)} / 120
+                    <Card className="dashboard-card grow-quest-hero grow-gameboard-card">
+                      <CardContent className="p-4 sm:p-6 space-y-5">
+                        <div className="grow-gameboard-top">
+                          <div className="min-w-0">
+                            <div className="grow-chip">Producer Quest Board</div>
+                            <h3 className="mt-3 text-3xl sm:text-4xl font-extrabold grow-game-title">
+                              Day {growthCurrentDay} / 120
                             </h3>
-                            <p className="text-sm mt-1" style={{ color: "var(--text-secondary)" }}>
-                              Keep the flame alive. Missed days reset streak power.
+                            <p className="mt-2 text-sm sm:text-base" style={{ color: "var(--text-secondary)" }}>
+                              {growthCheckedInToday
+                                ? "Today's check-in is locked. Keep the rhythm going tomorrow."
+                                : "Today's streak is still unclaimed. Finish a task and stamp the board."}
                             </p>
                           </div>
-                          <div className="grow-quest-rank">
-                            <p className="text-xs uppercase tracking-wider">Rank</p>
-                            <p className="font-bold">
-                              {(growthData.current_streak || 0) >= 45 ? "Legendary" : (growthData.current_streak || 0) >= 20 ? "Locked In" : (growthData.current_streak || 0) >= 7 ? "Rising" : "Rookie"}
+                          <div className="grow-quest-rank grow-rank-panel">
+                            <p className="text-xs uppercase tracking-wider">Current Rank</p>
+                            <p className="font-bold text-lg">{growthRank}</p>
+                            <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
+                              {growthMilestoneGap} day{growthMilestoneGap === 1 ? "" : "s"} until the next milestone
                             </p>
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                          <div className="grow-stat-card">
+                        <div className="grow-arc-track" aria-hidden="true">
+                          <div className="grow-arc-fill" style={{ width: `${growthCompletionPercent}%` }} />
+                        </div>
+
+                        <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+                          <div className="grow-stat-card grow-stat-card-hot">
+                            <p className="grow-stat-kicker">Heat</p>
                             <p className="grow-stat-value">{growthData.current_streak} 🔥</p>
-                            <p className="grow-stat-label">Current Streak</p>
+                            <p className="grow-stat-label">Live Streak</p>
                           </div>
                           <div className="grow-stat-card">
+                            <p className="grow-stat-kicker">XP</p>
                             <p className="grow-stat-value">{growthData.total_days_completed}/120</p>
                             <p className="grow-stat-label">Days Cleared</p>
                           </div>
                           <div className="grow-stat-card">
+                            <p className="grow-stat-kicker">Peak</p>
                             <p className="grow-stat-value">{growthData.longest_streak} 🏆</p>
-                            <p className="grow-stat-label">Best Streak</p>
+                            <p className="grow-stat-label">Best Run</p>
                           </div>
-                        </div>
-
-                        <div className="space-y-2">
-                          <div className="flex justify-between text-sm">
-                            <span>Quest Completion</span>
-                            <span className="font-bold gradient-text">{Math.round(((growthData.total_days_completed || 0) / 120) * 100)}%</span>
+                          <div className="grow-stat-card">
+                            <p className="grow-stat-kicker">Finish</p>
+                            <p className="grow-stat-value">{growthCompletionPercent}%</p>
+                            <p className="grow-stat-label">{growthDaysRemaining} days left</p>
                           </div>
-                          <div className="h-3 rounded-full overflow-hidden grow-progress-track">
-                            <div
-                              className="h-full grow-progress-fill"
-                              style={{ width: `${((growthData.total_days_completed || 0) / 120) * 100}%` }}
-                            />
-                          </div>
-                          <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                            {Math.max(0, 120 - (growthData.total_days_completed || 0))} days remaining to finish the quest.
-                          </p>
                         </div>
                       </CardContent>
                     </Card>
 
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6">
-                      <Card className="dashboard-card lg:col-span-4">
+                      <Card className="dashboard-card lg:col-span-4 grow-mission-hub">
                         <CardHeader>
                           <CardTitle className="text-lg flex items-center gap-2">
                             <Target className="h-5 w-5 text-blue-500" />
-                            Daily Mission
+                            Daily Mission Hub
                           </CardTitle>
-                          <CardDescription>Complete any quest objective, then check in.</CardDescription>
+                          <CardDescription>Touch one productive action, then claim today.</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
+                          <div className="grow-daily-status">
+                            <div>
+                              <p className="text-xs uppercase tracking-[0.2em]" style={{ color: "var(--text-secondary)" }}>
+                                Status
+                              </p>
+                              <p className="text-2xl font-extrabold gradient-text">
+                                {growthCheckedInToday ? "Claimed" : "Ready"}
+                              </p>
+                            </div>
+                            <div className={`grow-status-pulse ${growthCheckedInToday ? "is-complete" : ""}`}>
+                              {growthCheckedInToday ? "✓" : "!"}
+                            </div>
+                          </div>
+
                           <div className="space-y-2 text-sm">
-                            <div className="grow-mission-item">✅ Generate tags for a beat</div>
-                            <div className="grow-mission-item">✅ Upload a beat to YouTube</div>
-                            <div className="grow-mission-item">✅ Create or edit a description</div>
+                            <div className="grow-mission-item">
+                              <span className="grow-mission-dot">1</span>
+                              <div>
+                                <p className="font-semibold">Generate a fresh tag run</p>
+                                <p className="text-xs" style={{ color: "var(--text-secondary)" }}>Wake up your next upload idea.</p>
+                              </div>
+                            </div>
+                            <div className="grow-mission-item">
+                              <span className="grow-mission-dot">2</span>
+                              <div>
+                                <p className="font-semibold">Refine or write a description</p>
+                                <p className="text-xs" style={{ color: "var(--text-secondary)" }}>Keep the upload pipeline moving.</p>
+                              </div>
+                            </div>
+                            <div className="grow-mission-item">
+                              <span className="grow-mission-dot">3</span>
+                              <div>
+                                <p className="font-semibold">Upload or queue a beat</p>
+                                <p className="text-xs" style={{ color: "var(--text-secondary)" }}>Progress counts. Momentum matters.</p>
+                              </div>
+                            </div>
                           </div>
                           <Button
                             onClick={handleCheckin}
                             disabled={loadingGrowth}
-                            className="w-full btn-modern py-4"
+                            className="w-full btn-modern py-4 grow-claim-button"
                           >
                             <CheckCircle2 className="mr-2 h-5 w-5" />
-                            {loadingGrowth ? "Checking in..." : "Complete Daily Check-In"}
+                            {loadingGrowth ? "Stamping..." : growthCheckedInToday ? "Today's Claim Locked" : "Claim Today's Streak"}
                           </Button>
+                          <p className="text-xs text-center" style={{ color: "var(--text-secondary)" }}>
+                            {growthCheckedInToday ? "You already banked today's progress." : "One click after any real task. Keep it honest and keep it moving."}
+                          </p>
                         </CardContent>
                       </Card>
 
-                      <Card className="dashboard-card lg:col-span-8">
+                      <Card className="dashboard-card lg:col-span-8 grow-map-card">
                         <CardHeader>
                           <div className="flex flex-wrap justify-between gap-2 items-center">
                             <CardTitle className="text-lg">120-Day Quest Map</CardTitle>
                             <Button onClick={fetchCalendar} variant="outline" size="sm">Refresh</Button>
                           </div>
-                          <CardDescription>Tap any day tile to inspect progress details.</CardDescription>
+                          <CardDescription>Hit completed tiles, avoid missed breaks, and inspect each day like a level node.</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
+                          <div className="grow-map-stats">
+                            <div className="grow-mini-pill">Next milestone: Day {nextGrowthMilestone}</div>
+                            <div className="grow-mini-pill">{growthDaysRemaining} days to finish</div>
+                            <div className="grow-mini-pill">{growthData.badges_earned?.length || 0} rewards unlocked</div>
+                          </div>
                           {calendarData && (
                             <div className="grid grid-cols-5 sm:grid-cols-8 lg:grid-cols-10 gap-2">
                               {Object.entries(calendarData.calendar || {}).slice(0, 120).map(([date, statusData], index) => {
@@ -2942,16 +3046,16 @@ const Dashboard = ({ setIsAuthenticated }) => {
                               </div>
                               <div className="mt-3 text-sm">
                                 {selectedDay.status === "completed" && (
-                                  <p className="text-green-600 font-semibold">Completed mission: {selectedDay.activity || "activity recorded"}</p>
+                                  <p className="text-green-600 font-semibold">Mission cleared: {selectedDay.activity || "activity recorded"}</p>
                                 )}
                                 {selectedDay.status === "missed" && (
-                                  <p className="text-red-600 font-semibold">Missed day. Streak reset risk detected.</p>
+                                  <p className="text-red-600 font-semibold">Missed day. Momentum broke here.</p>
                                 )}
                                 {selectedDay.status === "today" && (
-                                  <p className="text-purple-600 font-semibold">Live mission day. Complete one task then check in.</p>
+                                  <p className="text-purple-600 font-semibold">Live mission node. Do one real task, then lock it in.</p>
                                 )}
                                 {selectedDay.status === "future" && (
-                                  <p style={{ color: "var(--text-secondary)" }}>Upcoming day. Keep consistency to avoid resets.</p>
+                                  <p style={{ color: "var(--text-secondary)" }}>Future tile. Protect the run until you get here.</p>
                                 )}
                               </div>
                             </div>
@@ -2968,10 +3072,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
                     </div>
 
                     {growthData.badges_earned?.length > 0 && (
-                      <Card className="dashboard-card">
+                      <Card className="dashboard-card grow-reward-vault">
                         <CardHeader>
                           <CardTitle className="text-lg">🏆 Reward Vault</CardTitle>
-                          <CardDescription>Your unlocked challenge badges.</CardDescription>
+                          <CardDescription>Visible proof you stayed locked in.</CardDescription>
                         </CardHeader>
                         <CardContent>
                           <div className="flex flex-wrap gap-2">

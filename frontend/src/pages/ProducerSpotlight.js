@@ -59,6 +59,14 @@ const AVATAR_CHOICES = [
 ];
 const DEFAULT_AVATAR_URL = AVATAR_CHOICES[0].url;
 
+const TIER_CLASS_MAP = {
+  Bronze: "bg-amber-500/15 text-amber-200 border-amber-300/40",
+  Silver: "bg-slate-300/15 text-slate-100 border-slate-200/45",
+  Gold: "bg-yellow-400/15 text-yellow-100 border-yellow-300/45",
+  Platinum: "bg-cyan-400/15 text-cyan-100 border-cyan-300/45",
+  Diamond: "bg-fuchsia-400/15 text-fuchsia-100 border-fuchsia-300/45",
+};
+
 export default function ProducerSpotlight() {
   const navigate = useNavigate();
   const [spotlightData, setSpotlightData] = useState(null);
@@ -315,6 +323,8 @@ export default function ProducerSpotlight() {
     return <User className="h-3 w-3" />;
   };
 
+  const getTierClass = (tier) => TIER_CLASS_MAP[tier] || TIER_CLASS_MAP.Bronze;
+
   const openProducerStats = async (producer) => {
     if (!producer?.user_id) return;
     setSelectedProducer(producer);
@@ -411,6 +421,9 @@ export default function ProducerSpotlight() {
                     {getRoleTagIcon(producer.role_tag)}
                     {producer.role_tag || "Newbie"}
                   </span>
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-semibold ${getTierClass(producer.spotlight_tier)}`}>
+                    {producer.spotlight_tier || "Bronze"} Tier
+                  </span>
                   <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
                     {producer.tags.slice(0, 2).join(" / ") || "Open for collabs"}
                   </p>
@@ -435,6 +448,9 @@ export default function ProducerSpotlight() {
               </span>
               <span className="rounded-full border border-white/10 px-2 py-1">
                 {producer.views || 0} views
+              </span>
+              <span className="rounded-full border border-white/10 px-2 py-1">
+                {producer.spotlight_score || 0} score
               </span>
             </div>
 
@@ -907,6 +923,21 @@ export default function ProducerSpotlight() {
                   <p className="text-xs text-muted-foreground flex items-center gap-1"><BarChart3 className="h-3 w-3" /> Likes</p>
                   <p className="font-bold text-lg">{producerStats.stats?.likes || 0}</p>
                 </div>
+              </div>
+
+              <div className="rounded-lg border p-3 space-y-2">
+                <p className="text-sm font-semibold">Spotlight Tier</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-xs font-semibold ${getTierClass(selectedProducer?.spotlight_tier)}`}>
+                    {selectedProducer?.spotlight_tier || "Bronze"} Tier
+                  </span>
+                  <span className="text-sm text-muted-foreground">
+                    Score: {selectedProducer?.spotlight_score || 0}
+                  </span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Tier rises with consistency, spotlight activity, channel traction, and verified/featured status.
+                </p>
               </div>
 
               <div className="rounded-lg border p-3 space-y-2">

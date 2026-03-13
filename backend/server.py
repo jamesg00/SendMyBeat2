@@ -4430,16 +4430,12 @@ async def beathelper_get_image_preview(file_id: str, current_user: dict = Depend
         raise HTTPException(status_code=404, detail="Image file missing on server.")
 
     image_bytes = path.read_bytes()
-    ext = path.suffix.lower()
-    mime = "image/jpeg"
-    if ext == ".png":
-        mime = "image/png"
-    elif ext == ".webp":
-        mime = "image/webp"
-    elif ext == ".webm":
-        mime = "image/webm"
-
-    data_url = f"data:{mime};base64,{base64.b64encode(image_bytes).decode('utf-8')}"
+    data_url = _image_data_url_from_bytes(
+        image_bytes,
+        max_dimensions=(480, 480),
+        fit="contain",
+        quality=72,
+    )
     return {"file_id": upload.get("id"), "filename": upload.get("original_filename"), "data_url": data_url}
 
 
@@ -5427,10 +5423,36 @@ async def _profile_with_role_tag(profile_doc: dict) -> ProducerProfile:
 
 def _attach_growth_to_profile(profile: ProducerProfile, growth_by_user: dict[str, dict]) -> ProducerProfile:
     growth = growth_by_user.get(profile.user_id, {}) if profile and profile.user_id else {}
+    current_streak = int(growth.get("current_streak") or 0)
+    longest_streak = int(growth.get("longest_streak") or 0)
+    total_days_completed = int(growth.get("total_days_completed") or 0)
+    spotlight_score = min(
+        999,
+        int(profile.views or 0) // 200
+        + int(profile.likes or 0) // 25
+        + (current_streak * 5)
+        + (longest_streak * 2)
+        + (total_days_completed * 3)
+        + (60 if profile.featured else 0)
+        + (40 if profile.verification_status == "approved" else 0)
+    )
+    if spotlight_score >= 550:
+        spotlight_tier = "Diamond"
+    elif spotlight_score >= 320:
+        spotlight_tier = "Platinum"
+    elif spotlight_score >= 180:
+        spotlight_tier = "Gold"
+    elif spotlight_score >= 80:
+        spotlight_tier = "Silver"
+    else:
+        spotlight_tier = "Bronze"
+
     return profile.model_copy(update={
-        "current_streak": int(growth.get("current_streak") or 0),
-        "longest_streak": int(growth.get("longest_streak") or 0),
-        "total_days_completed": int(growth.get("total_days_completed") or 0),
+        "current_streak": current_streak,
+        "longest_streak": longest_streak,
+        "total_days_completed": total_days_completed,
+        "spotlight_score": spotlight_score,
+        "spotlight_tier": spotlight_tier,
     })
 
 
