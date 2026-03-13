@@ -1644,6 +1644,19 @@ def _is_admin_user(user: dict) -> bool:
     return (user_id and user_id in ADMIN_USER_IDS) or (username and username in ADMIN_USERNAMES)
 
 
+def _can_view_tag_debug(user: dict) -> bool:
+    return _is_admin_user(user)
+
+
+def _sanitize_tag_generation_doc(doc: Optional[dict], current_user: dict) -> Optional[dict]:
+    if not doc:
+        return doc
+    sanitized = dict(doc)
+    if not _can_view_tag_debug(current_user):
+        sanitized["debug"] = None
+    return sanitized
+
+
 async def _ensure_pro_user(current_user: dict, feature_name: str = "This feature") -> None:
     sub_status = await get_user_subscription_status(current_user["id"])
     if not sub_status.get("is_subscribed"):
@@ -2986,7 +2999,9 @@ _LOW_INTENT_EXACT_TAGS = {
 _GENERIC_BEAT_MODIFIERS = {
     "vibe", "energy", "flow", "sound", "street", "club", "wavy",
     "banger", "hard", "emotional", "melodic", "dark", "sad", "hype",
-    "inspired", "style", "producer",
+    "inspired", "style", "producer", "trap", "rap", "hip", "hop",
+    "southern", "atlanta", "fast", "slow", "unique", "experimental",
+    "bouncy", "tempo", "rage",
 }
 
 
@@ -3168,10 +3183,15 @@ def _is_generic_artist_modifier_tag(tag: str, artist_name: str, seed_tokens: set
     if seed_tokens and any(token in seed_tokens for token in tokens):
         return False
 
+    protected_tokens = {"type", "x", "and"}
+    modifier_tokens = [token for token in tokens if token in _GENERIC_BEAT_MODIFIERS and token not in protected_tokens]
+    if not modifier_tokens:
+        return False
+
     # Drop artist + generic modifier + beat style patterns.
     if "beat" not in tokens:
         return False
-    if any(mod in tokens for mod in _GENERIC_BEAT_MODIFIERS):
+    if modifier_tokens:
         return True
     return False
 
@@ -3668,6 +3688,11 @@ Optional candidate inspirations from YouTube/Spotify/SoundCloud/custom inputs:
                     dropped_debug.append({"tag": clean, "reason": "low_intent"})
                 return
 
+            if _is_generic_artist_modifier_tag(clean, artist_name, source_seed_tokens):
+                if len(dropped_debug) < 80:
+                    dropped_debug.append({"tag": clean, "reason": "generic_artist_modifier"})
+                return
+
             exact_key = _tag_exact_key(clean)
             semantic_key = _tag_semantic_key(clean)
             if not exact_key:
@@ -3698,10 +3723,6 @@ Optional candidate inspirations from YouTube/Spotify/SoundCloud/custom inputs:
             )
 
         for tag in [t for t in parsed_tags if isinstance(t, str)]:
-            if _is_generic_artist_modifier_tag(tag, artist_name, source_seed_tokens):
-                if len(dropped_debug) < 80:
-                    dropped_debug.append({"tag": _clean_tag_text(tag), "reason": "generic_artist_modifier"})
-                continue
             try_push_tag(tag, "llm", "llm_high_intent", max_tags=80)
 
         llm_selected_count = len(final_tags)
@@ -3756,7 +3777,7 @@ Optional candidate inspirations from YouTube/Spotify/SoundCloud/custom inputs:
             query=request.query,
             tags=final_tags,
             excluded_tags=[],
-            debug=debug_info,
+            debug=debug_info if _can_view_tag_debug(current_user) else None,
         )
         
         tag_doc = tag_gen.model_dump()
@@ -3827,12 +3848,14 @@ async def get_tag_history(current_user: dict = Depends(get_current_user)):
     for doc in tag_docs:
         if isinstance(doc['created_at'], str):
             doc['created_at'] = datetime.fromisoformat(doc['created_at'])
-    
-    return [TagGenerationResponse(**doc) for doc in tag_docs]
+
+    return [TagGenerationResponse(**_sanitize_tag_generation_doc(doc, current_user)) for doc in tag_docs]
 
 
 @api_router.get("/tags/debug/{tag_id}", response_model=TagDebugResponse)
 async def get_tag_debug(tag_id: str, current_user: dict = Depends(get_current_user)):
+    if not _can_view_tag_debug(current_user):
+        raise HTTPException(status_code=403, detail="Tag debug is only available to admin users.")
     doc = await db.tag_generations.find_one(
         {"id": tag_id, "user_id": current_user["id"]},
         {"_id": 0, "id": 1, "query": 1, "debug": 1},
@@ -3881,7 +3904,7 @@ async def save_tag_history(request: TagHistorySaveRequest, current_user: dict = 
     tag_doc["query_key"] = _normalize_query_key(request.query)
     tag_doc['created_at'] = tag_doc['created_at'].isoformat()
     await db.tag_generations.insert_one(tag_doc)
-    return tag_gen
+    return TagGenerationResponse(**_sanitize_tag_generation_doc(tag_gen.model_dump(), current_user))
 
 
 @api_router.patch("/tags/history/{tag_id}", response_model=TagGenerationResponse)
@@ -3922,7 +3945,7 @@ async def update_tag_history(tag_id: str, request: TagHistoryUpdateRequest, curr
     updated = await db.tag_generations.find_one({"id": tag_id, "user_id": current_user["id"]}, {"_id": 0})
     if updated and isinstance(updated.get("created_at"), str):
         updated["created_at"] = datetime.fromisoformat(updated["created_at"])
-    return TagGenerationResponse(**updated)
+    return TagGenerationResponse(**_sanitize_tag_generation_doc(updated, current_user))
 
 
 @api_router.delete("/tags/history/{tag_id}")
@@ -5360,6 +5383,34 @@ async def _build_spotlight_profiles(profile_docs: list[dict], growth_by_user: di
     return profiles
 
 
+async def _refresh_spotlight_metrics_for_profiles(profile_docs: list[dict]) -> None:
+    if not profile_docs:
+        return
+
+    semaphore = asyncio.Semaphore(4)
+
+    async def refresh_one(profile_doc: dict) -> None:
+        youtube_url = ((profile_doc.get("social_links") or {}).get("youtube") or "").strip()
+        if not youtube_url:
+            return
+        async with semaphore:
+            top_beats, channel_perf = await asyncio.to_thread(_fetch_channel_top_viewed_beats, youtube_url, 5)
+        next_views = int(channel_perf.get("total_views") or 0)
+        next_likes = sum(int(beat.get("likes") or 0) for beat in top_beats)
+        if next_views <= 0 and next_likes <= 0:
+            return
+        await db.producer_profiles.update_one(
+            {"user_id": profile_doc.get("user_id")},
+            {"$set": {
+                "views": next_views,
+                "likes": next_likes,
+                "updated_at": datetime.now(timezone.utc),
+            }},
+        )
+        profile_doc["views"] = next_views
+        profile_doc["likes"] = next_likes
+
+
 def _image_data_url_from_bytes(
     image_bytes: bytes,
     *,
@@ -5657,6 +5708,19 @@ async def get_producer_spotlight():
 
     new_producers = sorted(all_profiles, key=created_at_ts, reverse=True)[:12]
     ranked_profiles = sorted(all_profiles, key=trending_score, reverse=True)
+
+    metrics_candidates_by_user: dict[str, dict] = {}
+    for profile in featured + trending + new_producers + ranked_profiles[:24]:
+        user_id = profile.get("user_id")
+        if user_id and user_id not in metrics_candidates_by_user:
+            metrics_candidates_by_user[user_id] = profile
+    await _refresh_spotlight_metrics_for_profiles(list(metrics_candidates_by_user.values()))
+
+    featured = sorted(featured, key=trending_score, reverse=True)[:3]
+    trending = sorted(trending, key=trending_score, reverse=True)[:12]
+    new_producers = sorted(new_producers, key=created_at_ts, reverse=True)[:12]
+    ranked_profiles = sorted(all_profiles, key=trending_score, reverse=True)
+
     featured_profiles, trending_profiles, new_profiles, all_network_profiles = await asyncio.gather(
         _build_spotlight_profiles(featured, growth_by_user),
         _build_spotlight_profiles(trending, growth_by_user),
@@ -5741,6 +5805,11 @@ async def get_producer_stats(user_id: str, current_user: dict = Depends(get_curr
     if channel_top_beats:
         # Prefer real channel top beats for spotlight.
         top_beats = channel_top_beats
+    spotlight_likes = int(profile.get("likes") or 0)
+    if channel_top_beats:
+        youtube_likes = sum(int(beat.get("likes") or 0) for beat in channel_top_beats)
+        if youtube_likes > 0:
+            spotlight_likes = youtube_likes
     spotlight_views = int(profile.get("views") or 0)
     if channel_perf.get("total_views"):
         spotlight_views = int(channel_perf.get("total_views") or 0)
@@ -5748,7 +5817,7 @@ async def get_producer_stats(user_id: str, current_user: dict = Depends(get_curr
     return {
         "profile": profile_with_role.model_dump(),
         "stats": {
-            "likes": int(profile.get("likes") or 0),
+            "likes": spotlight_likes,
             "views": spotlight_views,
             "current_streak": int((growth or {}).get("current_streak") or 0),
             "longest_streak": int((growth or {}).get("longest_streak") or 0),

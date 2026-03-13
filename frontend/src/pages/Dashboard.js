@@ -187,6 +187,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [beatHelperImagePreview, setBeatHelperImagePreview] = useState("");
   const [loadingBeatHelperPreview, setLoadingBeatHelperPreview] = useState(false);
   const [beatHelperQueueImagePreviews, setBeatHelperQueueImagePreviews] = useState({});
+  const [uploadingBeatHelperAudio, setUploadingBeatHelperAudio] = useState(false);
+  const [uploadingBeatHelperImage, setUploadingBeatHelperImage] = useState(false);
   const beatHelperPreviewCacheRef = useRef({});
   const [beatHelperContact, setBeatHelperContact] = useState({ email: "", phone: "", email_enabled: false, sms_enabled: false });
   const [beatHelperTemplates, setBeatHelperTemplates] = useState([]);
@@ -220,6 +222,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
 
   const isPro = !!subscriptionStatus?.is_subscribed;
   const isAdmin = ADMIN_USERNAMES.has((user?.username || "").toLowerCase());
+  const canViewTagDebug = isAdmin;
   const visibleTabs = DASHBOARD_TABS.filter((tab) => !tab.proOnly || isPro);
   const adEligibleTabs = ["tags", "descriptions", "upload", "analytics", "grow", "beathelper"].includes(activeTab);
   const activeTabIndex = Math.max(0, visibleTabs.findIndex((tab) => tab.value === activeTab));
@@ -654,6 +657,60 @@ const Dashboard = ({ setIsAuthenticated }) => {
     }
   };
 
+  const handleBeatHelperAudioUpload = async (file) => {
+    if (!file) return;
+    if (file.size / (1024 * 1024) > 200) {
+      toast.error("Audio file too large. Max size is 200MB.");
+      return;
+    }
+
+    try {
+      setUploadingBeatHelperAudio(true);
+      const formData = new FormData();
+      formData.append("file", file);
+      const response = await axios.post(`${API}/upload/audio`, formData);
+      const nextFileId = response?.data?.file_id || "";
+      if (!nextFileId) {
+        throw new Error("Upload response missing file_id");
+      }
+      setBeatHelperForm((prev) => ({ ...prev, beat_file_id: nextFileId }));
+      await fetchBeatHelperData();
+      toast.success("Beat audio added to BeatHelper");
+    } catch (error) {
+      const detail = error?.response?.data?.detail;
+      toast.error(typeof detail === "string" ? detail : "Failed to upload beat audio");
+    } finally {
+      setUploadingBeatHelperAudio(false);
+    }
+  };
+
+  const handleBeatHelperImageUpload = async (file) => {
+    if (!file) return;
+
+    try {
+      setUploadingBeatHelperImage(true);
+      const formData = new FormData();
+      formData.append("file", file);
+      const response = await axios.post(`${API}/upload/image`, formData);
+      const nextFileId = response?.data?.file_id || "";
+      if (!nextFileId) {
+        throw new Error("Upload response missing file_id");
+      }
+      setBeatHelperForm((prev) => ({
+        ...prev,
+        image_file_id: nextFileId,
+        ai_choose_image: false,
+      }));
+      await fetchBeatHelperData();
+      toast.success("Thumbnail image added to BeatHelper");
+    } catch (error) {
+      const detail = error?.response?.data?.detail;
+      toast.error(typeof detail === "string" ? detail : "Failed to upload thumbnail image");
+    } finally {
+      setUploadingBeatHelperImage(false);
+    }
+  };
+
   const handleBeatHelperImageSearch = async ({ autoBuild = false } = {}) => {
     try {
       setLoadingBeatHelperImageSearch(true);
@@ -1054,7 +1111,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
       setGeneratedTags(response.data.tags);
       setActiveTagHistoryId(response.data.id);
       setSelectedTagHistoryIds([response.data.id]);
-      setTagDebug(response.data?.debug || null);
+      setTagDebug(canViewTagDebug ? response.data?.debug || null : null);
       upsertTagHistoryItem(response.data);
       toast.success(`Generated ${response.data.tags.length} tags! (AI + YouTube + Spotify + SoundCloud + custom tags)`);
 
@@ -1176,7 +1233,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
   };
 
   const fetchTagDebug = async (tagId) => {
-    if (!tagId) {
+    if (!tagId || !canViewTagDebug) {
       setTagDebug(null);
       setShowTagDebug(false);
       return;
@@ -1650,7 +1707,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
           </div>
 
           <TabsList
-            className="hidden sm:grid w-full max-w-5xl mx-auto gap-1 text-xs sm:text-sm dashboard-tabs relative overflow-hidden"
+            className="hidden sm:grid w-full max-w-6xl mx-auto gap-1 text-xs sm:text-sm dashboard-tabs dashboard-tabs-desktop relative overflow-hidden"
             style={{ gridTemplateColumns: `repeat(${Math.max(visibleTabs.length, 1)}, minmax(0, 1fr))` }}
           >
             <div
@@ -1663,7 +1720,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                 key={tab.value}
                 value={tab.value}
                 data-testid={`${tab.value}-tab`}
-                className="relative z-10 px-1 sm:px-3 py-1.5 sm:py-2 truncate transition-colors data-[state=active]:bg-transparent data-[state=active]:text-white"
+                className="relative z-10 flex min-h-[72px] items-center justify-center px-2 sm:px-3 py-2 text-center leading-tight whitespace-normal transition-colors data-[state=active]:bg-transparent data-[state=active]:text-white"
               >
                 {tab.label}
               </TabsTrigger>
@@ -1699,6 +1756,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
                 beatHelperImagePreview={beatHelperImagePreview}
                 loadingBeatHelperPreview={loadingBeatHelperPreview}
                 beatHelperQueueImagePreviews={beatHelperQueueImagePreviews}
+                uploadingBeatHelperAudio={uploadingBeatHelperAudio}
+                uploadingBeatHelperImage={uploadingBeatHelperImage}
                 beatHelperContact={beatHelperContact}
                 setBeatHelperContact={setBeatHelperContact}
                 beatHelperTemplates={beatHelperTemplates}
@@ -1720,6 +1779,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
                 fetchBeatHelperData={fetchBeatHelperData}
                 handleBeatHelperDispatchNow={handleBeatHelperDispatchNow}
                 handleBeatHelperCleanupUploads={handleBeatHelperCleanupUploads}
+                handleBeatHelperAudioUpload={handleBeatHelperAudioUpload}
+                handleBeatHelperImageUpload={handleBeatHelperImageUpload}
                 handleBeatHelperImageSearch={handleBeatHelperImageSearch}
                 handleBeatHelperImportSearchImage={handleBeatHelperImportSearchImage}
                 handleBeatHelperSaveContact={handleBeatHelperSaveContact}
@@ -1924,7 +1985,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         </div>
                       </div>
 
-                      {tagDebug && (
+                      {canViewTagDebug && tagDebug && (
                         <div className="p-3 sm:p-4 rounded-lg border" style={{ backgroundColor: "var(--bg-secondary)", borderColor: "var(--border-color)" }}>
                           <div className="flex items-center justify-between gap-2">
                             <p className="text-sm sm:text-base font-semibold">Tag Generation Debug</p>

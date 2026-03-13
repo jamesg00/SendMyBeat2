@@ -450,6 +450,9 @@ export default function ProducerSpotlight() {
                 {producer.views || 0} views
               </span>
               <span className="rounded-full border border-white/10 px-2 py-1">
+                {producer.likes || 0} likes
+              </span>
+              <span className="rounded-full border border-white/10 px-2 py-1">
                 {producer.spotlight_score || 0} score
               </span>
             </div>

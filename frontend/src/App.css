@@ -213,6 +213,18 @@ h1, h2, h3, h4, h5, h6 {
   padding: 6px;
 }
 
+.dashboard-tabs-desktop {
+  min-height: 84px;
+  align-items: stretch;
+}
+
+.dashboard-tabs-desktop [role="tab"] {
+  height: 100%;
+  white-space: normal !important;
+  word-break: keep-all;
+  overflow-wrap: normal;
+}
+
 /* Dashboard tab bar cleanup in light mode:
    remove inner separator lines, keep a black outer border */
 html:not(.dark) .dashboard-tabs {
