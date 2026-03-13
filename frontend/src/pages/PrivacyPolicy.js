@@ -12,8 +12,8 @@ const PrivacyPolicy = () => {
       className="min-h-screen cyber-grid scanline-effect"
       style={{ backgroundColor: "var(--bg-primary)", color: "var(--text-primary)" }}
     >
-      <div className="container mx-auto max-w-4xl px-3 py-4 sm:px-4 sm:py-6 md:px-6 md:py-8">
-        <div className="mb-6 flex items-center justify-between sm:mb-8">
+      <div className="policy-page container mx-auto max-w-4xl px-3 py-4 sm:px-4 sm:py-6 md:px-6 md:py-8">
+        <div className="policy-page-header mb-6 flex items-center justify-between gap-3 sm:mb-8">
           <Button
             variant="ghost"
             onClick={() => navigate(-1)}
@@ -22,7 +22,7 @@ const PrivacyPolicy = () => {
             <ArrowLeft className="h-3 w-3 sm:h-4 sm:w-4" />
             Back
           </Button>
-          <DarkModeToggle />
+          <DarkModeToggle inline />
         </div>
 
         <div className="game-card p-4 sm:p-6 md:p-8 lg:p-12" style={{ color: "var(--text-primary)" }}>

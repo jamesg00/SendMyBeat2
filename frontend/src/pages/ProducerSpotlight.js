@@ -346,26 +346,6 @@ export default function ProducerSpotlight() {
     [allProducers]
   );
   const visibleNetwork = useMemo(() => allProducers.slice(0, 16), [allProducers]);
-  const visibleTrending = useMemo(
-    () => (spotlightLiteMode ? (spotlightData?.trending_producers || []).slice(0, 9) : (spotlightData?.trending_producers || [])),
-    [spotlightData, spotlightLiteMode]
-  );
-  const visibleNew = useMemo(
-    () => (spotlightLiteMode ? (spotlightData?.new_producers || []).slice(0, 9) : (spotlightData?.new_producers || [])),
-    [spotlightData, spotlightLiteMode]
-  );
-  const visibleFeatured = useMemo(
-    () => (spotlightLiteMode ? (spotlightData?.featured_producers || []).slice(0, 4) : (spotlightData?.featured_producers || [])),
-    [spotlightData, spotlightLiteMode]
-  );
-  const visibleStreaks = useMemo(
-    () => (spotlightLiteMode ? streakLeaders.slice(0, 9) : streakLeaders),
-    [streakLeaders, spotlightLiteMode]
-  );
-  const visibleNetworkGrid = useMemo(
-    () => (spotlightLiteMode ? visibleNetwork.slice(0, 8) : visibleNetwork),
-    [visibleNetwork, spotlightLiteMode]
-  );
 
   if (loading) {
     return (
@@ -808,7 +788,7 @@ export default function ProducerSpotlight() {
             <h2 className="text-2xl font-bold">Featured Producers</h2>
           </div>
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            {visibleFeatured.map(p => (
+            {spotlightData.featured_producers.map(p => (
               <ProducerCard key={p.user_id} producer={p} badge="featured" />
             ))}
           </div>
@@ -823,7 +803,7 @@ export default function ProducerSpotlight() {
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
             {spotlightData?.trending_producers.length > 0 ? (
-              visibleTrending.map(p => (
+              spotlightData.trending_producers.map(p => (
                 <ProducerCard key={p.user_id} producer={p} badge="trending" />
               ))
             ) : (
@@ -842,7 +822,7 @@ export default function ProducerSpotlight() {
             <h2 className="text-2xl font-bold">New Users</h2>
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-            {visibleNew.map(p => (
+            {(spotlightData?.new_producers || []).map(p => (
               <ProducerCard key={p.user_id} producer={p} badge="new" />
             ))}
           </div>
@@ -856,7 +836,7 @@ export default function ProducerSpotlight() {
             <h2 className="text-2xl font-bold">Streak Leaders (Ranked by Days)</h2>
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-            {visibleStreaks.map((p, idx) => (
+            {streakLeaders.map((p, idx) => (
               <ProducerCard key={`streak-${p.user_id}`} producer={{ ...p, featured: idx < 3 }} badge={idx < 3 ? "featured" : undefined} />
             ))}
           </div>
@@ -873,7 +853,7 @@ export default function ProducerSpotlight() {
             <Button variant="outline" onClick={() => setShowAllOpen(true)}>Show All</Button>
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-4">
-            {visibleNetworkGrid.map((p) => (
+            {visibleNetwork.map((p) => (
               <ProducerCard key={`all-${p.user_id}`} producer={p} />
             ))}
           </div>

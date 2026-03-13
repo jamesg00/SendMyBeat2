@@ -8,8 +8,8 @@ const TermsAndConditions = () => {
 
   return (
     <div className="min-h-screen cyber-grid scanline-effect" style={{ backgroundColor: "var(--bg-primary)", color: "var(--text-primary)" }}>
-      <div className="container mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-6 md:py-8 max-w-4xl">
-        <div className="flex justify-between items-center mb-6 sm:mb-8">
+      <div className="policy-page container mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-6 md:py-8 max-w-4xl">
+        <div className="policy-page-header flex justify-between items-center gap-3 mb-6 sm:mb-8">
           <Button
             variant="ghost"
             onClick={() => navigate(-1)}
@@ -18,7 +18,7 @@ const TermsAndConditions = () => {
             <ArrowLeft className="w-3 h-3 sm:w-4 sm:h-4" />
             Back
           </Button>
-          <DarkModeToggle />
+          <DarkModeToggle inline />
         </div>
 
         <div className="game-card p-4 sm:p-6 md:p-8 lg:p-12" style={{ color: "var(--text-primary)" }}>

@@ -83,6 +83,7 @@ const BeatHelperStudio = ({
   const pending = beatHelperQueue.filter((item) => item.status === "pending_approval").length;
   const uploaded = beatHelperQueue.filter((item) => item.status === "uploaded").length;
   const [preferredReminderChannel, setPreferredReminderChannel] = useState("email");
+  const [brokenSearchImageIds, setBrokenSearchImageIds] = useState({});
 
   useEffect(() => {
     if (beatHelperContact.sms_enabled && beatHelperContact.phone) {
@@ -91,6 +92,10 @@ const BeatHelperStudio = ({
     }
     setPreferredReminderChannel("email");
   }, [beatHelperContact.email, beatHelperContact.phone, beatHelperContact.email_enabled, beatHelperContact.sms_enabled]);
+
+  useEffect(() => {
+    setBrokenSearchImageIds({});
+  }, [beatHelperImageResults]);
 
   const contactConfigured = useMemo(() => (
     Boolean((beatHelperContact.email || "").trim() && beatHelperContact.email_enabled) ||
@@ -116,6 +121,10 @@ const BeatHelperStudio = ({
   }, [beatHelperQueue]);
 
   const showReminderNudge = !contactConfigured || daysSinceLastActivity === null || daysSinceLastActivity >= 3;
+  const visibleBeatHelperImageResults = useMemo(
+    () => beatHelperImageResults.filter((result) => !brokenSearchImageIds[result.id]),
+    [beatHelperImageResults, brokenSearchImageIds]
+  );
 
   const handleReminderBootstrap = async () => {
     const nextContact =
@@ -387,7 +396,7 @@ const BeatHelperStudio = ({
                       </div>
 
                       <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3">
-                        {beatHelperImageResults.length ? beatHelperImageResults.map((result) => {
+                        {visibleBeatHelperImageResults.length ? visibleBeatHelperImageResults.map((result) => {
                           const isImporting = importingBeatHelperImageUrl === result.image_url;
                           return (
                             <button
@@ -408,6 +417,9 @@ const BeatHelperStudio = ({
                                   alt={result.artist || result.query_used || "BeatHelper search result"}
                                   className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.04]"
                                   loading="lazy"
+                                  onError={() => {
+                                    setBrokenSearchImageIds((prev) => ({ ...prev, [result.id]: true }));
+                                  }}
                                 />
                               </div>
                               <div className="space-y-2 p-3">

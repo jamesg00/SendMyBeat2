@@ -43,15 +43,15 @@ const LandingPage = ({ setIsAuthenticated }) => {
 
       {/* Navigation */}
       <nav className="fixed w-full z-50 bg-black/50 backdrop-blur-md border-b border-white/10">
-        <div className="container mx-auto px-4 sm:px-6 h-16 sm:h-20 flex items-center justify-between gap-3">
+        <div className="container mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="h-9 w-9 sm:h-10 sm:w-10 bg-gradient-to-br from-green-400 to-emerald-600 rounded-xl flex items-center justify-center shadow-[0_0_20px_rgba(34,197,94,0.3)] flex-shrink-0">
+            <div className="h-10 w-10 bg-gradient-to-br from-green-400 to-emerald-600 rounded-xl flex items-center justify-center shadow-[0_0_20px_rgba(34,197,94,0.3)]">
               <Music className="h-6 w-6 text-black fill-current" />
             </div>
-            <span className="text-lg sm:text-xl font-bold tracking-tight">SendMyBeat</span>
+            <span className="text-xl font-bold tracking-tight">SendMyBeat</span>
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-4">
+          <div className="flex items-center gap-4">
             <Button
               variant="ghost"
               onClick={() => { setAuthMode("login"); setIsLoginOpen(true); }}
@@ -61,7 +61,7 @@ const LandingPage = ({ setIsAuthenticated }) => {
             </Button>
             <Button
               onClick={() => { setAuthMode("register"); setIsLoginOpen(true); }}
-              className="bg-white text-black hover:bg-gray-200 font-semibold rounded-full px-4 sm:px-6 text-sm sm:text-base transition-all hover:scale-105"
+              className="bg-white text-black hover:bg-gray-200 font-semibold rounded-full px-6 transition-all hover:scale-105"
             >
               Get Started
             </Button>
@@ -75,20 +75,20 @@ const LandingPage = ({ setIsAuthenticated }) => {
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[600px] bg-green-500/20 rounded-full blur-[120px] pointer-events-none" />
         <div className="absolute bottom-0 right-0 w-[800px] h-[600px] bg-purple-500/10 rounded-full blur-[120px] pointer-events-none" />
 
-        <div className="container mx-auto px-4 sm:px-6 relative z-10 text-center">
+        <div className="container mx-auto px-6 relative z-10 text-center">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 mb-8 animate-fade-in-up">
             <span className="flex h-2 w-2 rounded-full bg-green-500 animate-pulse"></span>
             <span className="text-sm font-medium text-gray-300">New: Producer Spotlight & AI Tools</span>
           </div>
 
-          <h1 className="text-4xl sm:text-5xl md:text-7xl lg:text-8xl font-bold tracking-tight mb-8 leading-tight">
+          <h1 className="text-5xl md:text-7xl lg:text-8xl font-bold tracking-tight mb-8 leading-tight">
             The Future of <br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-emerald-400 to-teal-400">
               Beat Distribution
             </span>
           </h1>
 
-          <p className="text-lg sm:text-xl md:text-2xl text-gray-400 mb-12 max-w-3xl mx-auto leading-relaxed">
+          <p className="text-xl md:text-2xl text-gray-400 mb-12 max-w-3xl mx-auto leading-relaxed">
             Upload to YouTube in seconds. Generate viral tags with AI. <br className="hidden md:block" />
             Join a global community of 100k+ producers.
           </p>
@@ -206,7 +206,7 @@ const LandingPage = ({ setIsAuthenticated }) => {
 
       {/* Auth Dialog */}
       <Dialog open={isLoginOpen} onOpenChange={setIsLoginOpen}>
-        <DialogContent className="w-[calc(100vw-1rem)] sm:max-w-md bg-zinc-950 border-white/10 text-white p-4 sm:p-6">
+        <DialogContent className="sm:max-w-md bg-zinc-950 border-white/10 text-white">
           <DialogHeader>
             <DialogTitle className="text-2xl font-bold text-center">
               {authMode === "login" ? "Welcome Back" : "Join the Movement"}

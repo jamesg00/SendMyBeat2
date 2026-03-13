@@ -745,6 +745,36 @@ body.dark .tag-item,
   box-shadow: 0 6px 16px var(--glow);
 }
 
+.dark-mode-toggle--inline {
+  position: static;
+  top: auto;
+  right: auto;
+  z-index: auto;
+  flex-shrink: 0;
+}
+
+.policy-page,
+.policy-page p,
+.policy-page li,
+.policy-page a,
+.policy-page h1,
+.policy-page h2,
+.policy-page h3 {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+@media (max-width: 640px) {
+  .policy-page-header {
+    align-items: center;
+  }
+
+  .policy-page-header .dark-mode-toggle--inline {
+    padding: 10px;
+    border-radius: 10px;
+  }
+}
+
 /* Mesh Gradient Background */
 .mesh-gradient {
   background: 
