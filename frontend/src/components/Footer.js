@@ -1,11 +1,13 @@
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { Instagram, Youtube, Music2 } from "lucide-react";
 
 const Footer = () => {
   const currentYear = new Date().getFullYear();
+  const location = useLocation();
+  const isLandingFooter = location.pathname === "/";
 
   return (
-    <footer className="app-footer mt-auto">
+    <footer className={`app-footer mt-auto ${isLandingFooter ? "app-footer--landing" : ""}`}>
       <div className="container mx-auto px-3 sm:px-4 md:px-6 py-6 sm:py-8">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8">
           <div className="app-footer-brand flex flex-col items-center md:items-start">
@@ -65,7 +67,7 @@ const Footer = () => {
 
         <div className="app-footer-bottom mt-6 sm:mt-8 pt-4 sm:pt-6 text-center">
           <p className="text-xs sm:text-sm app-footer-text">
-            © {currentYear} SendMyBeat. All rights reserved.
+            &copy; {currentYear} SendMyBeat. All rights reserved.
           </p>
         </div>
       </div>
