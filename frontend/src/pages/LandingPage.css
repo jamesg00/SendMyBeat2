@@ -159,6 +159,81 @@
   background: rgba(61, 220, 122, 0.06);
 }
 
+.landing-example-status {
+  color: #c9ffd9;
+}
+
+.landing-example-prompt,
+.landing-example-console {
+  border: 1px solid rgba(84, 242, 139, 0.12);
+  background:
+    linear-gradient(180deg, rgba(3, 9, 6, 0.82), rgba(7, 14, 11, 0.92));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.landing-example-prompt {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.landing-example-code-label {
+  color: #7df8b7;
+}
+
+.landing-example-code-equals {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.landing-example-caret {
+  display: inline-block;
+  color: #b8ffcf;
+  animation: landingBlink 1s steps(1) infinite;
+}
+
+.landing-example-progress-track {
+  height: 8px;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.landing-example-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #2dc968 0%, #64f1a3 65%, #b4ffcf 100%);
+  box-shadow: 0 0 22px rgba(84, 242, 139, 0.3);
+  transition: width 500ms ease;
+}
+
+.landing-example-console {
+  display: grid;
+  gap: 10px;
+  font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+.landing-example-console-line {
+  display: grid;
+  gap: 4px;
+}
+
+.landing-example-console-key {
+  color: #7df8b7;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.landing-example-console-value {
+  color: #edfef3;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .landing-output-label,
 .landing-plan-price,
 .landing-accent-text {
@@ -169,6 +244,10 @@
   border: 1px solid rgba(84, 242, 139, 0.2);
   background: rgba(84, 242, 139, 0.1);
   color: #d9ffe7;
+}
+
+.landing-tag-animated {
+  animation: landingTagIn 320ms ease;
 }
 
 .landing-tag-muted {
@@ -254,4 +333,28 @@
 
 .landing-auth-link-btn:hover {
   text-decoration: underline;
+}
+
+@keyframes landingBlink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes landingTagIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

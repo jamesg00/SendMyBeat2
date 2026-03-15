@@ -852,6 +852,53 @@ body.dark[data-theme="minimal"] .app-footer-icon {
     color: #f3f4f6 !important;
 }
 
+/* Landing page footer should keep its dedicated dark palette regardless of active theme. */
+body[data-theme] .app-footer.app-footer--landing,
+html.dark body[data-theme] .app-footer.app-footer--landing,
+body.dark[data-theme] .app-footer.app-footer--landing {
+    border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+    background: linear-gradient(180deg, rgba(7, 10, 9, 0.98), rgba(3, 5, 4, 1)) !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
+}
+
+body[data-theme] .app-footer.app-footer--landing .app-footer-title,
+body[data-theme] .app-footer.app-footer--landing .app-footer-heading,
+body[data-theme] .app-footer.app-footer--landing .app-footer-text,
+body[data-theme] .app-footer.app-footer--landing .app-footer-link,
+html.dark body[data-theme] .app-footer.app-footer--landing .app-footer-title,
+html.dark body[data-theme] .app-footer.app-footer--landing .app-footer-heading,
+html.dark body[data-theme] .app-footer.app-footer--landing .app-footer-text,
+html.dark body[data-theme] .app-footer.app-footer--landing .app-footer-link,
+body.dark[data-theme] .app-footer.app-footer--landing .app-footer-title,
+body.dark[data-theme] .app-footer.app-footer--landing .app-footer-heading,
+body.dark[data-theme] .app-footer.app-footer--landing .app-footer-text,
+body.dark[data-theme] .app-footer.app-footer--landing .app-footer-link {
+    color: #f8faf9 !important;
+}
+
+body[data-theme] .app-footer.app-footer--landing .app-footer-link:hover,
+html.dark body[data-theme] .app-footer.app-footer--landing .app-footer-link:hover,
+body.dark[data-theme] .app-footer.app-footer--landing .app-footer-link:hover {
+    color: #3ddc7a !important;
+}
+
+body[data-theme] .app-footer.app-footer--landing .app-footer-logo,
+body[data-theme] .app-footer.app-footer--landing .app-footer-icon,
+html.dark body[data-theme] .app-footer.app-footer--landing .app-footer-logo,
+html.dark body[data-theme] .app-footer.app-footer--landing .app-footer-icon,
+body.dark[data-theme] .app-footer.app-footer--landing .app-footer-logo,
+body.dark[data-theme] .app-footer.app-footer--landing .app-footer-icon {
+    border-color: rgba(255, 255, 255, 0.14) !important;
+    color: #f8faf9 !important;
+    background: rgba(255, 255, 255, 0.04) !important;
+}
+
+body[data-theme] .app-footer.app-footer--landing .app-footer-bottom,
+html.dark body[data-theme] .app-footer.app-footer--landing .app-footer-bottom,
+body.dark[data-theme] .app-footer.app-footer--landing .app-footer-bottom {
+    border-top-color: rgba(255, 255, 255, 0.08) !important;
+}
+
 /* === OVERRIDES FOR MATRIX THEME TO LIMIT SCOPE === */
 /* Only apply matrix styles when theme="matrix" or .matrix-mode class is present */
 body:not([data-theme="matrix"]) .matrix-bg::before {

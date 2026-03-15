@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import axios from "axios";
 import { API } from "@/App";
 import { toast } from "sonner";
-import { ArrowRight, CheckCircle2, LineChart, Music, Play, Upload, Youtube, Zap } from "lucide-react";
+import { ArrowRight, CheckCircle2, LineChart, LoaderCircle, Music, Upload, Youtube, Zap } from "lucide-react";
 import { setAuthToken } from "@/lib/auth";
 import "@/pages/LandingPage.css";
 
@@ -61,12 +61,100 @@ const planCards = [
   },
 ];
 
+const liveExamplePrompt = "Future Type Beat";
+
+const liveExampleFrames = [
+  {
+    progress: 14,
+    stage: "Reading prompt",
+    status: "Waiting for producer input...",
+    typedLength: 6,
+    tags: [],
+    title: "",
+    description: "",
+    metrics: ["Prompt locked", "Context warmup", "No metadata yet"],
+  },
+  {
+    progress: 33,
+    stage: "Analyzing references",
+    status: "Checking artist lanes, search intent, and naming patterns...",
+    typedLength: liveExamplePrompt.length,
+    tags: ["future type beat", "future x metro type beat", "pluto trap beat"],
+    title: "",
+    description: "",
+    metrics: ["Intent match: high", "Trap lane found", "Title drafting"],
+  },
+  {
+    progress: 58,
+    stage: "Generating tags",
+    status: "Stacking searchable tags from the seed phrase...",
+    typedLength: liveExamplePrompt.length,
+    tags: [
+      "future type beat",
+      "ds2 type beat",
+      "dirty sprite 2 type beat",
+      "purple reign type beat",
+      "monster type beat",
+      "pluto trap type beat",
+    ],
+    title: "FREE Future Type Beat 2026 | Dark Melodic Trap Instrumental",
+    description: "",
+    metrics: ["62 tags ready", "Title scored", "Description writing"],
+  },
+  {
+    progress: 82,
+    stage: "Writing metadata",
+    status: "Building a title and description pack for YouTube...",
+    typedLength: liveExamplePrompt.length,
+    tags: [
+      "future type beat",
+      "ds2 type beat",
+      "dirty sprite 2 type beat",
+      "purple reign type beat",
+      "monster type beat",
+      "pluto trap type beat",
+    ],
+    title: "FREE Future Type Beat 2026 | Dark Melodic Trap Instrumental",
+    description: "Dark, spacey trap energy with room for hooks, verses, and late-night visuals.",
+    metrics: ["SEO title ready", "Description synced", "Upload handoff next"],
+  },
+  {
+    progress: 100,
+    stage: "Ready to upload",
+    status: "Everything is generated and queued for the upload studio.",
+    typedLength: liveExamplePrompt.length,
+    tags: [
+      "future type beat",
+      "ds2 type beat",
+      "dirty sprite 2 type beat",
+      "purple reign type beat",
+      "monster type beat",
+      "pluto trap type beat",
+    ],
+    title: "FREE Future Type Beat 2026 | Dark Melodic Trap Instrumental",
+    description: "Dark, spacey trap energy with room for hooks, verses, and late-night visuals.",
+    metrics: ["62 tags generated", "1 title + description", "Upload-ready"],
+  },
+];
+
 const LandingPage = ({ setIsAuthenticated }) => {
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [authMode, setAuthMode] = useState("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [liveFrameIndex, setLiveFrameIndex] = useState(0);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setLiveFrameIndex((current) => (current + 1) % liveExampleFrames.length);
+    }, 1600);
+
+    return () => window.clearInterval(interval);
+  }, []);
+
+  const liveFrame = liveExampleFrames[liveFrameIndex];
+  const typedPrompt = liveExamplePrompt.slice(0, liveFrame.typedLength);
 
   const openAuth = (mode) => {
     setAuthMode(mode);
@@ -158,14 +246,6 @@ const LandingPage = ({ setIsAuthenticated }) => {
                   Start Free
                   <ArrowRight className="ml-2 h-5 w-5" />
                 </Button>
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="landing-outline-btn h-14 w-full rounded-full text-lg sm:w-auto"
-                >
-                  <Play className="mr-2 h-5 w-5 fill-current" />
-                  Watch Demo
-                </Button>
               </div>
 
               <div className="landing-muted grid gap-3 text-sm sm:grid-cols-3">
@@ -197,60 +277,97 @@ const LandingPage = ({ setIsAuthenticated }) => {
 
               <div className="space-y-4">
                 <div className="landing-input-shell rounded-2xl p-4">
-                  <div className="landing-muted-2 mb-2 text-xs uppercase tracking-[0.2em]">Input</div>
-                  <div className="landing-plan-shell rounded-xl px-4 py-3 text-base font-medium">
-                    Future Type Beat
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div className="landing-muted-2 text-xs uppercase tracking-[0.2em]">Prompt</div>
+                    <div className="landing-example-status flex items-center gap-2 text-xs">
+                      <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                      <span>{liveFrame.stage}</span>
+                    </div>
+                  </div>
+                  <div className="landing-example-prompt rounded-xl px-4 py-3 text-base font-medium">
+                    <span className="landing-example-code-label">prompt</span>
+                    <span className="landing-example-code-equals">=</span>
+                    <span>&quot;{typedPrompt}</span>
+                    <span className="landing-example-caret">|</span>
+                    <span>&quot;</span>
+                  </div>
+                  <div className="mt-3">
+                    <div className="landing-example-progress-track">
+                      <div
+                        className="landing-example-progress-fill"
+                        style={{ width: `${liveFrame.progress}%` }}
+                      />
+                    </div>
+                    <div className="mt-2 flex items-center justify-between text-[11px] uppercase tracking-[0.18em]">
+                      <span className="landing-muted-2">{liveFrame.status}</span>
+                      <span className="landing-accent-text">{liveFrame.progress}%</span>
+                    </div>
                   </div>
                 </div>
 
                 <div className="landing-output-shell rounded-2xl p-4">
-                  <div className="landing-output-label mb-3 text-xs uppercase tracking-[0.2em]">Output</div>
+                  <div className="landing-output-label mb-3 text-xs uppercase tracking-[0.2em]">Generated Output</div>
+                  <div className="landing-example-console mb-4 rounded-2xl p-4">
+                    <div className="landing-example-console-line">
+                      <span className="landing-example-console-key">const seed</span>
+                      <span className="landing-example-console-value">&quot;{liveExamplePrompt}&quot;</span>
+                    </div>
+                    <div className="landing-example-console-line">
+                      <span className="landing-example-console-key">const tags</span>
+                      <span className="landing-example-console-value">{liveFrame.tags.length ? `${liveFrame.tags.length}+ suggestions` : "pending..."}</span>
+                    </div>
+                    <div className="landing-example-console-line">
+                      <span className="landing-example-console-key">const title</span>
+                      <span className="landing-example-console-value">{liveFrame.title || "drafting..."}</span>
+                    </div>
+                    <div className="landing-example-console-line">
+                      <span className="landing-example-console-key">const description</span>
+                      <span className="landing-example-console-value">{liveFrame.description || "drafting..."}</span>
+                    </div>
+                  </div>
                   <div className="mb-3 flex flex-wrap gap-2">
-                    {[
-                      "future type beat",
-                      "ds2 type beat",
-                      "dirty sprite 2 type beat",
-                      "purple reign type beat",
-                      "monster type beat",
-                      "pluto trap type beat",
-                    ].map((tag) => (
+                    {liveFrame.tags.map((tag) => (
                       <span
                         key={tag}
-                        className="landing-tag rounded-full px-3 py-1 text-xs"
+                        className="landing-tag landing-tag-animated rounded-full px-3 py-1 text-xs"
                       >
                         {tag}
                       </span>
                     ))}
-                    <span className="landing-tag-muted rounded-full px-3 py-1 text-xs">
-                      +54 more tags
-                    </span>
+                    {liveFrame.tags.length > 0 && (
+                      <span className="landing-tag-muted rounded-full px-3 py-1 text-xs">
+                        +{Math.max(0, 62 - liveFrame.tags.length)} more tags
+                      </span>
+                    )}
                   </div>
                   <div className="landing-muted space-y-2 text-sm">
                     <div>
-                      <span className="landing-panel-title font-semibold">Title:</span> Future Type Beat 2026
+                      <span className="landing-panel-title font-semibold">Title:</span>{" "}
+                      {liveFrame.title || "Drafting search-friendly title..."}
                     </div>
                     <div>
-                      <span className="landing-panel-title font-semibold">Description:</span> Generated and ready for YouTube.
+                      <span className="landing-panel-title font-semibold">Description:</span>{" "}
+                      {liveFrame.description || "Building a description from tone, artist lane, and upload intent."}
                     </div>
                     <div className="landing-accent-text flex items-center gap-2 pt-1">
                       <Youtube className="h-4 w-4" />
-                      Upload-ready in one screen
+                      {liveFrame.progress === 100 ? "Upload-ready in one screen" : "Preparing upload-ready metadata"}
                     </div>
                   </div>
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div className="landing-stat rounded-2xl p-4">
-                    <div className="landing-panel-title text-2xl font-bold">60-80</div>
-                    <div className="landing-muted-2 mt-1 text-xs uppercase tracking-[0.18em]">Tags per run</div>
+                    <div className="landing-panel-title text-2xl font-bold">{liveFrame.progress}%</div>
+                    <div className="landing-muted-2 mt-1 text-xs uppercase tracking-[0.18em]">Generation progress</div>
                   </div>
                   <div className="landing-stat rounded-2xl p-4">
-                    <div className="landing-panel-title text-2xl font-bold">1</div>
-                    <div className="landing-muted-2 mt-1 text-xs uppercase tracking-[0.18em]">Title + description set</div>
+                    <div className="landing-panel-title text-2xl font-bold">{liveFrame.tags.length || "--"}</div>
+                    <div className="landing-muted-2 mt-1 text-xs uppercase tracking-[0.18em]">Visible tags</div>
                   </div>
                   <div className="landing-stat rounded-2xl p-4">
-                    <div className="landing-panel-title text-2xl font-bold">Fast</div>
-                    <div className="landing-muted-2 mt-1 text-xs uppercase tracking-[0.18em]">Upload workflow</div>
+                    <div className="landing-panel-title text-sm font-bold leading-snug">{liveFrame.metrics[2]}</div>
+                    <div className="landing-muted-2 mt-1 text-xs uppercase tracking-[0.18em]">{liveFrame.metrics[0]}</div>
                   </div>
                 </div>
               </div>
