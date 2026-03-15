@@ -48,21 +48,31 @@ const ProgressBar = ({ isActive, message = "Processing...", duration = 30000, on
   };
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 cyber-grid neon-border-top shadow-2xl" style={{backgroundColor: 'var(--bg-primary)', borderTop: '2px solid var(--accent-primary)'}}>
+    <div
+      className="fixed bottom-0 left-0 right-0 z-50 border-t shadow-2xl backdrop-blur-md"
+      style={{
+        background: "color-mix(in srgb, var(--card-bg) 92%, transparent)",
+        borderTopColor: "var(--accent-primary)",
+        color: "var(--text-primary)",
+      }}
+    >
       <div className="container mx-auto px-4 py-3">
         <div className="flex items-center justify-between mb-2">
-          <p className="text-sm font-medium matrix-glow pulse-glow">
+          <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
             {message}
           </p>
           <div className="flex items-center gap-3">
-            <p className="text-sm font-bold matrix-glow" style={{color: 'var(--accent-primary)'}}>
+            <p className="text-sm font-bold" style={{color: 'var(--accent-primary)'}}>
               {Math.round(progress)}%
             </p>
             {onCancel && (
               <button
                 onClick={handleCancel}
-                className="p-1.5 rounded-full neon-border hover:scale-110 transition-transform rgb-hover"
-                style={{backgroundColor: 'rgba(239, 68, 68, 0.1)'}}
+                className="rounded-full border p-1.5 transition-transform hover:scale-110"
+                style={{
+                  backgroundColor: "color-mix(in srgb, #ef4444 12%, transparent)",
+                  borderColor: "color-mix(in srgb, #ef4444 32%, var(--border-color))",
+                }}
                 title="Cancel operation"
               >
                 <X className="w-5 h-5" style={{color: '#ef4444'}} />
@@ -70,9 +80,15 @@ const ProgressBar = ({ isActive, message = "Processing...", duration = 30000, on
             )}
           </div>
         </div>
-        <div className="w-full h-3 neon-border rounded-full overflow-hidden" style={{backgroundColor: 'rgba(0, 255, 65, 0.1)'}}>
+        <div
+          className="h-3 w-full overflow-hidden rounded-full border"
+          style={{
+            backgroundColor: "color-mix(in srgb, var(--bg-secondary) 82%, transparent)",
+            borderColor: "var(--border-color)",
+          }}
+        >
           <div 
-            className="h-full bg-gradient-to-r from-[var(--accent-primary)] to-[var(--accent-secondary)] transition-all duration-300 ease-out matrix-glow"
+            className="h-full bg-gradient-to-r from-[var(--accent-primary)] to-[var(--accent-secondary)] transition-all duration-300 ease-out"
             style={{ 
               width: `${progress}%`,
               boxShadow: '0 0 20px var(--accent-primary)'

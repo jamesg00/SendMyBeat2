@@ -13,7 +13,6 @@ const UploadDashboard = ({
   youtubeEmail,
   onDisconnectYouTube,
   onConnectYouTube,
-  onExitUploadTab,
   handleAudioUpload,
   handleImageUpload,
   uploadingAudio,
@@ -30,15 +29,10 @@ const UploadDashboard = ({
   return (
     <Card className="dashboard-card min-h-[400px]">
       <CardHeader>
-        <div className="flex items-center justify-between gap-3">
-          <CardTitle className="flex items-center gap-2">
-             <Youtube className="h-5 w-5 text-red-600" />
-             New Upload
-          </CardTitle>
-          <Button variant="outline" size="sm" onClick={() => onExitUploadTab?.()}>
-            Exit Upload Tab
-          </Button>
-        </div>
+        <CardTitle className="flex items-center gap-2">
+           <Youtube className="h-5 w-5 text-red-600" />
+           New Upload
+        </CardTitle>
         <CardDescription>Upload audio and image to enter the studio.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">

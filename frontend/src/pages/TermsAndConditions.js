@@ -2,18 +2,19 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import DarkModeToggle from "@/components/DarkModeToggle";
+import "@/pages/PolicyPages.css";
 
 const TermsAndConditions = () => {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen cyber-grid scanline-effect" style={{ backgroundColor: "var(--bg-primary)", color: "var(--text-primary)" }}>
-      <div className="policy-page container mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-6 md:py-8 max-w-4xl">
-        <div className="policy-page-header flex justify-between items-center gap-3 mb-6 sm:mb-8">
+    <div className="policy-shell">
+      <div className="policy-wrap policy-copy container mx-auto max-w-4xl px-3 py-4 sm:px-4 sm:py-6 md:px-6 md:py-8">
+        <div className="policy-header mb-6 sm:mb-8">
           <Button
             variant="ghost"
             onClick={() => navigate(-1)}
-            className="flex items-center gap-1 sm:gap-2 matrix-glow hover:scale-105 transition-transform text-sm sm:text-base"
+            className="policy-back-btn flex items-center gap-1 text-sm transition-transform hover:scale-105 sm:gap-2 sm:text-base"
           >
             <ArrowLeft className="w-3 h-3 sm:w-4 sm:h-4" />
             Back
@@ -21,17 +22,17 @@ const TermsAndConditions = () => {
           <DarkModeToggle inline />
         </div>
 
-        <div className="game-card p-4 sm:p-6 md:p-8 lg:p-12" style={{ color: "var(--text-primary)" }}>
-          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-4 sm:mb-6 text-center brand-text matrix-glow rgb-hover">
+        <div className="policy-card p-4 sm:p-6 md:p-8 lg:p-12">
+          <h1 className="policy-title mb-4 text-center text-2xl font-bold sm:mb-6 sm:text-3xl md:text-4xl">
             Terms and Conditions
           </h1>
-          <p className="text-xs sm:text-sm mb-6 sm:mb-8 text-center matrix-glow" style={{ color: "var(--text-secondary)" }}>
+          <p className="policy-muted mb-6 text-center text-xs sm:mb-8 sm:text-sm">
             Last Updated: January 2025
           </p>
 
-          <div className="space-y-6 sm:space-y-8 matrix-glow text-sm sm:text-base" style={{ color: "var(--text-primary)" }}>
+          <div className="policy-copy space-y-6 text-sm sm:space-y-8 sm:text-base">
             <section>
-              <h2 className="text-xl sm:text-2xl font-semibold mb-3 matrix-glow">
+              <h2 className="policy-title mb-3 text-xl font-semibold sm:text-2xl">
                 1. Acceptance of Terms
               </h2>
               <p>
@@ -40,7 +41,7 @@ const TermsAndConditions = () => {
             </section>
 
             <section>
-              <h2 className="text-xl sm:text-2xl font-semibold mb-3 matrix-glow">
+              <h2 className="policy-title mb-3 text-xl font-semibold sm:text-2xl">
                 2. Description of Service
               </h2>
               <p>
@@ -55,7 +56,7 @@ const TermsAndConditions = () => {
             </section>
 
             <section>
-              <h2 className="text-xl sm:text-2xl font-semibold mb-3 matrix-glow">
+              <h2 className="policy-title mb-3 text-xl font-semibold sm:text-2xl">
                 3. User Accounts and Registration
               </h2>
               <p>
@@ -70,7 +71,7 @@ const TermsAndConditions = () => {
             </section>
 
             <section>
-              <h2 className="text-xl sm:text-2xl font-semibold mb-3 matrix-glow">
+              <h2 className="policy-title mb-3 text-xl font-semibold sm:text-2xl">
                 4. Subscription Plans and Payments
               </h2>
               <p className="mb-2">
@@ -85,7 +86,7 @@ const TermsAndConditions = () => {
             </section>
 
             <section>
-              <h2 className="text-xl sm:text-2xl font-semibold mb-3 matrix-glow">
+              <h2 className="policy-title mb-3 text-xl font-semibold sm:text-2xl">
                 5. User Content and Intellectual Property
               </h2>
               <p>
@@ -99,7 +100,7 @@ const TermsAndConditions = () => {
             </section>
 
             <section>
-              <h2 className="text-xl sm:text-2xl font-semibold mb-3 matrix-glow">
+              <h2 className="policy-title mb-3 text-xl font-semibold sm:text-2xl">
                 6. Acceptable Use Policy
               </h2>
               <p>
@@ -116,7 +117,7 @@ const TermsAndConditions = () => {
             </section>
 
             <section>
-              <h2 className="text-xl sm:text-2xl font-semibold mb-3 matrix-glow">
+              <h2 className="policy-title mb-3 text-xl font-semibold sm:text-2xl">
                 7. Third-Party Services
               </h2>
               <p>
@@ -125,7 +126,7 @@ const TermsAndConditions = () => {
             </section>
 
             <section>
-              <h2 className="text-xl sm:text-2xl font-semibold mb-3 matrix-glow">
+              <h2 className="policy-title mb-3 text-xl font-semibold sm:text-2xl">
                 8. Limitation of Liability
               </h2>
               <p>
@@ -134,7 +135,7 @@ const TermsAndConditions = () => {
             </section>
 
             <section>
-              <h2 className="text-xl sm:text-2xl font-semibold mb-3 matrix-glow">
+              <h2 className="policy-title mb-3 text-xl font-semibold sm:text-2xl">
                 9. Data and Privacy
               </h2>
               <p>
@@ -143,7 +144,7 @@ const TermsAndConditions = () => {
             </section>
 
             <section>
-              <h2 className="text-xl sm:text-2xl font-semibold mb-3 matrix-glow">
+              <h2 className="policy-title mb-3 text-xl font-semibold sm:text-2xl">
                 10. Termination
               </h2>
               <p>
@@ -152,7 +153,7 @@ const TermsAndConditions = () => {
             </section>
 
             <section>
-              <h2 className="text-xl sm:text-2xl font-semibold mb-3 matrix-glow">
+              <h2 className="policy-title mb-3 text-xl font-semibold sm:text-2xl">
                 11. Changes to Terms
               </h2>
               <p>
@@ -161,7 +162,7 @@ const TermsAndConditions = () => {
             </section>
 
             <section>
-              <h2 className="text-xl sm:text-2xl font-semibold mb-3 matrix-glow">
+              <h2 className="policy-title mb-3 text-xl font-semibold sm:text-2xl">
                 12. Governing Law
               </h2>
               <p>
@@ -170,7 +171,7 @@ const TermsAndConditions = () => {
             </section>
 
             <section>
-              <h2 className="text-xl sm:text-2xl font-semibold mb-3 matrix-glow">
+              <h2 className="policy-title mb-3 text-xl font-semibold sm:text-2xl">
                 13. Contact Information
               </h2>
               <p>
@@ -179,7 +180,7 @@ const TermsAndConditions = () => {
             </section>
 
             <section>
-              <h2 className="text-xl sm:text-2xl font-semibold mb-3 matrix-glow">
+              <h2 className="policy-title mb-3 text-xl font-semibold sm:text-2xl">
                 14. Severability
               </h2>
               <p>
@@ -188,7 +189,7 @@ const TermsAndConditions = () => {
             </section>
 
             <section>
-              <h2 className="text-xl sm:text-2xl font-semibold mb-3 matrix-glow">
+              <h2 className="policy-title mb-3 text-xl font-semibold sm:text-2xl">
                 15. Entire Agreement
               </h2>
               <p>
@@ -197,8 +198,8 @@ const TermsAndConditions = () => {
             </section>
           </div>
 
-          <div className="mt-12 pt-8 border-t border-gray-200 dark:border-gray-700">
-            <p className="text-center text-sm" style={{ color: "var(--text-secondary)" }}>
+          <div className="policy-accent-divider mt-12 pt-8">
+            <p className="policy-muted text-center text-sm">
               By using SendMyBeat.com, you acknowledge that you have read, understood, and agree to be bound by these Terms and Conditions.
             </p>
           </div>

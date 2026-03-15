@@ -25,6 +25,9 @@ const MetadataEditor = ({
     return query.replace(/\([^)]*\)/g, "").trim() || query;
   };
 
+  const selectedTagEntry = tagHistory.find((entry) => entry.id === selectedTagsId);
+  const selectedTagList = (selectedTagEntry?.tags || []).filter(Boolean);
+
   return (
     <Card className="border-l-4 border-l-blue-500 shadow-sm">
        <CardHeader className="pb-3">
@@ -68,6 +71,36 @@ const MetadataEditor = ({
                       ))}
                    </SelectContent>
                 </Select>
+                <div
+                  className="rounded-md border px-3 py-2 text-xs"
+                  style={{ borderColor: "var(--border-color)", backgroundColor: "var(--bg-secondary)", color: "var(--text-secondary)" }}
+                >
+                  {selectedTagList.length > 0 ? (
+                    <>
+                      <div className="mb-2 font-medium" style={{ color: "var(--text-primary)" }}>
+                        {selectedTagList.length} tags selected
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {selectedTagList.slice(0, 10).map((tag) => (
+                          <span
+                            key={tag}
+                            className="rounded-full border px-2 py-1 leading-none"
+                            style={{ borderColor: "var(--border-color)", color: "var(--text-primary)" }}
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                        {selectedTagList.length > 10 && (
+                          <span className="rounded-full border px-2 py-1 leading-none" style={{ borderColor: "var(--border-color)" }}>
+                            +{selectedTagList.length - 10} more
+                          </span>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <span>No saved tags selected yet.</span>
+                  )}
+                </div>
              </div>
           </div>
           {selectedDescriptionId && (

@@ -1,56 +1,15 @@
-import React, { useState } from 'react';
-import axios from 'axios';
-import { API } from '@/App';
+import React from 'react';
 import { useTheme } from '@/lib/ThemeContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Palette, Monitor, Zap, Box, Sparkles } from 'lucide-react';
-import { toast } from 'sonner';
+import { Palette, Monitor, Zap } from 'lucide-react';
 
-export default function ThemeCustomizer({ isPro = false, onUpgrade }) {
-  const { theme, setTheme, setAiTheme } = useTheme();
-  const [aiPrompt, setAiPrompt] = useState('');
-  const [isGeneratingTheme, setIsGeneratingTheme] = useState(false);
+export default function ThemeCustomizer() {
+  const { theme, setTheme } = useTheme();
 
   const themes = [
     { id: 'matrix', name: 'Matrix Arcade', icon: <Monitor className="h-5 w-5" />, desc: 'Cyberpunk retro style' },
-    { id: 'glass', name: 'Glassmorphism', icon: <Box className="h-5 w-5" />, desc: 'Modern frosted glass' },
     { id: 'neubrutalism', name: 'Neubrutalism', icon: <Zap className="h-5 w-5" />, desc: 'Bold, high contrast' },
   ];
-
-  const handleGenerateAiTheme = async () => {
-    if (!isPro) {
-      toast.error('AI Theme Generator is a Pro feature.');
-      if (onUpgrade) onUpgrade();
-      return;
-    }
-
-    setIsGeneratingTheme(true);
-    try {
-      const response = await axios.post(`${API}/theme/generate`, {
-        prompt: aiPrompt,
-        mode: document.documentElement.classList.contains('dark') ? 'dark' : 'light',
-      });
-
-      const generated = response?.data;
-      if (!generated?.variables) {
-        throw new Error('Invalid AI theme response');
-      }
-
-      setAiTheme(generated);
-      setTheme('ai');
-      toast.success(`Applied AI Theme: ${generated.theme_name || 'Custom Theme'}`);
-    } catch (error) {
-      console.error('Failed to generate AI theme', error);
-      if (error?.response?.status === 402 && onUpgrade) {
-        onUpgrade();
-      }
-      toast.error(error?.response?.data?.detail || 'Failed to generate AI theme');
-    } finally {
-      setIsGeneratingTheme(false);
-    }
-  };
 
   return (
     <Card className="dashboard-card border-l-4 border-primary">
@@ -62,18 +21,18 @@ export default function ThemeCustomizer({ isPro = false, onUpgrade }) {
         <CardDescription>Customize the look and feel of your studio</CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {themes.map((t) => (
             <button
               key={t.id}
               onClick={() => setTheme(t.id)}
-              className={`
-                relative p-4 rounded-xl border-2 text-left transition-all duration-200
-                hover:scale-105 flex flex-col gap-2
-                ${theme === t.id
-                  ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
-                  : 'border-muted hover:border-primary/50 bg-card'}
-              `}
+              className={
+                `relative p-4 rounded-xl border-2 text-left transition-all duration-200 hover:scale-105 flex flex-col gap-2 ${
+                  theme === t.id
+                    ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
+                    : 'border-muted hover:border-primary/50 bg-card'
+                }`
+              }
             >
               <div className={`p-2 rounded-lg w-fit ${theme === t.id ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
                 {t.icon}
@@ -82,36 +41,11 @@ export default function ThemeCustomizer({ isPro = false, onUpgrade }) {
                 <p className="font-bold text-sm">{t.name}</p>
                 <p className="text-xs text-muted-foreground">{t.desc}</p>
               </div>
-              {theme === t.id && (
+              {theme === t.id ? (
                 <div className="absolute top-3 right-3 h-2 w-2 rounded-full bg-primary shadow-[0_0_8px_var(--accent-primary)]" />
-              )}
+              ) : null}
             </button>
           ))}
-        </div>
-
-        <div className="mt-4 rounded-xl border border-primary/30 bg-card p-4 space-y-3">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-primary" />
-            <p className="font-bold text-sm">AI Theme Generator (Grok) {isPro ? '' : '· Pro Only'}</p>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {isPro
-              ? 'Generate a fresh custom theme from a prompt. You can re-run it anytime.'
-              : 'Upgrade to Pro to unlock AI-generated custom themes.'}
-          </p>
-          <Input
-            value={aiPrompt}
-            onChange={(e) => setAiPrompt(e.target.value)}
-            placeholder="e.g. icy blue futuristic studio with soft neon accents"
-            disabled={!isPro || isGeneratingTheme}
-          />
-          <Button
-            className="w-full"
-            onClick={handleGenerateAiTheme}
-            disabled={isGeneratingTheme}
-          >
-            {isGeneratingTheme ? 'Generating Theme...' : (isPro ? 'Generate AI Theme' : 'Upgrade to Use AI Themes')}
-          </Button>
         </div>
       </CardContent>
     </Card>

@@ -41,9 +41,25 @@ const formatUploadLabel = (file) => {
   return date ? `${file.original_filename} - ${date}` : file.original_filename;
 };
 
+const formatSectionBadge = (audioCount = 0, imageCount = 0) => {
+  return `${audioCount}A / ${imageCount}V`;
+};
+
+const SURFACE_BORDER = "color-mix(in srgb, var(--text-primary) 18%, var(--border-color))";
+const SURFACE_BG = "color-mix(in srgb, var(--bg-secondary) 92%, black)";
+const INNER_SURFACE_BG = "color-mix(in srgb, var(--bg-secondary) 82%, black)";
+
+const compactTags = (tags = [], limit = 4) => {
+  const safeTags = Array.isArray(tags) ? tags.filter(Boolean) : [];
+  return {
+    visible: safeTags.slice(0, limit),
+    remaining: Math.max(0, safeTags.length - limit),
+  };
+};
+
 const StatCard = ({ icon: Icon, label, value }) => (
   <div className="rounded-2xl border px-4 py-3" style={{ borderColor: "var(--border-color)", background: "rgba(255,255,255,0.05)" }}>
-    <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.18em]" style={{ color: "var(--text-secondary)" }}>
+    <div className="flex items-center gap-2 whitespace-nowrap text-[11px] uppercase tracking-[0.12em] sm:tracking-[0.18em]" style={{ color: "var(--text-secondary)" }}>
       <Icon className="h-3.5 w-3.5" />
       {label}
     </div>
@@ -53,13 +69,20 @@ const StatCard = ({ icon: Icon, label, value }) => (
 
 const StudioSection = ({ title, description, badge, open, onOpenChange, children }) => (
   <Collapsible open={open} onOpenChange={onOpenChange}>
-    <div className="overflow-hidden rounded-3xl border" style={{ borderColor: "var(--border-color)", background: "rgba(255,255,255,0.03)" }}>
+    <div
+      className="overflow-hidden rounded-3xl border-2 shadow-[0_10px_40px_rgba(0,0,0,0.18)]"
+      style={{ borderColor: SURFACE_BORDER, background: SURFACE_BG }}
+    >
       <CollapsibleTrigger asChild>
-        <button type="button" className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left sm:px-5">
+        <button
+          type="button"
+          className="flex w-full items-center justify-between gap-3 border-b px-4 py-4 text-left sm:px-5"
+          style={{ borderColor: open ? SURFACE_BORDER : "transparent" }}
+        >
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <p className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>{title}</p>
-              {badge ? <Badge className="border-transparent bg-[var(--accent-primary)]/15 text-[var(--text-primary)]">{badge}</Badge> : null}
+              {badge ? <Badge className="inline-flex max-w-full shrink-0 whitespace-nowrap border px-2.5 py-1 text-[10px] uppercase tracking-[0.08em] sm:tracking-[0.14em]" style={{ borderColor: SURFACE_BORDER, background: "color-mix(in srgb, var(--accent-primary) 14%, transparent)", color: "var(--text-primary)" }}>{badge}</Badge> : null}
             </div>
             {description ? <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>{description}</p> : null}
           </div>
@@ -67,7 +90,7 @@ const StudioSection = ({ title, description, badge, open, onOpenChange, children
         </button>
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="border-t px-4 py-4 sm:px-5" style={{ borderColor: "var(--border-color)" }}>
+        <div className="px-4 py-4 sm:px-5" style={{ background: INNER_SURFACE_BG }}>
           {children}
         </div>
       </CollapsibleContent>
@@ -89,7 +112,7 @@ const AssetDropzone = ({ title, subtitle, accept, loading, files, selectedFileId
       <div className="flex items-start justify-between gap-3">
         <div>
           <Label>{title}</Label>
-          <p className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>{subtitle}</p>
+          {subtitle ? <p className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>{subtitle}</p> : null}
         </div>
         {loading ? (
           <div className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs" style={{ borderColor: "var(--border-color)", color: "var(--text-secondary)" }}>
@@ -113,23 +136,22 @@ const AssetDropzone = ({ title, subtitle, accept, loading, files, selectedFileId
           setDragActive(false);
           handleFiles(e.dataTransfer.files);
         }}
-        className={`w-full rounded-3xl border border-dashed px-5 py-6 text-left transition ${dragActive ? "scale-[1.01]" : ""}`}
+        className={`w-full rounded-3xl border-2 border-dashed px-5 py-6 text-left transition ${dragActive ? "scale-[1.01]" : ""}`}
         style={{
-          borderColor: dragActive ? "var(--accent-primary)" : "var(--border-color)",
-          background: dragActive ? "color-mix(in srgb, var(--accent-primary) 12%, transparent)" : "rgba(255,255,255,0.025)",
+          borderColor: dragActive ? "var(--accent-primary)" : SURFACE_BORDER,
+          background: dragActive ? "color-mix(in srgb, var(--accent-primary) 12%, transparent)" : INNER_SURFACE_BG,
         }}
       >
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-3">
-            <div className="rounded-2xl border p-3" style={{ borderColor: "var(--border-color)", background: "rgba(255,255,255,0.04)" }}>
+            <div className="rounded-2xl border-2 p-3" style={{ borderColor: SURFACE_BORDER, background: "rgba(255,255,255,0.04)" }}>
               <UploadCloud className="h-5 w-5" style={{ color: "var(--accent-primary)" }} />
             </div>
             <div>
-              <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>Drag and drop or click to add a file</p>
-              <p className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>Upload straight into BeatHelper without leaving the queue flow.</p>
+              <p className="text-sm font-medium" style={{ color: "var(--beathelper-text-primary, var(--text-primary))" }}>Drag and drop or click to add a file</p>
             </div>
           </div>
-          <div className="text-xs uppercase tracking-[0.18em]" style={{ color: "var(--text-secondary)" }}>Drop Here</div>
+          <div className="hidden shrink-0 whitespace-nowrap text-xs uppercase tracking-[0.12em] sm:block sm:tracking-[0.18em]" style={{ color: "var(--beathelper-text-primary, var(--text-primary))" }}>Drop Here</div>
         </div>
       </button>
 
@@ -161,9 +183,9 @@ const QueueCard = ({
   handleBeatHelperAssistTitle,
   handleBeatHelperSaveEdit,
 }) => (
-  <div className="rounded-3xl border p-4 sm:p-5" style={{ borderColor: "var(--border-color)", background: "color-mix(in srgb, var(--bg-secondary) 88%, transparent)" }}>
+  <div className="rounded-3xl border-2 p-4 shadow-[0_10px_30px_rgba(0,0,0,0.16)] sm:p-5" style={{ borderColor: SURFACE_BORDER, background: "color-mix(in srgb, var(--bg-secondary) 88%, transparent)" }}>
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-[160px_minmax(0,1fr)]">
-      <div className="overflow-hidden rounded-2xl border" style={{ borderColor: "var(--border-color)", background: "var(--bg-primary)" }}>
+      <div className="overflow-hidden rounded-2xl border-2" style={{ borderColor: SURFACE_BORDER, background: "var(--bg-primary)" }}>
         {preview?.kind === "video" ? (
           <video src={preview.src} className="h-40 w-full object-cover" muted playsInline autoPlay loop />
         ) : preview?.src ? (
@@ -176,7 +198,7 @@ const QueueCard = ({
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="truncate text-lg font-semibold" style={{ color: "var(--text-primary)" }}>{item.generated_title || item.beat_original_filename}</h3>
-            <span className={`rounded-full border px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.18em] ${STATUS_CLASS[item.status] || STATUS_CLASS.queued}`}>{item.status}</span>
+            <span className={`rounded-full border px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.08em] whitespace-nowrap sm:tracking-[0.18em] ${STATUS_CLASS[item.status] || STATUS_CLASS.queued}`}>{item.status}</span>
           </div>
           <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>{item.target_artist} - {item.beat_type}</p>
           <p className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>Scheduled (UTC): {item.scheduled_for_utc || "n/a"}</p>
@@ -184,8 +206,28 @@ const QueueCard = ({
 
         {!edit ? (
           <>
-            <div className="rounded-2xl border px-4 py-3 text-sm" style={{ borderColor: "var(--border-color)", background: "rgba(255,255,255,0.03)", color: "var(--text-secondary)" }}>
-              {(item.generated_tags || []).slice(0, 8).join(", ") || "No tags generated yet"}
+            <div className="rounded-2xl border-2 px-4 py-3" style={{ borderColor: SURFACE_BORDER, background: INNER_SURFACE_BG }}>
+              <p className="text-[11px] uppercase tracking-[0.08em] sm:tracking-[0.16em]" style={{ color: "var(--text-secondary)" }}>Key Tags</p>
+              {compactTags(item.generated_tags, 4).visible.length > 0 ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {compactTags(item.generated_tags, 4).visible.map((tag) => (
+                    <span
+                      key={`${item.id}-${tag}`}
+                      className="rounded-full border px-2.5 py-1 text-[11px]"
+                      style={{ borderColor: SURFACE_BORDER, color: "var(--text-primary)", background: "rgba(255,255,255,0.03)" }}
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                  {compactTags(item.generated_tags, 4).remaining > 0 ? (
+                    <span className="rounded-full border px-2.5 py-1 text-[11px]" style={{ borderColor: SURFACE_BORDER, color: "var(--text-secondary)" }}>
+                      +{compactTags(item.generated_tags, 4).remaining} more
+                    </span>
+                  ) : null}
+                </div>
+              ) : (
+                <p className="mt-2 text-sm" style={{ color: "var(--text-secondary)" }}>No tags generated yet</p>
+              )}
             </div>
             <div className="flex flex-wrap gap-2">
               <Button size="sm" variant="outline" onClick={() => handleBeatHelperRequestApproval(item.id)} className="gap-1"><Send className="h-3 w-3" />Request Approval</Button>
@@ -197,7 +239,7 @@ const QueueCard = ({
             </div>
           </>
         ) : (
-          <div className="space-y-4 rounded-2xl border p-4" style={{ borderColor: "var(--border-color)", background: "rgba(255,255,255,0.03)" }}>
+          <div className="space-y-4 rounded-2xl border-2 p-4" style={{ borderColor: SURFACE_BORDER, background: INNER_SURFACE_BG }}>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <Input value={edit.generated_title} onChange={(e) => setEditingQueueById((prev) => ({ ...prev, [item.id]: { ...prev[item.id], generated_title: e.target.value } }))} placeholder="Title" />
               <Input value={edit.target_artist} onChange={(e) => setEditingQueueById((prev) => ({ ...prev, [item.id]: { ...prev[item.id], target_artist: e.target.value } }))} placeholder="Artist" />
@@ -229,7 +271,7 @@ const QueueCard = ({
             {assistTitlesById[item.id]?.length > 0 ? (
               <div className="flex flex-wrap gap-2">
                 {assistTitlesById[item.id].map((title) => (
-                  <button key={title} type="button" className="rounded-full border px-3 py-1.5 text-xs" style={{ borderColor: "var(--border-color)", color: "var(--text-primary)" }} onClick={() => setEditingQueueById((prev) => ({ ...prev, [item.id]: { ...prev[item.id], generated_title: title } }))}>{title}</button>
+                  <button key={title} type="button" className="rounded-full border-2 px-3 py-1.5 text-xs" style={{ borderColor: SURFACE_BORDER, color: "var(--text-primary)" }} onClick={() => setEditingQueueById((prev) => ({ ...prev, [item.id]: { ...prev[item.id], generated_title: title } }))}>{title}</button>
                 ))}
               </div>
             ) : null}
@@ -360,12 +402,18 @@ const selectedImageLabel = useMemo(
   };
 
   return (
-    <div className="space-y-6">
+    <div
+      className="beathelper-studio space-y-6"
+      style={{
+        "--beathelper-text-primary": "var(--text-primary)",
+        "--beathelper-text-secondary": "var(--text-secondary)",
+      }}
+    >
       <Card className="overflow-hidden border" style={{ borderColor: "color-mix(in srgb, var(--accent-primary) 34%, var(--border-color))", background: "radial-gradient(circle at top left, color-mix(in srgb, var(--accent-primary) 18%, transparent), transparent 42%), linear-gradient(135deg, color-mix(in srgb, var(--bg-secondary) 92%, black), color-mix(in srgb, var(--bg-primary) 90%, black))" }}>
         <CardContent className="px-5 py-6 sm:px-7 sm:py-7">
           <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
             <div className="max-w-3xl space-y-3">
-              <div className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs uppercase tracking-[0.24em]" style={{ borderColor: "var(--border-color)", color: "var(--text-secondary)", background: "rgba(255,255,255,0.04)" }}>
+              <div className="inline-flex items-center gap-2 whitespace-nowrap rounded-full border px-3 py-1 text-xs uppercase tracking-[0.12em] sm:tracking-[0.24em]" style={{ borderColor: "var(--border-color)", color: "var(--text-secondary)", background: "rgba(255,255,255,0.04)" }}>
                 <Bot className="h-3.5 w-3.5" />
                 BeatHelper Studio
               </div>
@@ -448,22 +496,22 @@ const selectedImageLabel = useMemo(
             </CardHeader>
             <CardContent className="space-y-5 pt-6">
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <div className="rounded-2xl border px-4 py-3" style={{ borderColor: "var(--border-color)", background: "rgba(255,255,255,0.035)" }}><p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: "var(--text-secondary)" }}>Selected Beat</p><p className="mt-2 truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{beatHelperForm.beat_file_id ? selectedAudioLabel : "None yet"}</p></div>
-                <div className="rounded-2xl border px-4 py-3" style={{ borderColor: "var(--border-color)", background: "rgba(255,255,255,0.035)" }}><p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: "var(--text-secondary)" }}>Selected Visual</p><p className="mt-2 truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{beatHelperForm.image_file_id ? selectedImageLabel : beatHelperForm.ai_choose_image ? "AI fallback enabled" : "None yet"}</p></div>
-                <div className="rounded-2xl border px-4 py-3" style={{ borderColor: "var(--border-color)", background: "rgba(255,255,255,0.035)" }}><p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: "var(--text-secondary)" }}>Target</p><p className="mt-2 truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{beatHelperForm.target_artist?.trim() || "No artist yet"}</p></div>
-                <div className="rounded-2xl border px-4 py-3" style={{ borderColor: "var(--border-color)", background: "rgba(255,255,255,0.035)" }}><p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: "var(--text-secondary)" }}>Beat Type</p><p className="mt-2 truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{beatHelperForm.beat_type?.trim() || "No beat type yet"}</p></div>
+                <div className="rounded-2xl border-2 px-4 py-3" style={{ borderColor: SURFACE_BORDER, background: INNER_SURFACE_BG }}><p className="text-[11px] uppercase tracking-[0.08em] sm:tracking-[0.16em]" style={{ color: "var(--text-secondary)" }}>Selected Beat</p><p className="mt-2 truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{beatHelperForm.beat_file_id ? selectedAudioLabel : "None yet"}</p></div>
+                <div className="rounded-2xl border-2 px-4 py-3" style={{ borderColor: SURFACE_BORDER, background: INNER_SURFACE_BG }}><p className="text-[11px] uppercase tracking-[0.08em] sm:tracking-[0.16em]" style={{ color: "var(--text-secondary)" }}>Selected Visual</p><p className="mt-2 truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{beatHelperForm.image_file_id ? selectedImageLabel : beatHelperForm.ai_choose_image ? "AI fallback enabled" : "None yet"}</p></div>
+                <div className="rounded-2xl border-2 px-4 py-3" style={{ borderColor: SURFACE_BORDER, background: INNER_SURFACE_BG }}><p className="text-[11px] uppercase tracking-[0.08em] sm:tracking-[0.16em]" style={{ color: "var(--text-secondary)" }}>Target</p><p className="mt-2 truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{beatHelperForm.target_artist?.trim() || "No artist yet"}</p></div>
+                <div className="rounded-2xl border-2 px-4 py-3" style={{ borderColor: SURFACE_BORDER, background: INNER_SURFACE_BG }}><p className="text-[11px] uppercase tracking-[0.08em] sm:tracking-[0.16em]" style={{ color: "var(--text-secondary)" }}>Beat Type</p><p className="mt-2 truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{beatHelperForm.beat_type?.trim() || "No beat type yet"}</p></div>
               </div>
 
               <form onSubmit={handleBeatHelperQueue} className="space-y-4">
-                <StudioSection title="Assets" description="Drag in your beat and thumbnail here, or pick from your existing BeatHelper-safe uploads." badge={`${beatHelperUploads.audio_uploads.length} audio / ${beatHelperUploads.image_uploads.length} image`} open={openSections.assets} onOpenChange={(value) => setSectionOpen("assets", value)}>
+                <StudioSection title="Beat Audio + Video" description="Drag in your beat and visual here, or pick from your existing BeatHelper-safe uploads." badge={formatSectionBadge(beatHelperUploads.audio_uploads.length, beatHelperUploads.image_uploads.length)} open={openSections.assets} onOpenChange={(value) => setSectionOpen("assets", value)}>
                   <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-                    <AssetDropzone title="Beat Audio" subtitle="MP3, WAV, M4A, FLAC, or OGG" accept=".mp3,.wav,.m4a,.flac,.ogg,audio/*" loading={uploadingBeatHelperAudio} files={beatHelperUploads.audio_uploads} selectedFileId={beatHelperForm.beat_file_id} onSelect={(value) => setBeatHelperForm((prev) => ({ ...prev, beat_file_id: value }))} onFileUpload={handleBeatHelperAudioUpload} emptyLabel="Select BeatHelper audio" />
-                    <AssetDropzone title="Visual" subtitle="JPG, PNG, WEBP, WEBM, MP4, or MOV" accept=".jpg,.jpeg,.png,.webp,.webm,.mp4,.mov,.m4v,image/*,video/webm,video/mp4,video/quicktime" loading={uploadingBeatHelperImage} files={beatHelperUploads.image_uploads} selectedFileId={beatHelperForm.image_file_id} onSelect={(value) => setBeatHelperForm((prev) => ({ ...prev, image_file_id: value, ai_choose_image: false }))} onFileUpload={handleBeatHelperImageUpload} emptyLabel="Select BeatHelper visual" />
+                    <AssetDropzone title="Beat Audio" accept=".mp3,.wav,.m4a,.flac,.ogg,audio/*" loading={uploadingBeatHelperAudio} files={beatHelperUploads.audio_uploads} selectedFileId={beatHelperForm.beat_file_id} onSelect={(value) => setBeatHelperForm((prev) => ({ ...prev, beat_file_id: value }))} onFileUpload={handleBeatHelperAudioUpload} emptyLabel="Select BeatHelper audio" />
+                    <AssetDropzone title="Visual" accept=".jpg,.jpeg,.png,.webp,.webm,.mp4,.mov,.m4v,image/*,video/webm,video/mp4,video/quicktime" loading={uploadingBeatHelperImage} files={beatHelperUploads.image_uploads} selectedFileId={beatHelperForm.image_file_id} onSelect={(value) => setBeatHelperForm((prev) => ({ ...prev, image_file_id: value, ai_choose_image: false }))} onFileUpload={handleBeatHelperImageUpload} emptyLabel="Select BeatHelper visual" />
                   </div>
                   <label className="mt-4 flex items-center gap-2 text-sm" style={{ color: "var(--text-secondary)" }}><input type="checkbox" checked={beatHelperForm.ai_choose_image} onChange={(e) => setBeatHelperForm((prev) => ({ ...prev, ai_choose_image: e.target.checked }))} />Use AI image if no thumbnail is selected</label>
                 </StudioSection>
 
-                <StudioSection title="Beat Metadata" description="Core naming and SEO context for the queue item." open={openSections.metadata} onOpenChange={(value) => setSectionOpen("metadata", value)}>
+                <StudioSection title="Tags" description="Core naming and SEO context for the queue item." open={openSections.metadata} onOpenChange={(value) => setSectionOpen("metadata", value)}>
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <div className="space-y-2"><Label>Target Artist</Label><Input value={beatHelperForm.target_artist} onChange={(e) => setBeatHelperForm((prev) => ({ ...prev, target_artist: e.target.value }))} placeholder="e.g. Lil Uzi Vert" /></div>
                     <div className="space-y-2"><Label>Beat Type</Label><Input value={beatHelperForm.beat_type} onChange={(e) => setBeatHelperForm((prev) => ({ ...prev, beat_type: e.target.value }))} placeholder="e.g. rage" /></div>
@@ -473,12 +521,11 @@ const selectedImageLabel = useMemo(
                   <div className="mt-4 space-y-2"><Label>Context Tags</Label><Textarea rows={3} value={beatHelperForm.context_tags} onChange={(e) => setBeatHelperForm((prev) => ({ ...prev, context_tags: e.target.value }))} placeholder="baby pluto, pink tape, melodic rage" /></div>
                 </StudioSection>
 
-                <StudioSection title="Web Image Search" description="Search artist or song visuals, then import the exact one you want." badge={visibleBeatHelperImageResults.length ? `${visibleBeatHelperImageResults.length} results` : null} open={openSections.imageSearch} onOpenChange={(value) => setSectionOpen("imageSearch", value)}>
-                  <div className="rounded-3xl border p-4" style={{ borderColor: "var(--border-color)", background: "rgba(255,255,255,0.025)" }}>
+                <StudioSection title="Web Image Search" description="No image yet? Search an artist picture and use it." badge={visibleBeatHelperImageResults.length ? `${visibleBeatHelperImageResults.length} results` : null} open={openSections.imageSearch} onOpenChange={(value) => setSectionOpen("imageSearch", value)}>
+                  <div className="rounded-3xl border-2 p-4" style={{ borderColor: SURFACE_BORDER, background: INNER_SURFACE_BG }}>
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                       <div>
-                        <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>Search directly or auto-build from beat info</p>
-                        <p className="text-xs" style={{ color: "var(--text-secondary)" }}>Auto mode uses your artist, beat type, title override, and context tags.</p>
+                        <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>Search directly or build from your beat info</p>
                       </div>
                       <Button type="button" variant="outline" className="gap-2" onClick={() => handleBeatHelperImageSearch({ autoBuild: true })} disabled={loadingBeatHelperImageSearch}><Sparkles className="h-4 w-4" />Auto From Beat Info</Button>
                     </div>
@@ -493,8 +540,8 @@ const selectedImageLabel = useMemo(
                   {visibleBeatHelperImageResults.length > 0 ? (
                     <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-3">
                       {visibleBeatHelperImageResults.map((result) => (
-                        <div key={result.id} className="overflow-hidden rounded-3xl border p-3" style={{ borderColor: "var(--border-color)", background: "rgba(255,255,255,0.028)" }}>
-                          <div className="overflow-hidden rounded-2xl border" style={{ borderColor: "var(--border-color)", background: "var(--bg-primary)" }}>
+                        <div key={result.id} className="overflow-hidden rounded-3xl border-2 p-3" style={{ borderColor: SURFACE_BORDER, background: INNER_SURFACE_BG }}>
+                          <div className="overflow-hidden rounded-2xl border-2" style={{ borderColor: SURFACE_BORDER, background: "var(--bg-primary)" }}>
                             <img src={result.image_url} alt={result.title || result.query} className="h-40 w-full object-cover" loading="lazy" onError={() => setBrokenSearchImageIds((prev) => ({ ...prev, [result.id]: true }))} />
                           </div>
                           <Badge className="mt-3 border-emerald-400/40 bg-emerald-500/10 text-emerald-300">{String(result.source || "web").toUpperCase()}</Badge>
@@ -507,13 +554,13 @@ const selectedImageLabel = useMemo(
                       ))}
                     </div>
                   ) : (
-                    <div className="mt-4 rounded-3xl border px-4 py-6 text-center text-sm" style={{ borderColor: "var(--border-color)", color: "var(--text-secondary)", background: "rgba(255,255,255,0.02)" }}>
-                      Search results will show here. Broken image results are removed automatically.
+                    <div className="mt-4 rounded-3xl border-2 px-4 py-6 text-center text-sm" style={{ borderColor: SURFACE_BORDER, color: "var(--text-secondary)", background: INNER_SURFACE_BG }}>
+                      Search results show here.
                     </div>
                   )}
                 </StudioSection>
 
-                <StudioSection title="Automation and Delivery" description="Approval timing, notification channel, privacy, and queue automation." open={openSections.automation} onOpenChange={(value) => setSectionOpen("automation", value)}>
+                <StudioSection title="Delivery" description="Approval timing, notification channel, privacy, and queue automation." open={openSections.automation} onOpenChange={(value) => setSectionOpen("automation", value)}>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                     <div className="space-y-2"><Label>Auto-skip Hours</Label><Input type="number" min="1" max="72" value={beatHelperForm.approval_timeout_hours} onChange={(e) => setBeatHelperForm((prev) => ({ ...prev, approval_timeout_hours: e.target.value }))} /></div>
                     <div className="space-y-2"><Label>Notify Via</Label><Select value={beatHelperForm.notify_channel} onValueChange={(value) => setBeatHelperForm((prev) => ({ ...prev, notify_channel: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">None</SelectItem><SelectItem value="email">Email</SelectItem><SelectItem value="sms">SMS</SelectItem><SelectItem value="email_sms">Email + SMS</SelectItem></SelectContent></Select></div>
@@ -542,9 +589,9 @@ const selectedImageLabel = useMemo(
                     {beatHelperTemplates.length > 0 ? (
                       <div className="space-y-2">
                         {beatHelperTemplates.slice(0, 6).map((template) => (
-                          <div key={template.id} className="rounded-2xl border px-3 py-2 text-sm" style={{ borderColor: "var(--border-color)" }}>
+                          <div key={template.id} className="rounded-2xl border-2 px-3 py-2 text-sm" style={{ borderColor: SURFACE_BORDER, background: INNER_SURFACE_BG }}>
                             <div className="font-medium" style={{ color: "var(--text-primary)" }}>{template.name}</div>
-                            <div className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>{(template.tags || []).slice(0, 10).join(", ")}</div>
+                            <div className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>{(template.tags || []).slice(0, 4).join(", ")}{(template.tags || []).length > 4 ? ` +${(template.tags || []).length - 4} more` : ""}</div>
                           </div>
                         ))}
                       </div>
@@ -552,7 +599,7 @@ const selectedImageLabel = useMemo(
                   </div>
                 </StudioSection>
 
-                <div className="flex flex-wrap items-center gap-3 rounded-3xl border px-4 py-4" style={{ borderColor: "var(--border-color)", background: "rgba(255,255,255,0.03)" }}>
+                <div className="flex flex-wrap items-center gap-3 rounded-3xl border-2 px-4 py-4" style={{ borderColor: SURFACE_BORDER, background: INNER_SURFACE_BG }}>
                   <Button type="submit" disabled={loadingBeatHelper} className="gap-2"><Sparkles className="h-4 w-4" />{loadingBeatHelper ? "Queuing..." : "Queue Beat"}</Button>
                   <p className="text-sm" style={{ color: "var(--text-secondary)" }}>One beat plus one thumbnail per queue item.</p>
                 </div>

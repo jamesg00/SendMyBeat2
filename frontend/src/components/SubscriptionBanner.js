@@ -51,7 +51,7 @@ const SubscriptionBanner = ({
     const isMax = plan === "max";
     const title = isMax ? "SendMyBeat Max" : "SendMyBeat Plus";
     const subline = isMax
-      ? "Unlimited AI + unlimited uploads"
+      ? "High-usage AI + high-usage uploads"
       : `${creditsTotal} AI generations + ${uploadsTotal} uploads per month`;
 
     return (
@@ -71,10 +71,10 @@ const SubscriptionBanner = ({
             </div>
             <div className="text-center sm:text-right">
               <p className="text-3xl sm:text-4xl font-bold gradient-text">
-                {isMax ? "∞" : `${creditsRemaining}/${creditsTotal}`}
+                {isMax ? "\u221e" : `${creditsRemaining}/${creditsTotal}`}
               </p>
               <p className="text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>
-                {isMax ? "UNLIMITED" : "METERED"}
+                {isMax ? "HIGH USAGE" : "METERED"}
               </p>
             </div>
           </div>
@@ -151,4 +151,5 @@ const SubscriptionBanner = ({
 };
 
 export default SubscriptionBanner;
+
 

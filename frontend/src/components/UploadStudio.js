@@ -44,8 +44,7 @@ const UploadStudio = ({
   API,
   onUpgrade,
   onDisconnectYouTube,
-  onConnectYouTube,
-  onExitUploadTab
+  onConnectYouTube
 }) => {
   // --- State ---
   const [studioOpen, setStudioOpen] = useState(false);
@@ -911,7 +910,6 @@ const UploadStudio = ({
         youtubeEmail={youtubeEmail}
         onDisconnectYouTube={onDisconnectYouTube}
         onConnectYouTube={onConnectYouTube}
-        onExitUploadTab={onExitUploadTab}
         handleAudioUpload={handleAudioUpload}
         handleImageUpload={handleImageUpload}
         uploadingAudio={uploadingAudio}

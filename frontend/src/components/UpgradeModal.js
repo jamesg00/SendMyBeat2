@@ -38,7 +38,7 @@ const UpgradeModal = ({ open, onClose, onUpgrade, loading }) => {
         <DialogHeader>
           <DialogTitle className="text-2xl text-center gradient-text">Choose Your Plan</DialogTitle>
           <DialogDescription className="text-center" style={{ color: "var(--text-secondary)" }}>
-            SendMyBeat Plus is metered for profitability. SendMyBeat Max is fully unlimited.
+            Plus is a metered monthly plan. Max is built for high-usage producers who need more room to publish.
           </DialogDescription>
         </DialogHeader>
 
@@ -60,10 +60,10 @@ const UpgradeModal = ({ open, onClose, onUpgrade, loading }) => {
           <PlanCard
             title="SendMyBeat Max"
             price="$12/mo"
-            subtitle="No limits"
+            subtitle="High-usage plan"
             bullets={[
-              "Unlimited AI generations",
-              "Unlimited YouTube uploads",
+              "High-usage AI generations",
+              "High-usage YouTube uploads",
               "All BeatHelper automation",
               "Priority growth workflow",
             ]}
@@ -82,4 +82,3 @@ const UpgradeModal = ({ open, onClose, onUpgrade, loading }) => {
 };
 
 export default UpgradeModal;
-

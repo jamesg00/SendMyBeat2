@@ -50,12 +50,12 @@ const createGlossyAvatarDataUrl = ({ rim, shell, glow, inner, highlight }) => {
 };
 
 const AVATAR_CHOICES = [
-  { id: "1", label: "Blue Glow", url: createGlossyAvatarDataUrl({ rim: "#0b42d9", shell: "#4fa7ff", glow: "#2d7dff", inner: "#7cecff", highlight: "#c5ebff" }) },
-  { id: "2", label: "Red Glow", url: createGlossyAvatarDataUrl({ rim: "#8f0011", shell: "#ff2641", glow: "#ff3048", inner: "#ff8b93", highlight: "#ffe0e4" }) },
-  { id: "3", label: "Green Glow", url: createGlossyAvatarDataUrl({ rim: "#0d6c08", shell: "#65dd2f", glow: "#63f53d", inner: "#b5ff98", highlight: "#ebffd9" }) },
-  { id: "4", label: "Orange Glow", url: createGlossyAvatarDataUrl({ rim: "#a64f00", shell: "#ffab1f", glow: "#ff8d18", inner: "#ffd36c", highlight: "#fff0bf" }) },
-  { id: "5", label: "Gold Glow", url: createGlossyAvatarDataUrl({ rim: "#b57b00", shell: "#ffd432", glow: "#ffbd20", inner: "#ffe98b", highlight: "#fff8d2" }) },
-  { id: "6", label: "Purple Glow", url: createGlossyAvatarDataUrl({ rim: "#6e1fcf", shell: "#b659ff", glow: "#a246ff", inner: "#deb0ff", highlight: "#f4e4ff" }) },
+  { id: "1", label: "Blue", url: createGlossyAvatarDataUrl({ rim: "#0b42d9", shell: "#4fa7ff", glow: "#2d7dff", inner: "#7cecff", highlight: "#c5ebff" }) },
+  { id: "2", label: "Red", url: createGlossyAvatarDataUrl({ rim: "#8f0011", shell: "#ff2641", glow: "#ff3048", inner: "#ff8b93", highlight: "#ffe0e4" }) },
+  { id: "3", label: "Green", url: createGlossyAvatarDataUrl({ rim: "#0d6c08", shell: "#65dd2f", glow: "#63f53d", inner: "#b5ff98", highlight: "#ebffd9" }) },
+  { id: "4", label: "Orange", url: createGlossyAvatarDataUrl({ rim: "#a64f00", shell: "#ffab1f", glow: "#ff8d18", inner: "#ffd36c", highlight: "#fff0bf" }) },
+  { id: "5", label: "Gold", url: createGlossyAvatarDataUrl({ rim: "#b57b00", shell: "#ffd432", glow: "#ffbd20", inner: "#ffe98b", highlight: "#fff8d2" }) },
+  { id: "6", label: "Purple", url: createGlossyAvatarDataUrl({ rim: "#6e1fcf", shell: "#b659ff", glow: "#a246ff", inner: "#deb0ff", highlight: "#f4e4ff" }) },
 ];
 const DEFAULT_AVATAR_URL = AVATAR_CHOICES[0].url;
 
@@ -87,7 +87,6 @@ export default function ProducerSpotlight() {
   const [producerStatsOpen, setProducerStatsOpen] = useState(false);
   const [activeView, setActiveView] = useState("trending");
   const [showAllOpen, setShowAllOpen] = useState(false);
-  const [spotlightLiteMode, setSpotlightLiteMode] = useState(false);
   const [verificationForm, setVerificationForm] = useState({
     stage_name: "",
     main_platform_url: "",
@@ -109,19 +108,6 @@ export default function ProducerSpotlight() {
     fetchSpotlight();
     fetchMyProfile();
     checkYouTubeConnection();
-  }, []);
-
-  useEffect(() => {
-    const updateLiteMode = () => {
-      const mobile = window.innerWidth < 1024;
-      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      const lowPowerDevice = typeof navigator.hardwareConcurrency === "number" && navigator.hardwareConcurrency <= 4;
-      setSpotlightLiteMode(mobile || reducedMotion || lowPowerDevice);
-    };
-
-    updateLiteMode();
-    window.addEventListener("resize", updateLiteMode);
-    return () => window.removeEventListener("resize", updateLiteMode);
   }, []);
 
   const fetchSpotlight = async () => {
@@ -310,8 +296,8 @@ export default function ProducerSpotlight() {
   };
 
   const getRoleTagClass = (roleTag) => {
-    if (roleTag === "Creator") return "bg-amber-500/20 text-amber-300 border-amber-400";
-    if (roleTag === "Verified") return "bg-sky-500/20 text-sky-300 border-sky-400";
+    if (roleTag === "Creator") return "bg-yellow-400/20 text-yellow-100 border-yellow-300";
+    if (roleTag === "Verified") return "bg-sky-500/20 text-sky-200 border-sky-400";
     if (roleTag === "Pro") return "bg-violet-500/20 text-violet-300 border-violet-400";
     return "bg-zinc-500/20 text-zinc-300 border-zinc-500";
   };
@@ -321,6 +307,11 @@ export default function ProducerSpotlight() {
     if (roleTag === "Verified") return <BadgeCheck className="h-3 w-3" />;
     if (roleTag === "Pro") return <Shield className="h-3 w-3" />;
     return <User className="h-3 w-3" />;
+  };
+
+  const getRoleTagLabel = (roleTag) => {
+    if (roleTag === "Verified") return "Blue Magic";
+    return roleTag || "Newbie";
   };
 
   const getTierClass = (tier) => TIER_CLASS_MAP[tier] || TIER_CLASS_MAP.Bronze;
@@ -367,13 +358,13 @@ export default function ProducerSpotlight() {
 
   const ProducerCard = ({ producer, badge }) => (
     <Card
-      className={`producer-card h-full cursor-pointer border border-white/10 bg-[color:var(--card-bg)]/90 backdrop-blur-sm transition-all duration-200 hover:-translate-y-1 hover:border-emerald-400/60 hover:shadow-[0_18px_50px_rgba(16,185,129,0.14)] ${producer.featured ? "border-yellow-400/60 shadow-[0_0_24px_rgba(250,204,21,0.18)]" : ""}`}
+      className={`producer-card h-full cursor-pointer transition-all duration-200 hover:-translate-y-1 ${producer.featured ? "border-yellow-400/60 shadow-[0_0_24px_rgba(250,204,21,0.18)]" : ""}`}
       onClick={() => openProducerStats(producer)}
     >
       <CardContent className="p-4">
         <div className="flex items-start gap-4">
           <div className="relative flex-shrink-0">
-            <div className="h-16 w-16 rounded-2xl border border-white/10 bg-slate-200/80 flex items-center justify-center overflow-hidden shadow-lg">
+            <div className="h-16 w-16 rounded-2xl border flex items-center justify-center overflow-hidden shadow-lg" style={{ borderColor: "var(--border-color)", backgroundColor: "var(--bg-secondary)" }}>
               <img
                 src={producer.avatar_url || DEFAULT_AVATAR_URL}
                 alt={`${producer.username} avatar`}
@@ -382,7 +373,7 @@ export default function ProducerSpotlight() {
               />
             </div>
             {badge && (
-              <div className="absolute -bottom-2 left-2 inline-flex items-center gap-1 rounded-full bg-zinc-950/90 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-100 shadow-lg">
+              <div className="absolute -bottom-2 left-2 inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-bold uppercase tracking-[0.12em] shadow-lg" style={{ borderColor: "var(--border-color)", backgroundColor: "var(--bg-primary)", color: "var(--text-primary)" }}>
                 {badge === "featured" && <Star className="h-3 w-3 fill-current" />}
                 {badge === "trending" && <TrendingUp className="h-3 w-3" />}
                 {badge === "new" && <Sparkles className="h-3 w-3" />}
@@ -414,12 +405,10 @@ export default function ProducerSpotlight() {
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <span
-                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-semibold ${getRoleTagClass(producer.role_tag)} ${
-                      producer.role_tag === "Creator" ? "creator-badge-epic" : ""
-                    }`}
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-semibold ${getRoleTagClass(producer.role_tag)}`}
                   >
                     {getRoleTagIcon(producer.role_tag)}
-                    {producer.role_tag || "Newbie"}
+                    {getRoleTagLabel(producer.role_tag)}
                   </span>
                   <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-semibold ${getTierClass(producer.spotlight_tier)}`}>
                     {producer.spotlight_tier || "Bronze"} Tier
@@ -430,7 +419,7 @@ export default function ProducerSpotlight() {
                 </div>
               </div>
 
-              <span className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300">
+              <span className="rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ borderColor: "var(--border-color)", backgroundColor: "var(--bg-secondary)", color: "var(--text-secondary)" }}>
                 View card
               </span>
             </div>
@@ -440,19 +429,19 @@ export default function ProducerSpotlight() {
             </p>
 
             <div className="flex flex-wrap gap-2 text-[11px] text-muted-foreground">
-              <span className="rounded-full border border-white/10 px-2 py-1">
+              <span className="rounded-full border px-2 py-1" style={{ borderColor: "var(--border-color)" }}>
                 {producer.total_days_completed || 0} days
               </span>
-              <span className="rounded-full border border-white/10 px-2 py-1">
+              <span className="rounded-full border px-2 py-1" style={{ borderColor: "var(--border-color)" }}>
                 {producer.current_streak || 0} streak
               </span>
-              <span className="rounded-full border border-white/10 px-2 py-1">
+              <span className="rounded-full border px-2 py-1" style={{ borderColor: "var(--border-color)" }}>
                 {producer.views || 0} views
               </span>
-              <span className="rounded-full border border-white/10 px-2 py-1">
+              <span className="rounded-full border px-2 py-1" style={{ borderColor: "var(--border-color)" }}>
                 {producer.likes || 0} likes
               </span>
-              <span className="rounded-full border border-white/10 px-2 py-1">
+              <span className="rounded-full border px-2 py-1" style={{ borderColor: "var(--border-color)" }}>
                 {producer.spotlight_score || 0} score
               </span>
             </div>
@@ -483,7 +472,7 @@ export default function ProducerSpotlight() {
   const MiniProducerCard = ({ producer }) => (
     <button
       type="button"
-      className="text-left rounded-lg border p-3 bg-[var(--bg-secondary)] hover:border-emerald-500 transition-colors"
+      className="text-left rounded-lg border p-3 bg-[var(--bg-secondary)] transition-colors hover:border-[var(--accent-primary)]"
       onClick={() => {
         setShowAllOpen(false);
         openProducerStats(producer);
@@ -504,57 +493,50 @@ export default function ProducerSpotlight() {
   );
 
   return (
-    <div className={`spotlight-parallax-bg relative min-h-screen overflow-hidden ${spotlightLiteMode ? "spotlight-lite" : ""}`}>
-      <div className="spotlight-grid-layer" aria-hidden="true" />
-      {!spotlightLiteMode && (
-        <div className="spotlight-aero-backdrop" aria-hidden="true">
-          <div className="spotlight-aero-orb orb-a" />
-          <div className="spotlight-aero-orb orb-b" />
-          <div className="spotlight-aero-orb orb-c" />
-          <div className="spotlight-aero-orb orb-d" />
-          <div className="spotlight-aero-rings ring-a" />
-          <div className="spotlight-aero-rings ring-b" />
-          <div className="spotlight-aero-gloss" />
-          <div className="spotlight-aero-wave wave-a" />
-          <div className="spotlight-aero-wave wave-b" />
+    <div className="min-h-screen dashboard-parallax-bg">
+      <div className="dashboard-grid-layer" aria-hidden="true" />
+      <div className="relative z-10 container mx-auto px-4 py-8 space-y-8 dashboard-shell text-[var(--text-primary)]">
+        <div className="flex items-center justify-between gap-3">
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={() => navigate("/dashboard")}
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Dashboard
+          </Button>
+          <DarkModeToggle inline />
         </div>
-      )}
-      <div className="relative z-10 container mx-auto px-4 py-8 space-y-12 text-[var(--text-primary)]">
-        <DarkModeToggle />
-        <div className="flex items-center justify-start">
-        <Button
-          variant="outline"
-          className="gap-2"
-          onClick={() => navigate("/dashboard")}
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to Dashboard
-        </Button>
-      </div>
 
       {/* Hero Section */}
-      <div className="spotlight-hero-shell text-center space-y-5">
-        <div className="spotlight-hero-chip">SendMyBeat Network OS</div>
-        <h1 className="spotlight-aero-title text-4xl md:text-6xl font-bold">Producer Spotlight</h1>
-        <p className="text-lg text-sky-950/90 dark:text-cyan-50 max-w-2xl mx-auto">
-          Discover the next wave of talent inside a glossy cybernetic producer network built for collabs, momentum, and visibility.
+      <div className="dashboard-card rounded-3xl px-6 py-8 text-center space-y-5">
+        <div className="inline-flex items-center justify-center rounded-full border px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.18em]" style={{ borderColor: "var(--border-color)", color: "var(--text-secondary)", backgroundColor: "var(--bg-secondary)" }}>
+          SendMyBeat Network
+        </div>
+        <h1 className="text-4xl md:text-5xl font-bold gradient-text">Producer Spotlight</h1>
+        <p className="text-base md:text-lg max-w-2xl mx-auto" style={{ color: "var(--text-secondary)" }}>
+          Discover producers, track momentum, and open profile stats without leaving the main dashboard visual system.
         </p>
         {!youtubeConnected && (
-          <div className="mx-auto max-w-2xl rounded-2xl border border-cyan-200/70 bg-white/55 px-4 py-3 text-sm font-medium text-sky-950 shadow-lg backdrop-blur dark:border-cyan-300/20 dark:bg-cyan-950/30 dark:text-cyan-50">
+          <div className="mx-auto max-w-2xl rounded-2xl border px-4 py-3 text-sm font-medium" style={{ borderColor: "var(--border-color)", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)" }}>
             Producer Spotlight now requires a connected Google / YouTube account. Existing profiles stay hidden until the account is connected.
           </div>
         )}
-        <div className="spotlight-hero-marquee">
-          <span>cyber aero profiles</span>
-          <span>artist network</span>
-          <span>open sessions</span>
-          <span>daily streaks</span>
-          <span>top beat lanes</span>
+        <div className="flex flex-wrap justify-center gap-2">
+          {["artist network", "open sessions", "daily streaks", "top beat lanes"].map((label) => (
+            <span
+              key={label}
+              className="rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.08em]"
+              style={{ borderColor: "var(--border-color)", backgroundColor: "var(--bg-secondary)", color: "var(--text-secondary)" }}
+            >
+              {label}
+            </span>
+          ))}
         </div>
 
         <Dialog open={isEditing} onOpenChange={setIsEditing}>
           <DialogTrigger asChild>
-            <Button size="lg" className="btn-modern mt-4 spotlight-aero-cta">
+            <Button size="lg" className="btn-modern mt-4">
               {youtubeConnected ? (myProfile?.bio ? "Edit My Profile" : "Join the Spotlight") : "Connect Google to Join"}
             </Button>
           </DialogTrigger>
@@ -567,12 +549,12 @@ export default function ProducerSpotlight() {
             </DialogHeader>
             <div className="grid gap-4 py-4">
               {!youtubeConnected && (
-                <div className="rounded-2xl border border-cyan-200/70 bg-cyan-50/70 p-4 text-sm text-sky-950 dark:border-cyan-300/20 dark:bg-cyan-950/30 dark:text-cyan-50">
+                <div className="rounded-2xl border p-4 text-sm" style={{ borderColor: "var(--border-color)", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)" }}>
                   <p className="font-semibold">Connect Google / YouTube first</p>
                   <p className="mt-1">
                     Producer Spotlight only works for connected accounts. This also applies to people who already joined before this requirement.
                   </p>
-                  <Button type="button" className="mt-3 spotlight-aero-cta" onClick={connectYouTube} disabled={connectingYouTube}>
+                  <Button type="button" className="mt-3 btn-modern" onClick={connectYouTube} disabled={connectingYouTube}>
                     {connectingYouTube ? "Connecting..." : "Connect Google Account"}
                   </Button>
                 </div>
@@ -591,24 +573,25 @@ export default function ProducerSpotlight() {
                     {uploadingAvatar ? "Uploading..." : "Upload your own (max 2MB)"}
                   </span>
                 </div>
-                <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+                <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
                   {AVATAR_CHOICES.map((avatar) => (
                     <button
                       key={avatar.id}
                       type="button"
+                      title={avatar.label}
                       onClick={() => setEditForm({ ...editForm, avatar_url: avatar.url })}
                       className={`rounded-xl border p-2 transition-all ${
                         editForm.avatar_url === avatar.url
                           ? "border-emerald-500 ring-2 ring-emerald-500/30"
                           : "border-[var(--border-color)] hover:border-emerald-400"
-                      }`}
+                      } min-w-0 min-h-[96px] text-center flex flex-col items-center justify-center gap-1`}
                     >
                       <img
                         src={avatar.url}
                         alt={avatar.label}
-                        className="h-12 w-12 rounded-full object-cover mx-auto"
+                        className="h-12 w-12 rounded-full object-cover"
                       />
-                      <p className="text-xs mt-1">{avatar.label}</p>
+                      <p className="text-[11px] leading-tight whitespace-nowrap">{avatar.label}</p>
                     </button>
                   ))}
                 </div>
@@ -691,12 +674,10 @@ export default function ProducerSpotlight() {
                 <div className="flex items-center justify-between">
                   <label className="font-semibold">Verification</label>
                   <span
-                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-semibold ${getRoleTagClass(myProfile?.role_tag || "Newbie")} ${
-                      (myProfile?.role_tag || "Newbie") === "Creator" ? "creator-badge-epic" : ""
-                    }`}
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-semibold ${getRoleTagClass(myProfile?.role_tag || "Newbie")}`}
                   >
                     {getRoleTagIcon(myProfile?.role_tag)}
-                    {myProfile?.role_tag || "Newbie"}
+                    {getRoleTagLabel(myProfile?.role_tag)}
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground">
@@ -758,25 +739,25 @@ export default function ProducerSpotlight() {
 
       <section className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <Card className="spotlight-aero-panel border-white/10 bg-[color:var(--card-bg)]/80">
+          <Card className="dashboard-card">
             <CardHeader className="pb-2">
               <CardDescription>Network Size</CardDescription>
               <CardTitle className="text-2xl">{allProducers.length}</CardTitle>
             </CardHeader>
           </Card>
-          <Card className="spotlight-aero-panel border-white/10 bg-[color:var(--card-bg)]/80">
+          <Card className="dashboard-card">
             <CardHeader className="pb-2">
               <CardDescription>Trending Now</CardDescription>
               <CardTitle className="text-2xl">{spotlightData?.trending_producers?.length || 0}</CardTitle>
             </CardHeader>
           </Card>
-          <Card className="spotlight-aero-panel border-white/10 bg-[color:var(--card-bg)]/80">
+          <Card className="dashboard-card">
             <CardHeader className="pb-2">
               <CardDescription>New This Week</CardDescription>
               <CardTitle className="text-2xl">{spotlightData?.new_producers?.length || 0}</CardTitle>
             </CardHeader>
           </Card>
-          <Card className="spotlight-aero-panel border-white/10 bg-[color:var(--card-bg)]/80">
+          <Card className="dashboard-card">
             <CardHeader className="pb-2">
               <CardDescription>Featured</CardDescription>
               <CardTitle className="text-2xl">{spotlightData?.featured_producers?.length || 0}</CardTitle>
@@ -784,16 +765,16 @@ export default function ProducerSpotlight() {
           </Card>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button className="spotlight-tab" variant={activeView === "trending" ? "default" : "outline"} onClick={() => setActiveView("trending")}>
+          <Button className="border-[var(--border-color)]" variant={activeView === "trending" ? "default" : "outline"} onClick={() => setActiveView("trending")}>
             Trending
           </Button>
-          <Button className="spotlight-tab" variant={activeView === "new" ? "default" : "outline"} onClick={() => setActiveView("new")}>
+          <Button className="border-[var(--border-color)]" variant={activeView === "new" ? "default" : "outline"} onClick={() => setActiveView("new")}>
             New Users
           </Button>
-          <Button className="spotlight-tab" variant={activeView === "streaks" ? "default" : "outline"} onClick={() => setActiveView("streaks")}>
+          <Button className="border-[var(--border-color)]" variant={activeView === "streaks" ? "default" : "outline"} onClick={() => setActiveView("streaks")}>
             Streak Leaders
           </Button>
-          <Button className="spotlight-tab" variant={activeView === "network" ? "default" : "outline"} onClick={() => setActiveView("network")}>
+          <Button className="border-[var(--border-color)]" variant={activeView === "network" ? "default" : "outline"} onClick={() => setActiveView("network")}>
             Network
           </Button>
         </div>

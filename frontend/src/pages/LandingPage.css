@@ -1,0 +1,257 @@
+.landing-page {
+  --landing-bg: #030504;
+  --landing-bg-soft: rgba(11, 16, 14, 0.82);
+  --landing-panel: rgba(12, 16, 15, 0.78);
+  --landing-panel-strong: rgba(9, 11, 11, 0.88);
+  --landing-card: rgba(255, 255, 255, 0.04);
+  --landing-card-strong: rgba(255, 255, 255, 0.06);
+  --landing-border: rgba(255, 255, 255, 0.1);
+  --landing-border-strong: rgba(79, 209, 122, 0.28);
+  --landing-text: #f8faf9;
+  --landing-text-soft: #cad4cf;
+  --landing-text-muted: #9daaa4;
+  --landing-accent: #3ddc7a;
+  --landing-accent-strong: #1fb863;
+  --landing-accent-soft: rgba(61, 220, 122, 0.12);
+  --landing-accent-soft-strong: rgba(61, 220, 122, 0.18);
+  --landing-shadow: 0 24px 60px rgba(0, 0, 0, 0.34);
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(61, 220, 122, 0.12), transparent 42%),
+    linear-gradient(180deg, #020403 0%, #050807 46%, #030504 100%);
+  color: var(--landing-text);
+}
+
+.landing-page .gradient-text {
+  background: linear-gradient(90deg, #54f28b 0%, #3ddc7a 45%, #6df4d8 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.landing-nav {
+  border-bottom: 1px solid var(--landing-border);
+  background: rgba(3, 5, 4, 0.64);
+  backdrop-filter: blur(14px);
+}
+
+.landing-brand-mark {
+  background: linear-gradient(135deg, #54f28b 0%, #1fb863 100%);
+  box-shadow: 0 0 20px rgba(61, 220, 122, 0.26);
+}
+
+.landing-shell-glow-a,
+.landing-shell-glow-b {
+  pointer-events: none;
+  position: absolute;
+  border-radius: 999px;
+}
+
+.landing-shell-glow-a {
+  background: rgba(61, 220, 122, 0.18);
+}
+
+.landing-shell-glow-b {
+  background: rgba(91, 241, 188, 0.08);
+}
+
+.landing-muted {
+  color: var(--landing-text-soft);
+}
+
+.landing-muted-2 {
+  color: var(--landing-text-muted);
+}
+
+.landing-chip {
+  border: 1px solid rgba(84, 242, 139, 0.2);
+  background: rgba(61, 220, 122, 0.1);
+  color: #d9ffe7;
+}
+
+.landing-chip-dot {
+  background: var(--landing-accent);
+}
+
+.landing-ghost-btn {
+  color: var(--landing-text);
+}
+
+.landing-ghost-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.landing-primary-btn {
+  background: #ffffff;
+  color: #050807;
+  box-shadow: 0 0 30px rgba(255, 255, 255, 0.08);
+}
+
+.landing-primary-btn:hover {
+  background: #eef2ef;
+}
+
+.landing-cta-btn {
+  background: var(--landing-accent);
+  color: #041108;
+  box-shadow: 0 0 30px rgba(61, 220, 122, 0.35);
+}
+
+.landing-cta-btn:hover {
+  background: #54f28b;
+  box-shadow: 0 0 50px rgba(61, 220, 122, 0.5);
+}
+
+.landing-outline-btn {
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: var(--landing-text);
+  backdrop-filter: blur(10px);
+}
+
+.landing-outline-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.landing-info-card,
+.landing-plan-card,
+.landing-workflow-card,
+.landing-upload-shell,
+.landing-growth-shell,
+.landing-auth-dialog {
+  border: 1px solid var(--landing-border);
+  background: var(--landing-card);
+}
+
+.landing-info-card {
+  color: var(--landing-text-soft);
+}
+
+.landing-info-card-title,
+.landing-auth-title,
+.landing-panel-title,
+.landing-section-title,
+.landing-card-title {
+  color: var(--landing-text);
+}
+
+.landing-panel {
+  border: 1px solid var(--landing-border);
+  background: var(--landing-panel-strong);
+  box-shadow: var(--landing-shadow);
+  backdrop-filter: blur(18px);
+}
+
+.landing-pill {
+  border: 1px solid rgba(84, 242, 139, 0.3);
+  background: rgba(61, 220, 122, 0.1);
+  color: #b8ffcf;
+}
+
+.landing-input-shell,
+.landing-stat,
+.landing-plan-shell {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.landing-output-shell {
+  border: 1px solid rgba(61, 220, 122, 0.2);
+  background: rgba(61, 220, 122, 0.06);
+}
+
+.landing-output-label,
+.landing-plan-price,
+.landing-accent-text {
+  color: #b8ffcf;
+}
+
+.landing-tag {
+  border: 1px solid rgba(84, 242, 139, 0.2);
+  background: rgba(84, 242, 139, 0.1);
+  color: #d9ffe7;
+}
+
+.landing-tag-muted {
+  border: 1px solid var(--landing-border);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--landing-text-soft);
+}
+
+.landing-kicker,
+.landing-label {
+  color: rgba(184, 255, 207, 0.82);
+}
+
+.landing-plan-shell {
+  background: rgba(12, 16, 15, 0.7);
+  backdrop-filter: blur(10px);
+}
+
+.landing-plan-card {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.landing-workflow-card,
+.landing-upload-shell,
+.landing-growth-shell {
+  background: rgba(255, 255, 255, 0.035);
+  transition: border-color 180ms ease, transform 180ms ease;
+}
+
+.landing-workflow-card:hover {
+  border-color: rgba(61, 220, 122, 0.3);
+  transform: translateY(-1px);
+}
+
+.landing-icon-box {
+  background: rgba(61, 220, 122, 0.15);
+  color: #b8ffcf;
+}
+
+.landing-icon-box-red {
+  background: rgba(239, 68, 68, 0.14);
+  color: #fda4a4;
+}
+
+.landing-icon-box-gold {
+  background: rgba(234, 179, 8, 0.14);
+  color: #fde68a;
+}
+
+.landing-auth-dialog {
+  background: rgba(10, 14, 13, 0.94) !important;
+  color: var(--landing-text) !important;
+}
+
+.landing-auth-copy,
+.landing-auth-label,
+.landing-auth-link {
+  color: var(--landing-text-soft);
+}
+
+.landing-auth-input {
+  border-color: var(--landing-border) !important;
+  background: rgba(0, 0, 0, 0.4) !important;
+}
+
+.landing-auth-input:focus {
+  border-color: rgba(61, 220, 122, 0.5) !important;
+  box-shadow: 0 0 0 3px rgba(61, 220, 122, 0.12) !important;
+}
+
+.landing-auth-submit {
+  background: #ffffff;
+  color: #050807;
+}
+
+.landing-auth-submit:hover {
+  background: #eef2ef;
+}
+
+.landing-auth-link-btn {
+  color: var(--landing-accent);
+}
+
+.landing-auth-link-btn:hover {
+  text-decoration: underline;
+}

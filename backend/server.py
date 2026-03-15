@@ -88,6 +88,7 @@ ADMIN_USER_IDS = {
 }
 SENDGRID_API_KEY = os.environ.get('SENDGRID_API_KEY')
 SENDGRID_FROM_EMAIL = os.environ.get('SENDGRID_FROM_EMAIL')
+VERIFICATION_REVIEW_EMAIL = os.environ.get("VERIFICATION_REVIEW_EMAIL", "jamesbeatsmanagement1234@gmail.com").strip()
 TEXTBELT_API_KEY = os.environ.get('TEXTBELT_API_KEY')
 REMINDER_SERIALIZER = URLSafeSerializer(REMINDER_SECRET)
 BEATHELPER_DEFAULT_APPROVAL_TIMEOUT_HOURS = int(os.environ.get("BEATHELPER_DEFAULT_APPROVAL_TIMEOUT_HOURS", "12"))
@@ -705,6 +706,7 @@ class User(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     username: str
+    is_admin: bool = False
     email: Optional[str] = None
     phone: Optional[str] = None
     reminder_email_enabled: bool = False
@@ -1617,6 +1619,43 @@ async def ensure_has_credit(user_id: str, feature_name: str = "generations") -> 
         )
 
 
+async def _can_use_free_monthly_analytics(user_id: str) -> bool:
+    user_doc = await db.users.find_one(
+        {"id": user_id},
+        {"analytics_free_usage_month": 1, "analytics_free_usage_count": 1}
+    )
+    current_month = datetime.now(timezone.utc).strftime("%Y-%m")
+    if not user_doc:
+        return False
+
+    used_month = str(user_doc.get("analytics_free_usage_month") or "")
+    used_count = int(user_doc.get("analytics_free_usage_count") or 0)
+    if used_month != current_month:
+        return True
+    return used_count < 1
+
+
+async def _consume_free_monthly_analytics(user_id: str) -> None:
+    user_doc = await db.users.find_one(
+        {"id": user_id},
+        {"analytics_free_usage_month": 1, "analytics_free_usage_count": 1}
+    )
+    current_month = datetime.now(timezone.utc).strftime("%Y-%m")
+    used_month = str((user_doc or {}).get("analytics_free_usage_month") or "")
+
+    if used_month != current_month:
+        await db.users.update_one(
+            {"id": user_id},
+            {"$set": {"analytics_free_usage_month": current_month, "analytics_free_usage_count": 1}},
+        )
+        return
+
+    await db.users.update_one(
+        {"id": user_id},
+        {"$inc": {"analytics_free_usage_count": 1}},
+    )
+
+
 # ============ Auth Helper Functions ============
 def create_access_token(user_id: str, username: str) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=JWT_EXPIRATION)
@@ -1676,10 +1715,10 @@ def _sanitize_tag_generation_doc(doc: Optional[dict], current_user: dict) -> Opt
 
 async def _ensure_pro_user(current_user: dict, feature_name: str = "This feature") -> None:
     sub_status = await get_user_subscription_status(current_user["id"])
-    if not sub_status.get("is_subscribed"):
+    if sub_status.get("plan") not in {"plus", "max"}:
         raise HTTPException(
             status_code=402,
-            detail=f"{feature_name} is a Pro feature. Upgrade to Pro to use BeatHelper."
+            detail=f"{feature_name} requires a Plus or Max plan."
         )
 
 
@@ -1855,6 +1894,34 @@ def _send_sms_notification(to_phone: str, message: str) -> bool:
         return resp.status_code < 400
     except Exception:
         return False
+
+
+def _send_verification_application_email(
+    *,
+    current_user: dict,
+    user_doc: dict,
+    username: str,
+    request: VerificationApplicationRequest,
+    submitted_at: datetime,
+) -> bool:
+    subject = f"SendMyBeat verification request - {username}"
+    account_email = (user_doc.get("email") or "").strip() or "No account email on file"
+    stage_name = (request.stage_name or "").strip() or "Not provided"
+    main_platform_url = (request.main_platform_url or "").strip() or "Not provided"
+    notable_work = (request.notable_work or "").strip() or "Not provided"
+    reason = (request.reason or "").strip() or "Not provided"
+    message = (
+        "A producer submitted a verification request.\n\n"
+        f"Username: {username}\n"
+        f"User ID: {current_user.get('id')}\n"
+        f"Account Email: {account_email}\n"
+        f"Stage Name: {stage_name}\n"
+        f"Main Platform URL: {main_platform_url}\n"
+        f"Notable Work: {notable_work}\n"
+        f"Reason: {reason}\n"
+        f"Submitted At: {submitted_at.isoformat()}\n"
+    )
+    return _send_email_notification(VERIFICATION_REVIEW_EMAIL, subject, message)
 
 
 async def _dispatch_beathelper_approval_request(item: dict, user_doc: dict, source: str = "manual") -> dict:
@@ -2076,7 +2143,7 @@ async def register(user_data: UserRegister, request: Request):
     hashed_password = bcrypt.hash(user_data.password)
     
     # Create user
-    user = User(username=user_data.username)
+    user = User(username=user_data.username, is_admin=False)
     user_doc = user.model_dump()
     user_doc['password_hash'] = hashed_password
     user_doc['created_at'] = user_doc['created_at'].isoformat()
@@ -2108,6 +2175,7 @@ async def login(user_data: UserLogin, request: Request):
     user = User(
         id=user_doc['id'],
         username=user_doc['username'],
+        is_admin=_is_admin_user(user_doc),
         created_at=datetime.fromisoformat(user_doc['created_at']) if isinstance(user_doc['created_at'], str) else user_doc['created_at']
     )
     
@@ -2121,7 +2189,8 @@ async def get_me(current_user: dict = Depends(get_current_user)):
     
     if isinstance(user_doc['created_at'], str):
         user_doc['created_at'] = datetime.fromisoformat(user_doc['created_at'])
-    
+    user_doc["is_admin"] = _is_admin_user(user_doc)
+
     return User(**user_doc)
 
 @api_router.post("/theme/generate", response_model=ThemeGenerateResponse)
@@ -2313,8 +2382,22 @@ async def disconnect_youtube(current_user: dict = Depends(get_current_user)):
 async def get_youtube_analytics(current_user: dict = Depends(get_current_user)):
     """Analyze YouTube channel performance and provide AI insights"""
     try:
-        # Check if user has credits
-        await ensure_has_credit(current_user['id'], "analytics")
+        subscription_status = await get_user_subscription_status(current_user['id'])
+        analytics_plan = subscription_status.get("plan") or "free"
+        using_free_monthly_analytics = analytics_plan == "free"
+
+        if using_free_monthly_analytics:
+            free_analytics_available = await _can_use_free_monthly_analytics(current_user['id'])
+            if not free_analytics_available:
+                raise HTTPException(
+                    status_code=402,
+                    detail={
+                        "message": "Free users get 1 channel analysis per month. Upgrade to Plus or Max for more analytics access.",
+                        "resets_at": subscription_status.get("resets_at"),
+                    }
+                )
+        else:
+            await ensure_has_credit(current_user['id'], "analytics")
         
         # Check if YouTube is connected
         connection = await db.youtube_connections.find_one({"user_id": current_user['id']})
@@ -2552,7 +2635,10 @@ CRITICAL RULES:
                 ]
             }
         
-        await consume_credit(current_user['id'])
+        if using_free_monthly_analytics:
+            await _consume_free_monthly_analytics(current_user['id'])
+        else:
+            await consume_credit(current_user['id'])
         return YouTubeAnalyticsResponse(
             channel_name=channel_snippet['title'],
             subscriber_count=int(channel_stats.get('subscriberCount', 0)),
@@ -3740,14 +3826,31 @@ Optional candidate inspirations from YouTube/Spotify/SoundCloud/custom inputs:
             )
 
         for tag in [t for t in parsed_tags if isinstance(t, str)]:
-            try_push_tag(tag, "llm", "llm_high_intent", max_tags=80)
+            exact_key = _tag_exact_key(tag)
+            matched_source = candidate_source_map.get(exact_key, "llm")
+            accepted_reason = "llm_matched_source" if matched_source != "llm" else "llm_high_intent"
+            try_push_tag(tag, matched_source, accepted_reason, max_tags=80)
 
         llm_selected_count = len(final_tags)
 
-        # Force song/project seed coverage before broader top-up.
-        for seed_tag in source_priority_pool:
+        # Force YouTube-backed song/project terms near the top before broader top-up.
+        youtube_priority_pool = [
+            tag for tag in source_priority_pool
+            if candidate_source_map.get(_tag_exact_key(tag), "").startswith("youtube")
+        ]
+        external_priority_pool = [
+            tag for tag in source_priority_pool
+            if not candidate_source_map.get(_tag_exact_key(tag), "").startswith("youtube")
+        ]
+
+        for seed_tag in youtube_priority_pool:
+            try_push_tag(seed_tag, candidate_source_map.get(_tag_exact_key(seed_tag), "youtube"), "youtube_seed_priority", max_tags=80)
+            if len([t for t in selected_tags_debug if t.get("reason") == "youtube_seed_priority"]) >= 16:
+                break
+
+        for seed_tag in external_priority_pool:
             try_push_tag(seed_tag, candidate_source_map.get(_tag_exact_key(seed_tag), "source"), "song_seed_priority", max_tags=80)
-            if len([t for t in selected_tags_debug if t.get("reason") == "song_seed_priority"]) >= 20:
+            if len([t for t in selected_tags_debug if t.get("reason") in {"youtube_seed_priority", "song_seed_priority"}]) >= 28:
                 break
 
         # If model under-returns, top up carefully from candidate pool
@@ -3757,6 +3860,44 @@ Optional candidate inspirations from YouTube/Spotify/SoundCloud/custom inputs:
                 try_push_tag(candidate, source, "candidate_top_up", max_tags=64)
                 if len(final_tags) >= 64:
                     break
+
+        selected_source_lookup = {
+            _tag_exact_key(entry.get("tag", "")): entry.get("source", "llm")
+            for entry in selected_tags_debug
+            if _tag_exact_key(entry.get("tag", ""))
+        }
+        youtube_exact_keys = {_tag_exact_key(tag) for tag in youtube_type_beat_tags if _tag_exact_key(tag)}
+        spotify_exact_keys = {_tag_exact_key(tag) for tag in spotify_type_beat_tags if _tag_exact_key(tag)}
+        soundcloud_exact_keys = {_tag_exact_key(tag) for tag in soundcloud_type_beat_tags if _tag_exact_key(tag)}
+        artist_exact = _tag_exact_key(artist_name)
+
+        def rank_final_tag(tag: str) -> tuple:
+            exact = _tag_exact_key(tag)
+            source = selected_source_lookup.get(exact) or candidate_source_map.get(exact) or "llm"
+            source_rank = {
+                "youtube": 0,
+                "youtube_titles": 0,
+                "youtube_tracks": 0,
+                "spotify": 1,
+                "spotify_tracks": 1,
+                "soundcloud": 2,
+                "soundcloud_tracks": 2,
+                "llm": 3,
+                "custom": 4,
+            }.get(source, 5)
+            exact_pool_rank = (
+                0 if exact in youtube_exact_keys
+                else 1 if exact in spotify_exact_keys
+                else 2 if exact in soundcloud_exact_keys
+                else 3
+            )
+            words = exact.split()
+            has_artist = 0 if artist_exact and artist_exact in exact else 1
+            has_type_beat = 0 if "type beat" in exact else 1
+            long_tail_rank = 0 if len(words) >= 4 else 1
+            return (exact_pool_rank, source_rank, has_artist, has_type_beat, long_tail_rank, -len(words), exact)
+
+        final_tags = sorted(final_tags, key=rank_final_tag)
 
         # Hard safety limit
         final_tags = final_tags[:80]
@@ -6127,6 +6268,17 @@ async def apply_for_verification(
             "submitted_at": now,
         },
     }
+    email_sent = _send_verification_application_email(
+        current_user=current_user,
+        user_doc=user_doc,
+        username=username,
+        request=request,
+        submitted_at=now,
+    )
+    update_fields["verification_review_email"] = VERIFICATION_REVIEW_EMAIL
+    update_fields["verification_email_sent"] = email_sent
+    if not email_sent:
+        update_fields["verification_note"] = "Application submitted and awaiting review. Review email delivery failed."
 
     await db.producer_profiles.update_one(
         {"user_id": current_user["id"]},
@@ -6143,14 +6295,9 @@ async def review_verification_application(
     request: VerificationReviewRequest,
     current_user: dict = Depends(get_current_user)
 ):
-    """Creator/admin-only endpoint to approve or reject verification."""
-    actor_username = (current_user.get("username") or "").lower()
-    is_creator = (
-        (CREATOR_USER_ID and current_user["id"] == CREATOR_USER_ID)
-        or (CREATOR_USERNAME and actor_username == CREATOR_USERNAME)
-    )
-    if not is_creator:
-        raise HTTPException(status_code=403, detail="Only creator/admin can review verification applications.")
+    """Admin-only endpoint to approve or reject verification."""
+    if not _is_admin_user(current_user):
+        raise HTTPException(status_code=403, detail="Only admins can review verification applications.")
 
     action = (request.action or "").strip().lower()
     if action not in {"approve", "reject"}:
@@ -6163,7 +6310,7 @@ async def review_verification_application(
     now = datetime.now(timezone.utc)
     update_fields = {
         "verification_status": "approved" if action == "approve" else "rejected",
-        "verification_note": (request.note or "").strip() or ("Approved by creator" if action == "approve" else "Rejected by creator"),
+        "verification_note": (request.note or "").strip() or ("Approved by admin" if action == "approve" else "Rejected by admin"),
         "updated_at": now,
     }
     if action == "approve":

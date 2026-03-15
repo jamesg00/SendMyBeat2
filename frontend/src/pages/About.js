@@ -2,18 +2,19 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Music, Zap, Youtube, Target, TrendingUp, Shield } from "lucide-react";
 import DarkModeToggle from "@/components/DarkModeToggle";
+import "@/pages/PolicyPages.css";
 
 const About = () => {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen cyber-grid scanline-effect" style={{backgroundColor: 'var(--bg-primary)'}}>
-      <div className="container mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-6 md:py-8 max-w-5xl">
-        <div className="policy-page-header flex justify-between items-center gap-3 mb-6 sm:mb-8">
+    <div className="policy-shell">
+      <div className="policy-wrap container mx-auto px-3 py-4 sm:px-4 sm:py-6 md:px-6 md:py-8">
+        <div className="policy-header mb-6 sm:mb-8">
           <Button
             variant="ghost"
             onClick={() => navigate(-1)}
-            className="flex items-center gap-1 sm:gap-2 matrix-glow hover:scale-105 transition-transform text-sm sm:text-base"
+            className="policy-back-btn flex items-center gap-1 text-sm transition-transform hover:scale-105 sm:gap-2 sm:text-base"
           >
             <ArrowLeft className="w-3 h-3 sm:w-4 sm:h-4" />
             Back
@@ -21,18 +22,18 @@ const About = () => {
           <DarkModeToggle inline />
         </div>
 
-        <div className="game-card p-4 sm:p-6 md:p-8 lg:p-12">
-          <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-3 sm:mb-4 text-center brand-text matrix-glow rgb-hover">
+        <div className="policy-card p-4 sm:p-6 md:p-8 lg:p-12">
+          <h1 className="policy-title text-center text-2xl font-bold mb-3 sm:mb-4 sm:text-3xl md:text-4xl lg:text-5xl">
             About SendMyBeat
           </h1>
-          <p className="text-sm sm:text-base md:text-lg lg:text-xl text-center matrix-glow mb-8 sm:mb-12 px-2">
+          <p className="policy-muted mb-8 px-2 text-center text-sm sm:mb-12 sm:text-base md:text-lg lg:text-xl">
             Empowering Music Producers to Maximize Beat Discoverability
           </p>
 
-          <div className="space-y-6 sm:space-y-8 matrix-glow">
+          <div className="policy-copy space-y-6 sm:space-y-8">
             <section>
-              <h2 className="text-xl sm:text-2xl md:text-3xl font-semibold mb-3 sm:mb-4 matrix-glow flex items-center gap-2 sm:gap-3">
-                <Target className="w-5 h-5 sm:w-6 sm:h-6 md:w-8 md:h-8 matrix-glow flex-shrink-0" />
+              <h2 className="policy-title mb-3 flex items-center gap-2 text-xl font-semibold sm:mb-4 sm:gap-3 sm:text-2xl md:text-3xl">
+                <Target className="policy-muted w-5 h-5 flex-shrink-0 sm:w-6 sm:h-6 md:w-8 md:h-8" />
                 <span>Our Mission</span>
               </h2>
               <p className="text-sm sm:text-base md:text-lg leading-relaxed">
@@ -41,56 +42,56 @@ const About = () => {
             </section>
 
             <section>
-              <h2 className="text-xl sm:text-2xl md:text-3xl font-semibold mb-3 sm:mb-4 matrix-glow flex items-center gap-2 sm:gap-3">
-                <Zap className="w-5 h-5 sm:w-6 sm:h-6 md:w-8 md:h-8 matrix-glow flex-shrink-0" />
+              <h2 className="policy-title mb-3 flex items-center gap-2 text-xl font-semibold sm:mb-4 sm:gap-3 sm:text-2xl md:text-3xl">
+                <Zap className="policy-muted w-5 h-5 flex-shrink-0 sm:w-6 sm:h-6 md:w-8 md:h-8" />
                 <span>What We Do</span>
               </h2>
               <p className="text-sm sm:text-base md:text-lg leading-relaxed mb-3 sm:mb-4">
                 SendMyBeat.com is a comprehensive platform designed specifically for music producers who want to maximize their beat discoverability. We provide powerful tools that streamline your workflow and optimize your content for search algorithms:
               </p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mt-4 sm:mt-6">
-                <div className="game-card p-4 sm:p-5 md:p-6">
+                <div className="policy-feature-card p-4 sm:p-5 md:p-6">
                   <div className="flex items-start gap-2 sm:gap-3">
-                    <Music className="w-5 h-5 sm:w-6 sm:h-6 matrix-glow mt-1 flex-shrink-0" />
+                    <Music className="policy-muted mt-1 w-5 h-5 flex-shrink-0 sm:w-6 sm:h-6" />
                     <div>
-                      <h3 className="font-semibold text-sm sm:text-base md:text-lg mb-1.5 sm:mb-2 matrix-glow">AI Tag Generation</h3>
-                      <p className="text-xs sm:text-sm matrix-glow">
+                      <h3 className="policy-title mb-1.5 text-sm font-semibold sm:mb-2 sm:text-base md:text-lg">AI Tag Generation</h3>
+                      <p className="text-xs sm:text-sm">
                         Generate up to 500 advanced, search-optimized tags based on your search queries. Our AI analyzes trends and suggests tags that increase discoverability, similar to tools like vidIQ.
                       </p>
                     </div>
                   </div>
                 </div>
 
-                <div className="game-card p-4 sm:p-5 md:p-6">
+                <div className="policy-feature-card p-4 sm:p-5 md:p-6">
                   <div className="flex items-start gap-2 sm:gap-3">
-                    <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6 matrix-glow mt-1 flex-shrink-0" />
+                    <TrendingUp className="policy-muted mt-1 w-5 h-5 flex-shrink-0 sm:w-6 sm:h-6" />
                     <div>
-                      <h3 className="font-semibold text-sm sm:text-base md:text-lg mb-1.5 sm:mb-2 matrix-glow">Smart Description Management</h3>
-                      <p className="text-xs sm:text-sm matrix-glow">
+                      <h3 className="policy-title mb-1.5 text-sm font-semibold sm:mb-2 sm:text-base md:text-lg">Smart Description Management</h3>
+                      <p className="text-xs sm:text-sm">
                         Save and manage multiple custom or AI-refined descriptions as templates. Generate descriptions based on your email, socials, BPM, and pricing information with AI assistance.
                       </p>
                     </div>
                   </div>
                 </div>
 
-                <div className="game-card p-4 sm:p-5 md:p-6">
+                <div className="policy-feature-card p-4 sm:p-5 md:p-6">
                   <div className="flex items-start gap-2 sm:gap-3">
-                    <Youtube className="w-5 h-5 sm:w-6 sm:h-6 matrix-glow mt-1 flex-shrink-0" />
+                    <Youtube className="policy-muted mt-1 w-5 h-5 flex-shrink-0 sm:w-6 sm:h-6" />
                     <div>
-                      <h3 className="font-semibold text-sm sm:text-base md:text-lg mb-1.5 sm:mb-2 matrix-glow">YouTube Integration</h3>
-                      <p className="text-xs sm:text-sm matrix-glow">
+                      <h3 className="policy-title mb-1.5 text-sm font-semibold sm:mb-2 sm:text-base md:text-lg">YouTube Integration</h3>
+                      <p className="text-xs sm:text-sm">
                         Upload your beats directly to YouTube with audio and image files from your local storage. Automatically apply generated tags and descriptions with options for public, unlisted, or private visibility.
                       </p>
                     </div>
                   </div>
                 </div>
 
-                <div className="game-card p-4 sm:p-5 md:p-6">
+                <div className="policy-feature-card p-4 sm:p-5 md:p-6">
                   <div className="flex items-start gap-2 sm:gap-3">
-                    <Shield className="w-5 h-5 sm:w-6 sm:h-6 matrix-glow mt-1 flex-shrink-0" />
+                    <Shield className="policy-muted mt-1 w-5 h-5 flex-shrink-0 sm:w-6 sm:h-6" />
                     <div>
-                      <h3 className="font-semibold text-sm sm:text-base md:text-lg mb-1.5 sm:mb-2 matrix-glow">Flexible Plans</h3>
-                      <p className="text-xs sm:text-sm matrix-glow">
+                      <h3 className="policy-title mb-1.5 text-sm font-semibold sm:mb-2 sm:text-base md:text-lg">Flexible Plans</h3>
+                      <p className="text-xs sm:text-sm">
                         Start free with 2 daily AI generations and 2 YouTube uploads, or upgrade to Pro for unlimited access. No commitments, cancel anytime.
                       </p>
                     </div>
@@ -100,7 +101,7 @@ const About = () => {
             </section>
 
             <section>
-              <h2 className="text-xl sm:text-2xl md:text-3xl font-semibold mb-3 sm:mb-4 matrix-glow">
+              <h2 className="policy-title mb-3 text-xl font-semibold sm:mb-4 sm:text-2xl md:text-3xl">
                 Why We Built This
               </h2>
               <p className="text-sm sm:text-base md:text-lg leading-relaxed mb-3 sm:mb-4">
@@ -112,7 +113,7 @@ const About = () => {
             </section>
 
             <section>
-              <h2 className="text-xl sm:text-2xl md:text-3xl font-semibold mb-3 sm:mb-4 matrix-glow">
+              <h2 className="policy-title mb-3 text-xl font-semibold sm:mb-4 sm:text-2xl md:text-3xl">
                 Who We Are
               </h2>
               <p className="text-sm sm:text-base md:text-lg leading-relaxed">
@@ -120,26 +121,26 @@ const About = () => {
               </p>
             </section>
 
-            <section className="game-card p-4 sm:p-6 md:p-8">
-              <h2 className="text-xl sm:text-2xl md:text-3xl font-semibold mb-3 sm:mb-4 matrix-glow text-center">
+            <section className="policy-feature-card p-4 sm:p-6 md:p-8">
+              <h2 className="policy-title mb-3 text-center text-xl font-semibold sm:mb-4 sm:text-2xl md:text-3xl">
                 Our Commitment
               </h2>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 text-center">
                 <div>
-                  <div className="text-3xl sm:text-4xl font-bold matrix-glow mb-2">Quality</div>
-                  <p className="text-sm matrix-glow">
+                  <div className="policy-title mb-2 text-3xl font-bold sm:text-4xl">Quality</div>
+                  <p className="text-sm">
                     We use state-of-the-art AI technology to deliver the best results for your content optimization needs.
                   </p>
                 </div>
                 <div>
-                  <div className="text-3xl sm:text-4xl font-bold matrix-glow mb-2">Simplicity</div>
-                  <p className="text-sm matrix-glow">
+                  <div className="policy-title mb-2 text-3xl font-bold sm:text-4xl">Simplicity</div>
+                  <p className="text-sm">
                     Our platform is designed to be intuitive and easy to use, saving you time and effort.
                   </p>
                 </div>
                 <div>
-                  <div className="text-2xl sm:text-3xl md:text-4xl font-bold matrix-glow mb-1.5 sm:mb-2">Growth</div>
-                  <p className="text-xs sm:text-sm matrix-glow">
+                  <div className="policy-title mb-1.5 text-2xl font-bold sm:mb-2 sm:text-3xl md:text-4xl">Growth</div>
+                  <p className="text-xs sm:text-sm">
                     We're constantly improving our tools and adding new features based on user feedback.
                   </p>
                 </div>
@@ -147,10 +148,10 @@ const About = () => {
             </section>
 
             <section>
-              <h2 className="text-xl sm:text-2xl md:text-3xl font-semibold mb-3 sm:mb-4 matrix-glow">
+              <h2 className="policy-title mb-3 text-xl font-semibold sm:mb-4 sm:text-2xl md:text-3xl">
                 Get Started Today
               </h2>
-              <p className="text-sm sm:text-base md:text-lg leading-relaxed mb-4 sm:mb-6 matrix-glow">
+              <p className="mb-4 text-sm leading-relaxed sm:mb-6 sm:text-base md:text-lg">
                 Join thousands of music producers who are already maximizing their beat discoverability with SendMyBeat.com. Start with our free plan and experience the power of AI-optimized content management. Upgrade to Pro whenever you're ready for unlimited access.
               </p>
               <div className="flex justify-center px-2">
@@ -165,8 +166,8 @@ const About = () => {
             </section>
           </div>
 
-          <div className="mt-8 sm:mt-12 pt-6 sm:pt-8 border-t border-gray-200 dark:border-gray-700">
-            <p className="text-center text-xs sm:text-sm text-gray-600 dark:text-gray-400 px-2">
+          <div className="policy-divider mt-8 px-2 pt-6 sm:mt-12 sm:pt-8">
+            <p className="policy-footer-text text-center text-xs sm:text-sm">
               Have questions or feedback? We'd love to hear from you. Connect with us on social media or reach out through our support channels.
             </p>
           </div>

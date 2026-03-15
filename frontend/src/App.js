@@ -18,12 +18,6 @@ import { clearAuthToken, getAuthToken } from "@/lib/auth";
 const BACKEND_URL =
   process.env.REACT_APP_BACKEND_URL || process.env.REACT_APP_API_BASE_URL;
 export const API = `${BACKEND_URL}/api`;
-const ADMIN_USERNAMES = new Set(
-  (process.env.REACT_APP_ADMIN_USERNAMES || "deadat18")
-    .split(",")
-    .map((value) => value.trim().toLowerCase())
-    .filter(Boolean)
-);
 
 // Axios interceptor for auth token
 axios.interceptors.request.use(
@@ -41,9 +35,8 @@ axios.interceptors.request.use(
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [currentUsername, setCurrentUsername] = useState("");
+  const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
-  const isAdmin = ADMIN_USERNAMES.has((currentUsername || "").toLowerCase());
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -51,15 +44,15 @@ function App() {
       if (token) {
         try {
           const me = await axios.get(`${API}/auth/me`);
-          setCurrentUsername(me?.data?.username || "");
+          setIsAdmin(Boolean(me?.data?.is_admin));
           setIsAuthenticated(true);
         } catch (error) {
           clearAuthToken();
           setIsAuthenticated(false);
-          setCurrentUsername("");
+          setIsAdmin(false);
         }
       } else {
-        setCurrentUsername("");
+        setIsAdmin(false);
       }
       setLoading(false);
     };
@@ -116,6 +109,16 @@ function App() {
               element={
                 isAuthenticated ? (
                   <Dashboard setIsAuthenticated={setIsAuthenticated} />
+                ) : (
+                  <Navigate to="/" replace />
+                )
+              }
+            />
+            <Route
+              path="/grow-in-120"
+              element={
+                isAuthenticated ? (
+                  <Dashboard setIsAuthenticated={setIsAuthenticated} standaloneGrow />
                 ) : (
                   <Navigate to="/" replace />
                 )

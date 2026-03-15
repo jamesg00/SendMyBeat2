@@ -1,5 +1,5 @@
 import React from "react";
-import { Wand2, ChevronUp, ChevronDown, Target, Sparkles, ImagePlus } from "lucide-react";
+import { Wand2, ChevronUp, ChevronDown, Target, Sparkles, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -18,6 +18,12 @@ const AIToolsPanel = ({
   beatAnalysis,
   thumbnailCheckResult
 }) => {
+  const actionButtonStyle = (accent) => ({
+    color: accent,
+    borderColor: `color-mix(in srgb, ${accent} 34%, var(--border-color))`,
+    backgroundColor: "transparent"
+  });
+
   return (
     <Card className="border-l-4 border-l-emerald-500 shadow-sm">
        <CardHeader className="pb-3 flex flex-row items-center justify-between">
@@ -35,7 +41,8 @@ const AIToolsPanel = ({
                    variant="outline"
                    onClick={handleAnalyzeBeat}
                    disabled={analyzingBeat}
-                   className="text-yellow-600 border-yellow-200 hover:bg-yellow-50 dark:hover:bg-yellow-900/20"
+                   className="transition-colors hover:bg-secondary/70"
+                   style={actionButtonStyle("var(--accent-primary)")}
                 >
                    {analyzingBeat ? "..." : <><Target className="mr-2 h-4 w-4"/> Analyze Beat</>}
                 </Button>
@@ -43,7 +50,8 @@ const AIToolsPanel = ({
                    variant="outline"
                    onClick={handleThumbnailCheck}
                    disabled={checkingThumbnail}
-                   className="text-emerald-600 border-emerald-200 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
+                   className="transition-colors hover:bg-secondary/70"
+                   style={actionButtonStyle("var(--accent-secondary)")}
                 >
                    {checkingThumbnail ? "..." : <><Sparkles className="mr-2 h-4 w-4"/> Check Thumb</>}
                 </Button>
@@ -51,9 +59,10 @@ const AIToolsPanel = ({
                    variant="outline"
                    onClick={handleGenerateImage}
                    disabled={generatingImages}
-                   className="text-blue-600 border-blue-200 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                   className="transition-colors hover:bg-secondary/70"
+                   style={actionButtonStyle("var(--text-primary)")}
                 >
-                   {generatingImages ? "..." : <><ImagePlus className="mr-2 h-4 w-4"/> Generate Image</>}
+                   {generatingImages ? "..." : <><Search className="mr-2 h-4 w-4"/> Web Image Search</>}
                 </Button>
              </div>
 
@@ -116,7 +125,10 @@ const AIToolsPanel = ({
              {generatedImages?.length > 0 && (
                 <div className="space-y-2">
                    <div className="text-xs font-semibold text-muted-foreground">
-                      Generated from: {generatedImageQuery || "artist search"}
+                      No thumbnail yet? Search artist visuals and apply one.
+                   </div>
+                   <div className="text-[11px] text-muted-foreground">
+                      Source: {generatedImageQuery || "artist search"}
                    </div>
                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                       {generatedImages.map((img) => (

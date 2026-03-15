@@ -24,20 +24,141 @@ import { clearAuthToken } from "@/lib/auth";
 
 const TAG_LIMIT = 120;
 const TAG_HISTORY_LIMIT = 100;
-const ADMIN_USERNAMES = new Set(
-  (process.env.REACT_APP_ADMIN_USERNAMES || "deadat18")
-    .split(",")
-    .map((value) => value.trim().toLowerCase())
-    .filter(Boolean)
-);
+const DEFAULT_TAG_PROVIDER = "grok";
 const DASHBOARD_TABS = [
   { value: "tags", label: "Tags" },
   { value: "descriptions", label: "Descriptions" },
   { value: "upload", label: "Upload" },
   { value: "analytics", label: "Analytics" },
-  { value: "grow", label: "Grow in 120" },
-  { value: "beathelper", label: "BeatHelper", proOnly: true },
+  { value: "beathelper", label: "BeatHelper", beatHelperOnly: true },
   { value: "settings", label: "Settings" },
+];
+
+const DESCRIPTION_TEMPLATES = [
+  {
+    id: "basic-type-beat",
+    name: "Basic Type Beat",
+    blurb: "Simple SEO-friendly layout for standard YouTube beat uploads.",
+    content: `🔥 Purchase / Download:
+
+🎵 BPM:
+🎹 Key:
+🎧 Genre:
+
+📩 Contact:
+Email:
+
+📱 Follow Me:
+Instagram:
+TikTok:
+Twitter:
+
+⚠️ Usage:
+Free for non-profit use only.
+Credit: Prod. by [Your Name]
+
+🏷️ Tags:
+#typebeat #[artistname]typebeat #[genre]beat`,
+  },
+  {
+    id: "beat-sales",
+    name: "Beat Sales",
+    blurb: "Built to drive traffic to your beat store and license page.",
+    content: `🛒 Buy / Lease This Beat:
+
+💰 Licensing:
+Basic Lease -
+Premium Lease -
+Exclusive -
+
+📧 Business Email:
+
+📱 Social Media:
+Instagram:
+TikTok:
+
+🎧 More Beats / Playlist:
+
+🏷️ Tags:
+#beatsforsale #typebeat #[genre]beat`,
+  },
+  {
+    id: "seo-discovery",
+    name: "SEO Discovery",
+    blurb: "Keyword-first structure for artist, subgenre, and discovery terms.",
+    content: `🎤 Artist / Style:
+🔥 Mood / Subgenre:
+
+🎵 BPM:
+🎹 Key:
+
+🛒 Buy / Lease:
+
+📩 Custom Beat Contact:
+Email:
+
+📱 Follow:
+Instagram:
+TikTok:
+
+🏷️ Search Tags:
+#[artistname]typebeat
+#[subgenre]typebeat
+#[year]typebeat
+#freestylebeat`,
+  },
+  {
+    id: "free-profit",
+    name: "Free for Profit",
+    blurb: "Clear rules for downloads, credits, and commercial upgrades.",
+    content: `🔥 FREE FOR PROFIT 🔥
+
+🎧 Free Download:
+
+📌 Rules:
+1. Credit: Prod. by [Your Name]
+2. Lease required for Spotify / Apple Music / DSP release
+3. Contact for exclusive rights
+
+📩 Email:
+
+📱 Socials:
+Instagram:
+TikTok:
+
+🎵 Beat Details:
+BPM:
+Key:
+
+🏷️ Tags:
+#freeforprofit #typebeat #freerapbeat`,
+  },
+  {
+    id: "channel-conversion",
+    name: "Channel Conversion",
+    blurb: "For producers pushing repeat listeners into playlists, socials, and store clicks.",
+    content: `🛒 Buy / Lease:
+
+🎵 BPM:
+🎹 Key:
+
+🔥 More Beats:
+Playlist:
+
+📧 Business Contact:
+Email:
+
+📱 Follow:
+Instagram:
+TikTok:
+Spotify:
+
+⚠️ Rights:
+All rights reserved unless licensed.
+
+🏷️ Tags:
+#typebeat #beatsforsale #[artistname]typebeat`,
+  },
 ];
 
 const toSafeNumber = (value, fallback = 0) => {
@@ -131,10 +252,9 @@ const normalizeCalendarData = (raw) => {
     return cleaned || query;
   };
 
-const Dashboard = ({ setIsAuthenticated }) => {
+const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
   const [user, setUser] = useState(null);
   const [tagQuery, setTagQuery] = useState("");
-  const [tagProvider, setTagProvider] = useState("grok");
   const [customTags, setCustomTags] = useState("");
   const [additionalTags, setAdditionalTags] = useState("");
   const [generatedTags, setGeneratedTags] = useState([]);
@@ -144,12 +264,11 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [tagHistory, setTagHistory] = useState([]);
   const [selectedTagHistoryIds, setSelectedTagHistoryIds] = useState([]);
   const [activeTagHistoryId, setActiveTagHistoryId] = useState(null);
-  const [activeTab, setActiveTab] = useState("tags");
+  const [activeTab, setActiveTab] = useState(standaloneGrow ? "grow" : "tags");
   const [descriptions, setDescriptions] = useState([]);
   const [loadingDescriptions, setLoadingDescriptions] = useState(false);
   const [newDescription, setNewDescription] = useState({ title: "", content: "" });
-  const [refineText, setRefineText] = useState("");
-  const [loadingRefine, setLoadingRefine] = useState(false);
+  const [showAllDescriptionTemplates, setShowAllDescriptionTemplates] = useState(false);
   const [generateForm, setGenerateForm] = useState({
     email: "",
     socials: "",
@@ -157,8 +276,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
   });
   const [loadingGenerate, setLoadingGenerate] = useState(false);
   const [editingDesc, setEditingDesc] = useState(null);
-  const [showSaveRefinedDialog, setShowSaveRefinedDialog] = useState(false);
-  const [refinedTextToSave, setRefinedTextToSave] = useState("");
 
   // Progress bar states
   const [progressActive, setProgressActive] = useState(false);
@@ -235,12 +352,19 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const dashboardParallaxRef = useRef(null);
 
   const isPro = !!subscriptionStatus?.is_subscribed;
-  const isAdmin = ADMIN_USERNAMES.has((user?.username || "").toLowerCase());
+  const analyticsPlan = subscriptionStatus?.plan || "free";
+  const hasPaidAnalyticsAccess = ["plus", "max"].includes(analyticsPlan);
+  const canUseBeatHelper = ["plus", "max"].includes(subscriptionStatus?.plan);
+  const isAdmin = Boolean(user?.is_admin);
   const canViewTagDebug = isAdmin;
-  const visibleTabs = DASHBOARD_TABS.filter((tab) => !tab.proOnly || isPro);
-  const adEligibleTabs = ["tags", "descriptions", "upload", "analytics", "grow", "beathelper"].includes(activeTab);
+  const visibleTabs = DASHBOARD_TABS.filter((tab) => {
+    if (tab.beatHelperOnly) return canUseBeatHelper;
+    if (tab.proOnly) return isPro;
+    return true;
+  });
+  const adEligibleTabs = ["tags", "descriptions", "upload", "analytics", "beathelper"].includes(activeTab) || standaloneGrow;
   const activeTabIndex = Math.max(0, visibleTabs.findIndex((tab) => tab.value === activeTab));
-  const activeTabLabel = visibleTabs[activeTabIndex]?.label || "Tags";
+  const activeTabLabel = standaloneGrow ? "Grow in 120" : (visibleTabs[activeTabIndex]?.label || "Tags");
   const desktopTabHighlightStyle = {
     width: `${100 / Math.max(visibleTabs.length, 1)}%`,
     transform: `translateX(${activeTabIndex * 100}%)`,
@@ -251,6 +375,9 @@ const Dashboard = ({ setIsAuthenticated }) => {
     userLoaded &&
     adEligibleTabs
   );
+  const visibleDescriptionTemplates = showAllDescriptionTemplates
+    ? DESCRIPTION_TEMPLATES
+    : DESCRIPTION_TEMPLATES.slice(0, 2);
 
   const healthScoreRaw = analyticsData?.insights?.channel_health_score || "";
   const parsedHealthScore = (() => {
@@ -373,16 +500,22 @@ const Dashboard = ({ setIsAuthenticated }) => {
   }, [activeTab, isPro, growthData?.challenge_start_date, calendarData]);
 
   useEffect(() => {
+    if (standaloneGrow) {
+      if (activeTab !== "grow") {
+        setActiveTab("grow");
+      }
+      return;
+    }
     if (!visibleTabs.some((tab) => tab.value === activeTab)) {
       setActiveTab(visibleTabs[0]?.value || "tags");
     }
-  }, [activeTab, visibleTabs]);
+  }, [activeTab, standaloneGrow, visibleTabs]);
 
   useEffect(() => {
-    if (activeTab === "beathelper" && isPro) {
+    if (activeTab === "beathelper" && canUseBeatHelper) {
       fetchBeatHelperData();
     }
-  }, [activeTab, isPro]);
+  }, [activeTab, canUseBeatHelper]);
 
   useEffect(() => {
     const selectedImageId = (beatHelperForm.image_file_id || "").trim();
@@ -1008,9 +1141,9 @@ const Dashboard = ({ setIsAuthenticated }) => {
       await fetchSubscriptionStatus();
     } catch (error) {
       if (error.response?.status === 402) {
-        const detail = error.response.data.detail;
-        toast.error(detail.message || "Daily limit reached");
-        setShowUpgradeModal(true);
+      const detail = error.response.data.detail;
+      toast.error(detail.message || "Analytics limit reached");
+      setShowUpgradeModal(true);
       } else if (error.response?.status === 400) {
         const detail = error.response?.data?.detail;
         toast.error(typeof detail === "string" ? detail : "Please connect your YouTube account first");
@@ -1118,11 +1251,11 @@ const Dashboard = ({ setIsAuthenticated }) => {
     try {
       const response = await axios.post(
         `${API}/tags/generate`,
-        {
-          query: tagQuery,
-          custom_tags: customTagsArray,
-          llm_provider: tagProvider
-        },
+          {
+            query: tagQuery,
+            custom_tags: customTagsArray,
+            llm_provider: DEFAULT_TAG_PROVIDER
+          },
         { signal: controller.signal }
       );
       setGeneratedTags(response.data.tags);
@@ -1323,7 +1456,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
         queries: selectedItems.map((item) => item.query || formatTagHistoryLabel(item.query || "")),
         candidate_tags: candidateTags,
         max_tags: 70,
-        llm_provider: tagProvider
+        llm_provider: DEFAULT_TAG_PROVIDER
       });
 
       const optimizedTags = Array.isArray(joinResponse?.data?.tags) ? joinResponse.data.tags : [];
@@ -1413,6 +1546,14 @@ const Dashboard = ({ setIsAuthenticated }) => {
     }
   };
 
+  const handleApplyDescriptionTemplate = (template) => {
+    setNewDescription((prev) => ({
+      ...prev,
+      content: template.content,
+    }));
+    toast.success(`${template.name} template loaded`);
+  };
+
   const handleDeleteDescription = async (id) => {
     // Confirmation dialog
     const confirmed = window.confirm(
@@ -1445,59 +1586,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
       fetchDescriptions();
     } catch (error) {
       toast.error("Failed to update description");
-    }
-  };
-
-  const handleRefineDescription = async () => {
-    if (!refineText.trim()) {
-      toast.error("Please enter a description to refine");
-      return;
-    }
-
-    setLoadingRefine(true);
-    try {
-      const response = await axios.post(`${API}/descriptions/refine`, { description: refineText });
-      setRefineText(response.data.refined_description);
-      setRefinedTextToSave(response.data.refined_description);
-      setShowSaveRefinedDialog(true);
-      toast.success("Description refined!");
-
-      // Refresh credits
-      setTimeout(() => {
-        fetchSubscriptionStatus();
-      }, 500);
-    } catch (error) {
-      // Handle credit limit
-      if (error.response?.status === 402) {
-        setShowUpgradeModal(true);
-        toast.error("Daily limit reached! Upgrade to continue.");
-      } else {
-        toast.error("Failed to refine description");
-      }
-
-      // Refresh credits even on error
-      setTimeout(() => {
-        fetchSubscriptionStatus();
-      }, 500);
-    } finally {
-      setLoadingRefine(false);
-    }
-  };
-
-  const handleSaveRefinedAsTemplate = async () => {
-    if (!refinedTextToSave.trim()) return;
-
-    try {
-      await axios.post(`${API}/descriptions`, {
-        title: `Refined - ${new Date().toLocaleDateString()}`,
-        content: refinedTextToSave,
-        is_ai_generated: true
-      });
-      toast.success("Refined text saved as template!");
-      setShowSaveRefinedDialog(false);
-      fetchDescriptions();
-    } catch (error) {
-      toast.error("Failed to save template");
     }
   };
 
@@ -1571,10 +1659,12 @@ const Dashboard = ({ setIsAuthenticated }) => {
       data-testid="dashboard"
     >
       <div className="dashboard-grid-layer" aria-hidden="true" />
-      <DarkModeToggle />
 
       {/* Header */}
-      <div className="glass-card mx-2 sm:mx-4 mt-2 sm:mt-4 rounded-xl sm:rounded-2xl border-0 dashboard-card">
+      <div className="glass-card relative mx-2 sm:mx-4 mt-2 sm:mt-4 rounded-xl sm:rounded-2xl border-0 dashboard-card">
+        <div className="absolute right-3 top-3 sm:right-4 sm:top-4 z-10">
+          <DarkModeToggle className="px-2.5 py-2 sm:px-3" />
+        </div>
         <div className="container mx-auto px-3 sm:px-4 md:px-6 pr-16 sm:pr-20 lg:pr-6 py-3 sm:py-4 dashboard-shell">
           <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 lg:gap-4">
             <div className="flex flex-1 items-center gap-2 sm:gap-3 md:gap-4 min-w-0 max-w-full">
@@ -1625,6 +1715,15 @@ const Dashboard = ({ setIsAuthenticated }) => {
                   </span>
                 </div>
               )}
+              <Button
+                variant="outline"
+                onClick={() => window.location.href = "/grow-in-120"}
+                className="gap-1 sm:gap-2 border-[var(--border-color)] text-xs sm:text-sm px-3 sm:px-4 py-2 whitespace-nowrap"
+              >
+                <CheckCircle2 className="h-3 w-3 sm:h-4 sm:w-4" />
+                <span className="hidden xl:inline">Grow in 120</span>
+                <span className="xl:hidden">Grow</span>
+              </Button>
 
               <Button
                 variant="outline"
@@ -1689,6 +1788,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
         />
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 sm:space-y-6">
+          {!standaloneGrow && (
           <div className="sm:hidden w-full max-w-xs mx-auto flex items-center justify-between gap-2 dashboard-tabs px-2 py-1.5">
             <Button
               type="button"
@@ -1722,9 +1822,11 @@ const Dashboard = ({ setIsAuthenticated }) => {
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
+          )}
 
+          {!standaloneGrow && (
           <TabsList
-            className="hidden sm:grid w-full max-w-6xl mx-auto gap-1 text-xs sm:text-sm dashboard-tabs dashboard-tabs-desktop relative overflow-hidden"
+            className="hidden sm:grid w-full max-w-3xl mx-auto gap-0.5 text-[10px] sm:text-[11px] dashboard-tabs dashboard-tabs-desktop relative overflow-hidden"
             style={{ gridTemplateColumns: `repeat(${Math.max(visibleTabs.length, 1)}, minmax(0, 1fr))` }}
           >
             <div
@@ -1732,17 +1834,18 @@ const Dashboard = ({ setIsAuthenticated }) => {
               style={desktopTabHighlightStyle}
               aria-hidden="true"
             />
-            {visibleTabs.map((tab) => (
-              <TabsTrigger
-                key={tab.value}
-                value={tab.value}
-                data-testid={`${tab.value}-tab`}
-                className="relative z-10 flex min-h-[72px] items-center justify-center px-2 sm:px-3 py-2 text-center leading-tight whitespace-normal transition-colors data-[state=active]:bg-transparent data-[state=active]:text-white"
-              >
-                {tab.label}
-              </TabsTrigger>
+            {visibleTabs.map((tab, index) => (
+                <TabsTrigger
+                  key={tab.value}
+                  value={tab.value}
+                  data-testid={`${tab.value}-tab`}
+                  className={`dashboard-tab-trigger relative z-10 flex min-h-[42px] items-center justify-center px-1.5 py-1 text-center leading-none whitespace-nowrap transition-colors data-[state=active]:bg-transparent data-[state=active]:text-white ${index > 0 ? "dashboard-tab-trigger--separated" : ""}`}
+                >
+                  {tab.label}
+                </TabsTrigger>
             ))}
           </TabsList>
+          )}
 
           {canShowAds && !["tags", "descriptions"].includes(activeTab) && (
             <AdBanner
@@ -1753,16 +1856,16 @@ const Dashboard = ({ setIsAuthenticated }) => {
 
           {/* BeatHelper Tab (Pro) */}
           <TabsContent value="beathelper" className="space-y-6 dashboard-section">
-            {!isPro ? (
+            {!canUseBeatHelper ? (
               <Card className="dashboard-card">
                 <CardHeader>
-                  <CardTitle>BeatHelper is Pro-only</CardTitle>
+                  <CardTitle>BeatHelper is for Plus and Max</CardTitle>
                   <CardDescription>
-                    Upgrade to Pro to queue beats, match thumbnails 1:1, and run assisted upload approvals.
+                    Upgrade to Plus or Max to queue beats, match thumbnails 1:1, and run assisted upload approvals.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <Button onClick={() => setShowUpgradeModal(true)}>Upgrade to Pro</Button>
+                  <Button onClick={() => setShowUpgradeModal(true)}>Upgrade Plan</Button>
                 </CardContent>
               </Card>
             ) : (
@@ -1856,23 +1959,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
                       </p>
                     </div>
 
-                    <div className="space-y-1.5 sm:space-y-2">
-                      <Label htmlFor="tag-provider" className="text-sm sm:text-base">AI Provider (Grok)</Label>
-                      <Select value={tagProvider} onValueChange={setTagProvider}>
-                        <SelectTrigger id="tag-provider" data-testid="tag-provider">
-                          <SelectValue placeholder="Grok" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="grok">Grok</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <p className="text-xs" style={{color: 'var(--text-secondary)'}}>
-                        Uses the Grok API key configured on the backend
-                      </p>
-                    </div>
-
-                    <div className="space-y-1.5 sm:space-y-2">
-                      <Label htmlFor="custom-tags" className="text-sm sm:text-base">Your Custom Tags (Optional)</Label>
+                      <div className="space-y-1.5 sm:space-y-2">
+                        <Label htmlFor="custom-tags" className="text-sm sm:text-base">Your Custom Tags (Optional)</Label>
                       <Textarea
                         id="custom-tags"
                         placeholder="e.g., free for profit, exclusive beat, lease available (comma-separated)"
@@ -2229,7 +2317,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                   <div className="grid grid-cols-3 gap-2 w-full lg:w-auto">
                     <div className="description-stat-chip">
                       <p className="description-stat-value">{descriptions.length}</p>
-                      <p className="description-stat-label">Saved</p>
+                      <p className="description-stat-label">My Templates</p>
                     </div>
                     <div className="description-stat-chip">
                       <p className="description-stat-value">{newDescription.content.trim() ? newDescription.content.trim().split(/\s+/).filter(Boolean).length : 0}</p>
@@ -2250,40 +2338,67 @@ const Dashboard = ({ setIsAuthenticated }) => {
                   <CardHeader className="px-4 sm:px-6 py-4 sm:py-6">
                     <CardTitle className="flex items-center gap-2 text-base sm:text-lg md:text-xl">
                       <Save className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 flex-shrink-0" />
-                      <span>Create & Save Description</span>
+                      <span>Create Your Template</span>
                     </CardTitle>
-                    <CardDescription>Build your reusable template, then save it in one click.</CardDescription>
+                    <CardDescription>Start from a built-in producer template or write your own, then save your edited version into your personal template library.</CardDescription>
                   </CardHeader>
                   <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6 space-y-3 sm:space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {[
-                        "🔥 Instant vibe hook",
-                        "🎧 Lease CTA line",
-                        "📌 Socials closer",
-                        "⚡ Producer stamp opener",
-                      ].map((hook) => (
-                        <button
-                          key={hook}
-                          type="button"
-                          className="description-hook-chip"
-                          onClick={() => {
-                            const text = hook.replace(/^.\s/, "");
-                            setNewDescription((prev) => ({
-                              ...prev,
-                              content: prev.content ? `${text}\n${prev.content}` : text,
-                            }));
-                          }}
-                        >
-                          {hook}
-                        </button>
-                      ))}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <Label>Starter Templates</Label>
+                          <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
+                            Built-in description starters. These are not saved to your account until you edit and save one.
+                          </p>
+                        </div>
+                        <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                          {visibleDescriptionTemplates.length} of {DESCRIPTION_TEMPLATES.length} visible
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {visibleDescriptionTemplates.map((template) => (
+                          <button
+                            key={template.id}
+                            type="button"
+                            className="rounded-xl border p-3 text-left transition-colors hover:border-[var(--accent-primary)]"
+                            style={{
+                              borderColor: "var(--border-color)",
+                              backgroundColor: "var(--bg-secondary)",
+                            }}
+                            onClick={() => handleApplyDescriptionTemplate(template)}
+                          >
+                            <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                              {template.name}
+                            </p>
+                            <p className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>
+                              {template.blurb}
+                            </p>
+                          </button>
+                        ))}
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                          Templates only fill the description body. BPM, key, links, socials, and other fields stay editable for each producer.
+                        </p>
+                        {DESCRIPTION_TEMPLATES.length > 2 && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="shrink-0 text-xs"
+                            onClick={() => setShowAllDescriptionTemplates((prev) => !prev)}
+                          >
+                            {showAllDescriptionTemplates ? "Show Less" : "Show All"}
+                          </Button>
+                        )}
+                      </div>
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="desc-title">Title</Label>
+                      <Label htmlFor="desc-title">Template Name</Label>
                       <Input
                         id="desc-title"
-                        placeholder="e.g., Trap Beat Template"
+                        placeholder="e.g., Free For Profit Template"
                         value={newDescription.title}
                         onChange={(e) => setNewDescription({ ...newDescription, title: e.target.value })}
                         onKeyDown={(e) => {
@@ -2312,8 +2427,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         data-testid="desc-content-input"
                       />
                       <div className="flex justify-between items-center text-xs">
-                        <p style={{color: 'var(--text-secondary)'}}>
-                          Press Enter to save. Use Shift+Enter for a new line.
+                      <p style={{color: 'var(--text-secondary)'}}>
+                          Press Enter to save your template. Use Shift+Enter for a new line.
                         </p>
                         <p style={{color: 'var(--text-secondary)'}}>
                           {(newDescription.content || "").length} chars
@@ -2326,19 +2441,64 @@ const Dashboard = ({ setIsAuthenticated }) => {
                       disabled={loadingDescriptions}
                       data-testid="save-desc-btn"
                     >
-                      Save Description
+                      Save to My Templates
+                    </Button>
+                  </CardContent>
+                </Card>
+
+              </div>
+
+              <div className="xl:col-span-5 space-y-4 sm:space-y-6">
+                <Card className="dashboard-card description-tool-card">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Plus className="h-5 w-5 text-blue-600" />
+                      AI Generate
+                    </CardTitle>
+                    <CardDescription>Build a full description from beat metadata and sales info.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <Input
+                      placeholder="Email"
+                      value={generateForm.email}
+                      onChange={(e) => setGenerateForm({ ...generateForm, email: e.target.value })}
+                      data-testid="gen-email-input"
+                    />
+                    <Input
+                      placeholder="Socials"
+                      value={generateForm.socials}
+                      onChange={(e) => setGenerateForm({ ...generateForm, socials: e.target.value })}
+                      data-testid="gen-socials-input"
+                    />
+                    <Textarea
+                      placeholder="Additional info"
+                      rows={2}
+                      value={generateForm.additional_info}
+                      onChange={(e) => setGenerateForm({ ...generateForm, additional_info: e.target.value })}
+                      data-testid="gen-additional-input"
+                    />
+                    <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                      Key, BPM, and pricing are now handled in Upload Studio after your beat is loaded.
+                    </p>
+                    <Button
+                      onClick={handleGenerateDescription}
+                      className="w-full"
+                      disabled={loadingGenerate}
+                      data-testid="generate-desc-btn"
+                    >
+                      {loadingGenerate ? "Generating..." : "Generate with AI"}
                     </Button>
                   </CardContent>
                 </Card>
 
                 <Card className="dashboard-card producer-card">
                   <CardHeader>
-                    <CardTitle>Saved Descriptions ({descriptions.length})</CardTitle>
-                    <CardDescription>Tap any description body to expand/collapse quickly.</CardDescription>
+                    <CardTitle>My Templates ({descriptions.length})</CardTitle>
+                    <CardDescription>Your saved description templates. Tap any body to expand or collapse quickly.</CardDescription>
                   </CardHeader>
                   <CardContent>
                     {descriptions.length === 0 ? (
-                      <p className="text-center py-8" style={{color: 'var(--text-secondary)'}} data-testid="no-descriptions-msg">No saved descriptions yet. Create one above!</p>
+                      <p className="text-center py-8" style={{color: 'var(--text-secondary)'}} data-testid="no-descriptions-msg">No personal templates yet. Start from a built-in template above or write your own.</p>
                     ) : (
                       <div className="space-y-3" data-testid="descriptions-list">
                         {descriptions.map((desc) => {
@@ -2437,77 +2597,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
                   </CardContent>
                 </Card>
               </div>
-
-              <div className="xl:col-span-5 space-y-4 sm:space-y-6">
-                <Card className="dashboard-card description-tool-card">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Sparkles className="h-5 w-5 text-blue-600" />
-                      AI Refine
-                    </CardTitle>
-                    <CardDescription>Paste your text and let AI sharpen clarity + conversion.</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <Textarea
-                      placeholder="Paste your description to refine..."
-                      className="resize-y min-h-[140px] max-h-[420px]"
-                      value={refineText}
-                      onChange={(e) => setRefineText(e.target.value)}
-                      data-testid="refine-text-input"
-                    />
-                    <Button
-                      onClick={handleRefineDescription}
-                      className="w-full"
-                      disabled={loadingRefine}
-                      data-testid="refine-btn"
-                    >
-                      {loadingRefine ? "Refining..." : "Refine with AI"}
-                    </Button>
-                  </CardContent>
-                </Card>
-
-                <Card className="dashboard-card description-tool-card">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Plus className="h-5 w-5 text-blue-600" />
-                      AI Generate
-                    </CardTitle>
-                    <CardDescription>Build a full description from beat metadata and sales info.</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <Input
-                      placeholder="Email"
-                      value={generateForm.email}
-                      onChange={(e) => setGenerateForm({ ...generateForm, email: e.target.value })}
-                      data-testid="gen-email-input"
-                    />
-                    <Input
-                      placeholder="Socials"
-                      value={generateForm.socials}
-                      onChange={(e) => setGenerateForm({ ...generateForm, socials: e.target.value })}
-                      data-testid="gen-socials-input"
-                    />
-                    <Textarea
-                      placeholder="Additional info"
-                      rows={2}
-                      value={generateForm.additional_info}
-                      onChange={(e) => setGenerateForm({ ...generateForm, additional_info: e.target.value })}
-                      data-testid="gen-additional-input"
-                    />
-                    <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                      Key, BPM, and pricing are now handled in Upload Studio after your beat is loaded.
-                    </p>
-                    <Button
-                      onClick={handleGenerateDescription}
-                      className="w-full"
-                      disabled={loadingGenerate}
-                      data-testid="generate-desc-btn"
-                    >
-                      {loadingGenerate ? "Generating..." : "Generate with AI"}
-                    </Button>
-                  </CardContent>
-                </Card>
-              </div>
             </div>
           </TabsContent>
 
@@ -2526,7 +2615,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
                onUpgrade={() => setShowUpgradeModal(true)}
                onDisconnectYouTube={disconnectYouTube}
                onConnectYouTube={connectYouTube}
-               onExitUploadTab={() => setActiveTab("tags")}
              />
           </TabsContent>
 
@@ -2539,32 +2627,41 @@ const Dashboard = ({ setIsAuthenticated }) => {
                   YouTube Channel Analytics
                 </CardTitle>
                 <CardDescription>
-                  Get AI-powered insights on your channel performance (uses 1 AI credit)
+                  {hasPaidAnalyticsAccess
+                    ? "Get AI-powered insights on your channel performance (uses 1 AI credit)"
+                    : "Free plan includes 1 channel analysis per month. Upgrade for ongoing analytics access."}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                {isPro && (
-                  <div>
-                    {!youtubeConnected ? (
-                      <Alert>
-                        <AlertCircle className="h-4 w-4" />
-                        <AlertDescription>
-                          Connect your YouTube account first to analyze your channel.
-                        </AlertDescription>
-                      </Alert>
-                    ) : (
-                      <Button
-                        onClick={handleAnalyzeChannel}
-                        disabled={loadingAnalytics || !isPro}
-                        className="w-full btn-modern"
-                      >
-                        <Sparkles className="mr-2 h-5 w-5" />
-                        {loadingAnalytics ? "Analyzing..." : "Analyze My Channel"}
-                      </Button>
-                    )}
+                {!hasPaidAnalyticsAccess && (
+                  <Alert>
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      Free users get 1 channel analysis each month. Upgrade to Plus or Max for more analytics usage.
+                    </AlertDescription>
+                  </Alert>
+                )}
+                <div>
+                  {!youtubeConnected ? (
+                    <Alert>
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        Connect your YouTube account first to analyze your channel.
+                      </AlertDescription>
+                    </Alert>
+                  ) : (
+                    <Button
+                      onClick={handleAnalyzeChannel}
+                      disabled={loadingAnalytics}
+                      className="w-full btn-modern"
+                    >
+                      <Sparkles className="mr-2 h-5 w-5" />
+                      {loadingAnalytics ? "Analyzing..." : "Analyze My Channel"}
+                    </Button>
+                  )}
 
-                    {analyticsData && (
-                      <div className="space-y-6 mt-6">
+                  {analyticsData && (
+                    <div className="space-y-6 mt-6">
                     {/* Channel Health Score */}
                     <Card className="producer-card glass-card border-2 border-purple-500">
                       <CardContent className="p-6">
@@ -2876,31 +2973,25 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         </CardContent>
                       </Card>
                     )}
-                  </div>
-                    )}
-                  </div>
-                )}
-
-                {!isPro && (
-                  <div className="flex items-center justify-center py-8">
-                    <div
-                      className="w-full max-w-md text-center p-6 rounded-xl border-2 shadow-lg"
-                      style={{ backgroundColor: "var(--bg-secondary)", borderColor: "var(--accent-primary)" }}
-                    >
-                      <p className="text-lg font-semibold mb-2">Unlock Analytics</p>
-                      <p className="text-sm mb-4" style={{ color: "var(--text-secondary)" }}>
-                        Premium-only insights. Upgrade to access analytics and AI coaching.
-                      </p>
-                      <Button onClick={() => setShowUpgradeModal(true)} className="btn-modern">
-                        Upgrade to Pro
-                      </Button>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </CardContent>
             </Card>
           </TabsContent>          {/* Grow in 120 Tab */}
           <TabsContent value="grow" className="space-y-4 sm:space-y-6 dashboard-section">
+            {standaloneGrow && (
+              <div className="flex justify-start">
+                <Button
+                  variant="outline"
+                  onClick={() => window.location.href = "/dashboard"}
+                  className="gap-2 border-[var(--border-color)]"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Back to Dashboard
+                </Button>
+              </div>
+            )}
             <div className="grow-quest-shell relative">
               <div
                 style={{
@@ -3188,43 +3279,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
         </Tabs>
       </div>
 
-      {/* Save Refined Text Dialog */}
-      <Dialog open={showSaveRefinedDialog} onOpenChange={setShowSaveRefinedDialog}>
-        <DialogContent data-testid="save-refined-dialog">
-          <DialogHeader>
-            <DialogTitle>Save Refined Description?</DialogTitle>
-            <DialogDescription>
-              Would you like to save this AI-refined description as a template?
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <Textarea
-              value={refinedTextToSave}
-              readOnly
-              rows={6}
-              className="resize-none"
-            />
-            <div className="flex gap-2">
-              <Button
-                onClick={handleSaveRefinedAsTemplate}
-                className="flex-1"
-                data-testid="save-refined-yes-btn"
-              >
-                Yes, Save as Template
-              </Button>
-              <Button
-                onClick={() => setShowSaveRefinedDialog(false)}
-                variant="outline"
-                className="flex-1"
-                data-testid="save-refined-no-btn"
-              >
-                No, Thanks
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
       {/* Upgrade Modal */}
       <UpgradeModal
         open={showUpgradeModal}
@@ -3274,7 +3328,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
               </Button>
             </div>
             <p className="text-xs text-center" style={{color: 'var(--text-secondary)'}}>
-              You can also check in from the "Grow in 120" tab anytime
+              You can also check in from the Grow in 120 page anytime
             </p>
           </div>
         </DialogContent>
