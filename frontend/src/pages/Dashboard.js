@@ -333,7 +333,9 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
   const [assistTitlesById, setAssistTitlesById] = useState({});
   const [beatHelperForm, setBeatHelperForm] = useState({
     beat_file_id: "",
+    beat_file_name: "",
     image_file_id: "",
+    image_file_name: "",
     beat_type: "",
     target_artist: "",
     generated_title_override: "",
@@ -820,9 +822,7 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
       if (!nextFileId) {
         throw new Error("Upload response missing file_id");
       }
-      await axios.post(`${API}/beat-helper/uploads/stage`, { file_id: nextFileId });
-      setBeatHelperForm((prev) => ({ ...prev, beat_file_id: nextFileId }));
-      await fetchBeatHelperData();
+      setBeatHelperForm((prev) => ({ ...prev, beat_file_id: nextFileId, beat_file_name: file.name || "Uploaded beat audio" }));
       toast.success("Beat audio added to BeatHelper");
     } catch (error) {
       const detail = error?.response?.data?.detail;
@@ -844,13 +844,12 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
       if (!nextFileId) {
         throw new Error("Upload response missing file_id");
       }
-      await axios.post(`${API}/beat-helper/uploads/stage`, { file_id: nextFileId });
       setBeatHelperForm((prev) => ({
         ...prev,
         image_file_id: nextFileId,
+        image_file_name: file.name || "Uploaded visual",
         ai_choose_image: false,
       }));
-      await fetchBeatHelperData();
       toast.success("Thumbnail image added to BeatHelper");
     } catch (error) {
       const detail = error?.response?.data?.detail;
@@ -910,14 +909,17 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
       if (!nextImageFileId) {
         throw new Error("Import response missing file_id");
       }
-      await axios.post(`${API}/beat-helper/uploads/stage`, { file_id: nextImageFileId });
+      const immediatePreview = { kind: "image", src: imageUrl };
+      beatHelperPreviewCacheRef.current[nextImageFileId] = immediatePreview;
+      setBeatHelperImagePreview(immediatePreview);
+      setLoadingBeatHelperPreview(false);
       setBeatHelperForm((prev) => ({
         ...prev,
         image_file_id: nextImageFileId,
+        image_file_name: result?.title || result?.query || "Selected web image",
         ai_choose_image: false,
       }));
       toast.success("Web image added to BeatHelper");
-      await fetchBeatHelperData();
     } catch (error) {
       const detail = error?.response?.data?.detail;
       toast.error(typeof detail === "string" ? detail : "Failed to import selected image");
@@ -1056,6 +1058,8 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
         generated_tags_text: (item.generated_tags || []).join(", "),
         beat_file_id: item.beat_file_id || "",
         image_file_id: item.image_file_id || "",
+        beat_file_name: item.beat_original_filename || "",
+        image_file_name: item.image_original_filename || "",
         template_id: item.template_id || "",
       },
     }));
@@ -1652,6 +1656,15 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
     }
   };
 
+  const handleManageSubscriptionPortal = async () => {
+    try {
+      const response = await axios.post(`${API}/subscription/portal`);
+      window.location.href = response.data.url;
+    } catch (error) {
+      toast.error("Failed to open subscription management");
+    }
+  };
+
   return (
     <div
       ref={dashboardParallaxRef}
@@ -1668,12 +1681,14 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
         <div className="container mx-auto px-3 sm:px-4 md:px-6 pr-16 sm:pr-20 lg:pr-6 py-3 sm:py-4 dashboard-shell">
           <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 lg:gap-4">
             <div className="flex flex-1 items-center gap-2 sm:gap-3 md:gap-4 min-w-0 max-w-full">
-              <img src="/sendmybeat.png" alt="SendMyBeat" className="h-10 w-10 sm:h-12 sm:w-12 object-contain" />
+              <div className="dashboard-brand-mark flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-xl flex-shrink-0">
+                <Music className="h-6 w-6 sm:h-7 sm:w-7 fill-current text-black" />
+              </div>
               <div className="min-w-0 flex-1">
-                <h1 className="text-lg sm:text-xl md:text-2xl font-bold gradient-text truncate">SendMyBeat</h1>
+                <h1 className="dashboard-brand-title text-lg sm:text-xl md:text-2xl font-bold gradient-text">SendMyBeat</h1>
                 {user && (
                   <p
-                    className="text-xs sm:text-sm truncate max-w-[180px] sm:max-w-[260px] md:max-w-[340px] lg:max-w-[420px]"
+                    className="dashboard-brand-subtitle text-xs sm:text-sm truncate max-w-[180px] sm:max-w-[260px] md:max-w-[340px] lg:max-w-[420px]"
                     style={{ color: "var(--text-secondary)" }}
                     title={`Welcome back, ${user.username}`}
                   >
@@ -1773,6 +1788,7 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
             isSubscribed={subscriptionStatus.is_subscribed}
             onUpgrade={() => setShowUpgradeModal(true)}
             API={API}
+            showManageButton={false}
           />
         )}
 
@@ -1918,6 +1934,64 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
 
           {/* Settings Tab */}
           <TabsContent value="settings" className="space-y-6 dashboard-section">
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+              <Card className="dashboard-card">
+                <CardHeader>
+                  <CardTitle>Subscription</CardTitle>
+                  <CardDescription>
+                    Manage billing and plan changes without leaving settings.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="rounded-xl border p-4" style={{ borderColor: "var(--border-color)", backgroundColor: "var(--bg-secondary)" }}>
+                    <div className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                      Current plan: {(subscriptionStatus?.plan || "free").toUpperCase()}
+                    </div>
+                    <div className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
+                      {subscriptionStatus?.is_subscribed ? "Active paid subscription" : "Free plan active"}
+                    </div>
+                  </div>
+                  {subscriptionStatus?.is_subscribed ? (
+                    <Button onClick={handleManageSubscriptionPortal} variant="outline" className="w-full">
+                      Manage Subscription
+                    </Button>
+                  ) : (
+                    <Button onClick={() => setShowUpgradeModal(true)} className="w-full">
+                      Upgrade Plan
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card className="dashboard-card">
+                <CardHeader>
+                  <CardTitle>Google Account</CardTitle>
+                  <CardDescription>
+                    Connect or disconnect the Google account used for YouTube uploads.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="rounded-xl border p-4" style={{ borderColor: "var(--border-color)", backgroundColor: "var(--bg-secondary)" }}>
+                    <div className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                      {youtubeConnected ? (youtubeName || youtubeEmail || "Google account connected") : "No Google account connected"}
+                    </div>
+                    <div className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
+                      {youtubeConnected ? "Disconnect to switch to another Google account." : "Connect a Google account to upload to YouTube."}
+                    </div>
+                  </div>
+                  {youtubeConnected ? (
+                    <Button onClick={disconnectYouTube} variant="outline" className="w-full">
+                      Disconnect Google Account
+                    </Button>
+                  ) : (
+                    <Button onClick={connectYouTube} className="w-full">
+                      Connect Google Account
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
             <ThemeCustomizer
               isPro={isPro}
               onUpgrade={() => setShowUpgradeModal(true)}
@@ -2378,7 +2452,7 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
                       </div>
                       <div className="flex items-center justify-between gap-3">
                         <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                          Templates only fill the description body. BPM, key, links, socials, and other fields stay editable for each producer.
+                          Templates only fill the description body.
                         </p>
                         {DESCRIPTION_TEMPLATES.length > 2 && (
                           <Button
@@ -2419,7 +2493,7 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
                         value={newDescription.content}
                         onChange={(e) => setNewDescription({ ...newDescription, content: e.target.value })}
                         onKeyDown={(e) => {
-                          if (e.key === "Enter" && !e.shiftKey && newDescription.title.trim()) {
+                          if (e.key === "Enter" && e.shiftKey && newDescription.title.trim()) {
                             e.preventDefault();
                             handleSaveDescription();
                           }
@@ -2428,7 +2502,7 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
                       />
                       <div className="flex justify-between items-center text-xs">
                       <p style={{color: 'var(--text-secondary)'}}>
-                          Press Enter to save your template. Use Shift+Enter for a new line.
+                          Press Enter for a new line. Use Shift+Enter to save.
                         </p>
                         <p style={{color: 'var(--text-secondary)'}}>
                           {(newDescription.content || "").length} chars

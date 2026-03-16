@@ -2,6 +2,7 @@ import React from "react";
 import { Wand2, ChevronUp, ChevronDown, Target, Sparkles, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 
 const AIToolsPanel = ({
   showTools,
@@ -14,6 +15,8 @@ const AIToolsPanel = ({
   handleGenerateImage,
   generatedImages,
   generatedImageQuery,
+  generatedImageSearchQuery,
+  setGeneratedImageSearchQuery,
   onUseGeneratedImage,
   beatAnalysis,
   thumbnailCheckResult
@@ -36,7 +39,31 @@ const AIToolsPanel = ({
        </CardHeader>
        {showTools && (
           <CardContent className="space-y-4">
-             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+             <div className="space-y-2 rounded-md border border-border bg-secondary/20 p-3">
+                <div className="text-sm font-semibold">Artwork Search</div>
+                <div className="text-xs text-muted-foreground">
+                   Search artist visuals, cover moods, or artwork styles and apply one to this upload.
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                   <Input
+                      value={generatedImageSearchQuery}
+                      onChange={(e) => setGeneratedImageSearchQuery?.(e.target.value)}
+                      placeholder="Lil Uzi cover art"
+                      className="min-w-0 sm:flex-1"
+                   />
+                   <Button
+                      variant="outline"
+                      onClick={() => handleGenerateImage({ query: generatedImageSearchQuery })}
+                      disabled={generatingImages}
+                      className="transition-colors hover:bg-secondary/70"
+                      style={actionButtonStyle("var(--text-primary)")}
+                   >
+                      {generatingImages ? "..." : <><Search className="mr-2 h-4 w-4"/><span className="hidden md:inline">Web Image Search</span><span className="md:hidden">Search</span></>}
+                   </Button>
+                </div>
+             </div>
+
+             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Button
                    variant="outline"
                    onClick={handleAnalyzeBeat}
@@ -54,15 +81,6 @@ const AIToolsPanel = ({
                    style={actionButtonStyle("var(--accent-secondary)")}
                 >
                    {checkingThumbnail ? "..." : <><Sparkles className="mr-2 h-4 w-4"/> Check Thumb</>}
-                </Button>
-                <Button
-                   variant="outline"
-                   onClick={handleGenerateImage}
-                   disabled={generatingImages}
-                   className="transition-colors hover:bg-secondary/70"
-                   style={actionButtonStyle("var(--text-primary)")}
-                >
-                   {generatingImages ? "..." : <><Search className="mr-2 h-4 w-4"/> Web Image Search</>}
                 </Button>
              </div>
 

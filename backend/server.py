@@ -1176,7 +1176,12 @@ def _search_bing_image_results(query_variants: list[str], artists: list[str], k:
         try:
             response = requests.get(
                 "https://www.bing.com/images/search",
-                params={"q": qv, "form": "HDRSC3", "first": "1"},
+                params={
+                    "q": qv,
+                    "form": "HDRSC3",
+                    "first": "1",
+                    "adlt": "strict",
+                },
                 headers=headers,
                 timeout=15,
             )

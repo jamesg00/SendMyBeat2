@@ -65,8 +65,8 @@ body[data-theme="glass"] {
     --bg-primary: #edf7ff !important;
     --bg-secondary: rgba(236, 245, 255, 0.82) !important;
     --bg-tertiary: rgba(226, 239, 255, 0.86) !important;
-    --text-primary: #1d4ed8 !important;
-    --text-secondary: #60a5fa !important;
+    --text-primary: #173b8f !important;
+    --text-secondary: #345ca8 !important;
     --accent-primary: #2f74ff !important;
     --accent-secondary: #68a7ff !important;
     --border-color: rgba(255, 255, 255, 0.56) !important;
@@ -171,6 +171,15 @@ body[data-theme="glass"] .producer-card {
     isolation: isolate;
 }
 
+body[data-theme="glass"] .dashboard-card > *,
+body[data-theme="glass"] .dashboard-card-muted > *,
+body[data-theme="glass"] .glass-card > *,
+body[data-theme="glass"] .producer-card > *,
+body[data-theme="glass"] .dashboard-tabs > * {
+    position: relative;
+    z-index: 1;
+}
+
 body[data-theme="glass"] .dashboard-tabs {
     background: rgba(255, 255, 255, 0.21) !important;
     border: 1px solid var(--glass-border-soft) !important;
@@ -189,6 +198,7 @@ body[data-theme="glass"] .dashboard-tabs::before {
     content: "";
     position: absolute;
     inset: 0;
+    z-index: 0;
     pointer-events: none;
     background:
         linear-gradient(120deg,
@@ -196,7 +206,7 @@ body[data-theme="glass"] .dashboard-tabs::before {
             rgba(255, 255, 255, 0.14) 28%,
             rgba(255, 255, 255, 0.3) 52%,
             rgba(255, 255, 255, 0.1) 100%);
-    opacity: 0.56;
+    opacity: 0.22;
 }
 
 html.dark body[data-theme="glass"] .dashboard-card::before,
@@ -223,6 +233,21 @@ body[data-theme="glass"] select {
     background: rgba(255, 255, 255, 0.48) !important;
     border: 1px solid var(--glass-border-soft) !important;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.58) !important;
+    color: var(--text-primary) !important;
+    opacity: 1 !important;
+}
+
+body[data-theme="glass"] input::placeholder,
+body[data-theme="glass"] textarea::placeholder {
+    color: color-mix(in srgb, var(--text-secondary) 78%, white 22%) !important;
+    opacity: 1 !important;
+}
+
+body[data-theme="glass"] [class*="text-muted"],
+body[data-theme="glass"] [data-slot="dialog-description"],
+body[data-theme="glass"] .text-muted-foreground {
+    color: var(--text-secondary) !important;
+    opacity: 1 !important;
 }
 
 body[data-theme="glass"] .btn-modern {

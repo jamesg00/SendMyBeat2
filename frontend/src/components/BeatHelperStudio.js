@@ -67,7 +67,7 @@ const StatCard = ({ icon: Icon, label, value }) => (
   </div>
 );
 
-const StudioSection = ({ title, description, badge, open, onOpenChange, children }) => (
+const StudioSection = ({ title, description, badge, open, onOpenChange, locked = false, lockMessage = "Complete the previous step to unlock this section.", children }) => (
   <Collapsible open={open} onOpenChange={onOpenChange}>
     <div
       className="overflow-hidden rounded-3xl border-2 shadow-[0_10px_40px_rgba(0,0,0,0.18)]"
@@ -76,29 +76,35 @@ const StudioSection = ({ title, description, badge, open, onOpenChange, children
       <CollapsibleTrigger asChild>
         <button
           type="button"
-          className="flex w-full items-center justify-between gap-3 border-b px-4 py-4 text-left sm:px-5"
-          style={{ borderColor: open ? SURFACE_BORDER : "transparent" }}
+          disabled={locked}
+          className="flex w-full items-start justify-between gap-3 border-b px-4 py-4 text-left sm:px-5"
+          style={{ borderColor: open ? SURFACE_BORDER : "transparent", opacity: locked ? 0.6 : 1, cursor: locked ? "not-allowed" : "pointer" }}
         >
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <p className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>{title}</p>
+          <div className="min-w-0 flex-1 pr-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="break-words text-base font-semibold leading-6" style={{ color: "var(--text-primary)" }}>{title}</p>
               {badge ? <Badge className="inline-flex max-w-full shrink-0 whitespace-nowrap border px-2.5 py-1 text-[10px] uppercase tracking-[0.08em] sm:tracking-[0.14em]" style={{ borderColor: SURFACE_BORDER, background: "color-mix(in srgb, var(--accent-primary) 14%, transparent)", color: "var(--text-primary)" }}>{badge}</Badge> : null}
+              {locked ? <Badge className="inline-flex shrink-0 whitespace-nowrap border px-2.5 py-1 text-[10px] uppercase tracking-[0.08em] sm:tracking-[0.14em]" style={{ borderColor: SURFACE_BORDER, background: "rgba(255,255,255,0.04)", color: "var(--text-secondary)" }}>Locked</Badge> : null}
             </div>
-            {description ? <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>{description}</p> : null}
+            <p className="mt-1 break-words text-sm leading-6" style={{ color: "var(--text-secondary)" }}>{locked ? lockMessage : description}</p>
           </div>
           <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} style={{ color: "var(--text-secondary)" }} />
         </button>
       </CollapsibleTrigger>
-      <CollapsibleContent>
+      <CollapsibleContent forceMount={locked}>
         <div className="px-4 py-4 sm:px-5" style={{ background: INNER_SURFACE_BG }}>
-          {children}
+          {locked ? (
+            <div className="rounded-2xl border-2 px-4 py-4 text-sm" style={{ borderColor: SURFACE_BORDER, color: "var(--text-secondary)", background: "rgba(255,255,255,0.02)" }}>
+              {lockMessage}
+            </div>
+          ) : children}
         </div>
       </CollapsibleContent>
     </div>
   </Collapsible>
 );
 
-const AssetDropzone = ({ title, subtitle, accept, loading, files, selectedFileId, onSelect, onFileUpload, emptyLabel }) => {
+const AssetDropzone = ({ title, subtitle, accept, loading, onFileUpload, currentLabel, emptyLabel }) => {
   const inputRef = useRef(null);
   const [dragActive, setDragActive] = useState(false);
 
@@ -155,14 +161,14 @@ const AssetDropzone = ({ title, subtitle, accept, loading, files, selectedFileId
         </div>
       </button>
 
-      <Select value={selectedFileId} onValueChange={onSelect}>
-        <SelectTrigger><SelectValue placeholder={emptyLabel} /></SelectTrigger>
-        <SelectContent>
-          {files.map((file) => (
-            <SelectItem key={file.id} value={file.id}>{formatUploadLabel(file)}</SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <div className="rounded-2xl border px-4 py-3" style={{ borderColor: SURFACE_BORDER, background: "rgba(255,255,255,0.03)" }}>
+        <p className="text-[11px] uppercase tracking-[0.08em] sm:tracking-[0.14em]" style={{ color: "var(--text-secondary)" }}>
+          Current Selection
+        </p>
+        <p className="mt-2 truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+          {currentLabel || emptyLabel}
+        </p>
+      </div>
     </div>
   );
 };
@@ -182,16 +188,20 @@ const QueueCard = ({
   handleBeatHelperDelete,
   handleBeatHelperAssistTitle,
   handleBeatHelperSaveEdit,
-}) => (
+}) => {
+  const [showAllTags, setShowAllTags] = useState(false);
+  const tagGroups = compactTags(item.generated_tags, 4);
+
+  return (
   <div className="rounded-3xl border-2 p-4 shadow-[0_10px_30px_rgba(0,0,0,0.16)] sm:p-5" style={{ borderColor: SURFACE_BORDER, background: "color-mix(in srgb, var(--bg-secondary) 88%, transparent)" }}>
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[160px_minmax(0,1fr)]">
-      <div className="overflow-hidden rounded-2xl border-2" style={{ borderColor: SURFACE_BORDER, background: "var(--bg-primary)" }}>
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[140px_minmax(0,1fr)]">
+      <div className="mx-auto aspect-square w-full max-w-[140px] overflow-hidden rounded-2xl border-2 lg:mx-0" style={{ borderColor: SURFACE_BORDER, background: "var(--bg-primary)" }}>
         {preview?.kind === "video" ? (
-          <video src={preview.src} className="h-40 w-full object-cover" muted playsInline autoPlay loop />
+          <video src={preview.src} className="h-full w-full object-cover" muted playsInline autoPlay loop />
         ) : preview?.src ? (
-          <img src={preview.src} alt={item.image_original_filename || "Queued thumbnail"} className="h-40 w-full object-cover" />
+          <img src={preview.src} alt={item.image_original_filename || "Queued thumbnail"} className="h-full w-full object-cover" />
         ) : (
-          <div className="flex h-40 items-center justify-center text-xs" style={{ color: "var(--text-secondary)" }}>No preview</div>
+          <div className="flex h-full w-full items-center justify-center text-xs" style={{ color: "var(--text-secondary)" }}>No preview</div>
         )}
       </div>
       <div className="min-w-0 space-y-4">
@@ -208,9 +218,9 @@ const QueueCard = ({
           <>
             <div className="rounded-2xl border-2 px-4 py-3" style={{ borderColor: SURFACE_BORDER, background: INNER_SURFACE_BG }}>
               <p className="text-[11px] uppercase tracking-[0.08em] sm:tracking-[0.16em]" style={{ color: "var(--text-secondary)" }}>Key Tags</p>
-              {compactTags(item.generated_tags, 4).visible.length > 0 ? (
+              {tagGroups.visible.length > 0 ? (
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {compactTags(item.generated_tags, 4).visible.map((tag) => (
+                  {tagGroups.visible.map((tag) => (
                     <span
                       key={`${item.id}-${tag}`}
                       className="rounded-full border px-2.5 py-1 text-[11px]"
@@ -219,10 +229,15 @@ const QueueCard = ({
                       {tag}
                     </span>
                   ))}
-                  {compactTags(item.generated_tags, 4).remaining > 0 ? (
-                    <span className="rounded-full border px-2.5 py-1 text-[11px]" style={{ borderColor: SURFACE_BORDER, color: "var(--text-secondary)" }}>
-                      +{compactTags(item.generated_tags, 4).remaining} more
-                    </span>
+                  {tagGroups.remaining > 0 ? (
+                    <button
+                      type="button"
+                      className="rounded-full border px-2.5 py-1 text-[11px] transition hover:border-[var(--accent-primary)] hover:text-[var(--text-primary)]"
+                      style={{ borderColor: SURFACE_BORDER, color: "var(--text-secondary)", background: "rgba(255,255,255,0.03)" }}
+                      onClick={() => setShowAllTags((prev) => !prev)}
+                    >
+                      +{tagGroups.remaining} more
+                    </button>
                   ) : null}
                 </div>
               ) : (
@@ -288,8 +303,40 @@ const QueueCard = ({
         )}
       </div>
     </div>
+    {showAllTags && Array.isArray(item.generated_tags) && item.generated_tags.length > 0 ? (
+      <div className="fixed inset-0 z-40 flex items-center justify-center px-4" style={{ background: "rgba(0,0,0,0.42)" }}>
+        <div
+          className="w-full max-w-sm rounded-3xl border-2 px-5 py-5 shadow-[0_24px_60px_rgba(0,0,0,0.36)] backdrop-blur-md"
+          style={{ borderColor: SURFACE_BORDER, background: "color-mix(in srgb, var(--bg-secondary) 76%, black)" }}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs uppercase tracking-[0.12em]" style={{ color: "var(--text-secondary)" }}>All Tags</p>
+            <button
+              type="button"
+              className="rounded-full border px-2.5 py-1 text-[10px] uppercase tracking-[0.1em] transition hover:border-[var(--accent-primary)] hover:text-[var(--text-primary)]"
+              style={{ borderColor: SURFACE_BORDER, color: "var(--text-secondary)", background: "rgba(255,255,255,0.03)" }}
+              onClick={() => setShowAllTags(false)}
+            >
+              Close
+            </button>
+          </div>
+          <div className="mt-4 flex flex-wrap justify-center gap-2">
+            {item.generated_tags.filter(Boolean).map((tag) => (
+              <span
+                key={`${item.id}-all-${tag}`}
+                className="rounded-full border px-2.5 py-1 text-[11px]"
+                style={{ borderColor: SURFACE_BORDER, color: "var(--text-primary)", background: "rgba(255,255,255,0.03)" }}
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+    ) : null}
   </div>
-);
+  );
+};
 
 export default function BeatHelperStudio(props) {
   const {
@@ -311,10 +358,6 @@ export default function BeatHelperStudio(props) {
     importingBeatHelperImageUrl,
     beatHelperForm,
     setBeatHelperForm,
-    newTemplateName,
-    setNewTemplateName,
-    newTemplateTags,
-    setNewTemplateTags,
     editingQueueById,
     setEditingQueueById,
     assistTitlesById,
@@ -327,7 +370,6 @@ export default function BeatHelperStudio(props) {
     handleBeatHelperImageSearch,
     handleBeatHelperImportSearchImage,
     handleBeatHelperSaveContact,
-    handleBeatHelperCreateTemplate,
     handleBeatHelperRequestApproval,
     handleBeatHelperApproveUpload,
     handleBeatHelperSetStatus,
@@ -344,11 +386,16 @@ export default function BeatHelperStudio(props) {
   const [brokenSearchImageIds, setBrokenSearchImageIds] = useState({});
   const [openSections, setOpenSections] = useState({
     assets: true,
-    metadata: true,
-    imageSearch: false,
+    imageSearch: true,
+    metadata: false,
     automation: false,
     contacts: false,
-    templates: false,
+  });
+  const [workflowProgress, setWorkflowProgress] = useState({
+    assetsConfirmed: false,
+    tagsConfirmed: false,
+    deliveryConfirmed: false,
+    contactConfirmed: false,
   });
 
   useEffect(() => {
@@ -383,15 +430,58 @@ export default function BeatHelperStudio(props) {
     [beatHelperImageResults, brokenSearchImageIds]
   );
   const selectedAudioLabel = useMemo(
-    () => formatUploadLabel(beatHelperUploads.audio_uploads.find((file) => file.id === beatHelperForm.beat_file_id)),
-    [beatHelperForm.beat_file_id, beatHelperUploads.audio_uploads]
+    () => beatHelperForm.beat_file_name || formatUploadLabel(beatHelperUploads.audio_uploads.find((file) => file.id === beatHelperForm.beat_file_id)),
+    [beatHelperForm.beat_file_id, beatHelperForm.beat_file_name, beatHelperUploads.audio_uploads]
   );
-const selectedImageLabel = useMemo(
-    () => formatUploadLabel(beatHelperUploads.image_uploads.find((file) => file.id === beatHelperForm.image_file_id)),
-    [beatHelperForm.image_file_id, beatHelperUploads.image_uploads]
+  const selectedImageLabel = useMemo(
+    () => beatHelperForm.image_file_name || formatUploadLabel(beatHelperUploads.image_uploads.find((file) => file.id === beatHelperForm.image_file_id)),
+    [beatHelperForm.image_file_id, beatHelperForm.image_file_name, beatHelperUploads.image_uploads]
   );
 
   const setSectionOpen = (key, value) => setOpenSections((prev) => ({ ...prev, [key]: value }));
+
+  const assetsReady = Boolean(beatHelperForm.beat_file_id && (beatHelperForm.image_file_id || beatHelperForm.ai_choose_image));
+  const tagsReady = Boolean((beatHelperForm.target_artist || "").trim() && (beatHelperForm.beat_type || "").trim());
+  const deliveryReady = Boolean((beatHelperForm.privacy_status || "").trim());
+  const contactReady = contactConfigured || Boolean((beatHelperContact.email || "").trim()) || Boolean((beatHelperContact.phone || "").trim());
+
+  const tagsUnlocked = workflowProgress.assetsConfirmed;
+  const deliveryUnlocked = tagsUnlocked && workflowProgress.tagsConfirmed;
+  const contactsUnlocked = deliveryUnlocked && workflowProgress.deliveryConfirmed;
+  const queueReady = contactsUnlocked && workflowProgress.contactConfirmed;
+
+  const confirmWorkflowStep = async (step) => {
+    if (step === "assets") {
+      if (!assetsReady) return;
+      setWorkflowProgress((prev) => ({ ...prev, assetsConfirmed: true }));
+      setSectionOpen("assets", false);
+      setSectionOpen("imageSearch", false);
+      setSectionOpen("metadata", true);
+      return;
+    }
+
+    if (step === "tags") {
+      if (!tagsReady) return;
+      setWorkflowProgress((prev) => ({ ...prev, tagsConfirmed: true }));
+      setSectionOpen("metadata", false);
+      setSectionOpen("automation", true);
+      return;
+    }
+
+    if (step === "delivery") {
+      if (!deliveryReady) return;
+      setWorkflowProgress((prev) => ({ ...prev, deliveryConfirmed: true }));
+      setSectionOpen("automation", false);
+      setSectionOpen("contacts", true);
+      return;
+    }
+
+    if (step === "contact") {
+      await handleBeatHelperSaveContact();
+      setWorkflowProgress((prev) => ({ ...prev, contactConfirmed: true }));
+      setSectionOpen("contacts", false);
+    }
+  };
 
   const handleReminderBootstrap = async () => {
     const nextContact = preferredReminderChannel === "email"
@@ -490,7 +580,6 @@ const selectedImageLabel = useMemo(
                 <div className="flex flex-wrap gap-2">
                   <Button type="button" variant="outline" onClick={fetchBeatHelperData} disabled={loadingBeatHelper} className="gap-2"><RefreshCw className="h-4 w-4" />Refresh</Button>
                   <Button type="button" variant="outline" onClick={handleBeatHelperDispatchNow} disabled={loadingBeatHelper}>Send Today's Approval</Button>
-                  <Button type="button" variant="outline" onClick={handleBeatHelperCleanupUploads} disabled={loadingBeatHelper}>Clean Unqueued Uploads</Button>
                 </div>
               </div>
             </CardHeader>
@@ -503,25 +592,42 @@ const selectedImageLabel = useMemo(
               </div>
 
               <form onSubmit={handleBeatHelperQueue} className="space-y-4">
-                <StudioSection title="Beat Audio + Video" description="Drag in your beat and visual here, or pick from your existing BeatHelper-safe uploads." badge={formatSectionBadge(beatHelperUploads.audio_uploads.length, beatHelperUploads.image_uploads.length)} open={openSections.assets} onOpenChange={(value) => setSectionOpen("assets", value)}>
+                <StudioSection title="Beat Audio + Video" description="Step 1: add your beat audio and visual first." badge={formatSectionBadge(beatHelperForm.beat_file_id ? 1 : 0, beatHelperForm.image_file_id || beatHelperForm.ai_choose_image ? 1 : 0)} open={openSections.assets} onOpenChange={(value) => setSectionOpen("assets", value)}>
                   <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-                    <AssetDropzone title="Beat Audio" accept=".mp3,.wav,.m4a,.flac,.ogg,audio/*" loading={uploadingBeatHelperAudio} files={beatHelperUploads.audio_uploads} selectedFileId={beatHelperForm.beat_file_id} onSelect={(value) => setBeatHelperForm((prev) => ({ ...prev, beat_file_id: value }))} onFileUpload={handleBeatHelperAudioUpload} emptyLabel="Select BeatHelper audio" />
-                    <AssetDropzone title="Visual" accept=".jpg,.jpeg,.png,.webp,.webm,.mp4,.mov,.m4v,image/*,video/webm,video/mp4,video/quicktime" loading={uploadingBeatHelperImage} files={beatHelperUploads.image_uploads} selectedFileId={beatHelperForm.image_file_id} onSelect={(value) => setBeatHelperForm((prev) => ({ ...prev, image_file_id: value, ai_choose_image: false }))} onFileUpload={handleBeatHelperImageUpload} emptyLabel="Select BeatHelper visual" />
+                    <AssetDropzone title="Beat Audio" accept=".mp3,.wav,.m4a,.flac,.ogg,audio/*" loading={uploadingBeatHelperAudio} onFileUpload={handleBeatHelperAudioUpload} currentLabel={selectedAudioLabel} emptyLabel="No beat audio selected" />
+                    <AssetDropzone title="Visual" accept=".jpg,.jpeg,.png,.webp,.webm,.mp4,.mov,.m4v,image/*,video/webm,video/mp4,video/quicktime" loading={uploadingBeatHelperImage} onFileUpload={handleBeatHelperImageUpload} currentLabel={selectedImageLabel} emptyLabel={beatHelperForm.ai_choose_image ? "AI fallback enabled" : "No visual selected"} />
                   </div>
-                  <label className="mt-4 flex items-center gap-2 text-sm" style={{ color: "var(--text-secondary)" }}><input type="checkbox" checked={beatHelperForm.ai_choose_image} onChange={(e) => setBeatHelperForm((prev) => ({ ...prev, ai_choose_image: e.target.checked }))} />Use AI image if no thumbnail is selected</label>
+                  <label
+                    className="mt-4 flex w-full items-start gap-4 rounded-2xl border-2 px-4 py-4 transition hover:border-[var(--accent-primary)]"
+                    style={{ borderColor: SURFACE_BORDER, background: INNER_SURFACE_BG }}
+                  >
+                    <span
+                      className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border-2"
+                      style={{ borderColor: SURFACE_BORDER, background: "rgba(255,255,255,0.03)" }}
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 shrink-0 accent-[var(--accent-primary)]"
+                        checked={beatHelperForm.ai_choose_image}
+                        onChange={(e) => setBeatHelperForm((prev) => ({ ...prev, ai_choose_image: e.target.checked }))}
+                      />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-medium leading-6" style={{ color: "var(--text-primary)" }}>
+                        AI image fallback
+                      </span>
+                      <span className="mt-1 block break-words text-sm leading-6" style={{ color: "var(--text-secondary)" }}>
+                        Use AI image if no thumbnail is selected.
+                      </span>
+                    </span>
+                  </label>
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 px-4 py-3" style={{ borderColor: SURFACE_BORDER, background: INNER_SURFACE_BG }}>
+                    <p className="text-sm" style={{ color: "var(--text-secondary)" }}>Confirm this step after your beat audio and visual are ready.</p>
+                    <Button type="button" onClick={() => confirmWorkflowStep("assets")} disabled={!assetsReady}>Confirm Media</Button>
+                  </div>
                 </StudioSection>
 
-                <StudioSection title="Tags" description="Core naming and SEO context for the queue item." open={openSections.metadata} onOpenChange={(value) => setSectionOpen("metadata", value)}>
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                    <div className="space-y-2"><Label>Target Artist</Label><Input value={beatHelperForm.target_artist} onChange={(e) => setBeatHelperForm((prev) => ({ ...prev, target_artist: e.target.value }))} placeholder="e.g. Lil Uzi Vert" /></div>
-                    <div className="space-y-2"><Label>Beat Type</Label><Input value={beatHelperForm.beat_type} onChange={(e) => setBeatHelperForm((prev) => ({ ...prev, beat_type: e.target.value }))} placeholder="e.g. rage" /></div>
-                    <div className="space-y-2"><Label>Title Override</Label><Input value={beatHelperForm.generated_title_override} onChange={(e) => setBeatHelperForm((prev) => ({ ...prev, generated_title_override: e.target.value }))} placeholder="Leave blank for AI title" /></div>
-                    <div className="space-y-2"><Label>Tag Template</Label><Select value={beatHelperForm.template_id || "none"} onValueChange={(value) => setBeatHelperForm((prev) => ({ ...prev, template_id: value === "none" ? "" : value }))}><SelectTrigger><SelectValue placeholder="Select template" /></SelectTrigger><SelectContent><SelectItem value="none">No template</SelectItem>{beatHelperTemplates.map((template) => <SelectItem key={template.id} value={template.id}>{template.name}</SelectItem>)}</SelectContent></Select></div>
-                  </div>
-                  <div className="mt-4 space-y-2"><Label>Context Tags</Label><Textarea rows={3} value={beatHelperForm.context_tags} onChange={(e) => setBeatHelperForm((prev) => ({ ...prev, context_tags: e.target.value }))} placeholder="baby pluto, pink tape, melodic rage" /></div>
-                </StudioSection>
-
-                <StudioSection title="Web Image Search" description="No image yet? Search an artist picture and use it." badge={visibleBeatHelperImageResults.length ? `${visibleBeatHelperImageResults.length} results` : null} open={openSections.imageSearch} onOpenChange={(value) => setSectionOpen("imageSearch", value)}>
+                <StudioSection title="Web Image Search" description="Step 1A: search a web image before moving on." badge={visibleBeatHelperImageResults.length ? `${visibleBeatHelperImageResults.length} results` : null} open={openSections.imageSearch} onOpenChange={(value) => setSectionOpen("imageSearch", value)}>
                   <div className="rounded-3xl border-2 p-4" style={{ borderColor: SURFACE_BORDER, background: INNER_SURFACE_BG }}>
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                       <div>
@@ -540,17 +646,28 @@ const selectedImageLabel = useMemo(
                   {visibleBeatHelperImageResults.length > 0 ? (
                     <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-3">
                       {visibleBeatHelperImageResults.map((result) => (
-                        <div key={result.id} className="overflow-hidden rounded-3xl border-2 p-3" style={{ borderColor: SURFACE_BORDER, background: INNER_SURFACE_BG }}>
-                          <div className="overflow-hidden rounded-2xl border-2" style={{ borderColor: SURFACE_BORDER, background: "var(--bg-primary)" }}>
-                            <img src={result.image_url} alt={result.title || result.query} className="h-40 w-full object-cover" loading="lazy" onError={() => setBrokenSearchImageIds((prev) => ({ ...prev, [result.id]: true }))} />
+                        <button
+                          key={result.id}
+                          type="button"
+                          className="overflow-hidden rounded-3xl border-2 p-3 text-left transition hover:scale-[1.01]"
+                          style={{ borderColor: SURFACE_BORDER, background: INNER_SURFACE_BG }}
+                          disabled={importingBeatHelperImageUrl === result.image_url}
+                          onClick={async () => {
+                            await handleBeatHelperImportSearchImage(result);
+                            setSectionOpen("imageSearch", false);
+                            setSectionOpen("assets", true);
+                          }}
+                        >
+                          <div className="mx-auto aspect-square w-full max-w-[180px] overflow-hidden rounded-2xl border-2 sm:max-w-full" style={{ borderColor: SURFACE_BORDER, background: "var(--bg-primary)" }}>
+                            <img src={result.image_url} alt={result.title || result.query} className="h-full w-full object-cover" loading="lazy" onError={() => setBrokenSearchImageIds((prev) => ({ ...prev, [result.id]: true }))} />
                           </div>
                           <Badge className="mt-3 border-emerald-400/40 bg-emerald-500/10 text-emerald-300">{String(result.source || "web").toUpperCase()}</Badge>
                           <p className="mt-3 line-clamp-1 text-base font-semibold" style={{ color: "var(--text-primary)" }}>{result.title || result.query || "Web image"}</p>
                           <p className="mt-1 line-clamp-2 text-sm" style={{ color: "var(--text-secondary)" }}>{result.query || beatHelperImageSearchQuery || "Suggested image"}</p>
-                          <Button type="button" variant="ghost" className="mt-3 px-0" disabled={importingBeatHelperImageUrl === result.image_url} onClick={() => handleBeatHelperImportSearchImage(result)}>
-                            {importingBeatHelperImageUrl === result.image_url ? "Importing..." : "Use this image"}
-                          </Button>
-                        </div>
+                          <p className="mt-3 text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+                            {importingBeatHelperImageUrl === result.image_url ? "Importing..." : "Click image to select"}
+                          </p>
+                        </button>
                       ))}
                     </div>
                   ) : (
@@ -560,48 +677,120 @@ const selectedImageLabel = useMemo(
                   )}
                 </StudioSection>
 
-                <StudioSection title="Delivery" description="Approval timing, notification channel, privacy, and queue automation." open={openSections.automation} onOpenChange={(value) => setSectionOpen("automation", value)}>
+                <StudioSection title="Tags" description="Step 2: add the artist and beat type info." open={openSections.metadata} onOpenChange={(value) => setSectionOpen("metadata", value)} locked={!tagsUnlocked} lockMessage="Confirm Beat Audio + Video first to unlock Tags.">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div className="space-y-2"><Label>Target Artist</Label><Input value={beatHelperForm.target_artist} onChange={(e) => setBeatHelperForm((prev) => ({ ...prev, target_artist: e.target.value }))} placeholder="e.g. Lil Uzi Vert" /></div>
+                    <div className="space-y-2"><Label>Beat Type</Label><Input value={beatHelperForm.beat_type} onChange={(e) => setBeatHelperForm((prev) => ({ ...prev, beat_type: e.target.value }))} placeholder="e.g. rage" /></div>
+                    <div className="space-y-2"><Label>Title Override</Label><Input value={beatHelperForm.generated_title_override} onChange={(e) => setBeatHelperForm((prev) => ({ ...prev, generated_title_override: e.target.value }))} placeholder="Leave blank for AI title" /></div>
+                    <div className="space-y-2"><Label>Tag Template</Label><Select value={beatHelperForm.template_id || "none"} onValueChange={(value) => setBeatHelperForm((prev) => ({ ...prev, template_id: value === "none" ? "" : value }))}><SelectTrigger><SelectValue placeholder="Select template" /></SelectTrigger><SelectContent><SelectItem value="none">No template</SelectItem>{beatHelperTemplates.map((template) => <SelectItem key={template.id} value={template.id}>{template.name}</SelectItem>)}</SelectContent></Select></div>
+                  </div>
+                  <div className="mt-4 space-y-2"><Label>Context Tags</Label><Textarea rows={3} value={beatHelperForm.context_tags} onChange={(e) => setBeatHelperForm((prev) => ({ ...prev, context_tags: e.target.value }))} placeholder="baby pluto, pink tape, melodic rage" /></div>
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 px-4 py-3" style={{ borderColor: SURFACE_BORDER, background: INNER_SURFACE_BG }}>
+                    <p className="text-sm" style={{ color: "var(--text-secondary)" }}>Confirm this step when your tag setup is ready.</p>
+                    <Button type="button" onClick={() => confirmWorkflowStep("tags")} disabled={!tagsReady}>Confirm Tags</Button>
+                  </div>
+                </StudioSection>
+
+                <StudioSection title="Delivery" description="Step 3: choose how this queue item should go out." open={openSections.automation} onOpenChange={(value) => setSectionOpen("automation", value)} locked={!deliveryUnlocked} lockMessage="Confirm Tags first to unlock Delivery.">
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                     <div className="space-y-2"><Label>Auto-skip Hours</Label><Input type="number" min="1" max="72" value={beatHelperForm.approval_timeout_hours} onChange={(e) => setBeatHelperForm((prev) => ({ ...prev, approval_timeout_hours: e.target.value }))} /></div>
                     <div className="space-y-2"><Label>Notify Via</Label><Select value={beatHelperForm.notify_channel} onValueChange={(value) => setBeatHelperForm((prev) => ({ ...prev, notify_channel: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">None</SelectItem><SelectItem value="email">Email</SelectItem><SelectItem value="sms">SMS</SelectItem><SelectItem value="email_sms">Email + SMS</SelectItem></SelectContent></Select></div>
                     <div className="space-y-2"><Label>Privacy</Label><Select value={beatHelperForm.privacy_status} onValueChange={(value) => setBeatHelperForm((prev) => ({ ...prev, privacy_status: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="public">Public</SelectItem><SelectItem value="unlisted">Unlisted</SelectItem><SelectItem value="private">Private</SelectItem></SelectContent></Select></div>
                   </div>
-                  <label className="mt-4 flex items-center gap-2 text-sm" style={{ color: "var(--text-secondary)" }}><input type="checkbox" checked={beatHelperForm.auto_upload_if_no_response} onChange={(e) => setBeatHelperForm((prev) => ({ ...prev, auto_upload_if_no_response: e.target.checked }))} />Auto-upload if no response comes in</label>
+                  <label
+                    className="mt-4 flex w-full items-start gap-4 rounded-2xl border-2 px-4 py-4 transition hover:border-[var(--accent-primary)]"
+                    style={{ borderColor: SURFACE_BORDER, background: INNER_SURFACE_BG }}
+                  >
+                    <span
+                      className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border-2"
+                      style={{ borderColor: SURFACE_BORDER, background: "rgba(255,255,255,0.03)" }}
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 shrink-0 accent-[var(--accent-primary)]"
+                        checked={beatHelperForm.auto_upload_if_no_response}
+                        onChange={(e) => setBeatHelperForm((prev) => ({ ...prev, auto_upload_if_no_response: e.target.checked }))}
+                      />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-medium leading-6" style={{ color: "var(--text-primary)" }}>
+                        Auto-upload fallback
+                      </span>
+                      <span className="mt-1 block break-words text-sm leading-6" style={{ color: "var(--text-secondary)" }}>
+                        Auto-upload if no response comes in.
+                      </span>
+                    </span>
+                  </label>
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 px-4 py-3" style={{ borderColor: SURFACE_BORDER, background: INNER_SURFACE_BG }}>
+                    <p className="text-sm" style={{ color: "var(--text-secondary)" }}>Confirm delivery settings to unlock contact details.</p>
+                    <Button type="button" onClick={() => confirmWorkflowStep("delivery")} disabled={!deliveryReady}>Confirm Delivery</Button>
+                  </div>
                 </StudioSection>
 
-                <StudioSection title="Notification Contact" description="Collapsed by default so it stays out of your way." open={openSections.contacts} onOpenChange={(value) => setSectionOpen("contacts", value)}>
+                <StudioSection title="Notification Contact" description="Step 4: choose where BeatHelper should notify you." open={openSections.contacts} onOpenChange={(value) => setSectionOpen("contacts", value)} locked={!contactsUnlocked} lockMessage="Confirm Delivery first to unlock Notification Contact.">
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <div className="space-y-2"><Label>Email</Label><Input value={beatHelperContact.email || ""} onChange={(e) => setBeatHelperContact((prev) => ({ ...prev, email: e.target.value }))} placeholder="you@domain.com" /></div>
                     <div className="space-y-2"><Label>Phone</Label><Input value={beatHelperContact.phone || ""} onChange={(e) => setBeatHelperContact((prev) => ({ ...prev, phone: e.target.value }))} placeholder="+15551234567" /></div>
                   </div>
-                  <div className="mt-4 flex flex-wrap gap-4 text-sm">
-                    <label className="flex items-center gap-2"><input type="checkbox" checked={!!beatHelperContact.email_enabled} onChange={(e) => setBeatHelperContact((prev) => ({ ...prev, email_enabled: e.target.checked }))} />Enable email</label>
-                    <label className="flex items-center gap-2"><input type="checkbox" checked={!!beatHelperContact.sms_enabled} onChange={(e) => setBeatHelperContact((prev) => ({ ...prev, sms_enabled: e.target.checked }))} />Enable SMS</label>
+                  <div className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+                    <label
+                      className="flex w-full items-start gap-4 rounded-2xl border-2 px-4 py-4 transition hover:border-[var(--accent-primary)]"
+                      style={{ borderColor: SURFACE_BORDER, background: INNER_SURFACE_BG }}
+                    >
+                      <span
+                        className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border-2"
+                        style={{ borderColor: SURFACE_BORDER, background: "rgba(255,255,255,0.03)" }}
+                      >
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 shrink-0 accent-[var(--accent-primary)]"
+                          checked={!!beatHelperContact.email_enabled}
+                          onChange={(e) => setBeatHelperContact((prev) => ({ ...prev, email_enabled: e.target.checked }))}
+                        />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-medium leading-6" style={{ color: "var(--text-primary)" }}>
+                          Email alerts
+                        </span>
+                        <span className="mt-1 block break-words text-sm leading-6" style={{ color: "var(--text-secondary)" }}>
+                          Send BeatHelper notifications to your email.
+                        </span>
+                      </span>
+                    </label>
+                    <label
+                      className="flex w-full items-start gap-4 rounded-2xl border-2 px-4 py-4 transition hover:border-[var(--accent-primary)]"
+                      style={{ borderColor: SURFACE_BORDER, background: INNER_SURFACE_BG }}
+                    >
+                      <span
+                        className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border-2"
+                        style={{ borderColor: SURFACE_BORDER, background: "rgba(255,255,255,0.03)" }}
+                      >
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 shrink-0 accent-[var(--accent-primary)]"
+                          checked={!!beatHelperContact.sms_enabled}
+                          onChange={(e) => setBeatHelperContact((prev) => ({ ...prev, sms_enabled: e.target.checked }))}
+                        />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-medium leading-6" style={{ color: "var(--text-primary)" }}>
+                          SMS alerts
+                        </span>
+                        <span className="mt-1 block break-words text-sm leading-6" style={{ color: "var(--text-secondary)" }}>
+                          Send BeatHelper notifications to your phone.
+                        </span>
+                      </span>
+                    </label>
                   </div>
-                  <Button type="button" variant="outline" className="mt-4" onClick={handleBeatHelperSaveContact}>Save Contact Settings</Button>
-                </StudioSection>
-
-                <StudioSection title="Tag Templates" description="Reusable template bundles tucked behind one panel." badge={beatHelperTemplates.length ? `${beatHelperTemplates.length} saved` : null} open={openSections.templates} onOpenChange={(value) => setSectionOpen("templates", value)}>
-                  <div className="space-y-4">
-                    <Input value={newTemplateName} onChange={(e) => setNewTemplateName(e.target.value)} placeholder="Template name" />
-                    <Textarea rows={3} value={newTemplateTags} onChange={(e) => setNewTemplateTags(e.target.value)} placeholder="tag1, tag2, tag3" />
-                    <Button type="button" variant="outline" onClick={handleBeatHelperCreateTemplate}>Save Template</Button>
-                    {beatHelperTemplates.length > 0 ? (
-                      <div className="space-y-2">
-                        {beatHelperTemplates.slice(0, 6).map((template) => (
-                          <div key={template.id} className="rounded-2xl border-2 px-3 py-2 text-sm" style={{ borderColor: SURFACE_BORDER, background: INNER_SURFACE_BG }}>
-                            <div className="font-medium" style={{ color: "var(--text-primary)" }}>{template.name}</div>
-                            <div className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>{(template.tags || []).slice(0, 4).join(", ")}{(template.tags || []).length > 4 ? ` +${(template.tags || []).length - 4} more` : ""}</div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 px-4 py-3" style={{ borderColor: SURFACE_BORDER, background: INNER_SURFACE_BG }}>
+                    <p className="text-sm" style={{ color: "var(--text-secondary)" }}>Save and confirm contact settings to finish the workflow.</p>
+                    <Button type="button" variant="outline" onClick={() => confirmWorkflowStep("contact")} disabled={!contactReady}>Confirm Contact</Button>
                   </div>
                 </StudioSection>
 
                 <div className="flex flex-wrap items-center gap-3 rounded-3xl border-2 px-4 py-4" style={{ borderColor: SURFACE_BORDER, background: INNER_SURFACE_BG }}>
-                  <Button type="submit" disabled={loadingBeatHelper} className="gap-2"><Sparkles className="h-4 w-4" />{loadingBeatHelper ? "Queuing..." : "Queue Beat"}</Button>
-                  <p className="text-sm" style={{ color: "var(--text-secondary)" }}>One beat plus one thumbnail per queue item.</p>
+                  <Button type="submit" disabled={loadingBeatHelper || !queueReady} className="gap-2"><Sparkles className="h-4 w-4" />{loadingBeatHelper ? "Queuing..." : "Queue Beat"}</Button>
+                  <p className="text-sm" style={{ color: "var(--text-secondary)" }}>{queueReady ? "Workflow complete. Queue this beat when you're ready." : "Finish each confirmed step to unlock queueing."}</p>
                 </div>
               </form>
             </CardContent>

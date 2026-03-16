@@ -178,6 +178,7 @@
   font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
   overflow: hidden;
   white-space: nowrap;
+  min-height: 54px;
 }
 
 .landing-example-code-label {
@@ -186,6 +187,14 @@
 
 .landing-example-code-equals {
   color: rgba(255, 255, 255, 0.55);
+}
+
+.landing-example-code-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #edfef3;
 }
 
 .landing-example-caret {
@@ -214,6 +223,7 @@
   display: grid;
   gap: 10px;
   font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  min-height: 190px;
 }
 
 .landing-example-console-line {
@@ -244,6 +254,11 @@
   border: 1px solid rgba(84, 242, 139, 0.2);
   background: rgba(84, 242, 139, 0.1);
   color: #d9ffe7;
+}
+
+.landing-tag-window {
+  min-height: 64px;
+  align-content: flex-start;
 }
 
 .landing-tag-animated {
@@ -298,19 +313,64 @@
 }
 
 .landing-auth-dialog {
+  --background: rgba(10, 14, 13, 0.98) !important;
+  --foreground: #f8faf9 !important;
+  --card-foreground: #f8faf9 !important;
+  --popover-foreground: #f8faf9 !important;
+  --muted-foreground: #cad4cf !important;
+  --accent-foreground: #f8faf9 !important;
+  --input: rgba(255, 255, 255, 0.12) !important;
+  --border: rgba(255, 255, 255, 0.1) !important;
+  --ring: rgba(61, 220, 122, 0.45) !important;
   background: rgba(10, 14, 13, 0.94) !important;
   color: var(--landing-text) !important;
+  border-color: var(--landing-border) !important;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5) !important;
+}
+
+.landing-auth-dialog,
+.landing-auth-dialog h1,
+.landing-auth-dialog h2,
+.landing-auth-dialog h3,
+.landing-auth-dialog h4,
+.landing-auth-dialog h5,
+.landing-auth-dialog h6,
+.landing-auth-dialog p,
+.landing-auth-dialog label,
+.landing-auth-dialog span,
+.landing-auth-dialog button {
+  color: var(--landing-text) !important;
+  opacity: 1 !important;
+  text-shadow: none !important;
+}
+
+.landing-auth-dialog [data-state="open"] {
+  opacity: 1 !important;
 }
 
 .landing-auth-copy,
 .landing-auth-label,
 .landing-auth-link {
-  color: var(--landing-text-soft);
+  color: var(--landing-text-soft) !important;
+}
+
+.landing-auth-dialog .landing-auth-copy,
+.landing-auth-dialog .landing-auth-label,
+.landing-auth-dialog .text-muted-foreground,
+.landing-auth-dialog [data-slot="dialog-description"] {
+  color: var(--landing-text-soft) !important;
+  opacity: 1 !important;
 }
 
 .landing-auth-input {
   border-color: var(--landing-border) !important;
   background: rgba(0, 0, 0, 0.4) !important;
+  color: var(--landing-text) !important;
+  caret-color: var(--landing-accent);
+}
+
+.landing-auth-input::placeholder {
+  color: var(--landing-text-muted) !important;
 }
 
 .landing-auth-input:focus {
@@ -323,16 +383,26 @@
   color: #050807;
 }
 
+.landing-auth-dialog .landing-auth-submit {
+  color: #050807 !important;
+}
+
 .landing-auth-submit:hover {
   background: #eef2ef;
 }
 
 .landing-auth-link-btn {
-  color: var(--landing-accent);
+  color: var(--landing-accent) !important;
 }
 
 .landing-auth-link-btn:hover {
   text-decoration: underline;
+}
+
+.landing-auth-dialog button.absolute,
+.landing-auth-dialog button.absolute svg {
+  color: var(--landing-text-soft) !important;
+  opacity: 1 !important;
 }
 
 @keyframes landingBlink {

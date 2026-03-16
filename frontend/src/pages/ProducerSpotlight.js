@@ -60,11 +60,11 @@ const AVATAR_CHOICES = [
 const DEFAULT_AVATAR_URL = AVATAR_CHOICES[0].url;
 
 const TIER_CLASS_MAP = {
-  Bronze: "bg-amber-500/15 text-amber-200 border-amber-300/40",
-  Silver: "bg-slate-300/15 text-slate-100 border-slate-200/45",
-  Gold: "bg-yellow-400/15 text-yellow-100 border-yellow-300/45",
-  Platinum: "bg-cyan-400/15 text-cyan-100 border-cyan-300/45",
-  Diamond: "bg-fuchsia-400/15 text-fuchsia-100 border-fuchsia-300/45",
+  Bronze: "spotlight-tier-tag spotlight-tier-tag--bronze bg-amber-500/15 text-amber-200 border-amber-300/40",
+  Silver: "spotlight-tier-tag spotlight-tier-tag--silver bg-slate-300/15 text-slate-100 border-slate-200/45",
+  Gold: "spotlight-tier-tag spotlight-tier-tag--gold bg-yellow-400/15 text-yellow-100 border-yellow-300/45",
+  Platinum: "spotlight-tier-tag spotlight-tier-tag--platinum bg-cyan-400/15 text-cyan-100 border-cyan-300/45",
+  Diamond: "spotlight-tier-tag spotlight-tier-tag--diamond bg-fuchsia-400/15 text-fuchsia-100 border-fuchsia-300/45",
 };
 
 export default function ProducerSpotlight() {
@@ -296,10 +296,10 @@ export default function ProducerSpotlight() {
   };
 
   const getRoleTagClass = (roleTag) => {
-    if (roleTag === "Creator") return "bg-yellow-400/20 text-yellow-100 border-yellow-300";
-    if (roleTag === "Verified") return "bg-sky-500/20 text-sky-200 border-sky-400";
-    if (roleTag === "Pro") return "bg-violet-500/20 text-violet-300 border-violet-400";
-    return "bg-zinc-500/20 text-zinc-300 border-zinc-500";
+    if (roleTag === "Creator") return "spotlight-role-tag spotlight-role-tag--creator bg-yellow-400/20 text-yellow-100 border-yellow-300";
+    if (roleTag === "Verified") return "spotlight-role-tag spotlight-role-tag--verified bg-sky-500/20 text-sky-200 border-sky-400";
+    if (roleTag === "Pro") return "spotlight-role-tag spotlight-role-tag--pro bg-violet-500/20 text-violet-300 border-violet-400";
+    return "spotlight-role-tag spotlight-role-tag--newbie bg-zinc-500/20 text-zinc-300 border-zinc-500";
   };
 
   const getRoleTagIcon = (roleTag) => {

@@ -1,5 +1,5 @@
 import React from "react";
-import { Youtube, CheckCircle2, AlertCircle, Music, Image as ImageIcon, Wand2 } from "lucide-react";
+import { Youtube, CheckCircle2, AlertCircle, Music, Image as ImageIcon, Wand2, Search, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -24,7 +24,14 @@ const UploadDashboard = ({
   setIsAudioDragActive,
   isImageDragActive,
   setIsImageDragActive,
-  setStudioOpen
+  setStudioOpen,
+  generatedImages,
+  generatedImageQuery,
+  generatedImageSearchQuery,
+  setGeneratedImageSearchQuery,
+  generatingImages,
+  handleGenerateImage,
+  handleUseGeneratedImage
 }) => {
   return (
     <Card className="dashboard-card min-h-[400px]">
@@ -90,6 +97,65 @@ const UploadDashboard = ({
                </label>
             </div>
          </div>
+
+         <Card className="dashboard-card border-l-4 border-l-emerald-500 shadow-sm">
+            <CardHeader className="pb-3">
+               <CardTitle className="flex items-center gap-2 text-base font-semibold">
+                  <Sparkles className="h-4 w-4 text-emerald-400" />
+                  AI Artwork Finder
+               </CardTitle>
+               <CardDescription>
+                  Search for a cover image and apply it if you do not have artwork yet.
+               </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+               <div className="flex flex-col gap-2 sm:flex-row">
+                  <Input
+                     value={generatedImageSearchQuery}
+                     onChange={(e) => setGeneratedImageSearchQuery(e.target.value)}
+                     placeholder="Lil Uzi cover art"
+                     className="min-w-0 sm:flex-1"
+                  />
+                  <Button
+                     type="button"
+                     variant="outline"
+                     onClick={() => handleGenerateImage({ query: generatedImageSearchQuery })}
+                     disabled={generatingImages}
+                     className="shrink-0"
+                  >
+                     {generatingImages ? "Searching..." : <><Search className="mr-2 h-4 w-4" /><span className="hidden md:inline">Find Images</span><span className="md:hidden">Search</span></>}
+                  </Button>
+               </div>
+
+               {!!generatedImages?.length && (
+                 <div className="space-y-3">
+                   <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                     Results {generatedImageQuery ? `for ${generatedImageQuery}` : ""}
+                   </div>
+                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                     {generatedImages.slice(0, 4).map((img) => (
+                       <button
+                         key={img.id}
+                         type="button"
+                         className="group overflow-hidden rounded-lg border border-border bg-background transition-colors hover:border-primary"
+                         onClick={() => handleUseGeneratedImage(img)}
+                       >
+                         <img
+                           src={img.thumbnail_url || img.image_url}
+                           alt={img.artist || "Artwork result"}
+                           className="h-24 w-full object-cover"
+                           loading="lazy"
+                         />
+                         <div className="truncate px-2 py-1 text-left text-[10px] text-muted-foreground">
+                           {img.artist || img.source || "Apply image"}
+                         </div>
+                       </button>
+                     ))}
+                   </div>
+                </div>
+               )}
+            </CardContent>
+         </Card>
 
          {audioFile && imageFile && (
            <Button onClick={() => setStudioOpen(true)} className="w-full py-6 text-lg bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700">

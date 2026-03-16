@@ -267,6 +267,24 @@ html:not(.dark) .dashboard-tab-trigger--separated::before {
   border-radius: 18px;
 }
 
+.dashboard-brand-mark {
+  background: linear-gradient(135deg, #54f28b 0%, #1fb863 100%);
+  box-shadow: 0 0 20px rgba(61, 220, 122, 0.26);
+}
+
+.dashboard-brand-title {
+  display: block;
+  line-height: 1.14;
+  padding-bottom: 0.14em;
+  overflow: visible;
+  white-space: nowrap;
+}
+
+.dashboard-brand-subtitle {
+  line-height: 1.35;
+  padding-bottom: 0.08em;
+}
+
 .dashboard-card-muted {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
@@ -1146,6 +1164,65 @@ html.dark .dashboard-grid-layer {
   transition: all 0.3s ease;
   position: relative;
   overflow: hidden;
+}
+
+html:not(.dark) .spotlight-role-tag,
+html:not(.dark) .spotlight-tier-tag {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+html:not(.dark) .spotlight-role-tag--creator {
+  background: rgba(250, 204, 21, 0.18) !important;
+  color: #8a5a00 !important;
+  border-color: rgba(217, 119, 6, 0.38) !important;
+}
+
+html:not(.dark) .spotlight-role-tag--verified {
+  background: rgba(56, 189, 248, 0.16) !important;
+  color: #0f5f86 !important;
+  border-color: rgba(14, 116, 144, 0.34) !important;
+}
+
+html:not(.dark) .spotlight-role-tag--pro {
+  background: rgba(139, 92, 246, 0.14) !important;
+  color: #5b21b6 !important;
+  border-color: rgba(109, 40, 217, 0.32) !important;
+}
+
+html:not(.dark) .spotlight-role-tag--newbie {
+  background: rgba(113, 113, 122, 0.12) !important;
+  color: #3f3f46 !important;
+  border-color: rgba(82, 82, 91, 0.28) !important;
+}
+
+html:not(.dark) .spotlight-tier-tag--bronze {
+  background: rgba(245, 158, 11, 0.16) !important;
+  color: #9a5a00 !important;
+  border-color: rgba(217, 119, 6, 0.34) !important;
+}
+
+html:not(.dark) .spotlight-tier-tag--silver {
+  background: rgba(148, 163, 184, 0.16) !important;
+  color: #475569 !important;
+  border-color: rgba(100, 116, 139, 0.3) !important;
+}
+
+html:not(.dark) .spotlight-tier-tag--gold {
+  background: rgba(250, 204, 21, 0.18) !important;
+  color: #946200 !important;
+  border-color: rgba(202, 138, 4, 0.34) !important;
+}
+
+html:not(.dark) .spotlight-tier-tag--platinum {
+  background: rgba(34, 211, 238, 0.14) !important;
+  color: #0f766e !important;
+  border-color: rgba(13, 148, 136, 0.3) !important;
+}
+
+html:not(.dark) .spotlight-tier-tag--diamond {
+  background: rgba(217, 70, 239, 0.12) !important;
+  color: #a21caf !important;
+  border-color: rgba(192, 38, 211, 0.28) !important;
 }
 
 .producer-card::before {

@@ -81,6 +81,7 @@ const UploadStudio = ({
   const [thumbnailProgress, setThumbnailProgress] = useState(0);
   const [generatedImages, setGeneratedImages] = useState([]);
   const [generatedImageQuery, setGeneratedImageQuery] = useState("");
+  const [generatedImageSearchQuery, setGeneratedImageSearchQuery] = useState("");
   const [generatingImages, setGeneratingImages] = useState(false);
   const [showTools, setShowTools] = useState(false);
 
@@ -672,13 +673,14 @@ const UploadStudio = ({
     }
   };
 
-  const handleGenerateImage = async () => {
-    const safeTitle = (uploadTitle || "").trim();
+  const handleGenerateImage = async ({ query = "" } = {}) => {
+    const manualQuery = String(query || "").trim();
+    const safeTitle = manualQuery || (uploadTitle || "").trim();
     const tags = tagHistory.find(t => t.id === selectedTagsId)?.tags || [];
     const safeTags = tags.filter(Boolean).map((t) => String(t).trim()).filter(Boolean);
 
     if (!safeTitle && !safeTags.length) {
-      toast.error("Add a title or select tags first.");
+      toast.error("Add a search phrase, title, or tags first.");
       return;
     }
 
@@ -692,6 +694,9 @@ const UploadStudio = ({
       const results = response.data?.results || [];
       setGeneratedImages(results);
       setGeneratedImageQuery(response.data?.query_used || "");
+      if (manualQuery) {
+        setGeneratedImageSearchQuery(manualQuery);
+      }
       if (!results.length) {
         toast.error("No image results found. Try a different artist/title.");
       } else {
@@ -841,6 +846,8 @@ const UploadStudio = ({
           handleGenerateImage={handleGenerateImage}
           generatedImages={generatedImages}
           generatedImageQuery={generatedImageQuery}
+          generatedImageSearchQuery={generatedImageSearchQuery}
+          setGeneratedImageSearchQuery={setGeneratedImageSearchQuery}
           onUseGeneratedImage={handleUseGeneratedImage}
           beatAnalysis={beatAnalysis}
           thumbnailCheckResult={thumbnailCheckResult}
@@ -922,6 +929,13 @@ const UploadStudio = ({
         isImageDragActive={isImageDragActive}
         setIsImageDragActive={setIsImageDragActive}
         setStudioOpen={setStudioOpen}
+        generatedImages={generatedImages}
+        generatedImageQuery={generatedImageQuery}
+        generatedImageSearchQuery={generatedImageSearchQuery}
+        setGeneratedImageSearchQuery={setGeneratedImageSearchQuery}
+        generatingImages={generatingImages}
+        handleGenerateImage={handleGenerateImage}
+        handleUseGeneratedImage={handleUseGeneratedImage}
       />
     );
   }

@@ -15,6 +15,7 @@ const SubscriptionBanner = ({
   plan = "free",
   onUpgrade,
   API,
+  showManageButton = true,
 }) => {
   const [loadingPortal, setLoadingPortal] = useState(false);
   const [nowMs, setNowMs] = useState(Date.now());
@@ -78,16 +79,18 @@ const SubscriptionBanner = ({
               </p>
             </div>
           </div>
-          <Button
-            onClick={handleManageSubscription}
-            disabled={loadingPortal}
-            variant="outline"
-            className="w-full py-3 sm:py-4 text-sm sm:text-base"
-            style={{ borderColor: "var(--accent-primary)", color: "var(--accent-primary)" }}
-          >
-            <Settings className="mr-2 h-4 w-4" />
-            {loadingPortal ? "Loading..." : "Manage Subscription"}
-          </Button>
+          {showManageButton ? (
+            <Button
+              onClick={handleManageSubscription}
+              disabled={loadingPortal}
+              variant="outline"
+              className="w-full py-3 sm:py-4 text-sm sm:text-base"
+              style={{ borderColor: "var(--accent-primary)", color: "var(--accent-primary)" }}
+            >
+              <Settings className="mr-2 h-4 w-4" />
+              {loadingPortal ? "Loading..." : "Manage Subscription"}
+            </Button>
+          ) : null}
         </CardContent>
       </Card>
     );

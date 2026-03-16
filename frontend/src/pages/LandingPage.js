@@ -154,7 +154,6 @@ const LandingPage = ({ setIsAuthenticated }) => {
   }, []);
 
   const liveFrame = liveExampleFrames[liveFrameIndex];
-  const typedPrompt = liveExamplePrompt.slice(0, liveFrame.typedLength);
 
   const openAuth = (mode) => {
     setAuthMode(mode);
@@ -287,9 +286,8 @@ const LandingPage = ({ setIsAuthenticated }) => {
                   <div className="landing-example-prompt rounded-xl px-4 py-3 text-base font-medium">
                     <span className="landing-example-code-label">prompt</span>
                     <span className="landing-example-code-equals">=</span>
-                    <span>&quot;{typedPrompt}</span>
-                    <span className="landing-example-caret">|</span>
-                    <span>&quot;</span>
+                    <span className="landing-example-code-value">&quot;{liveExamplePrompt}&quot;</span>
+                    <span className="landing-example-caret" aria-hidden="true">|</span>
                   </div>
                   <div className="mt-3">
                     <div className="landing-example-progress-track">
@@ -325,7 +323,7 @@ const LandingPage = ({ setIsAuthenticated }) => {
                       <span className="landing-example-console-value">{liveFrame.description || "drafting..."}</span>
                     </div>
                   </div>
-                  <div className="mb-3 flex flex-wrap gap-2">
+                  <div className="landing-tag-window mb-3 flex flex-wrap gap-2">
                     {liveFrame.tags.map((tag) => (
                       <span
                         key={tag}
