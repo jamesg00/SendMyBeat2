@@ -1,6 +1,6 @@
-# Deployment Guide: Free Self-Hosted Setup on Amazon Lightsail
+# Deployment Guide: Self-Hosted Setup on Amazon Lightsail
 
-This guide will help you deploy your entire application (Frontend + Backend + Database) on a single $3.50/month Amazon Lightsail instance. This eliminates MongoDB Atlas costs and keeps everything under one cheap bill.
+This guide will help you deploy your entire application (Frontend + Backend + Database) on a single Amazon Lightsail instance. For production use, the recommended baseline is the $12/month plan instead of the old low-memory tier.
 
 ## Prerequisites
 - An AWS Account
@@ -16,8 +16,9 @@ This guide will help you deploy your entire application (Frontend + Backend + Da
 3. Select **Linux/Unix** platform.
 4. Select **OS Only** -> **Ubuntu 22.04 LTS**.
 5. Scroll down to "Choose your instance plan".
-6. Select the **$3.50 USD/month** plan (512 MB RAM, 1 vCPU, 20 GB SSD).
-7. Name your instance (e.g., `sendmybeat-server`) and create it.
+6. Select at least the **$12 USD/month** plan.
+7. Recommended baseline: **2 GB RAM, 2 vCPU, 60 GB SSD** or better for production traffic and job processing.
+8. Name your instance (e.g., `sendmybeat-server`) and create it.
 
 ## Step 2: Configure Networking (Open Ports)
 
@@ -158,8 +159,8 @@ If you want the secure lock icon (`https://`), you can use **Caddy** to automati
 
 ## Cost Savings
 - **Database:** Free (Self-hosted on same server)
-- **Backend:** Included in server cost ($3.50/mo)
+- **Backend:** Included in server cost (example baseline: $12/mo)
 - **AI:** Pay-per-use (Grok is much cheaper than GPT-4)
-- **Total:** ~$3.50/mo + minimal AI usage.
+- **Total:** ~$12/mo + AI usage.
 
 Enjoy your low-cost setup! 🚀

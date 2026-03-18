@@ -296,6 +296,7 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
   const [subscriptionStatus, setSubscriptionStatus] = useState(null);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [upgradingSubscription, setUpgradingSubscription] = useState(false);
+  const [syncingSubscription, setSyncingSubscription] = useState(false);
   const [userLoaded, setUserLoaded] = useState(false);
   const [descriptionsLoaded, setDescriptionsLoaded] = useState(false);
   const [tagHistoryLoaded, setTagHistoryLoaded] = useState(false);
@@ -457,6 +458,31 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
     checkYouTubeConnection();
     fetchSubscriptionStatus();
     fetchGrowthStatus();
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("upgraded") !== "true") {
+      return;
+    }
+
+    syncSubscriptionStatus({ silent: true })
+      .then((data) => {
+        if (data?.is_subscribed) {
+          toast.success(`Your ${data.plan === "max" ? "Max" : "Plus"} plan is active`);
+        } else {
+          toast.error("Payment return detected, but billing has not synced yet. Try Refresh Billing Status.");
+        }
+      })
+      .catch(() => {
+        toast.error("Could not verify your subscription yet. Try Refresh Billing Status.");
+      })
+      .finally(() => {
+        params.delete("upgraded");
+        const nextQuery = params.toString();
+        const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}${window.location.hash || ""}`;
+        window.history.replaceState({}, "", nextUrl);
+      });
   }, []);
 
   useEffect(() => () => {
@@ -632,6 +658,26 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
       setSubscriptionStatus(response.data);
     } catch (error) {
       console.error("Failed to fetch subscription status", error);
+    }
+  };
+
+  const syncSubscriptionStatus = async ({ silent = false } = {}) => {
+    setSyncingSubscription(true);
+    try {
+      const response = await axios.post(`${API}/subscription/sync`);
+      setSubscriptionStatus(response.data);
+      if (!silent) {
+        toast.success(response.data?.is_subscribed ? "Subscription refreshed" : "No active paid subscription found");
+      }
+      return response.data;
+    } catch (error) {
+      const detail = error?.response?.data?.detail;
+      if (!silent) {
+        toast.error(typeof detail === "string" ? detail : "Failed to refresh billing status");
+      }
+      throw error;
+    } finally {
+      setSyncingSubscription(false);
     }
   };
 
@@ -1740,7 +1786,7 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
                   data-testid="header-upgrade-btn"
                 >
                   <Sparkles className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                  Upgrade to Pro
+                  Upgrade Plan
                 </Button>
               )}
 
@@ -2021,9 +2067,14 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
                       Manage Subscription
                     </Button>
                   ) : (
-                    <Button onClick={() => setShowUpgradeModal(true)} className="w-full">
-                      Upgrade Plan
-                    </Button>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <Button onClick={() => setShowUpgradeModal(true)} className="w-full">
+                        Upgrade Plan
+                      </Button>
+                      <Button onClick={() => syncSubscriptionStatus()} variant="outline" className="w-full" disabled={syncingSubscription}>
+                        {syncingSubscription ? "Refreshing..." : "Refresh Billing Status"}
+                      </Button>
+                    </div>
                   )}
                 </CardContent>
               </Card>
@@ -3408,7 +3459,7 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
                       Premium-only momentum tracking. Upgrade to access the 120-day challenge.
                     </p>
                     <Button onClick={() => setShowUpgradeModal(true)} className="btn-modern">
-                      Upgrade to Pro
+                      Upgrade Plan
                     </Button>
                   </div>
                 </div>

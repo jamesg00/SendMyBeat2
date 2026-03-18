@@ -385,7 +385,7 @@ export default function AdminCosts() {
           <div>
             <p className="font-semibold">About Cost Tracking</p>
             <p className="mt-1">
-              Hosting costs are fixed based on your Amazon Lightsail plan (default $3.50).
+              Hosting costs are fixed based on your Amazon Lightsail plan (default $12.00).
               AI costs are estimated based on token usage with Grok-2 pricing ($2/M input, $10/M output).
               Actual billing from xAI and AWS may vary slightly due to taxes and exchange rates.
             </p>

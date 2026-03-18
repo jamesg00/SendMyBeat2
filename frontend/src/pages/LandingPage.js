@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import axios from "axios";
@@ -35,7 +35,7 @@ const planCards = [
     description: "Start testing the workflow without committing.",
     bullets: [
       "2 AI generations per day",
-      "2 YouTube uploads per day",
+      "1 YouTube upload per day",
       "Tag, title, and upload flow",
     ],
   },
@@ -44,18 +44,18 @@ const planCards = [
     price: "$5/mo",
     description: "For producers publishing consistently every month.",
     bullets: [
-      "220 AI generations per month",
-      "90 YouTube uploads per month",
+      "150 AI generations per month",
+      "60 YouTube uploads per month",
       "BeatHelper queue + templates",
     ],
   },
   {
     name: "Max",
     price: "$12/mo",
-    description: "High-usage plan for serious producers.",
+    description: "Aggressive growth plan for producers with heavier output.",
     bullets: [
-      "High-usage AI workflow",
-      "High-usage YouTube uploads",
+      "500 AI generations per month",
+      "150 YouTube uploads per month",
       "Priority BeatHelper automation",
     ],
   },
@@ -489,19 +489,19 @@ const LandingPage = ({ setIsAuthenticated }) => {
         <Dialog open={isLoginOpen} onOpenChange={setIsLoginOpen}>
           <DialogContent className="landing-auth-dialog sm:max-w-md" overlayClassName="landing-auth-overlay">
           <DialogHeader>
-            <DialogTitle className="landing-auth-title text-center text-2xl font-bold">
+            <div className="landing-auth-title text-center text-2xl font-bold" style={{ color: "#eefaf2" }}>
               {authMode === "login" ? "Welcome Back" : "Create Your Account"}
-            </DialogTitle>
-            <DialogDescription className="landing-auth-copy text-center">
+            </div>
+            <p className="landing-auth-copy text-center text-sm" style={{ color: "#d7e5dd", margin: 0 }}>
               {authMode === "login"
                 ? "Log in to manage your beat uploads and metadata."
                 : "Start with the free plan and test the workflow immediately."}
-            </DialogDescription>
+            </p>
           </DialogHeader>
 
           <form onSubmit={handleAuth} className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label className="landing-auth-label">Username</Label>
+              <Label className="landing-auth-label" style={{ color: "#d7e5dd" }}>Username</Label>
               <Input
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
@@ -511,7 +511,7 @@ const LandingPage = ({ setIsAuthenticated }) => {
               />
             </div>
             <div className="space-y-2">
-              <Label className="landing-auth-label">Password</Label>
+              <Label className="landing-auth-label" style={{ color: "#d7e5dd" }}>Password</Label>
               <Input
                 type="password"
                 value={password}
@@ -531,7 +531,7 @@ const LandingPage = ({ setIsAuthenticated }) => {
             </Button>
           </form>
 
-          <div className="landing-muted-2 text-center text-sm">
+          <div className="landing-muted-2 text-center text-sm" style={{ color: "#d7e5dd" }}>
             {authMode === "login" ? (
               <>
                 Don&apos;t have an account?{" "}

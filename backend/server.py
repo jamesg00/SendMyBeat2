@@ -356,16 +356,20 @@ oauth = OAuth()
 api_router = APIRouter(prefix="/api")
 
 # ============ Cost Tracking Constants ============
-HOSTING_COST = float(os.environ.get("HOSTING_COST_USD", 3.50))
+HOSTING_COST = float(os.environ.get("HOSTING_COST_USD", 12.00))
 # Grok-2 pricing (approximate): $2.00/M input, $10.00/M output
 GROK_INPUT_COST = 2.0 / 1_000_000
 GROK_OUTPUT_COST = 10.0 / 1_000_000
 FREE_DAILY_AI_CREDITS = int(os.environ.get("FREE_DAILY_AI_CREDITS", "2"))
 FREE_DAILY_UPLOAD_CREDITS = int(os.environ.get("FREE_DAILY_UPLOAD_CREDITS", "1"))
-PLUS_MONTHLY_AI_CREDITS = int(os.environ.get("PLUS_MONTHLY_AI_CREDITS", "220"))
-PLUS_MONTHLY_UPLOAD_CREDITS = int(os.environ.get("PLUS_MONTHLY_UPLOAD_CREDITS", "90"))
-PLUS_MONTHLY_LLM_COST_CAP_USD = float(os.environ.get("PLUS_MONTHLY_LLM_COST_CAP_USD", "3.25"))
+PLUS_MONTHLY_AI_CREDITS = int(os.environ.get("PLUS_MONTHLY_AI_CREDITS", "150"))
+PLUS_MONTHLY_UPLOAD_CREDITS = int(os.environ.get("PLUS_MONTHLY_UPLOAD_CREDITS", "60"))
+PLUS_MONTHLY_LLM_COST_CAP_USD = float(os.environ.get("PLUS_MONTHLY_LLM_COST_CAP_USD", "2.50"))
 PLUS_NET_REVENUE_USD = float(os.environ.get("PLUS_NET_REVENUE_USD", "4.56"))
+MAX_MONTHLY_AI_CREDITS = int(os.environ.get("MAX_MONTHLY_AI_CREDITS", "500"))
+MAX_MONTHLY_UPLOAD_CREDITS = int(os.environ.get("MAX_MONTHLY_UPLOAD_CREDITS", "150"))
+MAX_MONTHLY_LLM_COST_CAP_USD = float(os.environ.get("MAX_MONTHLY_LLM_COST_CAP_USD", "7.50"))
+MAX_NET_REVENUE_USD = float(os.environ.get("MAX_NET_REVENUE_USD", "10.95"))
 
 # ============ LLM Helper ============
 _llm_client = None
@@ -1443,16 +1447,159 @@ async def _get_user_monthly_llm_cost(user_id: str) -> float:
     return float(result[0].get("total_cost") or 0.0)
 
 
+def _get_paid_plan_limits(plan: str) -> dict[str, float | int] | None:
+    normalized = (plan or "").strip().lower()
+    if normalized == "plus":
+        return {
+            "ai_credits": PLUS_MONTHLY_AI_CREDITS,
+            "upload_credits": PLUS_MONTHLY_UPLOAD_CREDITS,
+            "llm_cost_cap_usd": PLUS_MONTHLY_LLM_COST_CAP_USD,
+            "estimated_net_revenue_usd": PLUS_NET_REVENUE_USD,
+        }
+    if normalized == "max":
+        return {
+            "ai_credits": MAX_MONTHLY_AI_CREDITS,
+            "upload_credits": MAX_MONTHLY_UPLOAD_CREDITS,
+            "llm_cost_cap_usd": MAX_MONTHLY_LLM_COST_CAP_USD,
+            "estimated_net_revenue_usd": MAX_NET_REVENUE_USD,
+        }
+    return None
+
+
+def _is_paid_subscription_status(status: str) -> bool:
+    normalized = (status or "").strip().lower()
+    return normalized in {"active", "trialing", "past_due"}
+
+
+def _plan_from_price_ids(price_ids: set[str]) -> str:
+    plus_price_id = (os.environ.get("STRIPE_PRICE_ID_PLUS") or os.environ.get("STRIPE_PRICE_ID") or "").strip()
+    max_price_id = (os.environ.get("STRIPE_PRICE_ID_MAX") or "").strip()
+    if max_price_id and max_price_id in price_ids:
+        return "max"
+    if plus_price_id and plus_price_id in price_ids:
+        return "plus"
+    return "plus"
+
+
 def _resolve_subscription_plan(user_doc: dict) -> str:
     if not user_doc:
         return "free"
-    is_active = bool(user_doc.get('stripe_subscription_id')) and user_doc.get('subscription_status') == 'active'
-    if not is_active:
-        return "free"
     plan = (user_doc.get("subscription_plan") or "").strip().lower()
-    if plan in {"plus", "max"}:
+    subscription_status = str(user_doc.get("subscription_status") or "").strip().lower()
+    has_billing_link = bool(user_doc.get("stripe_subscription_id") or user_doc.get("stripe_customer_id"))
+
+    if plan in {"plus", "max"} and _is_paid_subscription_status(subscription_status):
         return plan
-    return "plus"
+    if plan in {"plus", "max"} and has_billing_link and subscription_status not in {"cancelled", "canceled", "incomplete_expired"}:
+        return plan
+    if _is_paid_subscription_status(subscription_status) and has_billing_link:
+        return "plus"
+    return "free"
+
+
+def _pick_best_stripe_subscription(subscriptions: list[dict]) -> dict | None:
+    if not subscriptions:
+        return None
+
+    status_rank = {
+        "active": 0,
+        "trialing": 1,
+        "past_due": 2,
+        "unpaid": 3,
+        "incomplete": 4,
+        "canceled": 5,
+        "cancelled": 5,
+        "incomplete_expired": 6,
+    }
+
+    def sort_key(sub: dict) -> tuple[int, float]:
+        status = str(sub.get("status") or "").strip().lower()
+        created = float(sub.get("created") or 0)
+        return (status_rank.get(status, 50), -created)
+
+    ordered = sorted(subscriptions, key=sort_key)
+    return ordered[0] if ordered else None
+
+
+async def _sync_user_subscription_from_stripe(user_doc: dict) -> dict:
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    customer_id = str(user_doc.get("stripe_customer_id") or "").strip()
+    subscription_id = str(user_doc.get("stripe_subscription_id") or "").strip()
+    email = str(user_doc.get("email") or "").strip()
+
+    if not customer_id and email:
+        try:
+            customers = stripe.Customer.list(email=email, limit=10)
+            matched_customer = next(
+                (
+                    customer for customer in (customers.data or [])
+                    if str(customer.get("email") or "").strip().lower() == email.lower()
+                ),
+                None,
+            )
+            if matched_customer:
+                customer_id = str(matched_customer.get("id") or "").strip()
+        except Exception as exc:
+            logging.error(f"Stripe customer lookup failed for user {user_doc.get('id')}: {exc}")
+
+    subscriptions: list[dict] = []
+    if subscription_id:
+        try:
+            subscription = stripe.Subscription.retrieve(subscription_id)
+            if subscription:
+                subscriptions.append(subscription)
+                if not customer_id:
+                    customer_id = str(subscription.get("customer") or "").strip()
+        except Exception as exc:
+            logging.warning(f"Stripe subscription retrieve failed for {subscription_id}: {exc}")
+
+    if customer_id:
+        try:
+            subscription_list = stripe.Subscription.list(customer=customer_id, status="all", limit=10)
+            subscriptions.extend(subscription_list.data or [])
+        except Exception as exc:
+            logging.error(f"Stripe subscription list failed for customer {customer_id}: {exc}")
+
+    deduped_subscriptions: list[dict] = []
+    seen_sub_ids: set[str] = set()
+    for subscription in subscriptions:
+        sub_id = str(subscription.get("id") or "").strip()
+        if not sub_id or sub_id in seen_sub_ids:
+            continue
+        seen_sub_ids.add(sub_id)
+        deduped_subscriptions.append(subscription)
+
+    best_subscription = _pick_best_stripe_subscription(deduped_subscriptions)
+    updates: dict[str, Any] = {}
+    if customer_id:
+        updates["stripe_customer_id"] = customer_id
+
+    if best_subscription:
+        best_status = str(best_subscription.get("status") or "").strip().lower()
+        price_ids = {
+            str(((item.get("price") or {}).get("id")) or "").strip()
+            for item in (((best_subscription.get("items") or {}).get("data")) or [])
+            if str(((item.get("price") or {}).get("id")) or "").strip()
+        }
+        updates.update({
+            "stripe_subscription_id": str(best_subscription.get("id") or "").strip() or None,
+            "subscription_status": best_status or "active",
+            "subscription_plan": _plan_from_price_ids(price_ids),
+        })
+    elif customer_id:
+        updates.update({
+            "subscription_status": "cancelled",
+            "subscription_plan": "free",
+            "stripe_subscription_id": None,
+        })
+
+    if updates:
+        await db.users.update_one({"id": user_doc["id"]}, {"$set": updates})
+
+    refreshed = await db.users.find_one({"id": user_doc["id"]})
+    return refreshed or user_doc
 
 
 async def _ensure_plus_usage_month(user_id: str, user_doc: dict) -> dict:
@@ -1492,34 +1639,22 @@ async def get_user_subscription_status(user_id: str) -> dict:
     
     plan = _resolve_subscription_plan(user_doc)
 
-    if plan == "max":
-        return {
-            "is_subscribed": True,
-            "plan": "max",
-            "credits_remaining": -1,  # Unlimited
-            "credits_total": -1,
-            "upload_credits_remaining": -1,  # Unlimited uploads
-            "upload_credits_total": -1,
-            "resets_at": None,
-            "monthly_llm_cost_usd": await _get_user_monthly_llm_cost(user_id),
-            "cost_guardrail_hit": False,
-        }
-
-    if plan == "plus":
+    if plan in {"plus", "max"}:
         user_doc = await _ensure_plus_usage_month(user_id, user_doc)
         ai_used = int(user_doc.get("plus_monthly_ai_used") or 0)
         upload_used = int(user_doc.get("plus_monthly_upload_used") or 0)
+        limits = _get_paid_plan_limits(plan) or {}
         llm_cost = await _get_user_monthly_llm_cost(user_id)
-        cost_guardrail_hit = llm_cost >= PLUS_MONTHLY_LLM_COST_CAP_USD
-        ai_remaining = max(0, PLUS_MONTHLY_AI_CREDITS - ai_used)
-        upload_remaining = max(0, PLUS_MONTHLY_UPLOAD_CREDITS - upload_used)
+        cost_guardrail_hit = llm_cost >= float(limits.get("llm_cost_cap_usd") or 0.0)
+        ai_remaining = max(0, int(limits.get("ai_credits") or 0) - ai_used)
+        upload_remaining = max(0, int(limits.get("upload_credits") or 0) - upload_used)
         return {
             "is_subscribed": True,
-            "plan": "plus",
+            "plan": plan,
             "credits_remaining": ai_remaining,
-            "credits_total": PLUS_MONTHLY_AI_CREDITS,
+            "credits_total": int(limits.get("ai_credits") or 0),
             "upload_credits_remaining": upload_remaining,
-            "upload_credits_total": PLUS_MONTHLY_UPLOAD_CREDITS,
+            "upload_credits_total": int(limits.get("upload_credits") or 0),
             "resets_at": None,
             "monthly_llm_cost_usd": round(llm_cost, 4),
             "cost_guardrail_hit": cost_guardrail_hit,
@@ -1574,13 +1709,8 @@ async def get_user_subscription_status(user_id: str) -> dict:
 async def check_and_use_credit(user_id: str, consume: bool = True) -> bool:
     """Check if user has credits and optionally use one. Returns True if allowed."""
     status = await get_user_subscription_status(user_id)
-    
-    # Max users always have access
-    if status['plan'] == "max":
-        return True
-    
-    # Plus metering guardrail
-    if status['plan'] == "plus":
+
+    if status['plan'] in {"plus", "max"}:
         if status.get("cost_guardrail_hit"):
             return False
         if status['credits_remaining'] <= 0:
@@ -1608,9 +1738,7 @@ async def check_and_use_credit(user_id: str, consume: bool = True) -> bool:
 async def consume_credit(user_id: str) -> None:
     """Consume one credit for free users after a successful operation."""
     status = await get_user_subscription_status(user_id)
-    if status['plan'] == "max":
-        return
-    if status['plan'] == "plus":
+    if status['plan'] in {"plus", "max"}:
         await db.users.update_one(
             {"id": user_id},
             {"$inc": {"plus_monthly_ai_used": 1}}
@@ -1624,12 +1752,8 @@ async def consume_credit(user_id: str) -> None:
 async def check_and_use_upload_credit(user_id: str) -> bool:
     """Check if user has upload credits and use one. Returns True if successful."""
     status = await get_user_subscription_status(user_id)
-    
-    # Max users always have access
-    if status['plan'] == "max":
-        return True
-    
-    if status['plan'] == "plus":
+
+    if status['plan'] in {"plus", "max"}:
         if status['upload_credits_remaining'] <= 0:
             return False
         await db.users.update_one(
@@ -1661,7 +1785,10 @@ async def ensure_has_credit(user_id: str, feature_name: str = "generations") -> 
         guardrail_hit = bool(status.get("cost_guardrail_hit"))
         message = f"Limit reached. Upgrade your plan for more {feature_name}."
         if guardrail_hit:
-            message = "Your Plus monthly AI cost guardrail was reached. Upgrade to Max for unlimited usage."
+            if status.get("plan") == "plus":
+                message = "Your Plus monthly AI cost guardrail was reached. Upgrade to Max for more monthly capacity."
+            elif status.get("plan") == "max":
+                message = "Your Max monthly AI fair-use limit was reached. Contact support if you need a higher-volume plan."
         raise HTTPException(
             status_code=402,
             detail={
@@ -2215,7 +2342,7 @@ async def _build_youtube_upload_job_payload(
         raise HTTPException(
             status_code=402,
             detail={
-                "message": "Daily upload limit reached. Upgrade to Pro for unlimited uploads!",
+                "message": "Upload limit reached. Upgrade to Plus or Max for more monthly uploads.",
                 "resets_at": status_doc.get("resets_at"),
             }
         )
@@ -4356,6 +4483,34 @@ async def create_customer_portal_session(current_user: dict = Depends(get_curren
     except Exception as e:
         logging.error(f"Portal session error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/subscription/sync", response_model=SubscriptionStatus)
+async def sync_subscription_status(current_user: dict = Depends(get_current_user)):
+    """Force-refresh a user's subscription state from Stripe."""
+    try:
+        user_doc = await db.users.find_one({"id": current_user["id"]})
+        if not user_doc:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        refreshed_user = await _sync_user_subscription_from_stripe(user_doc)
+        status = await get_user_subscription_status(refreshed_user["id"])
+        return SubscriptionStatus(
+            is_subscribed=status['is_subscribed'],
+            plan=status['plan'],
+            daily_credits_remaining=status['credits_remaining'],
+            daily_credits_total=status['credits_total'],
+            upload_credits_remaining=status['upload_credits_remaining'],
+            upload_credits_total=status['upload_credits_total'],
+            resets_at=status.get('resets_at'),
+            monthly_llm_cost_usd=status.get("monthly_llm_cost_usd"),
+            cost_guardrail_hit=status.get("cost_guardrail_hit"),
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logging.error(f"Subscription sync failed for user {current_user.get('id')}: {exc}")
+        raise HTTPException(status_code=500, detail="Failed to sync subscription status")
 
 
 # ============ Tag Generation Routes ============
@@ -7917,7 +8072,7 @@ async def get_admin_costs(current_user: dict = Depends(get_current_user)):
         if plan == "plus":
             estimated_revenue = PLUS_NET_REVENUE_USD
         elif plan == "max":
-            estimated_revenue = 10.95  # rough net after stripe fees on $12
+            estimated_revenue = MAX_NET_REVENUE_USD
         top_user_costs.append({
             "user_id": uid,
             "username": user_doc.get("username"),

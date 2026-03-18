@@ -38,7 +38,7 @@ const UpgradeModal = ({ open, onClose, onUpgrade, loading }) => {
         <DialogHeader>
           <DialogTitle className="text-2xl text-center gradient-text">Choose Your Plan</DialogTitle>
           <DialogDescription className="text-center" style={{ color: "var(--text-secondary)" }}>
-            Plus is a metered monthly plan. Max is built for high-usage producers who need more room to publish.
+            Plus is the cheap entry plan. Max gives you more monthly room without going fully unlimited.
           </DialogDescription>
         </DialogHeader>
 
@@ -48,8 +48,8 @@ const UpgradeModal = ({ open, onClose, onUpgrade, loading }) => {
             price="$5/mo"
             subtitle="Metered plan"
             bullets={[
-              "220 AI generations per month",
-              "90 YouTube uploads per month",
+              "150 AI generations per month",
+              "60 YouTube uploads per month",
               "BeatHelper queue + templates",
               "Lower-cost growth plan",
             ]}
@@ -60,10 +60,10 @@ const UpgradeModal = ({ open, onClose, onUpgrade, loading }) => {
           <PlanCard
             title="SendMyBeat Max"
             price="$12/mo"
-            subtitle="High-usage plan"
+            subtitle="Fair-use growth plan"
             bullets={[
-              "High-usage AI generations",
-              "High-usage YouTube uploads",
+              "500 AI generations per month",
+              "150 YouTube uploads per month",
               "All BeatHelper automation",
               "Priority growth workflow",
             ]}

@@ -317,7 +317,7 @@
 }
 
 .landing-auth-dialog {
-  --background: rgba(10, 14, 13, 0.98) !important;
+  --background: rgba(12, 18, 16, 0.98) !important;
   --foreground: #f8faf9 !important;
   --card-foreground: #f8faf9 !important;
   --popover-foreground: #f8faf9 !important;
@@ -326,17 +326,19 @@
   --input: rgba(255, 255, 255, 0.12) !important;
   --border: rgba(255, 255, 255, 0.1) !important;
   --ring: rgba(61, 220, 122, 0.45) !important;
-  background: rgba(10, 14, 13, 0.94) !important;
+  background:
+    linear-gradient(180deg, rgba(13, 19, 17, 0.97), rgba(9, 14, 12, 0.95)) !important;
   color: var(--landing-text) !important;
-  border-color: var(--landing-border) !important;
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5) !important;
+  border-color: rgba(84, 242, 139, 0.14) !important;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.38) !important;
 }
 
 .landing-auth-overlay {
   background:
-    radial-gradient(circle at top, rgba(61, 220, 122, 0.08), transparent 36%),
-    rgba(2, 5, 4, 0.78) !important;
-  backdrop-filter: blur(8px);
+    radial-gradient(circle at top, rgba(61, 220, 122, 0.09), transparent 34%),
+    rgba(2, 5, 4, 0.38) !important;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 
 .landing-auth-dialog,
@@ -355,6 +357,10 @@
   text-shadow: none !important;
 }
 
+.landing-auth-title {
+  color: #eefaf2 !important;
+}
+
 .landing-auth-dialog [data-state="open"] {
   opacity: 1 !important;
 }
@@ -362,31 +368,44 @@
 .landing-auth-copy,
 .landing-auth-label,
 .landing-auth-link {
-  color: var(--landing-text-soft) !important;
+  color: #d7e5dd !important;
 }
 
 .landing-auth-dialog .landing-auth-copy,
 .landing-auth-dialog .landing-auth-label,
 .landing-auth-dialog .text-muted-foreground,
 .landing-auth-dialog [data-slot="dialog-description"] {
-  color: var(--landing-text-soft) !important;
+  color: #d7e5dd !important;
   opacity: 1 !important;
+}
+
+.landing-auth-dialog form,
+.landing-auth-dialog .space-y-2,
+.landing-auth-dialog .text-center.text-sm,
+.landing-auth-dialog .landing-muted-2 {
+  color: #d7e5dd !important;
 }
 
 .landing-auth-input {
   border-color: var(--landing-border) !important;
-  background: rgba(0, 0, 0, 0.4) !important;
-  color: var(--landing-text) !important;
+  background: rgba(244, 248, 255, 0.92) !important;
+  color: #08110d !important;
   caret-color: var(--landing-accent);
 }
 
 .landing-auth-input::placeholder {
-  color: var(--landing-text-muted) !important;
+  color: rgba(8, 17, 13, 0.55) !important;
 }
 
 .landing-auth-input:focus {
   border-color: rgba(61, 220, 122, 0.5) !important;
   box-shadow: 0 0 0 3px rgba(61, 220, 122, 0.12) !important;
+}
+
+.landing-auth-dialog .landing-auth-input,
+.landing-auth-dialog .landing-auth-input:focus,
+.landing-auth-dialog .landing-auth-input:active {
+  color: #08110d !important;
 }
 
 .landing-auth-submit {
