@@ -3,22 +3,37 @@ import axios from "axios";
 import { API } from "@/App";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, RefreshCw, DollarSign, Server, Cpu } from "lucide-react";
+import { ArrowLeft, RefreshCw, DollarSign, Server, Cpu, Activity, AlertTriangle, Gauge } from "lucide-react";
 
 export default function AdminCosts() {
   const [costs, setCosts] = useState(null);
+  const [ops, setOps] = useState(null);
+  const [controls, setControls] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [savingControls, setSavingControls] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    fetchCosts();
+    fetchData();
   }, []);
 
-  const fetchCosts = async () => {
+  const extractErrorMessage = (err, fallback) => {
+    const detail = err?.response?.data?.detail;
+    if (typeof detail === "string") return detail;
+    if (detail?.message) return detail.message;
+    return fallback;
+  };
+
+  const fetchData = async () => {
     setLoading(true);
     try {
-      const response = await axios.get(`${API}/admin/costs`);
-      setCosts(response.data);
+      const [costsResponse, opsResponse] = await Promise.all([
+        axios.get(`${API}/admin/costs`),
+        axios.get(`${API}/admin/ops`),
+      ]);
+      setCosts(costsResponse.data);
+      setOps(opsResponse.data);
+      setControls(opsResponse?.data?.health?.controls || null);
       setError(null);
     } catch (err) {
       console.error("Failed to fetch costs:", err);
@@ -29,6 +44,54 @@ export default function AdminCosts() {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleToggleFeature = async (featureKey, nextValue) => {
+    if (!controls) return;
+    setSavingControls(true);
+    try {
+      const response = await axios.put(`${API}/admin/ops/controls`, {
+        disabled_features: {
+          [featureKey]: nextValue,
+        },
+      });
+      setControls(response?.data?.controls || controls);
+      await fetchData();
+    } catch (err) {
+      setError(extractErrorMessage(err, "Failed to update feature controls."));
+    } finally {
+      setSavingControls(false);
+    }
+  };
+
+  const handleSetOverloadMode = async (enabled) => {
+    setSavingControls(true);
+    try {
+      const response = await axios.put(`${API}/admin/ops/controls`, {
+        overload_mode_enabled: enabled,
+      });
+      setControls(response?.data?.controls || controls);
+      await fetchData();
+    } catch (err) {
+      setError(extractErrorMessage(err, "Failed to update overload mode."));
+    } finally {
+      setSavingControls(false);
+    }
+  };
+
+  const handleGlobalHeavyJobs = async (enabled) => {
+    setSavingControls(true);
+    try {
+      const response = await axios.put(`${API}/admin/ops/controls`, {
+        global_disable_new_heavy_jobs: enabled,
+      });
+      setControls(response?.data?.controls || controls);
+      await fetchData();
+    } catch (err) {
+      setError(extractErrorMessage(err, "Failed to update heavy-job controls."));
+    } finally {
+      setSavingControls(false);
     }
   };
 
@@ -50,7 +113,7 @@ export default function AdminCosts() {
             <Button onClick={() => window.location.href = '/dashboard'} variant="outline">
               Back to Dashboard
             </Button>
-            <Button onClick={fetchCosts}>
+            <Button onClick={fetchData}>
               Retry
             </Button>
           </div>
@@ -59,29 +122,148 @@ export default function AdminCosts() {
     );
   }
 
+  const health = ops?.health || {};
+  const healthControls = controls || health?.controls || {};
+  const disabledFeatures = healthControls?.disabled_features || {};
+
   return (
     <div className="min-h-screen bg-slate-50 py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-6xl mx-auto space-y-8">
 
-        {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-slate-900">Backend Cost Tracker</h1>
-            <p className="text-slate-500 mt-1">Estimated monthly spending for {costs?.month}</p>
+            <h1 className="text-3xl font-bold text-slate-900">Backend Ops + Cost Tracker</h1>
+            <p className="text-slate-500 mt-1">Launch hardening controls, queue visibility, and monthly cost estimates.</p>
           </div>
           <div className="flex items-center gap-3">
             <Button variant="outline" onClick={() => window.location.href = '/dashboard'} className="gap-2">
               <ArrowLeft className="h-4 w-4" />
               Back
             </Button>
-            <Button onClick={fetchCosts} className="gap-2">
+            <Button onClick={fetchData} className="gap-2" disabled={loading}>
               <RefreshCw className="h-4 w-4" />
               Refresh
             </Button>
           </div>
         </div>
 
-        {/* Key Metrics */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <Card className="border-l-4 border-emerald-500 shadow-md">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-slate-500 uppercase tracking-wide">Health</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-2">
+                <Activity className="h-8 w-8 text-emerald-500" />
+                <span className="text-2xl font-bold text-slate-900">{health?.status || "unknown"}</span>
+              </div>
+              <p className="text-xs text-slate-400 mt-2">Ready: {health?.ready ? "yes" : "no"}</p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-l-4 border-amber-500 shadow-md">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-slate-500 uppercase tracking-wide">Queued Jobs</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-2">
+                <Gauge className="h-8 w-8 text-amber-500" />
+                <span className="text-4xl font-bold text-slate-900">{health?.jobs?.queued ?? 0}</span>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-l-4 border-blue-600 shadow-md">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-slate-500 uppercase tracking-wide">Processing Jobs</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-2">
+                <Server className="h-8 w-8 text-blue-600" />
+                <span className="text-4xl font-bold text-slate-900">{health?.jobs?.processing ?? 0}</span>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-l-4 border-red-500 shadow-md">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-slate-500 uppercase tracking-wide">Failed Last Hour</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-8 w-8 text-red-500" />
+                <span className="text-4xl font-bold text-slate-900">{health?.jobs?.failed_last_hour ?? 0}</span>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card className="shadow-md">
+          <CardHeader className="bg-white border-b border-slate-100">
+            <CardTitle>Launch Controls</CardTitle>
+            <CardDescription>Use these when promo traffic starts stressing the worker queue.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6 pt-6">
+            <div className="flex flex-wrap gap-3">
+              <Button onClick={() => handleSetOverloadMode(!healthControls?.overload_mode_enabled)} disabled={savingControls} variant={healthControls?.overload_mode_enabled ? "destructive" : "default"}>
+                {healthControls?.overload_mode_enabled ? "Disable Overload Mode" : "Enable Overload Mode"}
+              </Button>
+              <Button onClick={() => handleGlobalHeavyJobs(!healthControls?.global_disable_new_heavy_jobs)} disabled={savingControls} variant="outline">
+                {healthControls?.global_disable_new_heavy_jobs ? "Allow New Heavy Jobs" : "Pause New Heavy Jobs"}
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {Object.entries(disabledFeatures).map(([featureKey, disabled]) => (
+                <div key={featureKey} className="flex items-center justify-between rounded-lg border border-slate-200 px-4 py-3">
+                  <div>
+                    <p className="font-medium text-slate-900">{featureKey.replace(/_/g, " ")}</p>
+                    <p className="text-xs text-slate-500">{disabled ? "Temporarily disabled" : "Available"}</p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant={disabled ? "destructive" : "outline"}
+                    disabled={savingControls}
+                    onClick={() => handleToggleFeature(featureKey, !disabled)}
+                  >
+                    {disabled ? "Enable" : "Disable"}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-md overflow-hidden">
+          <CardHeader className="bg-white border-b border-slate-100">
+            <CardTitle>Recent Jobs</CardTitle>
+            <CardDescription>Most recent background job activity.</CardDescription>
+          </CardHeader>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-slate-200">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Type</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Progress</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Updated</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-slate-200">
+                {(ops?.recent_jobs || []).map((job) => (
+                  <tr key={job.id}>
+                    <td className="px-4 py-3 text-sm text-slate-900">{job.type}</td>
+                    <td className="px-4 py-3 text-sm text-slate-600">{job.status}</td>
+                    <td className="px-4 py-3 text-sm text-slate-600 text-right">{job.progress}%</td>
+                    <td className="px-4 py-3 text-sm text-slate-600">{job.updated_at || "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+
+        {/* Existing cost UI */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <Card className="border-l-4 border-blue-600 shadow-md">
             <CardHeader className="pb-2">
@@ -129,7 +311,6 @@ export default function AdminCosts() {
           </Card>
         </div>
 
-        {/* Detailed Breakdown */}
         <Card className="shadow-md overflow-hidden">
           <CardHeader className="bg-white border-b border-slate-100">
             <CardTitle>Usage Breakdown</CardTitle>
@@ -197,7 +378,6 @@ export default function AdminCosts() {
           </div>
         </Card>
 
-        {/* Info Box */}
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800 flex items-start gap-3">
           <div className="bg-blue-100 p-2 rounded-full">
             <DollarSign className="h-4 w-4 text-blue-600" />
@@ -211,7 +391,6 @@ export default function AdminCosts() {
             </p>
           </div>
         </div>
-
       </div>
     </div>
   );

@@ -30,6 +30,7 @@ import requests
 import re
 import subprocess
 import html
+import hashlib
 from urllib.parse import urlencode, urlparse, urljoin
 from itsdangerous import URLSafeSerializer, BadSignature
 import socket
@@ -37,6 +38,9 @@ import ipaddress
 from cryptography.fernet import Fernet, InvalidToken as FernetInvalidToken
 from io import BytesIO
 from PIL import Image, ImageOps
+from storage import media_storage
+from services.background_jobs import BackgroundJobService
+from services.spotlight_service import SpotlightService
 from models_spotlight import (
     ProducerProfile,
     ProducerProfileUpdate,
@@ -112,6 +116,7 @@ GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', 'your_google_clien
 # Security
 security = HTTPBearer()
 _rate_limit_buckets: dict[str, list[float]] = {}
+_action_rate_limit_buckets: dict[str, list[float]] = {}
 
 
 def build_cors_origins() -> list[str]:
@@ -350,11 +355,6 @@ oauth = OAuth()
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
-# Create uploads directory
-# Use env override when provided; default to backend-local path for dev compatibility.
-UPLOADS_DIR = Path(os.environ.get("UPLOADS_DIR", str(ROOT_DIR / "uploads")))
-UPLOADS_DIR.mkdir(exist_ok=True)
-
 # ============ Cost Tracking Constants ============
 HOSTING_COST = float(os.environ.get("HOSTING_COST_USD", 3.50))
 # Grok-2 pricing (approximate): $2.00/M input, $10.00/M output
@@ -371,6 +371,20 @@ PLUS_NET_REVENUE_USD = float(os.environ.get("PLUS_NET_REVENUE_USD", "4.56"))
 _llm_client = None
 _llm_config = None
 _beathelper_scheduler_task: asyncio.Task | None = None
+_upload_job_worker_task: asyncio.Task | None = None
+_spotlight_refresh_task: asyncio.Task | None = None
+UPLOAD_JOB_POLL_INTERVAL_SECONDS = int(os.environ.get("UPLOAD_JOB_POLL_INTERVAL_SECONDS", "2"))
+UPLOAD_JOB_STALE_AFTER_SECONDS = int(os.environ.get("UPLOAD_JOB_STALE_AFTER_SECONDS", "1800"))
+UPLOAD_JOB_WORKER_ID = f"upload-worker-{uuid.uuid4().hex[:10]}"
+SPOTLIGHT_REFRESH_INTERVAL_SECONDS = int(os.environ.get("SPOTLIGHT_REFRESH_INTERVAL_SECONDS", "1800"))
+METADATA_CACHE_TTL_SECONDS = int(os.environ.get("METADATA_CACHE_TTL_SECONDS", "86400"))
+IMAGE_SEARCH_CACHE_TTL_SECONDS = int(os.environ.get("IMAGE_SEARCH_CACHE_TTL_SECONDS", "21600"))
+OPS_DEFAULT_MAX_QUEUED_JOBS = int(os.environ.get("OPS_DEFAULT_MAX_QUEUED_JOBS", "60"))
+OPS_DEFAULT_MAX_PROCESSING_JOBS = int(os.environ.get("OPS_DEFAULT_MAX_PROCESSING_JOBS", "8"))
+OPS_DEFAULT_MAX_USER_ACTIVE_JOBS = int(os.environ.get("OPS_DEFAULT_MAX_USER_ACTIVE_JOBS", "4"))
+OPS_HEALTH_WARN_QUEUE_DEPTH = int(os.environ.get("OPS_HEALTH_WARN_QUEUE_DEPTH", "25"))
+OPS_HEALTH_FAIL_QUEUE_DEPTH = int(os.environ.get("OPS_HEALTH_FAIL_QUEUE_DEPTH", "80"))
+OPS_FAIL_OPEN_HEALTH_SECONDS = int(os.environ.get("OPS_FAIL_OPEN_HEALTH_SECONDS", "120"))
 
 
 async def track_llm_usage(user_id: str | None, usage_type: str, prompt_tokens: int, completion_tokens: int):
@@ -572,19 +586,19 @@ def _store_uploaded_image_bytes(
     ext = (file_ext or "").lower()
     if ext not in [".jpg", ".jpeg", ".png", ".webp", ".webm", ".mp4", ".mov", ".m4v"]:
         ext = ".jpg"
-    filename = f"{file_id}{ext}"
-    file_path = UPLOADS_DIR / filename
-    with open(file_path, "wb") as buffer:
-        buffer.write(image_bytes)
+    storage_meta = media_storage.save_bytes(data=image_bytes, file_id=file_id, file_ext=ext)
     media_kind = "video" if ext in {".webm", ".mp4", ".mov", ".m4v"} else "image"
     upload_doc = {
         "id": file_id,
         "user_id": current_user_id,
         "original_filename": original_filename,
-        "stored_filename": filename,
+        "stored_filename": storage_meta["stored_filename"],
         "file_type": "image",
         "media_kind": media_kind,
-        "file_path": str(file_path),
+        "file_path": storage_meta["file_path"],
+        "storage_backend": storage_meta["storage_backend"],
+        "storage_key": storage_meta["storage_key"],
+        "file_size": storage_meta["file_size"],
         "uploaded_at": datetime.now(timezone.utc).isoformat()
     }
     return {"file_id": file_id, "filename": original_filename, "upload_doc": upload_doc}
@@ -596,7 +610,7 @@ def _visual_kind_from_upload(upload_doc: dict | None) -> str:
     explicit = str(upload_doc.get("media_kind") or "").strip().lower()
     if explicit in {"image", "video"}:
         return explicit
-    path_suffix = Path(str(upload_doc.get("file_path") or "")).suffix.lower()
+    path_suffix = media_storage.get_suffix(upload_doc)
     return "video" if path_suffix in {".webm", ".mp4", ".mov", ".m4v"} else "image"
 
 
@@ -848,6 +862,19 @@ class YouTubeUploadRequest(BaseModel):
     tags_id: Optional[str] = None
     privacy_status: str = "public"  # public, unlisted, private
 
+
+class UploadJobResponse(BaseModel):
+    id: str
+    type: str
+    user_id: str
+    status: Literal["queued", "processing", "succeeded", "failed"]
+    progress: int = 0
+    message: str = ""
+    result: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
+    created_at: str
+    updated_at: str
+
 class YouTubeConnectionStatus(BaseModel):
     connected: bool
     email: Optional[str] = None
@@ -972,6 +999,17 @@ class ThemeGenerateResponse(BaseModel):
     theme_name: str
     description: str
     variables: Dict[str, str]
+
+
+class OpsControlsUpdateRequest(BaseModel):
+    overload_mode_enabled: Optional[bool] = None
+    global_disable_new_heavy_jobs: Optional[bool] = None
+    max_queued_jobs: Optional[int] = None
+    max_processing_jobs: Optional[int] = None
+    max_user_active_jobs: Optional[int] = None
+    disabled_features: Optional[Dict[str, bool]] = None
+    queue_job_types_when_busy: Optional[Dict[str, bool]] = None
+    overload_message: Optional[str] = None
 
 
 class BeatHelperQueueCreateRequest(BaseModel):
@@ -1740,6 +1778,1476 @@ def _safe_iso_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _stable_json_dumps(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+
+
+def _build_ai_cache_key(*, namespace: str, user_id: str, payload: dict[str, Any]) -> str:
+    payload_hash = hashlib.sha256(_stable_json_dumps(payload).encode("utf-8")).hexdigest()
+    return f"{namespace}:v1:{user_id}:{payload_hash}"
+
+
+def _cache_expiry_iso(ttl_seconds: int) -> str:
+    return (datetime.now(timezone.utc) + timedelta(seconds=max(60, int(ttl_seconds)))).isoformat()
+
+
+async def _get_cached_ai_payload(cache_key: str) -> Optional[dict[str, Any]]:
+    now = _safe_iso_now()
+    doc = await db.ai_response_cache.find_one(
+        {
+            "key": cache_key,
+            "expires_at": {"$gt": now},
+        },
+        {"_id": 0, "payload": 1},
+    )
+    payload = doc.get("payload") if doc else None
+    return payload if isinstance(payload, dict) else None
+
+
+async def _set_cached_ai_payload(
+    *,
+    cache_key: str,
+    cache_type: str,
+    user_id: str,
+    payload: dict[str, Any],
+    ttl_seconds: int,
+) -> None:
+    now = _safe_iso_now()
+    await db.ai_response_cache.update_one(
+        {"key": cache_key},
+        {
+            "$set": {
+                "key": cache_key,
+                "type": cache_type,
+                "user_id": user_id,
+                "payload": payload,
+                "updated_at": now,
+                "expires_at": _cache_expiry_iso(ttl_seconds),
+            },
+            "$setOnInsert": {
+                "created_at": now,
+            },
+        },
+        upsert=True,
+    )
+
+
+async def _find_active_background_job(*, current_user: dict, job_type: str, cache_key: str) -> Optional[dict]:
+    return await db.upload_jobs.find_one(
+        {
+            "user_id": current_user["id"],
+            "type": job_type,
+            "status": {"$in": ["queued", "processing"]},
+            "payload.cache_key": cache_key,
+        },
+        {"_id": 0},
+        sort=[("created_at", -1)],
+    )
+
+
+def _default_ops_controls() -> dict[str, Any]:
+    return {
+        "overload_mode_enabled": False,
+        "global_disable_new_heavy_jobs": False,
+        "max_queued_jobs": OPS_DEFAULT_MAX_QUEUED_JOBS,
+        "max_processing_jobs": OPS_DEFAULT_MAX_PROCESSING_JOBS,
+        "max_user_active_jobs": OPS_DEFAULT_MAX_USER_ACTIVE_JOBS,
+        "disabled_features": {
+            "youtube_upload": False,
+            "channel_analytics": False,
+            "thumbnail_check": False,
+            "tag_generation": False,
+            "tag_join": False,
+            "image_search": False,
+            "beat_analysis": False,
+            "beat_fix": False,
+            "description_generate": False,
+            "description_refine": False,
+        },
+        "queue_job_types_when_busy": {
+            "youtube_upload": True,
+            "channel_analytics": True,
+            "thumbnail_check": True,
+            "tag_generation": True,
+            "tag_join": True,
+            "image_search": True,
+            "beat_analysis": True,
+            "beat_fix": True,
+        },
+        "overload_message": "Capacity is busy right now. Your request may be queued or temporarily unavailable.",
+        "updated_at": None,
+    }
+
+
+def _merge_ops_controls(raw: Optional[dict]) -> dict[str, Any]:
+    merged = _default_ops_controls()
+    if not isinstance(raw, dict):
+        return merged
+    for key in ["overload_mode_enabled", "global_disable_new_heavy_jobs", "overload_message"]:
+        if key in raw:
+            merged[key] = raw[key]
+    for key in ["max_queued_jobs", "max_processing_jobs", "max_user_active_jobs"]:
+        if isinstance(raw.get(key), int) and raw.get(key) > 0:
+            merged[key] = int(raw[key])
+    if isinstance(raw.get("disabled_features"), dict):
+        merged["disabled_features"].update({k: bool(v) for k, v in raw["disabled_features"].items()})
+    if isinstance(raw.get("queue_job_types_when_busy"), dict):
+        merged["queue_job_types_when_busy"].update({k: bool(v) for k, v in raw["queue_job_types_when_busy"].items()})
+    merged["updated_at"] = raw.get("updated_at")
+    return merged
+
+
+async def _get_ops_controls() -> dict[str, Any]:
+    doc = await db.system_settings.find_one({"key": "ops_controls"}, {"_id": 0, "value": 1, "updated_at": 1})
+    value = dict(doc.get("value") or {}) if doc else {}
+    if doc and doc.get("updated_at") and "updated_at" not in value:
+        value["updated_at"] = doc.get("updated_at")
+    return _merge_ops_controls(value)
+
+
+async def _set_ops_controls(update_request: OpsControlsUpdateRequest) -> dict[str, Any]:
+    existing = await _get_ops_controls()
+    next_value = _merge_ops_controls(existing)
+    payload = update_request.model_dump(exclude_none=True)
+    for key, value in payload.items():
+        if key in {"disabled_features", "queue_job_types_when_busy"} and isinstance(value, dict):
+            next_value[key].update({k: bool(v) for k, v in value.items()})
+        else:
+            next_value[key] = value
+    next_value["updated_at"] = _safe_iso_now()
+    await db.system_settings.update_one(
+        {"key": "ops_controls"},
+        {"$set": {"key": "ops_controls", "value": next_value, "updated_at": next_value["updated_at"]}},
+        upsert=True,
+    )
+    return next_value
+
+
+async def _get_background_job_stats() -> dict[str, Any]:
+    pipeline = [
+        {"$group": {"_id": "$status", "count": {"$sum": 1}}},
+    ]
+    rows = await db.upload_jobs.aggregate(pipeline).to_list(None)
+    counts = {str(row.get("_id") or ""): int(row.get("count") or 0) for row in rows}
+    queued = counts.get("queued", 0)
+    processing = counts.get("processing", 0)
+    failed_recent = await db.upload_jobs.count_documents(
+        {
+            "status": "failed",
+            "updated_at": {"$gte": (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()},
+        }
+    )
+    oldest_queued = await db.upload_jobs.find_one(
+        {"status": "queued"},
+        {"_id": 0, "created_at": 1, "type": 1},
+        sort=[("created_at", 1)],
+    )
+    return {
+        "queued": queued,
+        "processing": processing,
+        "succeeded": counts.get("succeeded", 0),
+        "failed": counts.get("failed", 0),
+        "failed_last_hour": int(failed_recent),
+        "oldest_queued_job": oldest_queued,
+    }
+
+
+async def _build_health_snapshot() -> dict[str, Any]:
+    now = _safe_iso_now()
+    controls = await _get_ops_controls()
+    job_stats = await _get_background_job_stats()
+    db_ok = True
+    db_error = None
+    try:
+        await db.command("ping")
+    except Exception as exc:
+        db_ok = False
+        db_error = str(exc)
+
+    queue_depth = int(job_stats.get("queued") or 0)
+    processing = int(job_stats.get("processing") or 0)
+    status = "healthy"
+    readiness = True
+    warnings: list[str] = []
+
+    if not db_ok:
+        status = "unhealthy"
+        readiness = False
+        warnings.append("Database ping failed.")
+    elif queue_depth >= OPS_HEALTH_FAIL_QUEUE_DEPTH:
+        status = "degraded"
+        readiness = False
+        warnings.append("Queued jobs exceeded fail threshold.")
+    elif queue_depth >= OPS_HEALTH_WARN_QUEUE_DEPTH or processing >= controls["max_processing_jobs"]:
+        status = "degraded"
+        warnings.append("Background job load is elevated.")
+
+    if controls.get("overload_mode_enabled"):
+        warnings.append("Manual overload mode is enabled.")
+
+    return {
+        "status": status,
+        "ready": readiness,
+        "timestamp": now,
+        "db": {"ok": db_ok, "error": db_error},
+        "jobs": job_stats,
+        "controls": controls,
+        "warnings": warnings,
+    }
+
+
+def _prune_action_bucket(bucket_key: str, *, window_seconds: int) -> list[float]:
+    now_ts = datetime.now(timezone.utc).timestamp()
+    window_start = now_ts - window_seconds
+    timestamps = [ts for ts in _action_rate_limit_buckets.get(bucket_key, []) if ts >= window_start]
+    _action_rate_limit_buckets[bucket_key] = timestamps
+    return timestamps
+
+
+def _enforce_action_rate_limit(bucket_key: str, *, limit: int, window_seconds: int, detail_message: str) -> None:
+    timestamps = _prune_action_bucket(bucket_key, window_seconds=window_seconds)
+    if len(timestamps) >= limit:
+        raise HTTPException(status_code=429, detail=detail_message)
+    timestamps.append(datetime.now(timezone.utc).timestamp())
+    _action_rate_limit_buckets[bucket_key] = timestamps
+
+
+async def _guard_heavy_feature(
+    *,
+    current_user: dict,
+    feature_key: str,
+    job_type: str | None = None,
+    queue_allowed_when_busy: bool = True,
+) -> None:
+    controls = await _get_ops_controls()
+    disabled_features = controls.get("disabled_features") or {}
+    if disabled_features.get(feature_key):
+        raise HTTPException(status_code=503, detail={"message": f"{feature_key.replace('_', ' ').title()} is temporarily disabled.", "code": "feature_disabled"})
+
+    if controls.get("global_disable_new_heavy_jobs") and job_type:
+        raise HTTPException(status_code=503, detail={"message": controls.get("overload_message"), "code": "heavy_jobs_disabled"})
+
+    job_stats = await _get_background_job_stats()
+    if job_type:
+        user_active_jobs = await db.upload_jobs.count_documents(
+            {
+                "user_id": current_user["id"],
+                "status": {"$in": ["queued", "processing"]},
+            }
+        )
+        if user_active_jobs >= int(controls.get("max_user_active_jobs") or OPS_DEFAULT_MAX_USER_ACTIVE_JOBS):
+            raise HTTPException(status_code=429, detail={"message": "You already have too many active jobs running. Wait for one to finish.", "code": "too_many_active_jobs"})
+
+    queue_too_busy = int(job_stats.get("queued") or 0) >= int(controls.get("max_queued_jobs") or OPS_DEFAULT_MAX_QUEUED_JOBS)
+    processing_too_busy = int(job_stats.get("processing") or 0) >= int(controls.get("max_processing_jobs") or OPS_DEFAULT_MAX_PROCESSING_JOBS)
+    if queue_too_busy or processing_too_busy or controls.get("overload_mode_enabled"):
+        if job_type and queue_allowed_when_busy and controls.get("queue_job_types_when_busy", {}).get(job_type, True):
+            return
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "message": controls.get("overload_message"),
+                "code": "capacity_busy",
+                "queued_jobs": job_stats.get("queued"),
+                "processing_jobs": job_stats.get("processing"),
+            },
+        )
+
+
+def _clean_youtube_tags(raw_tags: list[str] | None) -> list[str]:
+    tags: list[str] = []
+    total_chars = 0
+    for tag in raw_tags or []:
+        cleaned_tag = str(tag or "").strip().replace('"', '').replace("'", '')
+        if not cleaned_tag or len(cleaned_tag) > 30:
+            continue
+        tag_length = len(cleaned_tag) + 2
+        if total_chars + tag_length > 450:
+            break
+        tags.append(cleaned_tag)
+        total_chars += tag_length
+    return tags
+
+
+def _normalize_upload_render_settings(
+    aspect_ratio: str,
+    image_scale: float,
+    image_scale_x: float | None,
+    image_scale_y: float | None,
+    image_pos_x: float,
+    image_pos_y: float,
+    image_rotation: float,
+    background_color: str,
+) -> dict[str, Any]:
+    safe_aspect_ratio = (aspect_ratio or "16:9").strip()
+    aspect_map = {
+        "16:9": (1280, 720),
+        "1:1": (1080, 1080),
+        "9:16": (1080, 1920),
+        "4:5": (1080, 1350),
+    }
+    if safe_aspect_ratio not in aspect_map:
+        raise HTTPException(status_code=400, detail="Invalid aspect_ratio. Use 16:9, 1:1, 9:16, or 4:5.")
+
+    scale_x = image_scale_x if image_scale_x is not None else image_scale
+    scale_y = image_scale_y if image_scale_y is not None else image_scale
+    if not 0.5 <= scale_x <= 2.0:
+        raise HTTPException(status_code=400, detail="image_scale_x must be between 0.5 and 2.0.")
+    if not 0.5 <= scale_y <= 2.0:
+        raise HTTPException(status_code=400, detail="image_scale_y must be between 0.5 and 2.0.")
+    if not -1.0 <= image_pos_x <= 1.0:
+        raise HTTPException(status_code=400, detail="image_pos_x must be between -1 and 1.")
+    if not -1.0 <= image_pos_y <= 1.0:
+        raise HTTPException(status_code=400, detail="image_pos_y must be between -1 and 1.")
+    if not -180.0 <= image_rotation <= 180.0:
+        raise HTTPException(status_code=400, detail="image_rotation must be between -180 and 180 degrees.")
+
+    safe_background_color = (background_color or "black").strip().lower()
+    if safe_background_color not in ("black", "white"):
+        raise HTTPException(status_code=400, detail="background_color must be black or white.")
+
+    return {
+        "aspect_ratio": safe_aspect_ratio,
+        "target_w": aspect_map[safe_aspect_ratio][0],
+        "target_h": aspect_map[safe_aspect_ratio][1],
+        "image_scale": float(image_scale),
+        "image_scale_x": float(scale_x),
+        "image_scale_y": float(scale_y),
+        "image_pos_x": float(image_pos_x),
+        "image_pos_y": float(image_pos_y),
+        "image_rotation": float(image_rotation),
+        "background_color": safe_background_color,
+    }
+
+
+def _sanitize_upload_job_doc(doc: Optional[dict]) -> Optional[dict]:
+    return background_job_service.sanitize_job_doc(doc)
+
+
+async def _update_upload_job(
+    job_id: str,
+    *,
+    status: str | None = None,
+    progress: int | None = None,
+    message: str | None = None,
+    result: dict | None = None,
+    error: str | None = None,
+    extra_updates: dict[str, Any] | None = None,
+) -> None:
+    await background_job_service.update_job(
+        job_id,
+        status=status,
+        progress=progress,
+        message=message,
+        result=result,
+        error=error,
+        extra_updates=extra_updates,
+    )
+
+
+async def _finalize_beathelper_upload_job(job: dict, *, success: bool, result: dict | None = None, error: str | None = None) -> None:
+    payload = job.get("payload") or {}
+    item_id = payload.get("beat_helper_item_id")
+    if not item_id:
+        return
+
+    updates: dict[str, Any] = {"updated_at": _safe_iso_now()}
+    if success:
+        updates.update({
+            "status": "uploaded",
+            "uploaded_at": _safe_iso_now(),
+            "video_id": (result or {}).get("video_id"),
+            "video_url": (result or {}).get("video_url"),
+            "upload_job_id": job.get("id"),
+            "upload_job_status": "succeeded",
+        })
+    else:
+        updates.update({
+            "status": "upload_failed",
+            "upload_job_id": job.get("id"),
+            "upload_job_status": "failed",
+            "upload_error": error,
+        })
+
+    await db.beat_helper_queue.update_one(
+        {"id": item_id, "user_id": job.get("user_id")},
+        {"$set": updates},
+    )
+
+
+async def _build_youtube_upload_job_payload(
+    *,
+    current_user: dict,
+    title: str,
+    description_id: str,
+    tags_id: str | None,
+    privacy_status: str,
+    audio_file_id: str,
+    image_file_id: str,
+    description_override: str | None,
+    aspect_ratio: str,
+    image_scale: float,
+    image_scale_x: float | None,
+    image_scale_y: float | None,
+    image_pos_x: float,
+    image_pos_y: float,
+    image_rotation: float,
+    background_color: str,
+    remove_watermark: bool,
+    beat_helper_item_id: str | None = None,
+) -> dict[str, Any]:
+    user_id = current_user["id"]
+    user_sub_status = await get_user_subscription_status(user_id)
+    is_subscribed = bool(user_sub_status.get("is_subscribed", False))
+
+    if remove_watermark and not is_subscribed:
+        raise HTTPException(
+            status_code=402,
+            detail={
+                "message": "Watermark removal is a Pro feature. Upgrade to Pro to remove watermarks!",
+                "feature": "remove_watermark",
+            }
+        )
+
+    has_credit = await check_and_use_upload_credit(user_id)
+    if not has_credit:
+        status_doc = await get_user_subscription_status(user_id)
+        raise HTTPException(
+            status_code=402,
+            detail={
+                "message": "Daily upload limit reached. Upgrade to Pro for unlimited uploads!",
+                "resets_at": status_doc.get("resets_at"),
+            }
+        )
+
+    desc_doc = await db.descriptions.find_one({"id": description_id, "user_id": user_id})
+    if not desc_doc:
+        raise HTTPException(status_code=404, detail="Description not found")
+
+    description_text = str(description_override or desc_doc.get("content") or "").strip()
+    promo_line = "Visit www.sendmybeat.com to upload beats for free!"
+    if not is_subscribed:
+        if description_text.lower().startswith(promo_line.lower()):
+            pass
+        elif description_text:
+            description_text = f"{promo_line}\n{description_text}"
+        else:
+            description_text = promo_line
+
+    tags: list[str] = []
+    if tags_id:
+        tags_doc = await db.tag_generations.find_one({"id": tags_id, "user_id": user_id})
+        if tags_doc:
+            tags = _clean_youtube_tags(tags_doc.get("tags") or [])
+            logging.info(
+                f"Using {len(tags)} tags out of {len(tags_doc.get('tags') or [])} generated for async upload job"
+            )
+
+    audio_file = await db.uploads.find_one({"id": audio_file_id, "user_id": user_id})
+    image_file = await db.uploads.find_one({"id": image_file_id, "user_id": user_id})
+    if not audio_file or not image_file:
+        raise HTTPException(status_code=404, detail="Audio and image files are required")
+
+    render_settings = _normalize_upload_render_settings(
+        aspect_ratio=aspect_ratio,
+        image_scale=image_scale,
+        image_scale_x=image_scale_x,
+        image_scale_y=image_scale_y,
+        image_pos_x=image_pos_x,
+        image_pos_y=image_pos_y,
+        image_rotation=image_rotation,
+        background_color=background_color,
+    )
+
+    return {
+        "title": str(title or "").strip(),
+        "description_id": description_id,
+        "tags_id": tags_id or "",
+        "privacy_status": str(privacy_status or "public").strip() or "public",
+        "audio_file_id": audio_file_id,
+        "image_file_id": image_file_id,
+        "description_text": description_text,
+        "tags": tags,
+        "remove_watermark": bool(remove_watermark),
+        "is_subscribed": is_subscribed,
+        "beat_helper_item_id": beat_helper_item_id or "",
+        "render_settings": render_settings,
+    }
+
+
+async def _create_background_job(
+    *,
+    current_user: dict,
+    job_type: str,
+    payload: dict[str, Any],
+    message: str = "Queued for background processing.",
+) -> dict:
+    return await background_job_service.create_job(
+        current_user=current_user,
+        job_type=job_type,
+        payload=payload,
+        message=message,
+    )
+
+
+async def _create_youtube_upload_job(*, current_user: dict, payload: dict[str, Any]) -> dict:
+    job_doc = await _create_background_job(
+        current_user=current_user,
+        job_type="youtube_upload",
+        payload=payload,
+        message="Queued for background processing.",
+    )
+
+    beat_helper_item_id = payload.get("beat_helper_item_id")
+    if beat_helper_item_id:
+        now = _safe_iso_now()
+        await db.beat_helper_queue.update_one(
+            {"id": beat_helper_item_id, "user_id": current_user["id"]},
+            {"$set": {
+                "status": "uploading",
+                "upload_job_id": job_doc["id"],
+                "upload_job_status": "queued",
+                "updated_at": now,
+            }}
+        )
+
+    return job_doc
+
+
+def _ensure_ffmpeg_available() -> str:
+    ffmpeg_path = shutil.which('ffmpeg')
+    if ffmpeg_path:
+        logging.info(f"Using FFmpeg at: {ffmpeg_path}")
+        return ffmpeg_path
+
+    logging.warning("FFmpeg not found, attempting to install...")
+    try:
+        subprocess.run(['apt-get', 'update'], capture_output=True, timeout=120)
+        subprocess.run(['apt-get', 'install', '-y', 'ffmpeg'], capture_output=True, timeout=300)
+        ffmpeg_path = shutil.which('ffmpeg')
+        if ffmpeg_path:
+            logging.info(f"FFmpeg successfully installed at {ffmpeg_path}")
+            return ffmpeg_path
+        raise RuntimeError("FFmpeg installation failed")
+    except Exception as install_error:
+        logging.error(f"Failed to install FFmpeg: {str(install_error)}")
+        raise RuntimeError("FFmpeg not available. Please contact support or install FFmpeg on the server.")
+
+
+async def _auto_checkin_growth_upload(user_id: str) -> None:
+    try:
+        today = datetime.now(timezone.utc).date().isoformat()
+        growth = await db.growth_streaks.find_one({"user_id": user_id})
+
+        if growth and growth.get('last_checkin_date') != today:
+            last_checkin = growth.get('last_checkin_date')
+            current_streak = growth.get('current_streak', 0)
+
+            if last_checkin:
+                last_date = datetime.fromisoformat(last_checkin).date()
+                today_date = datetime.fromisoformat(today).date()
+                days_diff = (today_date - last_date).days
+                if days_diff == 1:
+                    current_streak += 1
+                elif days_diff > 1:
+                    current_streak = 1
+            else:
+                current_streak = 1
+
+            total_days = growth.get('total_days_completed', 0) + 1
+            longest_streak = max(growth.get('longest_streak', 0), current_streak)
+            calendar = growth.get('calendar', {})
+            calendar[today] = {"status": "completed", "activity": "youtube_upload"}
+
+            await db.growth_streaks.update_one(
+                {"user_id": user_id},
+                {"$set": {
+                    "current_streak": current_streak,
+                    "longest_streak": longest_streak,
+                    "total_days_completed": total_days,
+                    "last_checkin_date": today,
+                    "calendar": calendar,
+                }}
+            )
+            logging.info(f"Auto check-in complete for user {user_id}")
+    except Exception as exc:
+        logging.error(f"Auto checkin failed: {str(exc)}")
+
+
+async def _execute_youtube_upload_pipeline(job: dict) -> dict:
+    payload = job.get("payload") or {}
+    user_id = str(job.get("user_id") or "")
+    current_user = {"id": user_id}
+
+    await _update_upload_job(job["id"], progress=10, message="Refreshing YouTube connection...")
+    credentials = await refresh_youtube_token(user_id)
+
+    await _update_upload_job(job["id"], progress=20, message="Loading upload assets...")
+    audio_file = await db.uploads.find_one({"id": payload.get("audio_file_id"), "user_id": user_id})
+    image_file = await db.uploads.find_one({"id": payload.get("image_file_id"), "user_id": user_id})
+    if not audio_file or not image_file:
+        raise RuntimeError("Audio and image files are required")
+
+    visual_kind = _visual_kind_from_upload(image_file)
+    ffmpeg_path = _ensure_ffmpeg_available()
+
+    render_settings = payload.get("render_settings") or {}
+    target_w = int(render_settings.get("target_w") or 1280)
+    target_h = int(render_settings.get("target_h") or 720)
+    scale_x = min(float(render_settings.get("image_scale_x") or 1.0), 1.0)
+    scale_y = min(float(render_settings.get("image_scale_y") or 1.0), 1.0)
+    image_pos_x = float(render_settings.get("image_pos_x") or 0.0)
+    image_pos_y = float(render_settings.get("image_pos_y") or 0.0)
+    image_rotation = float(render_settings.get("image_rotation") or 0.0)
+    background_color = str(render_settings.get("background_color") or "black")
+    fit_expr = f"min({target_w}/iw\\,{target_h}/ih)"
+
+    rotation_filter = ""
+    if abs(image_rotation) > 0.01:
+        rotation_filter = f"rotate={image_rotation}*PI/180:c={background_color}:ow=rotw(iw):oh=roth(ih),"
+
+    video_filter = (
+        f"scale=iw*{fit_expr}*{scale_x}:ih*{fit_expr}*{scale_y},"
+        f"{rotation_filter}"
+        f"pad={target_w}:{target_h}:(ow-iw)/2+(ow-iw)/2*{image_pos_x}:(oh-ih)/2+(oh-ih)/2*{image_pos_y}:{background_color}"
+    )
+
+    should_add_watermark = not bool(payload.get("is_subscribed")) or not bool(payload.get("remove_watermark"))
+    if should_add_watermark:
+        watermark_text = 'Upload your beats for free: https://sendmybeat.com'
+        watermark_text_escaped = watermark_text.replace(':', r'\:').replace('/', r'\/')
+        video_filter += (
+            f",drawtext=text='{watermark_text_escaped}':fontcolor=white:fontsize=20:x=20:y=20:"
+            "fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:box=1:boxcolor=black@0.6:boxborderw=8"
+        )
+
+    video_path = media_storage.create_temp_path(".mp4")
+
+    try:
+        await _update_upload_job(job["id"], progress=40, message="Rendering video with FFmpeg...")
+        async with media_storage.local_path_for_processing(audio_file) as audio_path, media_storage.local_path_for_processing(image_file) as image_path:
+            audio_ext = audio_path.suffix.lower()
+            copy_audio = audio_ext in (".mp3", ".m4a", ".aac")
+            audio_args = ['-c:a', 'copy'] if copy_audio else ['-c:a', 'aac', '-b:a', '320k', '-ar', '48000']
+
+            if visual_kind == "video":
+                ffmpeg_cmd = [
+                    ffmpeg_path, '-stream_loop', '-1', '-i', str(image_path), '-i', str(audio_path),
+                    '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28',
+                    *audio_args, '-pix_fmt', 'yuv420p', '-vf', video_filter, '-shortest', '-movflags', '+faststart',
+                    '-threads', '0', '-y', str(video_path)
+                ]
+            else:
+                ffmpeg_cmd = [
+                    ffmpeg_path, '-loop', '1', '-framerate', '0.5', '-i', str(image_path), '-i', str(audio_path),
+                    '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', '-tune', 'stillimage', *audio_args,
+                    '-pix_fmt', 'yuv420p', '-vf', video_filter, '-shortest', '-movflags', '+faststart', '-threads', '0',
+                    '-y', str(video_path)
+                ]
+
+            result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True, timeout=600)
+        if result.returncode != 0:
+            raise RuntimeError(f"Video creation failed: {(result.stderr or '')[:500]}")
+
+        await _update_upload_job(job["id"], progress=70, message="Uploading video to YouTube...")
+        youtube = build('youtube', 'v3', credentials=credentials)
+        snippet = {
+            'title': str(payload.get("title") or "")[:100],
+            'description': str(payload.get("description_text") or "")[:5000],
+            'categoryId': '10',
+        }
+        tags = payload.get("tags") or []
+        if tags:
+            snippet['tags'] = tags
+
+        body = {
+            'snippet': snippet,
+            'status': {
+                'privacyStatus': payload.get("privacy_status") or "public",
+                'selfDeclaredMadeForKids': False,
+            },
+        }
+
+        file_size = video_path.stat().st_size
+        chunk_size = 10 * 1024 * 1024 if file_size > 50 * 1024 * 1024 else 5 * 1024 * 1024
+        media = MediaFileUpload(str(video_path), chunksize=chunk_size, resumable=True)
+        request = youtube.videos().insert(part='snippet,status', body=body, media_body=media)
+
+        response = None
+        retries = 0
+        max_retries = 5
+        while response is None and retries < max_retries:
+            try:
+                status, response = request.next_chunk()
+                if status:
+                    progress = 70 + int(status.progress() * 25)
+                    await _update_upload_job(job["id"], progress=progress, message=f"Uploading to YouTube... {int(status.progress() * 100)}%")
+            except Exception as exc:
+                retries += 1
+                logging.error(f"Upload error for job {job['id']} (retry {retries}/{max_retries}): {str(exc)}")
+                if retries >= max_retries:
+                    raise RuntimeError(f"YouTube upload failed after {max_retries} retries: {str(exc)}")
+
+        result_payload = {
+            "success": True,
+            "message": "Video uploaded to YouTube successfully!",
+            "video_id": response['id'],
+            "video_url": f"https://www.youtube.com/watch?v={response['id']}",
+            "title": payload.get("title"),
+            "privacy_status": payload.get("privacy_status"),
+            "tags_count": len(tags),
+        }
+
+        await _auto_checkin_growth_upload(user_id)
+        return result_payload
+    finally:
+        try:
+            if video_path.exists():
+                video_path.unlink()
+        except Exception:
+            pass
+
+
+async def _process_youtube_upload_job(job: dict) -> None:
+    job_id = job["id"]
+    try:
+        result = await _execute_youtube_upload_pipeline(job)
+        await _update_upload_job(
+            job_id,
+            status="succeeded",
+            progress=100,
+            message="Upload completed successfully.",
+            result=result,
+            error=None,
+            extra_updates={"completed_at": _safe_iso_now(), "worker_id": UPLOAD_JOB_WORKER_ID},
+        )
+        await _finalize_beathelper_upload_job(job, success=True, result=result)
+    except Exception as exc:
+        error_message = str(exc)
+        logging.error(f"YouTube upload job {job_id} failed: {error_message}")
+        await _update_upload_job(
+            job_id,
+            status="failed",
+            progress=100,
+            message="Upload failed.",
+            error=error_message,
+            extra_updates={"failed_at": _safe_iso_now(), "worker_id": UPLOAD_JOB_WORKER_ID},
+        )
+        await _finalize_beathelper_upload_job(job, success=False, error=error_message)
+
+
+async def _claim_next_background_job() -> dict | None:
+    return await background_job_service.claim_next_job()
+
+
+async def _requeue_stale_background_jobs() -> None:
+    await background_job_service.requeue_stale_jobs()
+
+
+async def _process_background_job(job: dict) -> None:
+    await background_job_service.process_job(job)
+
+
+async def _background_job_worker_loop() -> None:
+    await background_job_service.worker_loop()
+
+
+async def _build_channel_analytics_job_payload(current_user: dict) -> dict[str, Any]:
+    subscription_status = await get_user_subscription_status(current_user['id'])
+    analytics_plan = subscription_status.get("plan") or "free"
+    using_free_monthly_analytics = analytics_plan == "free"
+
+    if using_free_monthly_analytics:
+        free_analytics_available = await _can_use_free_monthly_analytics(current_user['id'])
+        if not free_analytics_available:
+            raise HTTPException(
+                status_code=402,
+                detail={
+                    "message": "Free users get 1 channel analysis per month. Upgrade to Plus or Max for more analytics access.",
+                    "resets_at": subscription_status.get("resets_at"),
+                }
+            )
+    else:
+        await ensure_has_credit(current_user['id'], "analytics")
+
+    connection = await db.youtube_connections.find_one({"user_id": current_user['id']})
+    if not connection:
+        raise HTTPException(status_code=400, detail="YouTube account not connected")
+
+    return {
+        "using_free_monthly_analytics": using_free_monthly_analytics,
+    }
+
+
+async def _execute_channel_analytics_job(job: dict) -> dict:
+    user_id = str(job.get("user_id") or "")
+    payload = job.get("payload") or {}
+    using_free_monthly_analytics = bool(payload.get("using_free_monthly_analytics"))
+
+    await _update_upload_job(job["id"], progress=10, message="Loading YouTube channel data...")
+    connection = await db.youtube_connections.find_one({"user_id": user_id})
+    if not connection:
+        raise HTTPException(status_code=400, detail="YouTube account not connected")
+
+    creds = _build_google_credentials_from_connection(connection, scopes=[
+        'https://www.googleapis.com/auth/youtube.upload',
+        'https://www.googleapis.com/auth/youtube.readonly',
+    ])
+
+    if creds.expired and creds.refresh_token:
+        creds.refresh(GoogleRequest())
+        await db.youtube_connections.update_one(
+            {"user_id": user_id},
+            {"$set": {
+                "access_token": None,
+                "access_token_encrypted": _encrypt_secret_value(creds.token),
+                "token_expiry": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+            }}
+        )
+
+    youtube = build('youtube', 'v3', credentials=creds)
+    channels_response = youtube.channels().list(part='statistics,snippet', mine=True).execute()
+    if not channels_response.get('items'):
+        raise HTTPException(status_code=404, detail="No channel found")
+
+    channel = channels_response['items'][0]
+    channel_stats = channel['statistics']
+    channel_snippet = channel['snippet']
+
+    search_response = youtube.search().list(
+        part='id',
+        forMine=True,
+        type='video',
+        order='date',
+        maxResults=10
+    ).execute()
+    video_ids = [item['id']['videoId'] for item in search_response.get('items', [])]
+
+    recent_videos = []
+    if video_ids:
+        videos_response = youtube.videos().list(part='snippet,statistics', id=','.join(video_ids)).execute()
+        for video in videos_response.get('items', []):
+            video_stats = video['statistics']
+            recent_videos.append({
+                'title': video['snippet']['title'],
+                'views': int(video_stats.get('viewCount', 0)),
+                'likes': int(video_stats.get('likeCount', 0)),
+                'comments': int(video_stats.get('commentCount', 0)),
+                'published_at': video['snippet']['publishedAt']
+            })
+
+    total_views = sum(v['views'] for v in recent_videos)
+    total_likes = sum(v['likes'] for v in recent_videos)
+    avg_views = total_views / len(recent_videos) if recent_videos else 0
+    engagement_rate = (total_likes / total_views * 100) if total_views > 0 else 0
+
+    analysis_prompt = f"""You are a YouTube SEO expert and growth strategist specializing in helping beat producers blow up their channels like Internet Money did. Analyze this channel deeply and provide COMPREHENSIVE, ACTIONABLE advice.
+
+CHANNEL DATA:
+- Subscribers: {channel_stats.get('subscriberCount', '0')}
+- Total Views: {channel_stats.get('viewCount', '0')}
+- Total Videos: {channel_stats.get('videoCount', '0')}
+- Average Views per Video (last 10): {avg_views:.0f}
+- Engagement Rate: {engagement_rate:.2f}%
+
+RECENT VIDEOS PERFORMANCE:
+{json.dumps(recent_videos, indent=2)}
+
+YOUR MISSION: Help this producer grow their channel from where they are now to 100K+ subscribers. They're a BEGINNER who needs specific, step-by-step guidance.
+
+CRITICAL: You MUST respond with ONLY valid JSON. No markdown, no code blocks, no explanation before or after. Just pure JSON.
+
+Provide your analysis in this EXACT JSON format (be DETAILED and SPECIFIC):
+{{
+  "channel_health_score": "X/100 - Brief explanation of why",
+  "what_works": [
+    "Specific strength 1 with data/evidence",
+    "Specific strength 2 with data/evidence", 
+    "Specific strength 3 with data/evidence",
+    "Specific strength 4 with data/evidence"
+  ],
+  "critical_issues": [
+    "Critical problem 1 - Why it's hurting growth",
+    "Critical problem 2 - Why it's hurting growth",
+    "Critical problem 3 - Why it's hurting growth",
+    "Critical problem 4 - Why it's hurting growth"
+  ],
+  "seo_optimization": [
+    "Title strategy: Specific formula/template to use",
+    "Description strategy: What to include in first 150 characters",
+    "Tag strategy: Types of tags to prioritize (high-volume vs long-tail)",
+    "Thumbnail strategy: Specific visual elements that work for beats",
+    "Upload timing: Best days/times for music content"
+  ],
+  "content_strategy": [
+    "Video format recommendation: What type of videos to make",
+    "Upload frequency: How often to post and why",
+    "Niche positioning: Specific sub-genre or style to focus on",
+    "Collaboration strategy: Who to work with and how",
+    "Series ideas: 2-3 specific series concepts to start"
+  ],
+  "immediate_actions": [
+    "Action 1: Do THIS specific thing in next 24 hours",
+    "Action 2: Do THIS specific thing this week",
+    "Action 3: Do THIS specific thing this month",
+    "Action 4: Start THIS habit from today",
+    "Action 5: Stop doing THIS immediately"
+  ],
+  "discoverability_tactics": [
+    "Tactic 1: Specific method to appear in more searches",
+    "Tactic 2: How to leverage trending sounds/artists",
+    "Tactic 3: Cross-platform promotion strategy",
+    "Tactic 4: Community engagement approach",
+    "Tactic 5: Algorithm hack specific to beat producers"
+  ],
+  "growth_roadmap": "A detailed 3-4 paragraph roadmap explaining: (1) Where they are now and why, (2) The exact path to 10K subs with timeline, (3) The path from 10K to 100K, (4) Specific metrics to track weekly. Be like a mentor giving a pep talk with concrete steps.",
+  "internet_money_lessons": [
+    "Lesson 1: Specific tactic Internet Money used that this producer should copy",
+    "Lesson 2: Another Internet Money growth strategy to implement",
+    "Lesson 3: How Internet Money handled [specific challenge] and how to apply it"
+  ]
+}}
+
+CRITICAL RULES:
+- Be BRUTALLY HONEST but ENCOURAGING
+- Give SPECIFIC numbers, formulas, and templates
+- Include EXAMPLES of good titles, descriptions, tags
+- Reference real artists/producers when relevant
+- Explain the "WHY" behind every recommendation
+- Assume they know NOTHING about YouTube SEO
+- Make it feel like a 1-on-1 coaching session
+- Focus on DISCOVERABILITY and GROWTH, not just quality content
+"""
+
+    await _update_upload_job(job["id"], progress=55, message="Generating AI channel insights...")
+    response = await llm_chat(
+        system_message="You are a top YouTube growth consultant who has helped music producers grow from 0 to 1M+ subscribers. You specialize in beat producer channels and understand YouTube's algorithm deeply. You give specific, tactical advice like a mentor. You reference successful producers like Internet Money, Nick Mira, Kyle Beats as examples. You're encouraging but brutally honest about what needs to change.",
+        user_message=analysis_prompt,
+    )
+
+    try:
+        response_text = response.strip()
+        if '```json' in response_text:
+            start = response_text.find('```json') + 7
+            end = response_text.find('```', start)
+            response_text = response_text[start:end].strip()
+        elif '```' in response_text:
+            start = response_text.find('```') + 3
+            end = response_text.find('```', start)
+            response_text = response_text[start:end].strip()
+        insights = json.loads(response_text)
+    except Exception as e:
+        logging.error(f"Failed to parse analytics response: {str(e)}")
+        logging.error(f"Response preview: {response[:500]}")
+        insights = {
+            "channel_health_score": "75/100 - Analysis complete but response format needs adjustment",
+            "what_works": [
+                "Your channel is being analyzed",
+                "Data has been collected successfully",
+                "AI insights are being generated",
+                "Check back in a moment for full details"
+            ],
+            "critical_issues": [
+                "AI response formatting issue detected",
+                "We're working on parsing the detailed analysis",
+                "Your data is safe and analysis is complete",
+                "Try again in a moment for full insights"
+            ],
+            "seo_optimization": [
+                "Loading SEO recommendations...",
+                "Analysis in progress",
+                "Please try again"
+            ],
+            "content_strategy": [
+                "Loading content strategy...",
+                "Analysis in progress",
+                "Please try again"
+            ],
+            "immediate_actions": [
+                "Action 1: Try analyzing again for full insights",
+                "Action 2: Your data has been successfully collected",
+                "Action 3: AI is processing your channel information",
+                "Action 4: Full detailed analysis coming soon",
+                "Action 5: Continue creating content while we optimize"
+            ],
+            "discoverability_tactics": [
+                "Loading discoverability tactics...",
+                "Analysis in progress",
+                "Please try again"
+            ],
+            "growth_roadmap": "Your comprehensive growth roadmap is being generated. The AI has analyzed your channel but encountered a formatting issue. Please try the analysis again in a moment for your full personalized roadmap including specific steps to grow from your current position to 10K and beyond.",
+            "internet_money_lessons": [
+                "Loading Internet Money lessons...",
+                "Analysis in progress",
+                "Please try again"
+            ]
+        }
+
+    if using_free_monthly_analytics:
+        await _consume_free_monthly_analytics(user_id)
+    else:
+        await consume_credit(user_id)
+
+    return YouTubeAnalyticsResponse(
+        channel_name=channel_snippet['title'],
+        subscriber_count=int(channel_stats.get('subscriberCount', 0)),
+        total_views=int(channel_stats.get('viewCount', 0)),
+        total_videos=int(channel_stats.get('videoCount', 0)),
+        recent_videos=recent_videos,
+        insights=insights
+    ).model_dump()
+
+
+async def _process_channel_analytics_job(job: dict) -> None:
+    job_id = job["id"]
+    try:
+        result = await _execute_channel_analytics_job(job)
+        await _update_upload_job(job_id, status="succeeded", progress=100, message="Channel analysis complete.", result=result, error=None, extra_updates={"completed_at": _safe_iso_now(), "worker_id": UPLOAD_JOB_WORKER_ID})
+    except Exception as exc:
+        error_message = str(exc)
+        logging.error(f"Channel analytics job {job_id} failed: {error_message}")
+        await _update_upload_job(job_id, status="failed", progress=100, message="Channel analysis failed.", error=error_message, extra_updates={"failed_at": _safe_iso_now(), "worker_id": UPLOAD_JOB_WORKER_ID})
+
+
+async def _execute_beat_analysis_job(job: dict) -> dict:
+    payload = job.get("payload") or {}
+    request = BeatAnalysisRequest(**payload)
+    analysis_prompt = f"""You are a YouTube SEO expert analyzing a beat upload. Evaluate this beat's potential performance:
+
+TITLE: {request.title}
+
+TAGS ({len(request.tags)} total): {", ".join(request.tags[:50])}
+
+DESCRIPTION: {request.description if request.description else "No description provided"}
+
+Analyze and provide ONLY valid JSON in this format:
+{{
+  "overall_score": 85,
+  "title_score": 90,
+  "tags_score": 80,
+  "seo_score": 85,
+  "strengths": [
+    "Strength 1",
+    "Strength 2",
+    "Strength 3"
+  ],
+  "weaknesses": [
+    "Weakness 1",
+    "Weakness 2"
+  ],
+  "suggestions": [
+    "Specific actionable suggestion 1",
+    "Specific actionable suggestion 2",
+    "Specific actionable suggestion 3"
+  ],
+  "predicted_performance": "Good"
+}}
+
+SCORING CRITERIA:
+- Title Score (0-100): Is it searchable? Does it include artist name? Type beat format?
+- Tags Score (0-100): Relevance and intent matter more than volume. Penalize tag stuffing or off-genre tags.
+- SEO Score (0-100): Overall searchability and discoverability
+- Overall Score: Average of all scores
+
+PREDICTED PERFORMANCE: "Poor" (0-40), "Average" (41-65), "Good" (66-85), "Excellent" (86-100)
+
+Be honest but encouraging. Focus on actionable improvements.
+If tags look stuffed or irrelevant, explicitly say so and recommend a smaller, high-intent set (20-40)."""
+
+    response = await llm_chat(
+        system_message="You are a YouTube SEO expert who helps beat producers optimize their uploads for maximum discoverability. You provide specific, actionable feedback.",
+        user_message=analysis_prompt,
+    )
+
+    try:
+        response_text = response.strip()
+        if '```json' in response_text:
+            start = response_text.find('```json') + 7
+            end = response_text.find('```', start)
+            response_text = response_text[start:end].strip()
+        elif '```' in response_text:
+            start = response_text.find('```') + 3
+            end = response_text.find('```', start)
+            response_text = response_text[start:end].strip()
+        analysis = _parse_llm_json_response(response_text)
+        return BeatAnalysisResponse(**analysis).model_dump()
+    except Exception as e:
+        logging.error(f"Failed to parse beat analysis: {str(e)}")
+        return BeatAnalysisResponse(
+            overall_score=70,
+            title_score=70,
+            tags_score=70,
+            seo_score=70,
+            strengths=["Title looks good", "Tags are present"],
+            weaknesses=["Analysis formatting issue"],
+            suggestions=["Try analyzing again", "Ensure title includes artist name", "Add more specific tags"],
+            predicted_performance="Average"
+        ).model_dump()
+
+
+async def _process_beat_analysis_job(job: dict) -> None:
+    job_id = job["id"]
+    try:
+        await _update_upload_job(job_id, progress=55, message="Analyzing beat metadata...")
+        result = await _execute_beat_analysis_job(job)
+        await _update_upload_job(job_id, status="succeeded", progress=100, message="Beat analysis complete.", result=result, error=None, extra_updates={"completed_at": _safe_iso_now(), "worker_id": UPLOAD_JOB_WORKER_ID})
+    except Exception as exc:
+        error_message = str(exc)
+        logging.error(f"Beat analysis job {job_id} failed: {error_message}")
+        await _update_upload_job(job_id, status="failed", progress=100, message="Beat analysis failed.", error=error_message, extra_updates={"failed_at": _safe_iso_now(), "worker_id": UPLOAD_JOB_WORKER_ID})
+
+
+async def _execute_beat_fix_job(job: dict) -> dict:
+    payload = job.get("payload") or {}
+    user_id = str(job.get("user_id") or "")
+    request = BeatFixRequest(**payload)
+    analysis = request.analysis
+    issues_text = " ".join(analysis.weaknesses + analysis.suggestions).lower()
+
+    needs_title = analysis.title_score < 70 or "title" in issues_text
+    needs_tags = analysis.tags_score < 70 or "tag" in issues_text
+    needs_description = (not request.description.strip()) or ("description" in issues_text) or ("seo" in issues_text)
+
+    if not any([needs_title, needs_tags, needs_description]):
+        return BeatFixResponse(
+            title=request.title,
+            tags=request.tags[:120],
+            description=request.description,
+            applied_fixes={"title": False, "tags": False, "description": False},
+            notes="No critical issues detected. No fixes applied."
+        ).model_dump()
+
+    fix_prompt = f"""You are a YouTube beat upload editor. Apply fixes ONLY to areas flagged below.
+
+Inputs:
+TITLE: {request.title}
+TAGS ({len(request.tags)}): {", ".join(request.tags)}
+DESCRIPTION: {request.description if request.description else "No description provided"}
+
+Analysis feedback:
+Weaknesses: {analysis.weaknesses}
+Suggestions: {analysis.suggestions}
+
+Fix flags:
+- title: {"YES" if needs_title else "NO"}
+- tags: {"YES" if needs_tags else "NO"}
+- description: {"YES" if needs_description else "NO"}
+
+Rules:
+1) If a fix flag is NO, return the original value unchanged for that field.
+2) Tags must be high-intent, relevant, and NOT stuffed. Max 120 tags. Keep order sensible.
+3) Title should be YouTube-searchable with the artist x artist type beat format when relevant.
+4) Description must sound like a real producer upload (not an AI response). Keep the user's vibe.
+5) If description is fixed, add a short pricing line if missing (e.g., "Lease: $20 | Trackout: $50 | Unlimited: $100").
+6) Keep any contact/social links present in the original description.
+7) Return STRICT JSON only.
+
+Return JSON schema:
+{{
+  "title": "string",
+  "tags": ["tag1", "tag2"],
+  "description": "string",
+  "applied_fixes": {{
+    "title": true/false,
+    "tags": true/false,
+    "description": true/false
+  }},
+  "notes": "short summary"
+}}
+"""
+
+    try:
+        response = await llm_chat(
+            system_message="You refine beat uploads for YouTube. Be concise, practical, and keep the creator's style.",
+            user_message=fix_prompt,
+        )
+
+        response_text = response.strip()
+        if '```json' in response_text:
+            start = response_text.find('```json') + 7
+            end = response_text.find('```', start)
+            response_text = response_text[start:end].strip()
+        elif '```' in response_text:
+            start = response_text.find('```') + 3
+            end = response_text.find('```', start)
+            response_text = response_text[start:end].strip()
+
+        fixed = json.loads(response_text)
+        tags = fixed.get("tags", request.tags)
+        if not isinstance(tags, list):
+            tags = request.tags
+        tags = tags[:120]
+
+        result = BeatFixResponse(
+            title=fixed.get("title", request.title),
+            tags=tags,
+            description=fixed.get("description", request.description),
+            applied_fixes=fixed.get("applied_fixes", {
+                "title": needs_title,
+                "tags": needs_tags,
+                "description": needs_description
+            }),
+            notes=fixed.get("notes")
+        )
+        await consume_credit(user_id)
+        return result.model_dump()
+    except Exception as e:
+        logging.error(f"Failed to apply beat fixes: {str(e)}")
+        await consume_credit(user_id)
+        return BeatFixResponse(
+            title=request.title,
+            tags=request.tags[:120],
+            description=request.description,
+            applied_fixes={"title": False, "tags": False, "description": False},
+            notes="Failed to apply fixes. Please try again."
+        ).model_dump()
+
+
+async def _process_beat_fix_job(job: dict) -> None:
+    job_id = job["id"]
+    try:
+        await _update_upload_job(job_id, progress=55, message="Applying beat fixes...")
+        result = await _execute_beat_fix_job(job)
+        await _update_upload_job(job_id, status="succeeded", progress=100, message="Beat fixes complete.", result=result, error=None, extra_updates={"completed_at": _safe_iso_now(), "worker_id": UPLOAD_JOB_WORKER_ID})
+    except Exception as exc:
+        error_message = str(exc)
+        logging.error(f"Beat fix job {job_id} failed: {error_message}")
+        await _update_upload_job(job_id, status="failed", progress=100, message="Beat fix failed.", error=error_message, extra_updates={"failed_at": _safe_iso_now(), "worker_id": UPLOAD_JOB_WORKER_ID})
+
+
+async def _execute_thumbnail_check_job(job: dict) -> dict:
+    payload = job.get("payload") or {}
+    user_id = str(job.get("user_id") or "")
+    image_bytes: bytes | None = None
+    image_mime = "image/jpeg"
+    image_file_id = str(payload.get("image_file_id") or "").strip()
+
+    if image_file_id:
+        upload = await db.uploads.find_one({"id": image_file_id, "user_id": user_id, "file_type": "image"})
+        if not upload:
+            raise HTTPException(status_code=404, detail="Referenced image file not found.")
+        if not media_storage.exists(upload):
+            raise HTTPException(status_code=404, detail="Referenced image file is missing on server.")
+        image_bytes = media_storage.read_bytes(upload)
+        ext = media_storage.get_suffix(upload)
+        image_mime = ".png" == ext and "image/png" or (".webp" == ext and "image/webp" or "image/jpeg")
+    else:
+        image_b64 = str(payload.get("image_bytes_b64") or "")
+        if image_b64:
+            image_bytes = base64.b64decode(image_b64)
+            image_mime = str(payload.get("image_mime") or "image/jpeg")
+
+    if not image_bytes:
+        raise HTTPException(status_code=400, detail="No image provided for thumbnail check.")
+
+    title = str(payload.get("title") or "")
+    tags = str(payload.get("tags") or "")
+    description = str(payload.get("description") or "")
+    llm_provider = payload.get("llm_provider")
+
+    analysis_prompt = f"""You are a YouTube beat-thumbnail specialist and active internet-money style producer in LA (~10k subs).
+Your job is to improve CTR and retention for TYPE BEAT uploads using a single static image.
+
+Context:
+- Video title: "{title}"
+- Tags: "{tags}"
+- Description (optional): "{description}"
+
+Analyze like a producer who uploads daily and optimizes thumbnails for YouTube search + suggested.
+Focus on:
+1) Mobile legibility and instant clarity (1-second glance test)
+2) Contrast, focal point, and visual hierarchy
+3) Relevance to the artist/type beat vibe in the title
+4) Simple, repeatable branding (corner badge, color system)
+5) Whether text (if any) is minimal, bold, and useful
+
+Avoid irrelevant advice (e.g., motion). Assume the thumbnail is a static image.
+Be practical and specific to beat uploads.
+
+Return STRICT JSON with this exact schema:
+{{
+  "score": 0-100,
+  "verdict": "one short sentence",
+  "strengths": ["..."],
+  "issues": ["..."],
+  "suggestions": ["..."],
+  "text_overlay_suggestion": "short text idea for the thumbnail",
+  "branding_suggestion": "one short branding tweak"
+}}
+"""
+
+    response_text = await llm_chat_with_image(
+        system_message="You are a ruthless but helpful beat-thumbnail critic. Be concise, actionable, and focused on CTR for type beat uploads.",
+        user_message=analysis_prompt,
+        image_bytes=image_bytes,
+        image_mime=image_mime,
+        provider=llm_provider,
+        max_tokens=600,
+    )
+
+    try:
+        try:
+            analysis = _parse_llm_json_response(response_text)
+        except Exception:
+            repair_prompt = f"""Convert the following thumbnail analysis into STRICT JSON only.
+Do not add commentary. Return exactly one JSON object with this schema:
+{{
+  "score": 0-100,
+  "verdict": "one short sentence",
+  "strengths": ["..."],
+  "issues": ["..."],
+  "suggestions": ["..."],
+  "text_overlay_suggestion": "short text idea for the thumbnail",
+  "branding_suggestion": "one short branding tweak"
+}}
+
+If a field is missing, infer a safe value.
+
+RAW INPUT:
+{response_text}
+"""
+            normalized_text = await llm_chat(
+                system_message="You convert LLM outputs into strict valid JSON objects.",
+                user_message=repair_prompt,
+                temperature=0.0,
+                max_tokens=500,
+                provider=(llm_provider or ("openai" if os.environ.get("OPENAI_API_KEY") else None)),
+                user_id=user_id,
+            )
+            analysis = _parse_llm_json_response(normalized_text)
+        await consume_credit(user_id)
+        return ThumbnailCheckResponse(**analysis).model_dump()
+    except Exception as e:
+        logging.error(f"Failed to parse thumbnail analysis: {str(e)} | raw_response={response_text[:1200]}")
+        await consume_credit(user_id)
+        return ThumbnailCheckResponse(
+            score=55,
+            verdict="Thumbnail analysis completed but formatting failed.",
+            strengths=["Clear subject or artwork present"],
+            issues=["Unable to parse detailed feedback"],
+            suggestions=["Try again for full details", "Increase contrast and simplify text"],
+            text_overlay_suggestion="FUTURE x UZI TYPE BEAT",
+            branding_suggestion="Add a consistent corner badge with your logo",
+        ).model_dump()
+
+
+async def _process_thumbnail_check_job(job: dict) -> None:
+    job_id = job["id"]
+    try:
+        await _update_upload_job(job_id, progress=55, message="Analyzing thumbnail...")
+        result = await _execute_thumbnail_check_job(job)
+        await _update_upload_job(job_id, status="succeeded", progress=100, message="Thumbnail analysis complete.", result=result, error=None, extra_updates={"completed_at": _safe_iso_now(), "worker_id": UPLOAD_JOB_WORKER_ID})
+    except Exception as exc:
+        error_message = str(exc)
+        logging.error(f"Thumbnail check job {job_id} failed: {error_message}")
+        await _update_upload_job(job_id, status="failed", progress=100, message="Thumbnail analysis failed.", error=error_message, extra_updates={"failed_at": _safe_iso_now(), "worker_id": UPLOAD_JOB_WORKER_ID})
+
+
+async def _execute_tag_generation_job(job: dict) -> dict:
+    payload = job.get("payload") or {}
+    user_id = str(job.get("user_id") or "")
+    current_user = {"id": user_id, "_execute_inline": True}
+    user_doc = await db.users.find_one({"id": user_id}, {"_id": 0, "username": 1})
+    if user_doc and user_doc.get("username"):
+        current_user["username"] = user_doc["username"]
+    request = TagGenerationRequest(
+        query=str(payload.get("query") or ""),
+        custom_tags=[tag for tag in (payload.get("custom_tags") or []) if isinstance(tag, str)],
+        llm_provider=payload.get("llm_provider"),
+    )
+    return await generate_tags(request, current_user)
+
+
+async def _process_tag_generation_job(job: dict) -> None:
+    job_id = job["id"]
+    try:
+        await _update_upload_job(job_id, progress=20, message="Gathering tag source signals...")
+        result = await _execute_tag_generation_job(job)
+        await _update_upload_job(job_id, status="succeeded", progress=100, message="Tag generation complete.", result=result, error=None, extra_updates={"completed_at": _safe_iso_now(), "worker_id": UPLOAD_JOB_WORKER_ID})
+    except Exception as exc:
+        error_message = str(exc)
+        logging.error(f"Tag generation job {job_id} failed: {error_message}")
+        await _update_upload_job(job_id, status="failed", progress=100, message="Tag generation failed.", error=error_message, extra_updates={"failed_at": _safe_iso_now(), "worker_id": UPLOAD_JOB_WORKER_ID})
+
+
+async def _execute_tag_join_job(job: dict) -> dict:
+    payload = job.get("payload") or {}
+    current_user = {"id": str(job.get("user_id") or ""), "_execute_inline": True}
+    request = TagJoinRequest(
+        queries=[query for query in (payload.get("queries") or []) if isinstance(query, str)],
+        candidate_tags=[tag for tag in (payload.get("candidate_tags") or []) if isinstance(tag, str)],
+        max_tags=int(payload.get("max_tags") or 120),
+        llm_provider=payload.get("llm_provider"),
+        enrich_from_sources=bool(payload.get("enrich_from_sources", True)),
+    )
+    return await join_tags_ai(request, current_user)
+
+
+async def _process_tag_join_job(job: dict) -> None:
+    job_id = job["id"]
+    try:
+        await _update_upload_job(job_id, progress=20, message="Merging tag source candidates...")
+        result = await _execute_tag_join_job(job)
+        await _update_upload_job(job_id, status="succeeded", progress=100, message="Tag join complete.", result=result, error=None, extra_updates={"completed_at": _safe_iso_now(), "worker_id": UPLOAD_JOB_WORKER_ID})
+    except Exception as exc:
+        error_message = str(exc)
+        logging.error(f"Tag join job {job_id} failed: {error_message}")
+        await _update_upload_job(job_id, status="failed", progress=100, message="Tag join failed.", error=error_message, extra_updates={"failed_at": _safe_iso_now(), "worker_id": UPLOAD_JOB_WORKER_ID})
+
+
+async def _execute_image_search_job(job: dict) -> dict:
+    payload = job.get("payload") or {}
+    user_id = str(job.get("user_id") or "")
+    current_user = {"id": user_id, "_execute_inline": True}
+    request_kind = str(payload.get("request_kind") or "beat_generate_image")
+    cache_key = str(payload.get("cache_key") or "")
+
+    if request_kind == "beathelper_image_search":
+        result = await beathelper_search_images(
+            BeatHelperImageSearchRequest(
+                search_query=payload.get("search_query"),
+                target_artist=payload.get("target_artist"),
+                beat_type=payload.get("beat_type"),
+                generated_title_override=payload.get("generated_title_override"),
+                context_tags=[tag for tag in (payload.get("context_tags") or []) if isinstance(tag, str)],
+                k=int(payload.get("k") or 8),
+            ),
+            current_user,
+        )
+        cache_type = "beathelper_image_search"
+    else:
+        result = await generate_image_suggestions(
+            ImageGenerateRequest(
+                title=str(payload.get("title") or ""),
+                tags=[tag for tag in (payload.get("tags") or []) if isinstance(tag, str)],
+                k=int(payload.get("k") or 6),
+            ),
+            current_user,
+        )
+        cache_type = "beat_generate_image"
+
+    if cache_key and isinstance(result, dict):
+        await _set_cached_ai_payload(
+            cache_key=cache_key,
+            cache_type=cache_type,
+            user_id=user_id,
+            payload=result,
+            ttl_seconds=IMAGE_SEARCH_CACHE_TTL_SECONDS,
+        )
+    return result
+
+
+async def _process_image_search_job(job: dict) -> None:
+    job_id = job["id"]
+    try:
+        await _update_upload_job(job_id, progress=25, message="Searching web image sources...")
+        result = await _execute_image_search_job(job)
+        await _update_upload_job(job_id, status="succeeded", progress=100, message="Image search complete.", result=result, error=None, extra_updates={"completed_at": _safe_iso_now(), "worker_id": UPLOAD_JOB_WORKER_ID})
+    except Exception as exc:
+        error_message = str(exc)
+        logging.error(f"Image search job {job_id} failed: {error_message}")
+        await _update_upload_job(job_id, status="failed", progress=100, message="Image search failed.", error=error_message, extra_updates={"failed_at": _safe_iso_now(), "worker_id": UPLOAD_JOB_WORKER_ID})
+
 async def _estimate_best_upload_hour_utc(user_id: str) -> int:
     """
     Estimate best publish hour from the user's recent YouTube uploads.
@@ -2392,279 +3900,29 @@ async def disconnect_youtube(current_user: dict = Depends(get_current_user)):
     await db.youtube_connections.delete_one({"user_id": current_user['id']})
     return {"success": True, "message": "YouTube account disconnected"}
 
-@api_router.post("/youtube/analytics", response_model=YouTubeAnalyticsResponse)
+@api_router.post("/youtube/analytics")
 async def get_youtube_analytics(current_user: dict = Depends(get_current_user)):
-    """Analyze YouTube channel performance and provide AI insights"""
+    """Create a background job for channel analytics."""
     try:
-        subscription_status = await get_user_subscription_status(current_user['id'])
-        analytics_plan = subscription_status.get("plan") or "free"
-        using_free_monthly_analytics = analytics_plan == "free"
-
-        if using_free_monthly_analytics:
-            free_analytics_available = await _can_use_free_monthly_analytics(current_user['id'])
-            if not free_analytics_available:
-                raise HTTPException(
-                    status_code=402,
-                    detail={
-                        "message": "Free users get 1 channel analysis per month. Upgrade to Plus or Max for more analytics access.",
-                        "resets_at": subscription_status.get("resets_at"),
-                    }
-                )
-        else:
-            await ensure_has_credit(current_user['id'], "analytics")
-        
-        # Check if YouTube is connected
-        connection = await db.youtube_connections.find_one({"user_id": current_user['id']})
-        if not connection:
-            raise HTTPException(status_code=400, detail="YouTube account not connected")
-        
-        # Build YouTube API client using stored tokens
-        creds = _build_google_credentials_from_connection(connection, scopes=[
-            'https://www.googleapis.com/auth/youtube.upload',
-            'https://www.googleapis.com/auth/youtube.readonly',
-        ])
-        
-        # Refresh token if needed
-        if creds.expired and creds.refresh_token:
-            creds.refresh(GoogleRequest())
-            # Update stored token
-            await db.youtube_connections.update_one(
-                {"user_id": current_user['id']},
-                {"$set": {
-                    "access_token": None,
-                    "access_token_encrypted": _encrypt_secret_value(creds.token),
-                    "token_expiry": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
-                }}
-            )
-        
-        youtube = build('youtube', 'v3', credentials=creds)
-        
-        # Get channel statistics
-        channels_response = youtube.channels().list(
-            part='statistics,snippet',
-            mine=True
-        ).execute()
-        
-        if not channels_response.get('items'):
-            raise HTTPException(status_code=404, detail="No channel found")
-        
-        channel = channels_response['items'][0]
-        channel_stats = channel['statistics']
-        channel_snippet = channel['snippet']
-        
-        # Get recent videos (last 10)
-        search_response = youtube.search().list(
-            part='id',
-            forMine=True,
-            type='video',
-            order='date',
-            maxResults=10
-        ).execute()
-        
-        video_ids = [item['id']['videoId'] for item in search_response.get('items', [])]
-        
-        recent_videos = []
-        if video_ids:
-            videos_response = youtube.videos().list(
-                part='snippet,statistics',
-                id=','.join(video_ids)
-            ).execute()
-            
-            for video in videos_response.get('items', []):
-                video_stats = video['statistics']
-                recent_videos.append({
-                    'title': video['snippet']['title'],
-                    'views': int(video_stats.get('viewCount', 0)),
-                    'likes': int(video_stats.get('likeCount', 0)),
-                    'comments': int(video_stats.get('commentCount', 0)),
-                    'published_at': video['snippet']['publishedAt']
-                })
-        
-        # Calculate engagement metrics
-        total_views = sum(v['views'] for v in recent_videos)
-        total_likes = sum(v['likes'] for v in recent_videos)
-        total_comments = sum(v['comments'] for v in recent_videos)
-        avg_views = total_views / len(recent_videos) if recent_videos else 0
-        engagement_rate = (total_likes / total_views * 100) if total_views > 0 else 0
-        
-        # Prepare comprehensive data for AI analysis
-        analysis_prompt = f"""You are a YouTube SEO expert and growth strategist specializing in helping beat producers blow up their channels like Internet Money did. Analyze this channel deeply and provide COMPREHENSIVE, ACTIONABLE advice.
-
-CHANNEL DATA:
-- Subscribers: {channel_stats.get('subscriberCount', '0')}
-- Total Views: {channel_stats.get('viewCount', '0')}
-- Total Videos: {channel_stats.get('videoCount', '0')}
-- Average Views per Video (last 10): {avg_views:.0f}
-- Engagement Rate: {engagement_rate:.2f}%
-
-RECENT VIDEOS PERFORMANCE:
-{json.dumps(recent_videos, indent=2)}
-
-YOUR MISSION: Help this producer grow their channel from where they are now to 100K+ subscribers. They're a BEGINNER who needs specific, step-by-step guidance.
-
-CRITICAL: You MUST respond with ONLY valid JSON. No markdown, no code blocks, no explanation before or after. Just pure JSON.
-
-Provide your analysis in this EXACT JSON format (be DETAILED and SPECIFIC):
-{{
-  "channel_health_score": "X/100 - Brief explanation of why",
-  
-  "what_works": [
-    "Specific strength 1 with data/evidence",
-    "Specific strength 2 with data/evidence", 
-    "Specific strength 3 with data/evidence",
-    "Specific strength 4 with data/evidence"
-  ],
-  
-  "critical_issues": [
-    "Critical problem 1 - Why it's hurting growth",
-    "Critical problem 2 - Why it's hurting growth",
-    "Critical problem 3 - Why it's hurting growth",
-    "Critical problem 4 - Why it's hurting growth"
-  ],
-  
-  "seo_optimization": [
-    "Title strategy: Specific formula/template to use",
-    "Description strategy: What to include in first 150 characters",
-    "Tag strategy: Types of tags to prioritize (high-volume vs long-tail)",
-    "Thumbnail strategy: Specific visual elements that work for beats",
-    "Upload timing: Best days/times for music content"
-  ],
-  
-  "content_strategy": [
-    "Video format recommendation: What type of videos to make",
-    "Upload frequency: How often to post and why",
-    "Niche positioning: Specific sub-genre or style to focus on",
-    "Collaboration strategy: Who to work with and how",
-    "Series ideas: 2-3 specific series concepts to start"
-  ],
-  
-  "immediate_actions": [
-    "Action 1: Do THIS specific thing in next 24 hours",
-    "Action 2: Do THIS specific thing this week",
-    "Action 3: Do THIS specific thing this month",
-    "Action 4: Start THIS habit from today",
-    "Action 5: Stop doing THIS immediately"
-  ],
-  
-  "discoverability_tactics": [
-    "Tactic 1: Specific method to appear in more searches",
-    "Tactic 2: How to leverage trending sounds/artists",
-    "Tactic 3: Cross-platform promotion strategy",
-    "Tactic 4: Community engagement approach",
-    "Tactic 5: Algorithm hack specific to beat producers"
-  ],
-  
-  "growth_roadmap": "A detailed 3-4 paragraph roadmap explaining: (1) Where they are now and why, (2) The exact path to 10K subs with timeline, (3) The path from 10K to 100K, (4) Specific metrics to track weekly. Be like a mentor giving a pep talk with concrete steps.",
-  
-  "internet_money_lessons": [
-    "Lesson 1: Specific tactic Internet Money used that this producer should copy",
-    "Lesson 2: Another Internet Money growth strategy to implement",
-    "Lesson 3: How Internet Money handled [specific challenge] and how to apply it"
-  ]
-}}
-
-CRITICAL RULES:
-- Be BRUTALLY HONEST but ENCOURAGING
-- Give SPECIFIC numbers, formulas, and templates
-- Include EXAMPLES of good titles, descriptions, tags
-- Reference real artists/producers when relevant
-- Explain the "WHY" behind every recommendation
-- Assume they know NOTHING about YouTube SEO
-- Make it feel like a 1-on-1 coaching session
-- Focus on DISCOVERABILITY and GROWTH, not just quality content
-"""
-        
-        # Get AI insights with enhanced system message
-        response = await llm_chat(
-            system_message="You are a top YouTube growth consultant who has helped music producers grow from 0 to 1M+ subscribers. You specialize in beat producer channels and understand YouTube's algorithm deeply. You give specific, tactical advice like a mentor. You reference successful producers like Internet Money, Nick Mira, Kyle Beats as examples. You're encouraging but brutally honest about what needs to change.",
-            user_message=analysis_prompt,
+        await _guard_heavy_feature(current_user=current_user, feature_key="channel_analytics", job_type="channel_analytics")
+        _enforce_action_rate_limit(
+            f"channel_analytics:{current_user['id']}",
+            limit=4,
+            window_seconds=300,
+            detail_message="Too many channel analytics requests. Try again in a few minutes.",
         )
-        
-        # Parse AI response - handle markdown code blocks
-        try:
-            # Try to extract JSON from markdown code blocks
-            response_text = response.strip()
-            
-            # Check if response is wrapped in markdown code blocks
-            if '```json' in response_text:
-                # Extract JSON from ```json ... ```
-                start = response_text.find('```json') + 7
-                end = response_text.find('```', start)
-                response_text = response_text[start:end].strip()
-            elif '```' in response_text:
-                # Extract JSON from ``` ... ```
-                start = response_text.find('```') + 3
-                end = response_text.find('```', start)
-                response_text = response_text[start:end].strip()
-            
-            insights = json.loads(response_text)
-            
-        except Exception as e:
-            logging.error(f"Failed to parse analytics response: {str(e)}")
-            logging.error(f"Response preview: {response[:500]}")
-            
-            # Fallback if JSON parsing fails
-            insights = {
-                "channel_health_score": "75/100 - Analysis complete but response format needs adjustment",
-                "what_works": [
-                    "Your channel is being analyzed",
-                    "Data has been collected successfully",
-                    "AI insights are being generated",
-                    "Check back in a moment for full details"
-                ],
-                "critical_issues": [
-                    "AI response formatting issue detected",
-                    "We're working on parsing the detailed analysis",
-                    "Your data is safe and analysis is complete",
-                    "Try again in a moment for full insights"
-                ],
-                "seo_optimization": [
-                    "Loading SEO recommendations...",
-                    "Analysis in progress",
-                    "Please try again"
-                ],
-                "content_strategy": [
-                    "Loading content strategy...",
-                    "Analysis in progress",
-                    "Please try again"
-                ],
-                "immediate_actions": [
-                    "Action 1: Try analyzing again for full insights",
-                    "Action 2: Your data has been successfully collected",
-                    "Action 3: AI is processing your channel information",
-                    "Action 4: Full detailed analysis coming soon",
-                    "Action 5: Continue creating content while we optimize"
-                ],
-                "discoverability_tactics": [
-                    "Loading discoverability tactics...",
-                    "Analysis in progress",
-                    "Please try again"
-                ],
-                "growth_roadmap": "Your comprehensive growth roadmap is being generated. The AI has analyzed your channel but encountered a formatting issue. Please try the analysis again in a moment for your full personalized roadmap including specific steps to grow from your current position to 10K and beyond.",
-                "internet_money_lessons": [
-                    "Loading Internet Money lessons...",
-                    "Analysis in progress",
-                    "Please try again"
-                ]
-            }
-        
-        if using_free_monthly_analytics:
-            await _consume_free_monthly_analytics(current_user['id'])
-        else:
-            await consume_credit(current_user['id'])
-        return YouTubeAnalyticsResponse(
-            channel_name=channel_snippet['title'],
-            subscriber_count=int(channel_stats.get('subscriberCount', 0)),
-            total_views=int(channel_stats.get('viewCount', 0)),
-            total_videos=int(channel_stats.get('videoCount', 0)),
-            recent_videos=recent_videos,
-            insights=insights
+        payload = await _build_channel_analytics_job_payload(current_user)
+        job_doc = await _create_background_job(
+            current_user=current_user,
+            job_type="channel_analytics",
+            payload=payload,
+            message="Queued channel analytics job.",
         )
-        
+        return {"success": True, "queued": True, "message": "Channel analysis queued.", "job": _sanitize_upload_job_doc(job_doc)}
     except HTTPException:
         raise
     except Exception as e:
-        logging.error(f"YouTube analytics error: {str(e)}")
+        logging.error(f"YouTube analytics queueing error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to analyze channel: {str(e)}")
 
 
@@ -3236,15 +4494,10 @@ async def _mark_uploads_as_beathelper_managed(user_id: str, upload_ids: list[str
 
 
 def _delete_upload_file(upload_doc: dict) -> None:
-    path_raw = str(upload_doc.get("file_path") or "").strip()
-    if not path_raw:
-        return
     try:
-        path = Path(path_raw)
-        if path.exists():
-            path.unlink()
+        media_storage.delete(upload_doc)
     except Exception as exc:
-        logging.warning(f"Failed to delete upload file {path_raw}: {str(exc)}")
+        logging.warning(f"Failed to delete upload file {upload_doc.get('id')}: {str(exc)}")
 
 
 async def _cleanup_unreferenced_beathelper_uploads(user_id: str, upload_ids: list[str]) -> None:
@@ -3267,7 +4520,7 @@ async def _cleanup_all_unqueued_uploads(user_id: str) -> dict[str, int]:
     queue_refs = await _beathelper_queue_upload_refs(user_id)
     uploads = await db.uploads.find(
         {"user_id": user_id, "file_type": {"$in": ["audio", "image"]}, "beathelper_managed": True},
-        {"_id": 0, "id": 1, "file_type": 1, "file_path": 1},
+        {"_id": 0, "id": 1, "file_type": 1, "file_path": 1, "storage_backend": 1, "storage_key": 1, "stored_filename": 1},
     ).to_list(5000)
 
     deleted_audio = 0
@@ -3627,11 +4880,37 @@ def _parse_llm_json_tags(response_text: str) -> list[str]:
     return [tag for tag in tags if isinstance(tag, str)]
 
 
-@api_router.post("/tags/generate", response_model=TagGenerationResponse)
+@api_router.post("/tags/generate")
 async def generate_tags(request: TagGenerationRequest, current_user: dict = Depends(get_current_user)):
-    try:
-        # Check if user has credits
+    if not current_user.get("_execute_inline"):
+        await _guard_heavy_feature(current_user=current_user, feature_key="tag_generation", job_type="tag_generation")
+        _enforce_action_rate_limit(
+            f"tag_generation:{current_user['id']}",
+            limit=10,
+            window_seconds=600,
+            detail_message="Too many tag generation requests. Please wait a few minutes.",
+        )
         await ensure_has_credit(current_user['id'], "generations")
+        payload = {
+            "query": request.query,
+            "custom_tags": [tag for tag in (request.custom_tags or []) if isinstance(tag, str) and tag.strip()],
+            "llm_provider": request.llm_provider,
+        }
+        cache_key = _build_ai_cache_key(namespace="tag_generation_job", user_id=current_user["id"], payload=payload)
+        active_job = await _find_active_background_job(current_user=current_user, job_type="tag_generation", cache_key=cache_key)
+        if active_job:
+            return {"success": True, "queued": True, "message": "Tag generation already in progress.", "job": _sanitize_upload_job_doc(active_job)}
+        payload["cache_key"] = cache_key
+        job_doc = await _create_background_job(
+            current_user=current_user,
+            job_type="tag_generation",
+            payload=payload,
+            message="Queued tag generation.",
+        )
+        return {"success": True, "queued": True, "message": "Tag generation queued.", "job": _sanitize_upload_job_doc(job_doc)}
+    try:
+        if not current_user.get("_execute_inline"):
+            await ensure_has_credit(current_user['id'], "generations")
 
         query_key = _normalize_query_key(request.query)
         prior_generations = await db.tag_generations.find(
@@ -4142,7 +5421,7 @@ async def delete_tag_history(tag_id: str, current_user: dict = Depends(get_curre
     return {"message": "Tag generation deleted successfully"}
 
 
-@api_router.post("/tags/join-ai", response_model=TagJoinResponse)
+@api_router.post("/tags/join-ai")
 async def join_tags_ai(request: TagJoinRequest, current_user: dict = Depends(get_current_user)):
     if not request.queries or len(request.queries) < 2:
         raise HTTPException(status_code=400, detail="At least two tag queries are required.")
@@ -4151,7 +5430,37 @@ async def join_tags_ai(request: TagJoinRequest, current_user: dict = Depends(get
     if not request.candidate_tags:
         raise HTTPException(status_code=400, detail="Candidate tags are required.")
 
-    await ensure_has_credit(current_user['id'], "generations")
+    if not current_user.get("_execute_inline"):
+        await _guard_heavy_feature(current_user=current_user, feature_key="tag_join", job_type="tag_join")
+        _enforce_action_rate_limit(
+            f"tag_join:{current_user['id']}",
+            limit=8,
+            window_seconds=600,
+            detail_message="Too many tag join requests. Please wait a few minutes.",
+        )
+        await ensure_has_credit(current_user['id'], "generations")
+        payload = {
+            "queries": request.queries,
+            "candidate_tags": request.candidate_tags,
+            "max_tags": request.max_tags,
+            "llm_provider": request.llm_provider,
+            "enrich_from_sources": request.enrich_from_sources,
+        }
+        cache_key = _build_ai_cache_key(namespace="tag_join_job", user_id=current_user["id"], payload=payload)
+        active_job = await _find_active_background_job(current_user=current_user, job_type="tag_join", cache_key=cache_key)
+        if active_job:
+            return {"success": True, "queued": True, "message": "Tag join already in progress.", "job": _sanitize_upload_job_doc(active_job)}
+        payload["cache_key"] = cache_key
+        job_doc = await _create_background_job(
+            current_user=current_user,
+            job_type="tag_join",
+            payload=payload,
+            message="Queued tag join.",
+        )
+        return {"success": True, "queued": True, "message": "Tag join queued.", "job": _sanitize_upload_job_doc(job_doc)}
+
+    if not current_user.get("_execute_inline"):
+        await ensure_has_credit(current_user['id'], "generations")
 
     max_tags = max(10, min(120, request.max_tags or 120))
     llm_provider = request.llm_provider.lower() if request.llm_provider else None
@@ -4389,8 +5698,20 @@ async def delete_description(description_id: str, current_user: dict = Depends(g
 @api_router.post("/descriptions/refine")
 async def refine_description(request: RefineDescriptionRequest, current_user: dict = Depends(get_current_user)):
     try:
-        # Check if user has credits
+        await _guard_heavy_feature(current_user=current_user, feature_key="description_refine", queue_allowed_when_busy=False)
+        _enforce_action_rate_limit(
+            f"description_refine:{current_user['id']}",
+            limit=12,
+            window_seconds=600,
+            detail_message="Too many description refine requests. Please wait a few minutes.",
+        )
         await ensure_has_credit(current_user['id'], "generations")
+        cache_payload = {"description": (request.description or "").strip()}
+        cache_key = _build_ai_cache_key(namespace="description_refine", user_id=current_user["id"], payload=cache_payload)
+        cached = await _get_cached_ai_payload(cache_key)
+        if cached:
+            await consume_credit(current_user['id'])
+            return cached
         prompt = f"""Refine and improve this YouTube beat description:
 
 {request.description}
@@ -4401,9 +5722,16 @@ Make it more engaging, professional, and optimized for YouTube. Keep the same in
             system_message="You are an expert at refining YouTube beat descriptions to maximize engagement and professionalism.",
             user_message=prompt,
         )
-        
+        result = {"refined_description": response.strip()}
+        await _set_cached_ai_payload(
+            cache_key=cache_key,
+            cache_type="description_refine",
+            user_id=current_user["id"],
+            payload=result,
+            ttl_seconds=METADATA_CACHE_TTL_SECONDS,
+        )
         await consume_credit(current_user['id'])
-        return {"refined_description": response.strip()}
+        return result
         
     except Exception as e:
         logging.error(f"Error refining description: {str(e)}")
@@ -4412,8 +5740,27 @@ Make it more engaging, professional, and optimized for YouTube. Keep the same in
 @api_router.post("/descriptions/generate")
 async def generate_description(request: GenerateDescriptionRequest, current_user: dict = Depends(get_current_user)):
     try:
-        # Check if user has credits
+        await _guard_heavy_feature(current_user=current_user, feature_key="description_generate", queue_allowed_when_busy=False)
+        _enforce_action_rate_limit(
+            f"description_generate:{current_user['id']}",
+            limit=12,
+            window_seconds=600,
+            detail_message="Too many description generation requests. Please wait a few minutes.",
+        )
         await ensure_has_credit(current_user['id'], "generations")
+        cache_payload = {
+            "email": request.email or "",
+            "socials": request.socials or "",
+            "key": request.key or "",
+            "bpm": request.bpm or "",
+            "prices": request.prices or "",
+            "additional_info": request.additional_info or "",
+        }
+        cache_key = _build_ai_cache_key(namespace="description_generate", user_id=current_user["id"], payload=cache_payload)
+        cached = await _get_cached_ai_payload(cache_key)
+        if cached:
+            await consume_credit(current_user['id'])
+            return cached
         
         info_parts = []
         if request.key:
@@ -4449,9 +5796,16 @@ Return only the complete description."""
             system_message="You are an expert at creating compelling YouTube beat descriptions that convert viewers into buyers.",
             user_message=prompt,
         )
-        
+        result = {"generated_description": response.strip()}
+        await _set_cached_ai_payload(
+            cache_key=cache_key,
+            cache_type="description_generate",
+            user_id=current_user["id"],
+            payload=result,
+            ttl_seconds=METADATA_CACHE_TTL_SECONDS,
+        )
         await consume_credit(current_user['id'])
-        return {"generated_description": response.strip()}
+        return result
         
     except Exception as e:
         logging.error(f"Error generating description: {str(e)}")
@@ -4473,37 +5827,25 @@ async def upload_audio(file: UploadFile = File(...), current_user: dict = Depend
         if file_ext not in allowed_extensions:
             raise HTTPException(status_code=400, detail="Invalid audio file format. Use MP3, WAV, M4A, FLAC, or OGG")
         
-        # Create unique filename
         file_id = str(uuid.uuid4())
-        filename = f"{file_id}{file_ext}"
-        file_path = UPLOADS_DIR / filename
-        
-        # Save file with chunked reading for better performance
-        chunk_size = 1024 * 1024  # 1MB chunks
-        total_bytes = 0
-        with open(file_path, "wb") as buffer:
-            while True:
-                chunk = await file.read(chunk_size)
-                if not chunk:
-                    break
-                total_bytes += len(chunk)
-                if total_bytes > MAX_AUDIO_UPLOAD_BYTES:
-                    buffer.close()
-                    try:
-                        file_path.unlink(missing_ok=True)
-                    except Exception:
-                        pass
-                    raise HTTPException(status_code=400, detail="Audio file is too large. Max size is 200MB.")
-                buffer.write(chunk)
+        storage_meta = await media_storage.save_upload_file(
+            upload_file=file,
+            file_id=file_id,
+            file_ext=file_ext,
+            max_bytes=MAX_AUDIO_UPLOAD_BYTES,
+        )
         
         # Save metadata to database
         upload_doc = {
             "id": file_id,
             "user_id": current_user['id'],
             "original_filename": file.filename,
-            "stored_filename": filename,
+            "stored_filename": storage_meta["stored_filename"],
             "file_type": "audio",
-            "file_path": str(file_path),
+            "file_path": storage_meta["file_path"],
+            "storage_backend": storage_meta["storage_backend"],
+            "storage_key": storage_meta["storage_key"],
+            "file_size": storage_meta["file_size"],
             "uploaded_at": datetime.now(timezone.utc).isoformat()
         }
         
@@ -4656,8 +5998,7 @@ async def beathelper_get_image_preview(file_id: str, current_user: dict = Depend
     if not upload:
         raise HTTPException(status_code=404, detail="Image not found.")
 
-    path = Path(upload.get("file_path", ""))
-    if not path.exists():
+    if not media_storage.exists(upload):
         raise HTTPException(status_code=404, detail="Image file missing on server.")
 
     visual_kind = _visual_kind_from_upload(upload)
@@ -4669,7 +6010,7 @@ async def beathelper_get_image_preview(file_id: str, current_user: dict = Depend
             "preview_url": f"/api/beat-helper/visual/{upload.get('id')}/stream",
         }
 
-    image_bytes = path.read_bytes()
+    image_bytes = media_storage.read_bytes(upload)
     data_url = _image_data_url_from_bytes(image_bytes, max_dimensions=(480, 480), fit="contain", quality=72)
     return {"file_id": upload.get("id"), "filename": upload.get("original_filename"), "kind": "image", "data_url": data_url}
 
@@ -4684,10 +6025,9 @@ async def beathelper_stream_visual(file_id: str, current_user: dict = Depends(ge
     })
     if not upload:
         raise HTTPException(status_code=404, detail="Visual not found.")
-    path = Path(upload.get("file_path", ""))
-    if not path.exists():
+    if not media_storage.exists(upload):
         raise HTTPException(status_code=404, detail="Visual file missing on server.")
-    ext = path.suffix.lower()
+    ext = media_storage.get_suffix(upload)
     media_type = {
         ".jpg": "image/jpeg",
         ".jpeg": "image/jpeg",
@@ -4698,7 +6038,11 @@ async def beathelper_stream_visual(file_id: str, current_user: dict = Depends(ge
         ".mov": "video/quicktime",
         ".m4v": "video/mp4",
     }.get(ext, "application/octet-stream")
-    return FileResponse(path, media_type=media_type, filename=upload.get("original_filename") or path.name)
+    return media_storage.stream_response(
+        upload,
+        media_type=media_type,
+        filename=upload.get("original_filename") or upload.get("stored_filename"),
+    )
 
 
 @api_router.get("/beat-helper/queue")
@@ -5128,7 +6472,8 @@ async def beathelper_approve_and_upload(item_id: str, current_user: dict = Depen
     if item.get("status") == "uploaded":
         return {"success": True, "message": "Already uploaded.", "video_url": item.get("video_url")}
 
-    upload_result = await upload_to_youtube(
+    payload = await _build_youtube_upload_job_payload(
+        current_user=current_user,
         title=item.get("generated_title") or item.get("beat_original_filename") or "Beat upload",
         description_id=item.get("description_id"),
         tags_id=item.get("tags_id"),
@@ -5145,20 +6490,15 @@ async def beathelper_approve_and_upload(item_id: str, current_user: dict = Depen
         image_rotation=0.0,
         background_color="black",
         remove_watermark=True,
-        current_user=current_user,
+        beat_helper_item_id=item_id,
     )
-
-    await db.beat_helper_queue.update_one(
-        {"id": item_id, "user_id": current_user["id"]},
-        {"$set": {
-            "status": "uploaded",
-            "uploaded_at": _safe_iso_now(),
-            "video_id": upload_result.get("video_id"),
-            "video_url": upload_result.get("video_url"),
-            "updated_at": _safe_iso_now(),
-        }}
-    )
-    return {"success": True, **upload_result}
+    job_doc = await _create_youtube_upload_job(current_user=current_user, payload=payload)
+    return {
+        "success": True,
+        "queued": True,
+        "message": "Upload queued. BeatHelper will update the item when YouTube upload finishes.",
+        "job": _sanitize_upload_job_doc(job_doc),
+    }
 
 
 @api_router.patch("/beat-helper/queue/{item_id}")
@@ -5448,93 +6788,26 @@ async def refresh_youtube_token(user_id: str) -> Credentials:
 
 
 # ============ Beat Analyzer Route ============
-@api_router.post("/beat/analyze", response_model=BeatAnalysisResponse)
+@api_router.post("/beat/analyze")
 async def analyze_beat(request: BeatAnalysisRequest, current_user: dict = Depends(get_current_user)):
-    """Analyze beat title, tags, and description to predict performance"""
+    """Create a background job for beat analysis."""
     try:
-        # Prepare analysis prompt
-        tags_str = ", ".join(request.tags[:50])  # First 50 tags
-        
-        analysis_prompt = f"""You are a YouTube SEO expert analyzing a beat upload. Evaluate this beat's potential performance:
-
-TITLE: {request.title}
-
-TAGS ({len(request.tags)} total): {tags_str}
-
-DESCRIPTION: {request.description if request.description else "No description provided"}
-
-Analyze and provide ONLY valid JSON in this format:
-{{
-  "overall_score": 85,
-  "title_score": 90,
-  "tags_score": 80,
-  "seo_score": 85,
-  "strengths": [
-    "Strength 1",
-    "Strength 2",
-    "Strength 3"
-  ],
-  "weaknesses": [
-    "Weakness 1",
-    "Weakness 2"
-  ],
-  "suggestions": [
-    "Specific actionable suggestion 1",
-    "Specific actionable suggestion 2",
-    "Specific actionable suggestion 3"
-  ],
-  "predicted_performance": "Good"
-}}
-
-SCORING CRITERIA:
-- Title Score (0-100): Is it searchable? Does it include artist name? Type beat format?
-- Tags Score (0-100): Relevance and intent matter more than volume. Penalize tag stuffing or off-genre tags.
-- SEO Score (0-100): Overall searchability and discoverability
-- Overall Score: Average of all scores
-
-PREDICTED PERFORMANCE: "Poor" (0-40), "Average" (41-65), "Good" (66-85), "Excellent" (86-100)
-
-Be honest but encouraging. Focus on actionable improvements.
-If tags look stuffed or irrelevant, explicitly say so and recommend a smaller, high-intent set (20-40)."""
-
-        # Get AI analysis
-        response = await llm_chat(
-            system_message="You are a YouTube SEO expert who helps beat producers optimize their uploads for maximum discoverability. You provide specific, actionable feedback.",
-            user_message=analysis_prompt,
+        await _guard_heavy_feature(current_user=current_user, feature_key="beat_analysis", job_type="beat_analysis")
+        _enforce_action_rate_limit(
+            f"beat_analysis:{current_user['id']}",
+            limit=8,
+            window_seconds=600,
+            detail_message="Too many beat analysis requests. Please wait a few minutes.",
         )
-        
-        # Parse response
-        try:
-            response_text = response.strip()
-            if '```json' in response_text:
-                start = response_text.find('```json') + 7
-                end = response_text.find('```', start)
-                response_text = response_text[start:end].strip()
-            elif '```' in response_text:
-                start = response_text.find('```') + 3
-                end = response_text.find('```', start)
-                response_text = response_text[start:end].strip()
-            
-            analysis = _parse_llm_json_response(response_text)
-            
-            return BeatAnalysisResponse(**analysis)
-            
-        except Exception as e:
-            logging.error(f"Failed to parse beat analysis: {str(e)}")
-            # Return fallback analysis
-            return BeatAnalysisResponse(
-                overall_score=70,
-                title_score=70,
-                tags_score=70,
-                seo_score=70,
-                strengths=["Title looks good", "Tags are present"],
-                weaknesses=["Analysis formatting issue"],
-                suggestions=["Try analyzing again", "Ensure title includes artist name", "Add more specific tags"],
-                predicted_performance="Average"
-            )
-        
+        job_doc = await _create_background_job(
+            current_user=current_user,
+            job_type="beat_analysis",
+            payload=request.model_dump(),
+            message="Queued beat analysis job.",
+        )
+        return {"success": True, "queued": True, "message": "Beat analysis queued.", "job": _sanitize_upload_job_doc(job_doc)}
     except Exception as e:
-        logging.error(f"Beat analysis error: {str(e)}")
+        logging.error(f"Beat analysis queueing error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -5901,77 +7174,38 @@ def _fetch_channel_top_viewed_beats(youtube_url: str, top_k: int = 5) -> tuple[l
         return [], performance
 
 
+def _serialize_for_cache(value: Any) -> Any:
+    return spotlight_service.serialize_for_cache(value)
+
+
+async def _compute_spotlight_payload() -> dict[str, Any]:
+    return await spotlight_service.compute_spotlight_payload()
+
+
+async def _compute_producer_stats_payload(user_id: str) -> dict[str, Any]:
+    try:
+        return await spotlight_service.compute_producer_stats_payload(user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+async def _refresh_spotlight_caches_once() -> dict[str, Any]:
+    return await spotlight_service.refresh_caches_once()
+
+
+async def _spotlight_refresh_loop() -> None:
+    await spotlight_service.refresh_loop()
+
+
 @api_router.get("/producers/spotlight", response_model=SpotlightResponse)
 async def get_producer_spotlight():
-    """Get featured, trending, and new producers for the spotlight page"""
-    all_profiles, growth_rows = await asyncio.gather(
-        db.producer_profiles.find({}, SPOTLIGHT_PROFILE_PROJECTION).to_list(5000),
-        db.growth_streaks.find(
-            {},
-            {"_id": 0, "user_id": 1, "current_streak": 1, "longest_streak": 1, "total_days_completed": 1},
-        ).to_list(5000),
-    )
-    if not all_profiles:
-        return SpotlightResponse(
-            featured_producers=[],
-            trending_producers=[],
-            new_producers=[],
-            all_producers=[],
-        )
+    """Get featured, trending, and new producers for the spotlight page."""
+    cached = await db.spotlight_cache.find_one({"key": "global"}, {"_id": 0, "payload": 1})
+    if cached and isinstance(cached.get("payload"), dict):
+        return SpotlightResponse(**cached["payload"])
 
-    growth_by_user = {g.get("user_id"): g for g in growth_rows}
-
-    def trending_score(profile: dict) -> float:
-        growth = growth_by_user.get(profile.get("user_id"), {})
-        likes = float(profile.get("likes") or 0)
-        views = float(profile.get("views") or 0)
-        streak = float(growth.get("current_streak") or 0)
-        days = float(growth.get("total_days_completed") or 0)
-        # Networking signal: active streak + engagement.
-        return likes * 4.0 + views * 0.15 + streak * 8.0 + days * 1.5
-
-    featured = [p for p in all_profiles if p.get("featured")]
-    featured = sorted(featured, key=trending_score, reverse=True)[:3]
-    trending = sorted(all_profiles, key=trending_score, reverse=True)[:12]
-    def created_at_ts(profile: dict) -> float:
-        value = profile.get("created_at")
-        if isinstance(value, datetime):
-            return value.timestamp()
-        if isinstance(value, str):
-            try:
-                return datetime.fromisoformat(value).timestamp()
-            except Exception:
-                return 0.0
-        return 0.0
-
-    new_producers = sorted(all_profiles, key=created_at_ts, reverse=True)[:12]
-    ranked_profiles = sorted(all_profiles, key=trending_score, reverse=True)
-
-    metrics_candidates_by_user: dict[str, dict] = {}
-    for profile in featured + trending + new_producers + ranked_profiles[:24]:
-        user_id = profile.get("user_id")
-        if user_id and user_id not in metrics_candidates_by_user:
-            metrics_candidates_by_user[user_id] = profile
-    await _refresh_spotlight_metrics_for_profiles(list(metrics_candidates_by_user.values()))
-
-    featured = sorted(featured, key=trending_score, reverse=True)[:3]
-    trending = sorted(trending, key=trending_score, reverse=True)[:12]
-    new_producers = sorted(new_producers, key=created_at_ts, reverse=True)[:12]
-    ranked_profiles = sorted(all_profiles, key=trending_score, reverse=True)
-
-    featured_profiles, trending_profiles, new_profiles, all_network_profiles = await asyncio.gather(
-        _build_spotlight_profiles(featured, growth_by_user),
-        _build_spotlight_profiles(trending, growth_by_user),
-        _build_spotlight_profiles(new_producers, growth_by_user),
-        _build_spotlight_profiles(ranked_profiles[:SPOTLIGHT_ALL_PRODUCERS_LIMIT], growth_by_user),
-    )
-
-    return SpotlightResponse(
-        featured_producers=featured_profiles,
-        trending_producers=trending_profiles,
-        new_producers=new_profiles,
-        all_producers=all_network_profiles,
-    )
+    payload = await _compute_spotlight_payload()
+    return SpotlightResponse(**payload)
 
 @api_router.get("/producers/me", response_model=ProducerProfile)
 async def get_my_producer_profile(current_user: dict = Depends(get_current_user)):
@@ -6002,81 +7236,12 @@ async def get_my_producer_profile(current_user: dict = Depends(get_current_user)
 @api_router.get("/producers/{user_id}/stats")
 async def get_producer_stats(user_id: str, current_user: dict = Depends(get_current_user)):
     """Detailed spotlight card stats for modal view."""
-    profile = await db.producer_profiles.find_one({"user_id": user_id})
-    if not profile:
-        raise HTTPException(status_code=404, detail="Producer profile not found.")
+    cached = await db.producer_stats_cache.find_one({"user_id": user_id}, {"_id": 0, "payload": 1})
+    if cached and isinstance(cached.get("payload"), dict):
+        return cached["payload"]
 
-    user_doc = await db.users.find_one({"id": user_id}, {"_id": 0, "username": 1, "created_at": 1})
-    growth = await db.growth_streaks.find_one({"user_id": user_id}, {"_id": 0})
-    youtube = await db.youtube_connections.find_one({"user_id": user_id}, {"_id": 0, "name": 1, "google_email": 1, "connected_at": 1})
-
-    uploads = await db.uploads.find({"user_id": user_id}, {"_id": 0, "file_type": 1, "uploaded_at": 1}).to_list(2000)
-    descriptions_count = await db.descriptions.count_documents({"user_id": user_id})
-    tag_sets_count = await db.tag_history.count_documents({"user_id": user_id})
-
-    audio_uploads = sum(1 for u in uploads if u.get("file_type") == "audio")
-    image_uploads = sum(1 for u in uploads if u.get("file_type") == "image")
-
-    profile_with_role = await _profile_with_role_tag(profile)
-    top_beats = []
-    if profile.get("top_beat_url"):
-        top_beats.append({
-            "title": "Top Beat",
-            "url": profile.get("top_beat_url"),
-        })
-
-    recent_audio = await db.uploads.find(
-        {"user_id": user_id, "file_type": "audio"},
-        {"_id": 0, "original_filename": 1, "uploaded_at": 1}
-    ).sort("uploaded_at", -1).limit(5).to_list(5)
-    for idx, upload in enumerate(recent_audio):
-        name = (upload.get("original_filename") or "").strip()
-        if not name:
-            continue
-        top_beats.append({
-            "title": f"Beat {idx + 1}: {name}",
-            "url": None,
-        })
-
-    youtube_url = ((profile.get("social_links") or {}).get("youtube") or "").strip()
-    channel_top_beats, channel_perf = await asyncio.to_thread(_fetch_channel_top_viewed_beats, youtube_url, 5)
-    if channel_top_beats:
-        # Prefer real channel top beats for spotlight.
-        top_beats = channel_top_beats
-    spotlight_likes = int(profile.get("likes") or 0)
-    if channel_top_beats:
-        youtube_likes = sum(int(beat.get("likes") or 0) for beat in channel_top_beats)
-        if youtube_likes > 0:
-            spotlight_likes = youtube_likes
-    spotlight_views = int(profile.get("views") or 0)
-    if channel_perf.get("total_views"):
-        spotlight_views = int(channel_perf.get("total_views") or 0)
-
-    return {
-        "profile": profile_with_role.model_dump(),
-        "stats": {
-            "likes": spotlight_likes,
-            "views": spotlight_views,
-            "current_streak": int((growth or {}).get("current_streak") or 0),
-            "longest_streak": int((growth or {}).get("longest_streak") or 0),
-            "total_days_completed": int((growth or {}).get("total_days_completed") or 0),
-            "descriptions_created": int(descriptions_count),
-            "tag_sets_created": int(tag_sets_count),
-            "audio_uploads": int(audio_uploads),
-            "image_uploads": int(image_uploads),
-        },
-        "top_beats": top_beats,
-        "top_song": profile.get("top_beat_url"),
-        "channel": {
-            "connected": bool(youtube),
-            "name": (youtube or {}).get("name"),
-            "email": (youtube or {}).get("google_email"),
-            "connected_at": (youtube or {}).get("connected_at"),
-            "performance": channel_perf,
-        },
-        "channel_top_beats": channel_top_beats,
-        "member_since": (user_doc or {}).get("created_at"),
-    }
+    payload = await _compute_producer_stats_payload(user_id)
+    return _serialize_for_cache(payload)
 
 @api_router.put("/producers/me", response_model=ProducerProfile)
 async def update_my_producer_profile(
@@ -6341,135 +7506,75 @@ async def review_verification_application(
     return await _profile_with_role_tag(updated)
 
 # ============ Beat Fixes Route ============
-@api_router.post("/beat/fix", response_model=BeatFixResponse)
+@api_router.post("/beat/fix")
 async def fix_beat(request: BeatFixRequest, current_user: dict = Depends(get_current_user)):
-    """Apply AI fixes to title/description/tags only when analysis indicates issues."""
+    """Create a background job for beat fixes."""
     try:
+        await _guard_heavy_feature(current_user=current_user, feature_key="beat_fix", job_type="beat_fix")
+        _enforce_action_rate_limit(
+            f"beat_fix:{current_user['id']}",
+            limit=8,
+            window_seconds=600,
+            detail_message="Too many beat fix requests. Please wait a few minutes.",
+        )
         await ensure_has_credit(current_user['id'], "fixes")
-
-        analysis = request.analysis
-        issues_text = " ".join(analysis.weaknesses + analysis.suggestions).lower()
-
-        needs_title = analysis.title_score < 70 or "title" in issues_text
-        needs_tags = analysis.tags_score < 70 or "tag" in issues_text
-        needs_description = (not request.description.strip()) or ("description" in issues_text) or ("seo" in issues_text)
-
-        if not any([needs_title, needs_tags, needs_description]):
-            return BeatFixResponse(
-                title=request.title,
-                tags=request.tags[:120],
-                description=request.description,
-                applied_fixes={"title": False, "tags": False, "description": False},
-                notes="No critical issues detected. No fixes applied."
-            )
-
-        fix_prompt = f"""You are a YouTube beat upload editor. Apply fixes ONLY to areas flagged below.
-
-Inputs:
-TITLE: {request.title}
-TAGS ({len(request.tags)}): {", ".join(request.tags)}
-DESCRIPTION: {request.description if request.description else "No description provided"}
-
-Analysis feedback:
-Weaknesses: {analysis.weaknesses}
-Suggestions: {analysis.suggestions}
-
-Fix flags:
-- title: {"YES" if needs_title else "NO"}
-- tags: {"YES" if needs_tags else "NO"}
-- description: {"YES" if needs_description else "NO"}
-
-Rules:
-1) If a fix flag is NO, return the original value unchanged for that field.
-2) Tags must be high-intent, relevant, and NOT stuffed. Max 120 tags. Keep order sensible.
-3) Title should be YouTube-searchable with the artist x artist type beat format when relevant.
-4) Description must sound like a real producer upload (not an AI response). Keep the user's vibe.
-5) If description is fixed, add a short pricing line if missing (e.g., "Lease: $20 | Trackout: $50 | Unlimited: $100").
-6) Keep any contact/social links present in the original description.
-7) Return STRICT JSON only.
-
-Return JSON schema:
-{{
-  "title": "string",
-  "tags": ["tag1", "tag2"],
-  "description": "string",
-  "applied_fixes": {{
-    "title": true/false,
-    "tags": true/false,
-    "description": true/false
-  }},
-  "notes": "short summary"
-}}
-"""
-
-        try:
-            response = await llm_chat(
-                system_message="You refine beat uploads for YouTube. Be concise, practical, and keep the creator's style.",
-                user_message=fix_prompt,
-            )
-
-            response_text = response.strip()
-            if '```json' in response_text:
-                start = response_text.find('```json') + 7
-                end = response_text.find('```', start)
-                response_text = response_text[start:end].strip()
-            elif '```' in response_text:
-                start = response_text.find('```') + 3
-                end = response_text.find('```', start)
-                response_text = response_text[start:end].strip()
-
-            fixed = json.loads(response_text)
-
-            tags = fixed.get("tags", request.tags)
-            if not isinstance(tags, list):
-                tags = request.tags
-            tags = tags[:120]
-
-            result = BeatFixResponse(
-                title=fixed.get("title", request.title),
-                tags=tags,
-                description=fixed.get("description", request.description),
-                applied_fixes=fixed.get("applied_fixes", {
-                    "title": needs_title,
-                    "tags": needs_tags,
-                    "description": needs_description
-                }),
-                notes=fixed.get("notes")
-            )
-
-            await consume_credit(current_user['id'])
-            return result
-        except Exception as e:
-            logging.error(f"Failed to apply beat fixes: {str(e)}")
-            await consume_credit(current_user['id'])
-            return BeatFixResponse(
-                title=request.title,
-                tags=request.tags[:120],
-                description=request.description,
-                applied_fixes={"title": False, "tags": False, "description": False},
-                notes="Failed to apply fixes. Please try again."
-            )
+        job_doc = await _create_background_job(
+            current_user=current_user,
+            job_type="beat_fix",
+            payload=request.model_dump(),
+            message="Queued beat fix job.",
+        )
+        return {"success": True, "queued": True, "message": "Beat fix queued.", "job": _sanitize_upload_job_doc(job_doc)}
     except HTTPException:
         raise
     except Exception as e:
-        logging.error(f"Beat fix error: {str(e)}")
+        logging.error(f"Beat fix queueing error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 # ============ AI Image Suggestions Route ============
-@api_router.post("/beat/generate-image", response_model=ImageGenerateResponse)
+@api_router.post("/beat/generate-image")
 async def generate_image_suggestions(
     request: ImageGenerateRequest,
     current_user: dict = Depends(get_current_user),
 ):
     """Generate artist-aware reference images based on title + selected tags."""
-    try:
-        title = (request.title or "").strip()
-        tags = request.tags or []
-        k = max(1, min(int(request.k or 6), 12))
-        if not title and not tags:
-            raise HTTPException(status_code=400, detail="title or tags are required.")
+    title = (request.title or "").strip()
+    tags = request.tags or []
+    k = max(1, min(int(request.k or 6), 12))
+    if not title and not tags:
+        raise HTTPException(status_code=400, detail="title or tags are required.")
 
+    if not current_user.get("_execute_inline"):
+        await _guard_heavy_feature(current_user=current_user, feature_key="image_search", job_type="image_search")
+        _enforce_action_rate_limit(
+            f"image_search:{current_user['id']}",
+            limit=12,
+            window_seconds=600,
+            detail_message="Too many image search requests. Please wait a few minutes.",
+        )
+        payload = {
+            "request_kind": "beat_generate_image",
+            "title": title,
+            "tags": tags,
+            "k": k,
+        }
+        cache_key = _build_ai_cache_key(namespace="beat_generate_image", user_id=current_user["id"], payload=payload)
+        cached = await _get_cached_ai_payload(cache_key)
+        if cached:
+            return cached
+        active_job = await _find_active_background_job(current_user=current_user, job_type="image_search", cache_key=cache_key)
+        if active_job:
+            return {"success": True, "queued": True, "message": "Image search already in progress.", "job": _sanitize_upload_job_doc(active_job)}
+        payload["cache_key"] = cache_key
+        job_doc = await _create_background_job(
+            current_user=current_user,
+            job_type="image_search",
+            payload=payload,
+            message="Queued image search.",
+        )
+        return {"success": True, "queued": True, "message": "Image search queued.", "job": _sanitize_upload_job_doc(job_doc)}
+    try:
         artists, query_variants, query = _build_image_query_variants(title, tags)
         results: list[dict] = []
         results.extend(_search_catalog_artist_images(query_variants, artists, k))
@@ -6477,12 +7582,14 @@ async def generate_image_suggestions(
             results.extend(_search_stock_image_results(query_variants, artists, k))
         if len(results) < k:
             results.extend(_search_bing_image_results(query_variants, artists, k))
-
-        return ImageGenerateResponse(
+        result = ImageGenerateResponse(
             query_used=query,
             detected_artists=artists,
             results=_dedupe_generated_image_results(results, k)
-        )
+        ).model_dump()
+        if current_user.get("_execute_inline"):
+            return result
+        return result
     except HTTPException:
         raise
     except Exception as e:
@@ -6490,13 +7597,21 @@ async def generate_image_suggestions(
         raise HTTPException(status_code=500, detail=f"Failed to generate image suggestions: {str(e)}")
 
 
-@api_router.post("/beat-helper/image-search", response_model=ImageGenerateResponse)
+@api_router.post("/beat-helper/image-search")
 async def beathelper_search_images(
     request: BeatHelperImageSearchRequest,
     current_user: dict = Depends(get_current_user),
 ):
     try:
         await _ensure_pro_user(current_user, "BeatHelper")
+        if not current_user.get("_execute_inline"):
+            await _guard_heavy_feature(current_user=current_user, feature_key="image_search", job_type="image_search")
+            _enforce_action_rate_limit(
+                f"beathelper_image_search:{current_user['id']}",
+                limit=12,
+                window_seconds=600,
+                detail_message="Too many BeatHelper image searches. Please wait a few minutes.",
+            )
 
         parts = [
             (request.search_query or "").strip(),
@@ -6523,6 +7638,33 @@ async def beathelper_search_images(
                 ] if value
             ).strip()
 
+        if not current_user.get("_execute_inline"):
+            payload = {
+                "request_kind": "beathelper_image_search",
+                "search_query": request.search_query or "",
+                "target_artist": request.target_artist or "",
+                "beat_type": request.beat_type or "",
+                "generated_title_override": request.generated_title_override or "",
+                "context_tags": tags,
+                "k": max(1, min(int(request.k or 8), 12)),
+                "smart_title": smart_title,
+            }
+            cache_key = _build_ai_cache_key(namespace="beathelper_image_search", user_id=current_user["id"], payload=payload)
+            cached = await _get_cached_ai_payload(cache_key)
+            if cached:
+                return cached
+            active_job = await _find_active_background_job(current_user=current_user, job_type="image_search", cache_key=cache_key)
+            if active_job:
+                return {"success": True, "queued": True, "message": "BeatHelper image search already in progress.", "job": _sanitize_upload_job_doc(active_job)}
+            payload["cache_key"] = cache_key
+            job_doc = await _create_background_job(
+                current_user=current_user,
+                job_type="image_search",
+                payload=payload,
+                message="Queued BeatHelper image search.",
+            )
+            return {"success": True, "queued": True, "message": "BeatHelper image search queued.", "job": _sanitize_upload_job_doc(job_doc)}
+
         return await generate_image_suggestions(
             ImageGenerateRequest(
                 title=smart_title,
@@ -6539,7 +7681,7 @@ async def beathelper_search_images(
 
 
 # ============ Thumbnail Checker Route ============
-@api_router.post("/beat/thumbnail-check", response_model=ThumbnailCheckResponse)
+@api_router.post("/beat/thumbnail-check")
 async def check_thumbnail(
     request: Request,
     file: UploadFile | None = File(default=None),
@@ -6550,8 +7692,15 @@ async def check_thumbnail(
     llm_provider: Optional[str] = Form(None),
     current_user: dict = Depends(get_current_user),
 ):
-    """Analyze a thumbnail image for click potential and clarity"""
+    """Create a background job for thumbnail checking."""
     try:
+        await _guard_heavy_feature(current_user=current_user, feature_key="thumbnail_check", job_type="thumbnail_check")
+        _enforce_action_rate_limit(
+            f"thumbnail_check:{current_user['id']}",
+            limit=8,
+            window_seconds=600,
+            detail_message="Too many thumbnail check requests. Please wait a few minutes.",
+        )
         await ensure_has_credit(current_user['id'], "thumbnail checks")
 
         if not title.strip() or not tags.strip() or not description.strip():
@@ -6560,131 +7709,46 @@ async def check_thumbnail(
                 detail="Title, tags, and description are required for thumbnail checks."
             )
 
-        image_bytes: bytes | None = None
+        image_bytes_b64 = ""
         image_mime = "image/jpeg"
+        safe_image_file_id = image_file_id.strip()
 
         if file is not None and getattr(file, "filename", None):
             allowed_types = {"image/jpeg", "image/png", "image/webp"}
             if file.content_type not in allowed_types:
                 raise HTTPException(status_code=400, detail="Invalid image type. Use JPG, PNG, or WEBP.")
             image_bytes = await file.read()
+            if not image_bytes:
+                raise HTTPException(status_code=400, detail="No image provided for thumbnail check.")
+            image_bytes_b64 = base64.b64encode(image_bytes).decode("utf-8")
             image_mime = file.content_type or image_mime
-        elif image_file_id.strip():
-            upload = await db.uploads.find_one({"id": image_file_id.strip(), "user_id": current_user["id"], "file_type": "image"})
+        elif safe_image_file_id:
+            upload = await db.uploads.find_one({"id": safe_image_file_id, "user_id": current_user["id"], "file_type": "image"})
             if not upload:
                 raise HTTPException(status_code=404, detail="Referenced image file not found.")
-            path = Path(upload.get("file_path", ""))
-            if not path.exists():
-                raise HTTPException(status_code=404, detail="Referenced image file is missing on server.")
-            image_bytes = path.read_bytes()
-            ext = path.suffix.lower()
-            image_mime = ".png" == ext and "image/png" or (".webp" == ext and "image/webp" or "image/jpeg")
-
-        if not image_bytes:
+        else:
             raise HTTPException(status_code=400, detail="No image provided for thumbnail check.")
 
-        analysis_prompt = f"""You are a YouTube beat-thumbnail specialist and active internet-money style producer in LA (~10k subs).
-Your job is to improve CTR and retention for TYPE BEAT uploads using a single static image.
-
-Context:
-- Video title: "{title}"
-- Tags: "{tags}"
-- Description (optional): "{description}"
-
-Analyze like a producer who uploads daily and optimizes thumbnails for YouTube search + suggested.
-Focus on:
-1) Mobile legibility and instant clarity (1-second glance test)
-2) Contrast, focal point, and visual hierarchy
-3) Relevance to the artist/type beat vibe in the title
-4) Simple, repeatable branding (corner badge, color system)
-5) Whether text (if any) is minimal, bold, and useful
-
-Avoid irrelevant advice (e.g., motion). Assume the thumbnail is a static image.
-Be practical and specific to beat uploads.
-
-Return STRICT JSON with this exact schema:
-{{
-  "score": 0-100,
-  "verdict": "one short sentence",
-  "strengths": ["..."],
-  "issues": ["..."],
-  "suggestions": ["..."],
-  "text_overlay_suggestion": "short text idea for the thumbnail",
-  "branding_suggestion": "one short branding tweak"
-}}
-"""
-
-        response_text = await llm_chat_with_image(
-            system_message="You are a ruthless but helpful beat-thumbnail critic. Be concise, actionable, and focused on CTR for type beat uploads.",
-            user_message=analysis_prompt,
-            image_bytes=image_bytes,
-            image_mime=image_mime,
-            provider=llm_provider,
-            max_tokens=600,
+        payload = {
+            "image_file_id": safe_image_file_id,
+            "image_bytes_b64": image_bytes_b64,
+            "image_mime": image_mime,
+            "title": title,
+            "tags": tags,
+            "description": description,
+            "llm_provider": llm_provider,
+        }
+        job_doc = await _create_background_job(
+            current_user=current_user,
+            job_type="thumbnail_check",
+            payload=payload,
+            message="Queued thumbnail analysis job.",
         )
-
-        try:
-            try:
-                analysis = _parse_llm_json_response(response_text)
-            except Exception:
-                repair_prompt = f"""Convert the following thumbnail analysis into STRICT JSON only.
-Do not add commentary. Return exactly one JSON object with this schema:
-{{
-  "score": 0-100,
-  "verdict": "one short sentence",
-  "strengths": ["..."],
-  "issues": ["..."],
-  "suggestions": ["..."],
-  "text_overlay_suggestion": "short text idea for the thumbnail",
-  "branding_suggestion": "one short branding tweak"
-}}
-
-If a field is missing, infer a safe value.
-
-RAW INPUT:
-{response_text}
-"""
-                normalized_text = await llm_chat(
-                    system_message="You convert LLM outputs into strict valid JSON objects.",
-                    user_message=repair_prompt,
-                    temperature=0.0,
-                    max_tokens=500,
-                    provider=(llm_provider or ("openai" if os.environ.get("OPENAI_API_KEY") else None)),
-                    user_id=current_user.get("id"),
-                )
-                analysis = _parse_llm_json_response(normalized_text)
-            if await request.is_disconnected():
-                logging.info("Thumbnail check canceled by client; skipping credit use.")
-                return ThumbnailCheckResponse(**analysis)
-            await consume_credit(current_user['id'])
-            return ThumbnailCheckResponse(**analysis)
-        except Exception as e:
-            logging.error(f"Failed to parse thumbnail analysis: {str(e)} | raw_response={response_text[:1200]}")
-            if await request.is_disconnected():
-                logging.info("Thumbnail check canceled by client; skipping credit use.")
-                return ThumbnailCheckResponse(
-                    score=55,
-                    verdict="Thumbnail analysis completed but formatting failed.",
-                    strengths=["Clear subject or artwork present"],
-                    issues=["Unable to parse detailed feedback"],
-                    suggestions=["Try again for full details", "Increase contrast and simplify text"],
-                    text_overlay_suggestion="FUTURE x UZI TYPE BEAT",
-                    branding_suggestion="Add a consistent corner badge with your logo",
-                )
-            await consume_credit(current_user['id'])
-            return ThumbnailCheckResponse(
-                score=55,
-                verdict="Thumbnail analysis completed but formatting failed.",
-                strengths=["Clear subject or artwork present"],
-                issues=["Unable to parse detailed feedback"],
-                suggestions=["Try again for full details", "Increase contrast and simplify text"],
-                text_overlay_suggestion="FUTURE x UZI TYPE BEAT",
-                branding_suggestion="Add a consistent corner badge with your logo",
-            )
+        return {"success": True, "queued": True, "message": "Thumbnail check queued.", "job": _sanitize_upload_job_doc(job_doc)}
     except HTTPException:
         raise
     except Exception as e:
-        logging.error(f"Thumbnail check error: {str(e)}")
+        logging.error(f"Thumbnail check queueing error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to analyze thumbnail: {str(e)}")
 
 
@@ -6709,390 +7773,90 @@ async def upload_to_youtube(
     remove_watermark: bool = Form(False),
     current_user: dict = Depends(get_current_user)
 ):
-    """Upload video to YouTube with selected description and tags"""
+    """Create a persisted YouTube upload job and return immediately."""
     try:
-        logging.info(f"Starting YouTube upload for user {current_user['id']}")
-        
-        # Check if user wants to remove watermark but is not subscribed
-        user_sub_status = await get_user_subscription_status(current_user['id'])
-        is_subscribed = user_sub_status.get('is_subscribed', False)
-        
-        if remove_watermark and not is_subscribed:
-            raise HTTPException(
-                status_code=402,
-                detail={
-                    "message": "Watermark removal is a Pro feature. Upgrade to Pro to remove watermarks!",
-                    "feature": "remove_watermark"
-                }
-            )
-        
-        # Check if user has upload credits
-        has_credit = await check_and_use_upload_credit(current_user['id'])
-        if not has_credit:
-            status = await get_user_subscription_status(current_user['id'])
-            raise HTTPException(
-                status_code=402,
-                detail={
-                    "message": "Daily upload limit reached. Upgrade to Pro for unlimited uploads!",
-                    "resets_at": status.get('resets_at')
-                }
-            )
-        
-        # Get and refresh YouTube credentials if needed
-        try:
-            credentials = await refresh_youtube_token(current_user['id'])
-            logging.info("YouTube credentials refreshed successfully")
-        except Exception as e:
-            logging.error(f"Error refreshing token: {str(e)}")
-            raise
-        
-        # Get description
-        desc_doc = await db.descriptions.find_one({"id": description_id, "user_id": current_user['id']})
-        if not desc_doc:
-            raise HTTPException(status_code=404, detail="Description not found")
-        
-        description_text = (description_override or desc_doc['content']).strip()
-        promo_line = "Visit www.sendmybeat.com to upload beats for free!"
-        if not is_subscribed:
-            if description_text.lower().startswith(promo_line.lower()):
-                description_text = description_text
-            elif description_text:
-                description_text = f"{promo_line}\n{description_text}"
-            else:
-                description_text = promo_line
-        
-        # Get tags if provided
-        tags = []
-        if tags_id:
-            tags_doc = await db.tag_generations.find_one({"id": tags_id, "user_id": current_user['id']})
-            if tags_doc:
-                # YouTube tag requirements:
-                # - Max 500 characters total for all tags
-                # - Each tag max 30 characters
-                # - Special characters can cause issues
-                raw_tags = tags_doc['tags']
-                
-                total_chars = 0
-                for tag in raw_tags:
-                    # Clean tag - remove problematic characters
-                    cleaned_tag = tag.strip().replace('"', '').replace("'", '')
-                    
-                    # Skip if too long or empty
-                    if not cleaned_tag or len(cleaned_tag) > 30:
-                        continue
-                    
-                    # Check if adding this tag would exceed limit
-                    tag_length = len(cleaned_tag) + 2  # +2 for separator
-                    if total_chars + tag_length > 450:  # Leave some buffer
-                        break
-                    
-                    tags.append(cleaned_tag)
-                    total_chars += tag_length
-                
-                logging.info(f"Using {len(tags)} tags (total {total_chars} chars) out of {len(raw_tags)} generated")
-        
-        # Get uploaded files
-        audio_file = await db.uploads.find_one({"id": audio_file_id, "user_id": current_user['id']})
-        image_file = await db.uploads.find_one({"id": image_file_id, "user_id": current_user['id']})
-        
-        if not audio_file or not image_file:
-            raise HTTPException(status_code=404, detail="Audio and image files are required")
-        
-        visual_kind = _visual_kind_from_upload(image_file)
-
-        # Create video from audio + image/video using ffmpeg
-        video_filename = f"{uuid.uuid4()}.mp4"
-        video_path = UPLOADS_DIR / video_filename
-        
-        # Optimized ffmpeg command for large files
-        # Try to find ffmpeg, install if not found
-        ffmpeg_path = shutil.which('ffmpeg')
-        
-        if not ffmpeg_path:
-            # Try to install ffmpeg if not found
-            logging.warning("FFmpeg not found, attempting to install...")
-            try:
-                install_result = subprocess.run(
-                    ['apt-get', 'update'],
-                    capture_output=True,
-                    timeout=120
-                )
-                install_result = subprocess.run(
-                    ['apt-get', 'install', '-y', 'ffmpeg'],
-                    capture_output=True,
-                    timeout=300
-                )
-                ffmpeg_path = shutil.which('ffmpeg')
-                if ffmpeg_path:
-                    logging.info(f"FFmpeg successfully installed at {ffmpeg_path}")
-                else:
-                    raise Exception("FFmpeg installation failed")
-            except Exception as install_error:
-                logging.error(f"Failed to install FFmpeg: {str(install_error)}")
-                raise HTTPException(
-                    status_code=500,
-                    detail="FFmpeg not available. Please contact support or install FFmpeg on the server."
-                )
-        
-        logging.info(f"Using FFmpeg at: {ffmpeg_path}")
-        
-        aspect_ratio = (aspect_ratio or "16:9").strip()
-        aspect_map = {
-            "16:9": (1280, 720),
-            "1:1": (1080, 1080),
-            "9:16": (1080, 1920),
-            "4:5": (1080, 1350),
-        }
-        if aspect_ratio not in aspect_map:
-            raise HTTPException(status_code=400, detail="Invalid aspect_ratio. Use 16:9, 1:1, 9:16, or 4:5.")
-        target_w, target_h = aspect_map[aspect_ratio]
-
-        scale_x = image_scale_x if image_scale_x is not None else image_scale
-        scale_y = image_scale_y if image_scale_y is not None else image_scale
-
-        if not 0.5 <= scale_x <= 2.0:
-            raise HTTPException(status_code=400, detail="image_scale_x must be between 0.5 and 2.0.")
-        if not 0.5 <= scale_y <= 2.0:
-            raise HTTPException(status_code=400, detail="image_scale_y must be between 0.5 and 2.0.")
-        if not -1.0 <= image_pos_x <= 1.0:
-            raise HTTPException(status_code=400, detail="image_pos_x must be between -1 and 1.")
-        if not -1.0 <= image_pos_y <= 1.0:
-            raise HTTPException(status_code=400, detail="image_pos_y must be between -1 and 1.")
-        if not -180.0 <= image_rotation <= 180.0:
-            raise HTTPException(status_code=400, detail="image_rotation must be between -180 and 180 degrees.")
-
-        background_color = (background_color or "black").strip().lower()
-        if background_color not in ("black", "white"):
-            raise HTTPException(status_code=400, detail="background_color must be black or white.")
-
-        # Always fit inside the target frame to avoid pad errors
-        scale_x = min(scale_x, 1.0)
-        scale_y = min(scale_y, 1.0)
-        fit_expr = f"min({target_w}/iw\\,{target_h}/ih)"
-
-        # Build video filter - add watermark for non-pro users OR pro users who didn't uncheck it
-        rotation_filter = ""
-        if abs(image_rotation) > 0.01:
-            rotation_filter = (
-                f"rotate={image_rotation}*PI/180:c={background_color}:ow=rotw(iw):oh=roth(ih),"
-            )
-
-        video_filter = (
-            f"scale=iw*{fit_expr}*{scale_x}:ih*{fit_expr}*{scale_y},"
-            f"{rotation_filter}"
-            f"pad={target_w}:{target_h}:(ow-iw)/2+(ow-iw)/2*{image_pos_x}:(oh-ih)/2+(oh-ih)/2*{image_pos_y}:{background_color}"
+        await _guard_heavy_feature(current_user=current_user, feature_key="youtube_upload", job_type="youtube_upload")
+        _enforce_action_rate_limit(
+            f"youtube_upload:{current_user['id']}",
+            limit=6,
+            window_seconds=900,
+            detail_message="Too many YouTube upload requests. Please wait a bit before starting another one.",
         )
-        
-        # Add watermark logic:
-        # - Free users: ALWAYS get watermark (remove_watermark is ignored/blocked at API level)
-        # - Pro users: Get watermark UNLESS they checked "remove_watermark"
-        should_add_watermark = not is_subscribed or not remove_watermark
-        
-        if should_add_watermark:
-            # Add text watermark at the top left with black semi-transparent background
-            watermark_text = 'Upload your beats for free: https://sendmybeat.com'
-            # Escape special characters for FFmpeg
-            watermark_text_escaped = watermark_text.replace(':', r'\:').replace('/', r'\/')
-            
-            # Add black background box with some padding for better visibility
-            video_filter += f",drawtext=text='{watermark_text_escaped}':fontcolor=white:fontsize=20:x=20:y=20:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:box=1:boxcolor=black@0.6:boxborderw=8"
-            
-            logging.info(f"Adding watermark at top-left with background - User type: {'free' if not is_subscribed else 'pro (chose to keep it)'}")
-        else:
-            logging.info("Pro user - watermark removed per user request")
-        
-        audio_ext = Path(audio_file['file_path']).suffix.lower()
-        copy_audio = audio_ext in (".mp3", ".m4a", ".aac")
-
-        audio_args = ['-c:a', 'copy'] if copy_audio else ['-c:a', 'aac', '-b:a', '320k', '-ar', '48000']
-
-        if visual_kind == "video":
-            ffmpeg_cmd = [
-                ffmpeg_path,
-                '-stream_loop', '-1',
-                '-i', image_file['file_path'],
-                '-i', audio_file['file_path'],
-                '-map', '0:v:0',
-                '-map', '1:a:0',
-                '-c:v', 'libx264',
-                '-preset', 'ultrafast',
-                '-crf', '28',
-                *audio_args,
-                '-pix_fmt', 'yuv420p',
-                '-vf', video_filter,
-                '-shortest',
-                '-movflags', '+faststart',
-                '-threads', '0',
-                '-y',
-                str(video_path)
-            ]
-        else:
-            ffmpeg_cmd = [
-                ffmpeg_path,
-                '-loop', '1',
-                '-framerate', '0.5',
-                '-i', image_file['file_path'],
-                '-i', audio_file['file_path'],
-                '-c:v', 'libx264',
-                '-preset', 'ultrafast',
-                '-crf', '28',
-                '-tune', 'stillimage',
-                *audio_args,
-                '-pix_fmt', 'yuv420p',
-                '-vf', video_filter,
-                '-shortest',
-                '-movflags', '+faststart',
-                '-threads', '0',
-                '-y',
-                str(video_path)
-            ]
-        
-        logging.info(f"Creating video with ffmpeg: {' '.join(ffmpeg_cmd)}")
-        
-        try:
-            # Run ffmpeg with timeout for large files (10 minutes)
-            result = subprocess.run(
-                ffmpeg_cmd, 
-                capture_output=True, 
-                text=True, 
-                timeout=600
-            )
-            
-            if result.returncode != 0:
-                logging.error(f"FFmpeg error: {result.stderr}")
-                raise Exception(f"Video creation failed: {result.stderr[:500]}")
-            
-            logging.info(f"Video created successfully at {video_path}")
-            
-        except subprocess.TimeoutExpired:
-            logging.error("FFmpeg timeout - file too large")
-            raise Exception("Video creation timed out. File may be too large (>150MB).")
-        
-        # Upload to YouTube
-        youtube = build('youtube', 'v3', credentials=credentials)
-        
-        # Prepare video metadata
-        snippet = {
-            'title': title[:100],  # YouTube title max 100 chars
-            'description': description_text[:5000],  # YouTube description max 5000 chars
-            'categoryId': '10'  # Music category
-        }
-        
-        # Only add tags if we have valid ones
-        if tags and len(tags) > 0:
-            snippet['tags'] = tags
-        
-        body = {
-            'snippet': snippet,
-            'status': {
-                'privacyStatus': privacy_status,
-                'selfDeclaredMadeForKids': False
-            }
-        }
-        
-        logging.info(f"Uploading to YouTube with title: {title}, tags: {len(tags)}, privacy: {privacy_status}")
-        
-        # Use larger chunks for files over 50MB (10MB chunks)
-        # This significantly speeds up large file uploads
-        file_size = video_path.stat().st_size
-        chunk_size = 10*1024*1024 if file_size > 50*1024*1024 else 5*1024*1024
-        
-        logging.info(f"File size: {file_size / (1024*1024):.1f}MB, using {chunk_size/(1024*1024):.0f}MB chunks")
-        media = MediaFileUpload(str(video_path), chunksize=chunk_size, resumable=True)
-        
-        logging.info(f"Starting YouTube upload with chunked transfer...")
-        request = youtube.videos().insert(
-            part='snippet,status',
-            body=body,
-            media_body=media
+        logging.info(f"Queueing YouTube upload for user {current_user['id']}")
+        payload = await _build_youtube_upload_job_payload(
+            current_user=current_user,
+            title=title,
+            description_id=description_id,
+            tags_id=tags_id,
+            privacy_status=privacy_status,
+            audio_file_id=audio_file_id,
+            image_file_id=image_file_id,
+            description_override=description_override,
+            aspect_ratio=aspect_ratio,
+            image_scale=image_scale,
+            image_scale_x=image_scale_x,
+            image_scale_y=image_scale_y,
+            image_pos_x=image_pos_x,
+            image_pos_y=image_pos_y,
+            image_rotation=image_rotation,
+            background_color=background_color,
+            remove_watermark=remove_watermark,
         )
-        
-        # Upload in chunks with progress tracking and retries
-        response = None
-        retries = 0
-        max_retries = 5  # More retries for large files
-        
-        while response is None and retries < max_retries:
-            try:
-                status, response = request.next_chunk()
-                if status:
-                    progress = int(status.progress() * 100)
-                    logging.info(f"YouTube upload progress: {progress}%")
-            except Exception as e:
-                logging.error(f"Upload error (retry {retries + 1}/{max_retries}): {str(e)}")
-                retries += 1
-                if retries >= max_retries:
-                    raise Exception(f"YouTube upload failed after {max_retries} retries: {str(e)}")
-        
-        logging.info(f"Video uploaded successfully! Video ID: {response['id']}")
-        
-        # Clean up temporary video file
-        try:
-            video_path.unlink()
-            logging.info("Temporary video file deleted")
-        except:
-            pass
-        
-        # Auto check-in for Grow in 120 challenge
-        try:
-            today = datetime.now(timezone.utc).date().isoformat()
-            growth = await db.growth_streaks.find_one({"user_id": current_user['id']})
-            
-            if growth and growth.get('last_checkin_date') != today:
-                # Auto checkin on upload
-                last_checkin = growth.get('last_checkin_date')
-                current_streak = growth.get('current_streak', 0)
-                
-                if last_checkin:
-                    last_date = datetime.fromisoformat(last_checkin).date()
-                    today_date = datetime.fromisoformat(today).date()
-                    days_diff = (today_date - last_date).days
-                    
-                    if days_diff == 1:
-                        current_streak += 1
-                    elif days_diff > 1:
-                        current_streak = 1
-                else:
-                    current_streak = 1
-                
-                total_days = growth.get('total_days_completed', 0) + 1
-                longest_streak = max(growth.get('longest_streak', 0), current_streak)
-                calendar = growth.get('calendar', {})
-                calendar[today] = {
-                    "status": "completed",
-                    "activity": "youtube_upload"
-                }
-                
-                await db.growth_streaks.update_one(
-                    {"user_id": current_user['id']},
-                    {"$set": {
-                        "current_streak": current_streak,
-                        "longest_streak": longest_streak,
-                        "total_days_completed": total_days,
-                        "last_checkin_date": today,
-                        "calendar": calendar
-                    }}
-                )
-                logging.info(f"Auto check-in complete for user {current_user['id']}")
-        except Exception as e:
-            logging.error(f"Auto checkin failed: {str(e)}")
-            # Don't fail the upload if checkin fails
-        
+        job_doc = await _create_youtube_upload_job(current_user=current_user, payload=payload)
         return {
             "success": True,
-            "message": "Video uploaded to YouTube successfully!",
-            "video_id": response['id'],
-            "video_url": f"https://www.youtube.com/watch?v={response['id']}",
-            "title": title,
-            "privacy_status": privacy_status,
-            "tags_count": len(tags)
+            "queued": True,
+            "message": "Upload queued. Rendering and YouTube upload will continue in the background.",
+            "job": _sanitize_upload_job_doc(job_doc),
         }
-        
     except HTTPException:
         raise
     except Exception as e:
-        logging.error(f"YouTube upload error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to prepare YouTube upload: {str(e)}")
+        logging.error(f"YouTube upload queueing error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to queue YouTube upload: {str(e)}")
+
+
+@api_router.get("/youtube/upload-jobs/{job_id}")
+async def get_youtube_upload_job(job_id: str, current_user: dict = Depends(get_current_user)):
+    job = await db.upload_jobs.find_one({"id": job_id, "user_id": current_user["id"], "type": "youtube_upload"})
+    if not job:
+        raise HTTPException(status_code=404, detail="Upload job not found")
+    return {"success": True, "job": _sanitize_upload_job_doc(job)}
+
+
+@api_router.get("/youtube/upload-jobs")
+async def list_youtube_upload_jobs(limit: int = 10, current_user: dict = Depends(get_current_user)):
+    safe_limit = max(1, min(int(limit or 10), 50))
+    jobs = await db.upload_jobs.find(
+        {"user_id": current_user["id"], "type": "youtube_upload"},
+        {"_id": 0},
+    ).sort("created_at", -1).limit(safe_limit).to_list(safe_limit)
+    return {
+        "success": True,
+        "jobs": [_sanitize_upload_job_doc(job) for job in jobs],
+    }
+
+
+@api_router.get("/jobs/{job_id}")
+async def get_background_job(job_id: str, current_user: dict = Depends(get_current_user)):
+    job = await db.upload_jobs.find_one({"id": job_id, "user_id": current_user["id"]}, {"_id": 0})
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return {"success": True, "job": _sanitize_upload_job_doc(job)}
+
+
+@api_router.get("/health")
+async def get_health():
+    snapshot = await _build_health_snapshot()
+    return snapshot
+
+
+@api_router.get("/health/ready")
+async def get_health_ready():
+    snapshot = await _build_health_snapshot()
+    if not snapshot.get("ready"):
+        raise HTTPException(status_code=503, detail=snapshot)
+    return snapshot
 
 
 # ============ Admin Routes ============
@@ -7177,6 +7941,42 @@ async def get_admin_costs(current_user: dict = Depends(get_current_user)):
     }
 
 
+@api_router.get("/admin/ops")
+async def get_admin_ops(current_user: dict = Depends(get_current_user)):
+    if not _is_admin_user(current_user):
+        raise HTTPException(status_code=403, detail="Admin access only")
+
+    health = await _build_health_snapshot()
+    recent_jobs = await db.upload_jobs.find({}, {"_id": 0}).sort("updated_at", -1).limit(25).to_list(25)
+    jobs_by_type = await db.upload_jobs.aggregate(
+        [
+            {"$group": {"_id": {"type": "$type", "status": "$status"}, "count": {"$sum": 1}}},
+            {"$sort": {"_id.type": 1, "_id.status": 1}},
+        ]
+    ).to_list(None)
+
+    return {
+        "health": health,
+        "recent_jobs": [_sanitize_upload_job_doc(job) for job in recent_jobs],
+        "jobs_by_type": [
+            {
+                "type": row.get("_id", {}).get("type"),
+                "status": row.get("_id", {}).get("status"),
+                "count": int(row.get("count") or 0),
+            }
+            for row in jobs_by_type
+        ],
+    }
+
+
+@api_router.put("/admin/ops/controls")
+async def update_admin_ops_controls(request: OpsControlsUpdateRequest, current_user: dict = Depends(get_current_user)):
+    if not _is_admin_user(current_user):
+        raise HTTPException(status_code=403, detail="Admin access only")
+    controls = await _set_ops_controls(request)
+    return {"success": True, "controls": controls}
+
+
 # Include the router in the main app
 app.include_router(api_router)
 
@@ -7194,18 +7994,64 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+background_job_service = BackgroundJobService(
+    db=db,
+    logger=logger,
+    poll_interval_seconds=UPLOAD_JOB_POLL_INTERVAL_SECONDS,
+    stale_after_seconds=UPLOAD_JOB_STALE_AFTER_SECONDS,
+    worker_id=UPLOAD_JOB_WORKER_ID,
+    now_factory=_safe_iso_now,
+)
+background_job_service.set_handlers(
+    {
+        "youtube_upload": _process_youtube_upload_job,
+        "channel_analytics": _process_channel_analytics_job,
+        "thumbnail_check": _process_thumbnail_check_job,
+        "beat_analysis": _process_beat_analysis_job,
+        "beat_fix": _process_beat_fix_job,
+        "tag_generation": _process_tag_generation_job,
+        "tag_join": _process_tag_join_job,
+        "image_search": _process_image_search_job,
+    }
+)
+spotlight_service = SpotlightService(
+    db=db,
+    logger=logger,
+    refresh_interval_seconds=SPOTLIGHT_REFRESH_INTERVAL_SECONDS,
+    spotlight_response_cls=SpotlightResponse,
+    spotlight_projection=SPOTLIGHT_PROFILE_PROJECTION,
+    spotlight_all_limit=SPOTLIGHT_ALL_PRODUCERS_LIMIT,
+    build_profiles=_build_spotlight_profiles,
+    profile_with_role_tag=_profile_with_role_tag,
+    refresh_metrics_for_profiles=_refresh_spotlight_metrics_for_profiles,
+    fetch_channel_top_viewed_beats=_fetch_channel_top_viewed_beats,
+    safe_iso_now=_safe_iso_now,
+)
 
 @app.on_event("startup")
 async def startup_background_tasks():
-    global _beathelper_scheduler_task
+    global _beathelper_scheduler_task, _upload_job_worker_task, _spotlight_refresh_task
     _validate_security_configuration()
+    await _requeue_stale_background_jobs()
+    if _upload_job_worker_task is None:
+        _upload_job_worker_task = asyncio.create_task(_background_job_worker_loop())
+        logger.info("Background job worker started")
+    if _spotlight_refresh_task is None:
+        _spotlight_refresh_task = asyncio.create_task(_spotlight_refresh_loop())
+        logger.info("Spotlight refresh loop started")
     if BEATHELPER_AUTO_DISPATCH_ENABLED and _beathelper_scheduler_task is None:
         _beathelper_scheduler_task = asyncio.create_task(_beathelper_scheduler_loop())
         logger.info("BeatHelper daily scheduler started")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
-    global _beathelper_scheduler_task
+    global _beathelper_scheduler_task, _upload_job_worker_task, _spotlight_refresh_task
+    if _upload_job_worker_task:
+        _upload_job_worker_task.cancel()
+        _upload_job_worker_task = None
+    if _spotlight_refresh_task:
+        _spotlight_refresh_task.cancel()
+        _spotlight_refresh_task = None
     if _beathelper_scheduler_task:
         _beathelper_scheduler_task.cancel()
         _beathelper_scheduler_task = None

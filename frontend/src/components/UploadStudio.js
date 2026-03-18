@@ -56,6 +56,7 @@ const UploadStudio = ({
   const [imageFile, setImageFile] = useState(null);
   const [audioFileId, setAudioFileId] = useState("");
   const [imageFileId, setImageFileId] = useState("");
+  const [selectedImageLabel, setSelectedImageLabel] = useState("");
   const [uploadingAudio, setUploadingAudio] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -122,6 +123,10 @@ const UploadStudio = ({
   // Upload Process
   const [uploadingToYouTube, setUploadingToYouTube] = useState(false);
   const [uploadController, setUploadController] = useState(null);
+  const [currentUploadJob, setCurrentUploadJob] = useState(null);
+
+  const hasAudioReady = Boolean(audioFileId);
+  const hasImageReady = Boolean(imageFileId);
 
   // Refs
   const audioPlayerRef = useRef(null);
@@ -457,6 +462,7 @@ const UploadStudio = ({
       });
       setImageFile(file);
       setImageFileId(response.data.file_id);
+      setSelectedImageLabel(file.name || "Uploaded image");
       setBeatMetaPromptShown(false);
       const url = URL.createObjectURL(file);
       setImagePreviewUrl(url);
@@ -578,6 +584,31 @@ const UploadStudio = ({
     );
   };
 
+  const pollBackgroundJobUntilDone = async (jobId, { intervalMs = 2500, maxAttempts = 180 } = {}) => {
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      const response = await axios.get(`${API}/jobs/${jobId}`);
+      const job = response?.data?.job;
+      if (!job) {
+        throw new Error("Job status response missing job data");
+      }
+      if (job.status === "succeeded") {
+        return job.result;
+      }
+      if (job.status === "failed") {
+        throw new Error(job.error || "Background job failed");
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, intervalMs));
+    }
+    throw new Error("Background job timed out");
+  };
+
+  const getApiErrorMessage = (error, fallback) => {
+    const detail = error?.response?.data?.detail;
+    if (typeof detail === "string") return detail;
+    if (detail?.message) return detail.message;
+    return error?.message || fallback;
+  };
+
   // --- AI Tools Handlers ---
 
   const handleAnalyzeBeat = async () => {
@@ -598,10 +629,15 @@ const UploadStudio = ({
         tags: tags,
         description: uploadDescriptionText || ""
       });
-      setBeatAnalysis(response.data);
-      toast.success(`Analysis: ${response.data.overall_score}/100`);
+      const jobId = response?.data?.job?.id;
+      if (!jobId) {
+        throw new Error("Beat analysis job was not created");
+      }
+      const result = await pollBackgroundJobUntilDone(jobId);
+      setBeatAnalysis(result);
+      toast.success(`Analysis: ${result.overall_score}/100`);
     } catch (error) {
-      toast.error("Analysis failed");
+      toast.error(getApiErrorMessage(error, "Analysis failed"));
     } finally {
       setAnalyzingBeat(false);
     }
@@ -653,7 +689,12 @@ const UploadStudio = ({
         headers: { "Content-Type": "multipart/form-data" },
         signal: controller.signal
       });
-      setThumbnailCheckResult(response.data);
+      const jobId = response?.data?.job?.id;
+      if (!jobId) {
+        throw new Error("Thumbnail check job was not created");
+      }
+      const result = await pollBackgroundJobUntilDone(jobId);
+      setThumbnailCheckResult(result);
       setThumbnailProgress(100);
       toast.success("Thumbnail Checked!");
     } catch (error) {
@@ -662,7 +703,7 @@ const UploadStudio = ({
             toast.error("Daily limit reached! Upgrade to continue.");
             onUpgrade();
          } else if (error.response?.data?.detail) {
-            toast.error(typeof error.response.data.detail === "string" ? error.response.data.detail : "Thumbnail check failed");
+            toast.error(typeof error.response.data.detail === "string" ? error.response.data.detail : (error.response.data.detail?.message || "Thumbnail check failed"));
          } else {
             toast.error("Thumbnail check failed");
          }
@@ -691,9 +732,11 @@ const UploadStudio = ({
         tags: safeTags,
         k: 6,
       });
-      const results = response.data?.results || [];
+      const queuedJobId = response?.data?.job?.id;
+      const resultPayload = queuedJobId ? await pollBackgroundJobUntilDone(queuedJobId, { intervalMs: 2500, maxAttempts: 120 }) : response.data;
+      const results = resultPayload?.results || [];
       setGeneratedImages(results);
-      setGeneratedImageQuery(response.data?.query_used || "");
+      setGeneratedImageQuery(resultPayload?.query_used || "");
       if (manualQuery) {
         setGeneratedImageSearchQuery(manualQuery);
       }
@@ -704,7 +747,7 @@ const UploadStudio = ({
       }
     } catch (error) {
       const detail = error?.response?.data?.detail;
-      toast.error(typeof detail === "string" ? detail : "Failed to generate image options");
+      toast.error(typeof detail === "string" ? detail : (detail?.message || "Failed to generate image options"));
     } finally {
       setGeneratingImages(false);
     }
@@ -723,6 +766,9 @@ const UploadStudio = ({
       });
       setImageFile(null);
       setImageFileId(imported.data.file_id);
+      setSelectedImageLabel(
+        imageOption.artist || imageOption.source || "Selected web image"
+      );
       setImagePreviewUrl(imageOption.image_url);
       setBeatMetaPromptShown(false);
       const img = new Image();
@@ -793,7 +839,7 @@ const UploadStudio = ({
          }
          onUpgrade();
       } else {
-        toast.error("Upload failed. Check connection or file size.");
+        toast.error(getApiErrorMessage(error, "Upload failed. Check connection or file size."));
       }
     } finally {
       setUploadingToYouTube(false);
@@ -801,12 +847,119 @@ const UploadStudio = ({
     }
   };
 
+  const handleYouTubeUploadAsync = async () => {
+    if (!uploadTitle || !selectedDescriptionId || !audioFileId || !imageFileId) {
+      toast.error("Please fill title, description, and ensure files are uploaded.");
+      return;
+    }
+
+    const controller = new AbortController();
+    setUploadController(controller);
+    setUploadingToYouTube(true);
+
+    const formData = new FormData();
+    formData.append('title', uploadTitle);
+    formData.append('description_id', selectedDescriptionId);
+    formData.append('tags_id', selectedTagsId || '');
+    formData.append('privacy_status', privacyStatus);
+    formData.append('audio_file_id', audioFileId);
+    formData.append('image_file_id', imageFileId);
+    formData.append('remove_watermark', removeWatermark);
+    formData.append('description_override', buildUploadDescriptionWithMetadata());
+    formData.append('aspect_ratio', videoAspectRatio);
+    formData.append('image_scale', String(lockImageScale ? imageScaleX : (imageScaleX + imageScaleY) / 2));
+    formData.append('image_scale_x', String(imageScaleX));
+    formData.append('image_scale_y', String(imageScaleY));
+    formData.append('image_pos_x', String(imagePosX));
+    formData.append('image_pos_y', String(imagePosY));
+    formData.append('image_rotation', String(imageRotation));
+    formData.append('background_color', backgroundColor);
+
+    try {
+      const response = await axios.post(`${API}/youtube/upload`, formData, {
+        timeout: 30000,
+        signal: controller.signal,
+      });
+      const nextJob = response?.data?.job || null;
+      if (nextJob?.id) {
+        setCurrentUploadJob(nextJob);
+        toast.success(response?.data?.message || "Upload queued.");
+        setStudioOpen(false);
+        return;
+      }
+
+      if (response?.data?.video_url) {
+        toast.success("Video uploaded successfully!");
+        window.open(response.data.video_url, "_blank");
+        setStudioOpen(false);
+        return;
+      }
+
+      toast.success(response?.data?.message || "Upload process started!");
+      setStudioOpen(false);
+      setUploadingToYouTube(false);
+    } catch (error) {
+      setUploadingToYouTube(false);
+      if (axios.isCancel(error)) return;
+      if (error.response?.status === 402) {
+        if (error.response.data.detail?.feature === 'remove_watermark') {
+          toast.error("Watermark removal is Pro only!");
+          setRemoveWatermark(false);
+        } else {
+          toast.error("Daily upload limit reached!");
+        }
+        onUpgrade();
+      } else {
+        toast.error(getApiErrorMessage(error, "Upload failed. Check connection or file size."));
+      }
+    } finally {
+      setUploadController(null);
+    }
+  };
+
   useEffect(() => {
-    if (audioFile && imageFile && !studioOpen) {
+    const jobId = currentUploadJob?.id;
+    const jobStatus = currentUploadJob?.status;
+    if (!jobId || !["queued", "processing"].includes(jobStatus)) {
+      return undefined;
+    }
+
+    setUploadingToYouTube(true);
+    const interval = window.setInterval(async () => {
+      try {
+        const response = await axios.get(`${API}/youtube/upload-jobs/${jobId}`);
+        const nextJob = response?.data?.job || null;
+        if (!nextJob) return;
+        setCurrentUploadJob(nextJob);
+
+        if (nextJob.status === "succeeded") {
+          window.clearInterval(interval);
+          setUploadingToYouTube(false);
+          toast.success(nextJob?.result?.message || "Video uploaded successfully!");
+          if (nextJob?.result?.video_url) {
+            window.open(nextJob.result.video_url, "_blank");
+          }
+          setCurrentUploadJob(null);
+        } else if (nextJob.status === "failed") {
+          window.clearInterval(interval);
+          setUploadingToYouTube(false);
+          toast.error(nextJob.error || "YouTube upload failed.");
+          setCurrentUploadJob(null);
+        }
+      } catch (error) {
+        console.error("Failed to poll upload job", error);
+      }
+    }, 3000);
+
+    return () => window.clearInterval(interval);
+  }, [API, currentUploadJob]);
+
+  useEffect(() => {
+    if (hasAudioReady && hasImageReady && !studioOpen) {
       toast.success("Files ready! Opening Upload Studio...", { duration: 2000 });
       setStudioOpen(true);
     }
-  }, [audioFile, imageFile]);
+  }, [hasAudioReady, hasImageReady, studioOpen]);
 
   useEffect(() => {
     if (!audioFileId || !imageFileId) return;
@@ -897,7 +1050,7 @@ const UploadStudio = ({
            <Button
               size="lg"
               className="w-full text-lg shadow-xl shadow-red-500/20 bg-red-600 hover:bg-red-700"
-              onClick={handleYouTubeUpload}
+              onClick={handleYouTubeUploadAsync}
               disabled={uploadingToYouTube}
            >
               {uploadingToYouTube ? "Uploading..." : "Upload Video to YouTube"}
@@ -924,6 +1077,8 @@ const UploadStudio = ({
         audioFile={audioFile}
         uploadingImage={uploadingImage}
         imageFile={imageFile}
+        selectedImageLabel={selectedImageLabel}
+        hasImageReady={hasImageReady}
         isAudioDragActive={isAudioDragActive}
         setIsAudioDragActive={setIsAudioDragActive}
         isImageDragActive={isImageDragActive}
@@ -936,6 +1091,7 @@ const UploadStudio = ({
         generatingImages={generatingImages}
         handleGenerateImage={handleGenerateImage}
         handleUseGeneratedImage={handleUseGeneratedImage}
+        currentUploadJob={currentUploadJob}
       />
     );
   }

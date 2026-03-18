@@ -21,6 +21,8 @@ const UploadDashboard = ({
   audioFile,
   uploadingImage,
   imageFile,
+  selectedImageLabel,
+  hasImageReady,
   isAudioDragActive,
   setIsAudioDragActive,
   isImageDragActive,
@@ -32,7 +34,8 @@ const UploadDashboard = ({
   setGeneratedImageSearchQuery,
   generatingImages,
   handleGenerateImage,
-  handleUseGeneratedImage
+  handleUseGeneratedImage,
+  currentUploadJob
 }) => {
   return (
     <Card className="dashboard-card min-h-[400px]">
@@ -94,7 +97,11 @@ const UploadDashboard = ({
                      <p className="text-xs text-slate-500">JPG, PNG, WEBP</p>
                   </div>
                   {uploadingImage && <div className="text-xs text-purple-400">Uploading...</div>}
-                  {imageFile && <div className="text-xs text-green-500 font-medium break-all">{imageFile.name}</div>}
+                  {hasImageReady && (
+                    <div className="text-xs text-green-500 font-medium break-all">
+                      {selectedImageLabel || imageFile?.name || "Selected image ready"}
+                    </div>
+                  )}
                </label>
             </div>
          </div>
@@ -157,7 +164,19 @@ const UploadDashboard = ({
             </CardContent>
          </Card>
 
-         {audioFile && imageFile && (
+         {currentUploadJob && ["queued", "processing"].includes(currentUploadJob.status) && (
+           <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm">
+             <p className="font-medium text-emerald-400">
+               YouTube upload {currentUploadJob.status === "queued" ? "queued" : "processing"}
+             </p>
+             <p className="mt-1 text-xs text-muted-foreground">
+               {currentUploadJob.message || "Rendering and uploading in the background."}
+               {typeof currentUploadJob.progress === "number" ? ` (${currentUploadJob.progress}%)` : ""}
+             </p>
+           </div>
+         )}
+
+         {audioFile && hasImageReady && (
            <Button onClick={() => setStudioOpen(true)} className="w-full py-6 text-lg bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700">
               Enter Studio <Wand2 className="ml-2 h-5 w-5" />
            </Button>

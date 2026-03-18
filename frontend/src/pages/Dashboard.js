@@ -874,14 +874,16 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
         k: 8,
       };
       const response = await axios.post(`${API}/beat-helper/image-search`, payload);
-      setBeatHelperImageResults(Array.isArray(response?.data?.results) ? response.data.results : []);
+      const queuedJobId = response?.data?.job?.id;
+      const resultPayload = queuedJobId ? await pollBackgroundJobUntilDone(queuedJobId, { intervalMs: 2500, maxAttempts: 120 }) : response.data;
+      setBeatHelperImageResults(Array.isArray(resultPayload?.results) ? resultPayload.results : []);
       if (!autoBuild && beatHelperImageSearchQuery.trim()) {
         return;
       }
-      setBeatHelperImageSearchQuery(response?.data?.query_used || "");
+      setBeatHelperImageSearchQuery(resultPayload?.query_used || "");
     } catch (error) {
       const detail = error?.response?.data?.detail;
-      toast.error(typeof detail === "string" ? detail : "Failed to search web images");
+      toast.error(typeof detail === "string" ? detail : (detail?.message || "Failed to search web images"));
     } finally {
       setLoadingBeatHelperImageSearch(false);
     }
@@ -1131,6 +1133,31 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
     toast.success("Logged out successfully");
   };
 
+  const pollBackgroundJobUntilDone = async (jobId, { intervalMs = 2500, maxAttempts = 240 } = {}) => {
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      const response = await axios.get(`${API}/jobs/${jobId}`);
+      const job = response?.data?.job;
+      if (!job) {
+        throw new Error("Job status response missing job data");
+      }
+      if (job.status === "succeeded") {
+        return job.result;
+      }
+      if (job.status === "failed") {
+        throw new Error(job.error || "Background job failed");
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, intervalMs));
+    }
+    throw new Error("Background job timed out");
+  };
+
+  const getApiErrorMessage = (error, fallback) => {
+    const detail = error?.response?.data?.detail;
+    if (typeof detail === "string") return detail;
+    if (detail?.message) return detail.message;
+    return error?.message || fallback;
+  };
+
   const handleAnalyzeChannel = async () => {
     setLoadingAnalytics(true);
     setProgressActive(true);
@@ -1138,7 +1165,12 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
     setProgressDuration(70000);
     try {
       const response = await axios.post(`${API}/youtube/analytics`);
-      setAnalyticsData(normalizeAnalyticsData(response.data));
+      const jobId = response?.data?.job?.id;
+      if (!jobId) {
+        throw new Error("Channel analytics job was not created");
+      }
+      const result = await pollBackgroundJobUntilDone(jobId, { intervalMs: 3000 });
+      setAnalyticsData(normalizeAnalyticsData(result));
       toast.success("Channel analysis complete!");
 
       // Refresh credits after analysis
@@ -1150,13 +1182,12 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
       setShowUpgradeModal(true);
       } else if (error.response?.status === 400) {
         const detail = error.response?.data?.detail;
-        toast.error(typeof detail === "string" ? detail : "Please connect your YouTube account first");
+        toast.error(typeof detail === "string" ? detail : (detail?.message || "Please connect your YouTube account first"));
       } else if (error.response?.status === 401) {
         toast.error("YouTube auth expired. Reconnect your YouTube account.");
       } else {
         console.error("Analytics error:", error);
-        const detail = error.response?.data?.detail;
-        toast.error(typeof detail === "string" ? detail : "Failed to analyze channel");
+        toast.error(getApiErrorMessage(error, "Failed to analyze channel"));
       }
 
       // Still refresh credits on error to show updated count
@@ -1262,12 +1293,14 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
           },
         { signal: controller.signal }
       );
-      setGeneratedTags(response.data.tags);
-      setActiveTagHistoryId(response.data.id);
-      setSelectedTagHistoryIds([response.data.id]);
-      setTagDebug(canViewTagDebug ? response.data?.debug || null : null);
-      upsertTagHistoryItem(response.data);
-      toast.success(`Generated ${response.data.tags.length} tags! (AI + YouTube + Spotify + SoundCloud + custom tags)`);
+      const queuedJobId = response?.data?.job?.id;
+      const resultPayload = queuedJobId ? await pollBackgroundJobUntilDone(queuedJobId, { intervalMs: 2500, maxAttempts: 180 }) : response.data;
+      setGeneratedTags(resultPayload.tags);
+      setActiveTagHistoryId(resultPayload.id);
+      setSelectedTagHistoryIds([resultPayload.id]);
+      setTagDebug(canViewTagDebug ? resultPayload?.debug || null : null);
+      upsertTagHistoryItem(resultPayload);
+      toast.success(`Generated ${resultPayload.tags.length} tags! (AI + YouTube + Spotify + SoundCloud + custom tags)`);
 
       // Refresh credits after a short delay to ensure backend has updated
       setTimeout(() => {
@@ -1290,7 +1323,7 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
         setShowUpgradeModal(true);
         toast.error("Daily limit reached! Upgrade to continue.");
       } else {
-        toast.error(error.response?.data?.detail?.message || error.response?.data?.detail || "Failed to generate tags");
+        toast.error(getApiErrorMessage(error, "Failed to generate tags"));
       }
 
       // Refresh credits even on error
@@ -1462,8 +1495,9 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
         max_tags: 70,
         llm_provider: DEFAULT_TAG_PROVIDER
       });
-
-      const optimizedTags = Array.isArray(joinResponse?.data?.tags) ? joinResponse.data.tags : [];
+      const queuedJobId = joinResponse?.data?.job?.id;
+      const joinPayload = queuedJobId ? await pollBackgroundJobUntilDone(queuedJobId, { intervalMs: 2500, maxAttempts: 180 }) : joinResponse.data;
+      const optimizedTags = Array.isArray(joinPayload?.tags) ? joinPayload.tags : [];
       if (!optimizedTags.length) {
         toast.error("AI join returned no tags. Please try again.");
         return;
@@ -1491,7 +1525,7 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
         setShowUpgradeModal(true);
         toast.error("Daily limit reached! Upgrade to continue.");
       } else {
-        toast.error("Failed to join with AI. Please try again.");
+        toast.error(getApiErrorMessage(error, "Failed to join with AI. Please try again."));
       }
     } finally {
       if (joinProgressIntervalRef.current) {
@@ -1620,7 +1654,7 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
         setShowUpgradeModal(true);
         toast.error("Daily limit reached! Upgrade to continue.");
       } else {
-        toast.error("Failed to generate description");
+        toast.error(getApiErrorMessage(error, "Failed to generate description"));
       }
 
       // Refresh credits even on error
