@@ -3,6 +3,7 @@ import { Wand2, ChevronUp, ChevronDown, Target, Sparkles, Search } from "lucide-
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import SearchResultImage from "@/components/upload-studio/SearchResultImage";
 
 const AIToolsPanel = ({
   showTools,
@@ -156,11 +157,10 @@ const AIToolsPanel = ({
                           className="group rounded-md overflow-hidden border border-border hover:border-primary transition-colors bg-background"
                           onClick={() => onUseGeneratedImage?.(img)}
                         >
-                          <img
-                            src={img.thumbnail_url || img.image_url}
-                            alt={img.artist || "Generated option"}
-                            className="w-full h-24 object-cover"
-                            loading="lazy"
+                          <SearchResultImage
+                             result={img}
+                             alt={img.artist || "Generated option"}
+                             className="aspect-square w-full object-cover object-center"
                           />
                           <div className="px-2 py-1 text-[10px] text-left text-muted-foreground truncate">
                             {img.artist || img.source}

@@ -3,6 +3,7 @@ import { Youtube, CheckCircle2, AlertCircle, Music, Image as ImageIcon, Wand2, S
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import SearchResultImage from "@/components/upload-studio/SearchResultImage";
 
 const AUDIO_EXTENSIONS = [".mp3", ".wav", ".m4a", ".flac", ".ogg"];
 const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".avif", ".heic", ".heif"];
@@ -140,12 +141,11 @@ const UploadDashboard = ({
                          className="group overflow-hidden rounded-lg border border-border bg-background transition-colors hover:border-primary"
                          onClick={() => handleUseGeneratedImage(img)}
                        >
-                         <img
-                           src={img.thumbnail_url || img.image_url}
-                           alt={img.artist || "Artwork result"}
-                           className="h-24 w-full object-cover"
-                           loading="lazy"
-                         />
+                          <SearchResultImage
+                            result={img}
+                            alt={img.artist || "Artwork result"}
+                            className="aspect-square w-full object-cover object-center"
+                          />
                          <div className="truncate px-2 py-1 text-left text-[10px] text-muted-foreground">
                            {img.artist || img.source || "Apply image"}
                          </div>

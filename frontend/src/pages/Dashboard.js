@@ -1730,6 +1730,16 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
                   </span>
                 </div>
               )}
+              {!youtubeConnected && (
+                <Button
+                  onClick={connectYouTube}
+                  className="gap-1 sm:gap-2 border border-yellow-400/60 bg-gradient-to-r from-yellow-400 to-orange-500 px-3 sm:px-4 py-2 text-xs font-semibold text-black shadow-[0_0_28px_rgba(251,191,36,0.28)] animate-pulse hover:from-yellow-300 hover:to-orange-400 sm:text-sm whitespace-nowrap"
+                >
+                  <Youtube className="h-3 w-3 sm:h-4 sm:w-4" />
+                  <span className="hidden xl:inline">Connect Google</span>
+                  <span className="xl:hidden">Google</span>
+                </Button>
+              )}
               <Button
                 variant="outline"
                 onClick={() => window.location.href = "/grow-in-120"}
@@ -1775,10 +1785,31 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
       </div>
 
       {/* Main Content */}
-      <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-6 md:py-8 dashboard-shell space-y-6 sm:space-y-8">
-        {/* Subscription Banner */}
-        {subscriptionStatus && (
-          <SubscriptionBanner
+       <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-6 md:py-8 dashboard-shell space-y-6 sm:space-y-8">
+         {!youtubeConnected && (
+           <div className="rounded-3xl border border-yellow-400/40 bg-gradient-to-r from-yellow-500/12 via-orange-500/10 to-transparent px-4 py-4 sm:px-5 shadow-[0_0_34px_rgba(249,115,22,0.12)]">
+             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+               <div>
+                 <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                   Connect your Google account for uploads, channel tools, and a stronger Producer Spotlight profile.
+                 </p>
+                 <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
+                   Your spotlight profile can still show up without it, but connecting helps verify your identity and channel data.
+                 </p>
+               </div>
+               <Button
+                 onClick={connectYouTube}
+                 className="gap-2 self-start bg-gradient-to-r from-yellow-400 to-orange-500 font-semibold text-black hover:from-yellow-300 hover:to-orange-400 lg:self-center"
+               >
+                 <Youtube className="h-4 w-4" />
+                 Connect Google Account
+               </Button>
+             </div>
+           </div>
+         )}
+         {/* Subscription Banner */}
+         {subscriptionStatus && (
+           <SubscriptionBanner
             creditsRemaining={subscriptionStatus.daily_credits_remaining}
             uploadCreditsRemaining={subscriptionStatus.upload_credits_remaining}
             creditsTotal={subscriptionStatus.daily_credits_total}

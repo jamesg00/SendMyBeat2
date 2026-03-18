@@ -312,13 +312,14 @@ def _get_connection_token(connection: dict, field_name: str) -> str | None:
     return connection.get(field_name)
 
 
-def _build_google_credentials_from_connection(connection: dict) -> Credentials:
+def _build_google_credentials_from_connection(connection: dict, scopes: Optional[list[str]] = None) -> Credentials:
     return Credentials(
         token=_get_connection_token(connection, "access_token"),
         refresh_token=_get_connection_token(connection, "refresh_token"),
         token_uri="https://oauth2.googleapis.com/token",
         client_id=GOOGLE_CLIENT_ID,
         client_secret=GOOGLE_CLIENT_SECRET,
+        scopes=scopes,
     )
 
 # Create the main app without a prefix
@@ -1131,15 +1132,23 @@ def _build_image_query_variants(title: str, tags: list[str], limit: int = 8) -> 
         raise HTTPException(status_code=400, detail="Could not infer artist query from title/tags.")
 
     query_variants: list[str] = []
+    if len(artists) >= 2:
+        duo_query = " x ".join(artists[:2]).strip()
+        if duo_query:
+            query_variants.extend([
+                duo_query,
+                f"{duo_query} album cover",
+                f"{duo_query} cover art",
+            ])
     for artist_name in artists:
         if not artist_name:
             continue
         query_variants.extend([
             artist_name,
-            f"{artist_name} rapper",
-            f"{artist_name} artist",
-            f"{artist_name} portrait",
+            f"{artist_name} album cover",
+            f"{artist_name} cover art",
             f"{artist_name} press photo",
+            f"{artist_name} portrait",
         ])
     if title.strip():
         query_variants.append(title.strip())
@@ -1851,7 +1860,7 @@ def _normalize_tag_list(raw_tags: list[str] | None, limit: int = 40) -> list[str
     cleaned: list[str] = []
     seen = set()
     for tag in tags:
-        value = re.sub(r"\s+", " ", str(tag or "").strip())
+        value = _clean_tag_text(str(tag or ""))
         if not value:
             continue
         key = value.lower()
@@ -2410,11 +2419,10 @@ async def get_youtube_analytics(current_user: dict = Depends(get_current_user)):
             raise HTTPException(status_code=400, detail="YouTube account not connected")
         
         # Build YouTube API client using stored tokens
-        creds = _build_google_credentials_from_connection(connection)
-        creds.scopes = [
+        creds = _build_google_credentials_from_connection(connection, scopes=[
             'https://www.googleapis.com/auth/youtube.upload',
             'https://www.googleapis.com/auth/youtube.readonly',
-        ]
+        ])
         
         # Refresh token if needed
         if creds.expired and creds.refresh_token:
@@ -3114,9 +3122,13 @@ _GENERIC_BEAT_MODIFIERS = {
 
 
 def _clean_tag_text(value: str) -> str:
-    clean = (value or "").strip().strip(",").strip('"').strip("'")
+    clean = html.unescape((value or "").replace("\\u0026", "&").replace("\\u0039", "'"))
+    clean = clean.strip().strip(",").strip('"').strip("'")
+    clean = re.sub(r"&#\d+;|&[a-zA-Z]+;", " ", clean)
+    clean = re.sub(r"[^\w\s&'/-]", " ", clean, flags=re.UNICODE)
+    clean = re.sub(r"\b\d{1,2}\b(?=\s*type beat\b)", " ", clean, flags=re.IGNORECASE)
     clean = re.sub(r"\s+", " ", clean)
-    return clean
+    return clean.strip(" -_/,'\"")
 
 
 def _normalize_artist_query(query: str) -> str:
@@ -3305,7 +3317,8 @@ def _is_generic_artist_modifier_tag(tag: str, artist_name: str, seed_tokens: set
 
 
 def _extract_song_seed(title: str, artist_name: str = "") -> str:
-    seed = re.split(r'[\(\[\|]', (title or ""))[0].strip()
+    seed = html.unescape((title or "").replace("\\u0026", "&").replace("\\u0039", "'"))
+    seed = re.split(r'[\(\[\|]', seed)[0].strip()
     seed = re.sub(r'\s+', ' ', seed)
     if not seed:
         return ""
@@ -3315,6 +3328,16 @@ def _extract_song_seed(title: str, artist_name: str = "") -> str:
         seed = artist_prefix.sub("", seed).strip()
 
     if not seed or len(seed) > 55:
+        return ""
+    lowered_seed = seed.lower()
+    non_music_headline_terms = {
+        "pays", "fan", "fans", "tuition", "college", "student", "students",
+        "interview", "reaction", "reactions", "reacts", "news", "shorts",
+        "podcast", "vlog", "documentary", "arrested", "arrest", "girlfriend",
+        "boyfriend", "dating", "explains", "explained", "talks", "talking",
+        "argument", "beef", "beefs", "exposes", "exposed", "prank",
+    }
+    if any(term in lowered_seed for term in non_music_headline_terms):
         return ""
     if "type beat" in seed.lower():
         return ""
@@ -5584,15 +5607,14 @@ async def _build_spotlight_profiles(profile_docs: list[dict], growth_by_user: di
 
     profiles: list[ProducerProfile] = []
     for profile_doc in profile_docs:
-        if profile_doc.get("user_id") not in connected_user_ids:
-            continue
+        is_google_connected = profile_doc.get("user_id") in connected_user_ids
         user_doc = user_by_id.get(profile_doc.get("user_id"), {})
         payload = dict(profile_doc)
         payload["username"] = (payload.get("username") or user_doc.get("username") or "producer").strip()
         payload["avatar_url"] = _normalize_spotlight_avatar_url(payload.get("avatar_url"))
         payload["role_tag"] = _spotlight_role_tag(profile_doc, user_doc)
         payload["verification_status"] = payload.get("verification_status") or "none"
-        payload["google_connected"] = True
+        payload["google_connected"] = is_google_connected
         payload["spotlight_eligible"] = True
         profile = ProducerProfile(**payload)
         profiles.append(_attach_growth_to_profile(profile, growth_by_user))
@@ -5669,7 +5691,7 @@ async def _spotlight_google_status(user_id: str) -> tuple[bool, bool]:
         {"_id": 0, "user_id": 1},
     )
     connected = bool(connection)
-    return connected, connected
+    return connected, True
 
 
 async def _profile_with_role_tag(profile_doc: dict) -> ProducerProfile:
@@ -6062,13 +6084,6 @@ async def update_my_producer_profile(
     current_user: dict = Depends(get_current_user)
 ):
     """Update current user's producer profile"""
-    google_connected, _ = await _spotlight_google_status(current_user["id"])
-    if not google_connected:
-        raise HTTPException(
-            status_code=403,
-            detail="Connect your Google/YouTube account before joining Producer Spotlight.",
-        )
-
     # Build update dict
     update_fields = {}
     if update_data.bio is not None:
@@ -6457,11 +6472,11 @@ async def generate_image_suggestions(
 
         artists, query_variants, query = _build_image_query_variants(title, tags)
         results: list[dict] = []
-        results.extend(_search_bing_image_results(query_variants, artists, k))
-        if len(results) < k:
-            results.extend(_search_catalog_artist_images(query_variants, artists, k))
+        results.extend(_search_catalog_artist_images(query_variants, artists, k))
         if len(results) < k:
             results.extend(_search_stock_image_results(query_variants, artists, k))
+        if len(results) < k:
+            results.extend(_search_bing_image_results(query_variants, artists, k))
 
         return ImageGenerateResponse(
             query_used=query,

@@ -644,12 +644,12 @@ export default function BeatHelperStudio(props) {
                     </div>
                   </div>
                   {visibleBeatHelperImageResults.length > 0 ? (
-                    <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-3">
+                    <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-3 2xl:grid-cols-4">
                       {visibleBeatHelperImageResults.map((result) => (
                         <button
                           key={result.id}
                           type="button"
-                          className="overflow-hidden rounded-3xl border-2 p-3 text-left transition hover:scale-[1.01]"
+                          className="overflow-hidden rounded-3xl border-2 p-2 text-left transition hover:scale-[1.01]"
                           style={{ borderColor: SURFACE_BORDER, background: INNER_SURFACE_BG }}
                           disabled={importingBeatHelperImageUrl === result.image_url}
                           onClick={async () => {
@@ -658,13 +658,13 @@ export default function BeatHelperStudio(props) {
                             setSectionOpen("assets", true);
                           }}
                         >
-                          <div className="mx-auto aspect-square w-full max-w-[180px] overflow-hidden rounded-2xl border-2 sm:max-w-full" style={{ borderColor: SURFACE_BORDER, background: "var(--bg-primary)" }}>
-                            <img src={result.image_url} alt={result.title || result.query} className="h-full w-full object-cover" loading="lazy" onError={() => setBrokenSearchImageIds((prev) => ({ ...prev, [result.id]: true }))} />
+                          <div className="aspect-square w-full overflow-hidden rounded-2xl border-2" style={{ borderColor: SURFACE_BORDER, background: "var(--bg-primary)" }}>
+                            <img src={result.thumbnail_url || result.image_url} alt={result.title || result.query} className="h-full w-full object-cover object-center" loading="lazy" onError={() => setBrokenSearchImageIds((prev) => ({ ...prev, [result.id]: true }))} />
                           </div>
-                          <Badge className="mt-3 border-emerald-400/40 bg-emerald-500/10 text-emerald-300">{String(result.source || "web").toUpperCase()}</Badge>
-                          <p className="mt-3 line-clamp-1 text-base font-semibold" style={{ color: "var(--text-primary)" }}>{result.title || result.query || "Web image"}</p>
-                          <p className="mt-1 line-clamp-2 text-sm" style={{ color: "var(--text-secondary)" }}>{result.query || beatHelperImageSearchQuery || "Suggested image"}</p>
-                          <p className="mt-3 text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+                          <Badge className="mt-2 border-emerald-400/40 bg-emerald-500/10 text-[10px] text-emerald-300">{String(result.source || "web").toUpperCase()}</Badge>
+                          <p className="mt-2 line-clamp-1 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{result.title || result.query || "Web image"}</p>
+                          <p className="mt-1 line-clamp-2 text-xs" style={{ color: "var(--text-secondary)" }}>{result.query || beatHelperImageSearchQuery || "Suggested image"}</p>
+                          <p className="mt-2 text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>
                             {importingBeatHelperImageUrl === result.image_url ? "Importing..." : "Click image to select"}
                           </p>
                         </button>

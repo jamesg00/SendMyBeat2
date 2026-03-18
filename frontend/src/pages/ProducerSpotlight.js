@@ -176,10 +176,6 @@ export default function ProducerSpotlight() {
   };
 
   const handleUpdateProfile = async () => {
-    if (!youtubeConnected) {
-      toast.error("Connect your Google/YouTube account before joining Producer Spotlight.");
-      return;
-    }
     setSavingProfile(true);
     try {
       const updateData = {
@@ -196,7 +192,7 @@ export default function ProducerSpotlight() {
       };
 
       await axios.put(`${API}/producers/me`, updateData);
-      toast.success("Profile updated! You are now discoverable.");
+      toast.success(youtubeConnected ? "Profile updated! You are now discoverable." : "Profile updated. Connect Google next to unlock the full spotlight setup.");
       setIsEditing(false);
       fetchMyProfile();
       fetchSpotlight(); // Refresh list to see if we appear (if algorithm picks us)
@@ -722,8 +718,8 @@ export default function ProducerSpotlight() {
                 )}
               </div>
               <div className="sticky bottom-0 pt-3 pb-1 bg-[var(--card-bg)]">
-                <Button onClick={handleUpdateProfile} className="w-full" disabled={savingProfile || !youtubeConnected}>
-                  {savingProfile ? "Saving..." : youtubeConnected ? "Save Profile" : "Connect Google to Continue"}
+                <Button onClick={handleUpdateProfile} className="w-full" disabled={savingProfile}>
+                  {savingProfile ? "Saving..." : "Save Profile"}
                 </Button>
               </div>
             </div>
@@ -734,6 +730,25 @@ export default function ProducerSpotlight() {
           <p className="text-sm text-red-500 max-w-3xl mx-auto">
             Spotlight API returned 404. Backend is running an older version. Deploy/restart backend with latest `server.py` routes.
           </p>
+        )}
+        {!youtubeConnected && (
+          <div className="mx-auto max-w-5xl rounded-3xl border border-yellow-400/40 bg-gradient-to-r from-yellow-500/12 via-orange-500/12 to-transparent px-5 py-4 shadow-[0_0_35px_rgba(250,204,21,0.12)]">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-yellow-100">Connect your Google account to strengthen your Spotlight profile.</p>
+                <p className="text-sm text-yellow-50/80">
+                  You can still appear in Producer Spotlight now, but connecting Google helps verify your channel identity and unlock fuller spotlight data.
+                </p>
+              </div>
+              <Button
+                onClick={connectYouTube}
+                disabled={connectingYouTube}
+                className="animate-pulse bg-gradient-to-r from-yellow-500 to-orange-500 text-black hover:from-yellow-400 hover:to-orange-400"
+              >
+                {connectingYouTube ? "Connecting..." : "Connect Google"}
+              </Button>
+            </div>
+          </div>
         )}
       </div>
 

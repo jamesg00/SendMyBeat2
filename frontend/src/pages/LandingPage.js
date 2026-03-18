@@ -144,16 +144,36 @@ const LandingPage = ({ setIsAuthenticated }) => {
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [liveFrameIndex, setLiveFrameIndex] = useState(0);
+  const [isMobileHero, setIsMobileHero] = useState(false);
 
   useEffect(() => {
+    const media = window.matchMedia("(max-width: 767px)");
+    const syncMobileHero = () => setIsMobileHero(media.matches);
+    syncMobileHero();
+
+    if (typeof media.addEventListener === "function") {
+      media.addEventListener("change", syncMobileHero);
+      return () => media.removeEventListener("change", syncMobileHero);
+    }
+
+    media.addListener(syncMobileHero);
+    return () => media.removeListener(syncMobileHero);
+  }, []);
+
+  useEffect(() => {
+    if (isMobileHero) {
+      setLiveFrameIndex(liveExampleFrames.length - 1);
+      return undefined;
+    }
+
     const interval = window.setInterval(() => {
       setLiveFrameIndex((current) => (current + 1) % liveExampleFrames.length);
     }, 1600);
 
     return () => window.clearInterval(interval);
-  }, []);
+  }, [isMobileHero]);
 
-  const liveFrame = liveExampleFrames[liveFrameIndex];
+  const liveFrame = isMobileHero ? liveExampleFrames[liveExampleFrames.length - 1] : liveExampleFrames[liveFrameIndex];
 
   const openAuth = (mode) => {
     setAuthMode(mode);
@@ -263,14 +283,14 @@ const LandingPage = ({ setIsAuthenticated }) => {
               </div>
             </div>
 
-            <div className="landing-panel rounded-[32px] p-5">
+            <div className={`landing-panel landing-hero-panel rounded-[32px] p-5 ${isMobileHero ? "landing-hero-panel-static" : ""}`}>
               <div className="mb-4 flex items-center justify-between">
                 <div>
                   <p className="landing-label text-xs uppercase tracking-[0.28em]">Live Example</p>
-                  <h2 className="landing-panel-title mt-1 text-2xl font-bold">From idea to upload-ready</h2>
+                  <h2 className="landing-panel-title mt-1 text-2xl font-bold">{isMobileHero ? "Upload-ready example" : "From idea to upload-ready"}</h2>
                 </div>
                 <div className="landing-pill rounded-full px-3 py-1 text-xs font-semibold">
-                  1 workflow
+                  {isMobileHero ? "Static view" : "1 workflow"}
                 </div>
               </div>
 
@@ -279,7 +299,7 @@ const LandingPage = ({ setIsAuthenticated }) => {
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <div className="landing-muted-2 text-xs uppercase tracking-[0.2em]">Prompt</div>
                     <div className="landing-example-status flex items-center gap-2 text-xs">
-                      <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                      <LoaderCircle className={`h-3.5 w-3.5 ${isMobileHero ? "" : "animate-spin"}`} />
                       <span>{liveFrame.stage}</span>
                     </div>
                   </div>
@@ -287,7 +307,7 @@ const LandingPage = ({ setIsAuthenticated }) => {
                     <span className="landing-example-code-label">prompt</span>
                     <span className="landing-example-code-equals">=</span>
                     <span className="landing-example-code-value">&quot;{liveExamplePrompt}&quot;</span>
-                    <span className="landing-example-caret" aria-hidden="true">|</span>
+                    {!isMobileHero && <span className="landing-example-caret" aria-hidden="true">|</span>}
                   </div>
                   <div className="mt-3">
                     <div className="landing-example-progress-track">
@@ -327,7 +347,7 @@ const LandingPage = ({ setIsAuthenticated }) => {
                     {liveFrame.tags.map((tag) => (
                       <span
                         key={tag}
-                        className="landing-tag landing-tag-animated rounded-full px-3 py-1 text-xs"
+                        className={`landing-tag rounded-full px-3 py-1 text-xs ${isMobileHero ? "" : "landing-tag-animated"}`}
                       >
                         {tag}
                       </span>
@@ -466,8 +486,8 @@ const LandingPage = ({ setIsAuthenticated }) => {
         </div>
       </section>
 
-      <Dialog open={isLoginOpen} onOpenChange={setIsLoginOpen}>
-        <DialogContent className="landing-auth-dialog sm:max-w-md">
+        <Dialog open={isLoginOpen} onOpenChange={setIsLoginOpen}>
+          <DialogContent className="landing-auth-dialog sm:max-w-md" overlayClassName="landing-auth-overlay">
           <DialogHeader>
             <DialogTitle className="landing-auth-title text-center text-2xl font-bold">
               {authMode === "login" ? "Welcome Back" : "Create Your Account"}

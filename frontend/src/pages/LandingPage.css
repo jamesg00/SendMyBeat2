@@ -55,6 +55,10 @@
   background: rgba(91, 241, 188, 0.08);
 }
 
+.landing-hero-panel {
+  min-height: 100%;
+}
+
 .landing-muted {
   color: var(--landing-text-soft);
 }
@@ -328,6 +332,13 @@
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5) !important;
 }
 
+.landing-auth-overlay {
+  background:
+    radial-gradient(circle at top, rgba(61, 220, 122, 0.08), transparent 36%),
+    rgba(2, 5, 4, 0.78) !important;
+  backdrop-filter: blur(8px);
+}
+
 .landing-auth-dialog,
 .landing-auth-dialog h1,
 .landing-auth-dialog h2,
@@ -403,6 +414,27 @@
 .landing-auth-dialog button.absolute svg {
   color: var(--landing-text-soft) !important;
   opacity: 1 !important;
+}
+
+@media (max-width: 767px) {
+  .landing-shell-glow-a,
+  .landing-shell-glow-b {
+    opacity: 0.45;
+    transform: none !important;
+  }
+
+  .landing-hero-panel-static .landing-example-progress-fill {
+    transition: none;
+  }
+
+  .landing-hero-panel-static .landing-tag-window {
+    min-height: auto;
+  }
+
+  .landing-hero-panel-static .landing-example-console,
+  .landing-hero-panel-static .landing-example-prompt {
+    min-height: 0;
+  }
 }
 
 @keyframes landingBlink {
