@@ -11,7 +11,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import axios from "axios";
 import { API } from "@/App";
 import { toast } from "sonner";
-import { Music, Sparkles, Save, LogOut, Copy, Trash2, Edit, Plus, Youtube, CheckCircle2, AlertCircle, Target, ChevronLeft, ChevronRight, DollarSign, Link } from "lucide-react";
+import { Music, Sparkles, Save, LogOut, Copy, Trash2, Edit, Plus, Youtube, CheckCircle2, AlertCircle, Target, ChevronLeft, ChevronRight, DollarSign, Link, CircleAlert } from "lucide-react";
 import DarkModeToggle from "@/components/DarkModeToggle";
 import SubscriptionBanner from "@/components/SubscriptionBanner";
 import UpgradeModal from "@/components/UpgradeModal";
@@ -168,6 +168,19 @@ const toSafeNumber = (value, fallback = 0) => {
 
 const toSafeArray = (value) => (Array.isArray(value) ? value : []);
 
+const normalizeAnalyticsText = (value) => {
+  if (typeof value !== "string") return "";
+  return value
+    .replace(/âœ"/g, "")
+    .replace(/âš /g, "")
+    .replace(/âš /g, "")
+    .replace(/â€™/g, "'")
+    .replace(/â€"/g, "-")
+    .replace(/â€œ/g, '"')
+    .replace(/â€/g, '"')
+    .trim();
+};
+
 const normalizeAnalyticsData = (raw) => {
   if (!raw || typeof raw !== "object") return null;
   const insights = raw.insights && typeof raw.insights === "object" ? raw.insights : {};
@@ -185,15 +198,15 @@ const normalizeAnalyticsData = (raw) => {
       published_at: typeof video?.published_at === "string" ? video.published_at : "",
     })),
     insights: {
-      channel_health_score: typeof insights.channel_health_score === "string" ? insights.channel_health_score : "N/A",
-      growth_roadmap: typeof insights.growth_roadmap === "string" ? insights.growth_roadmap : "",
-      what_works: toSafeArray(insights.what_works),
-      critical_issues: toSafeArray(insights.critical_issues),
-      immediate_actions: toSafeArray(insights.immediate_actions),
-      seo_optimization: toSafeArray(insights.seo_optimization),
-      content_strategy: toSafeArray(insights.content_strategy),
-      discoverability_tactics: toSafeArray(insights.discoverability_tactics),
-      internet_money_lessons: toSafeArray(insights.internet_money_lessons),
+      channel_health_score: normalizeAnalyticsText(typeof insights.channel_health_score === "string" ? insights.channel_health_score : "N/A"),
+      growth_roadmap: normalizeAnalyticsText(typeof insights.growth_roadmap === "string" ? insights.growth_roadmap : ""),
+      what_works: toSafeArray(insights.what_works).map(normalizeAnalyticsText).filter(Boolean),
+      critical_issues: toSafeArray(insights.critical_issues).map(normalizeAnalyticsText).filter(Boolean),
+      immediate_actions: toSafeArray(insights.immediate_actions).map(normalizeAnalyticsText).filter(Boolean),
+      seo_optimization: toSafeArray(insights.seo_optimization).map(normalizeAnalyticsText).filter(Boolean),
+      content_strategy: toSafeArray(insights.content_strategy).map(normalizeAnalyticsText).filter(Boolean),
+      discoverability_tactics: toSafeArray(insights.discoverability_tactics).map(normalizeAnalyticsText).filter(Boolean),
+      internet_money_lessons: toSafeArray(insights.internet_money_lessons).map(normalizeAnalyticsText).filter(Boolean),
     },
   };
 };
@@ -1208,9 +1221,15 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
     setLoadingAnalytics(true);
     setProgressActive(true);
     setProgressMessage("📈 Analyzing your channel performance and generating AI growth strategy...");
-    setProgressDuration(70000);
+    setProgressDuration(45000);
     try {
       const response = await axios.post(`${API}/youtube/analytics`);
+      if (response?.data?.result) {
+        setAnalyticsData(normalizeAnalyticsData(response.data.result));
+        toast.success(response?.data?.cached ? "Loaded recent channel analysis" : "Channel analysis complete!");
+        await fetchSubscriptionStatus();
+        return;
+      }
       const jobId = response?.data?.job?.id;
       if (!jobId) {
         throw new Error("Channel analytics job was not created");
@@ -3009,7 +3028,7 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
                         <ul className="space-y-3">
                           {analyticsData.insights?.what_works?.map((point, idx) => (
                             <li key={idx} className="flex items-start gap-3 p-3 rounded-lg" style={{backgroundColor: 'var(--bg-secondary)'}}>
-                              <span className="text-green-500 text-xl">âœ“</span>
+                              <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0 mt-0.5" />
                               <span className="flex-1">{point}</span>
                             </li>
                           ))}
@@ -3029,7 +3048,7 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
                         <ul className="space-y-3">
                           {analyticsData.insights?.critical_issues?.map((issue, idx) => (
                             <li key={idx} className="flex items-start gap-3 p-3 rounded-lg" style={{backgroundColor: 'var(--bg-secondary)'}}>
-                              <span className="text-red-500 text-xl">âš </span>
+                              <CircleAlert className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
                               <span className="flex-1">{issue}</span>
                             </li>
                           ))}

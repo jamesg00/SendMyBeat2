@@ -383,6 +383,7 @@ UPLOAD_JOB_WORKER_ID = f"upload-worker-{uuid.uuid4().hex[:10]}"
 SPOTLIGHT_REFRESH_INTERVAL_SECONDS = int(os.environ.get("SPOTLIGHT_REFRESH_INTERVAL_SECONDS", "1800"))
 METADATA_CACHE_TTL_SECONDS = int(os.environ.get("METADATA_CACHE_TTL_SECONDS", "86400"))
 IMAGE_SEARCH_CACHE_TTL_SECONDS = int(os.environ.get("IMAGE_SEARCH_CACHE_TTL_SECONDS", "21600"))
+CHANNEL_ANALYTICS_CACHE_TTL_SECONDS = int(os.environ.get("CHANNEL_ANALYTICS_CACHE_TTL_SECONDS", "21600"))
 OPS_DEFAULT_MAX_QUEUED_JOBS = int(os.environ.get("OPS_DEFAULT_MAX_QUEUED_JOBS", "60"))
 OPS_DEFAULT_MAX_PROCESSING_JOBS = int(os.environ.get("OPS_DEFAULT_MAX_PROCESSING_JOBS", "8"))
 OPS_DEFAULT_MAX_USER_ACTIVE_JOBS = int(os.environ.get("OPS_DEFAULT_MAX_USER_ACTIVE_JOBS", "4"))
@@ -461,7 +462,9 @@ def _get_vision_model_for_provider(provider_name: str) -> str:
         return (
             os.environ.get("GROK_VISION_MODEL")
             or os.environ.get("GROK_MODEL_VISION")
-            or "grok-2-vision-latest"
+            or os.environ.get("GROK_MODEL")
+            or os.environ.get("LLM_MODEL")
+            or "grok-2-latest"
         )
     if provider == "openai":
         return (
@@ -695,10 +698,19 @@ async def llm_chat_with_image(
             or "images are not supported" in err_text
             or "invalid request content" in err_text
         )
+        model_not_found = (
+            "model not found" in err_text
+            or "invalid model" in err_text
+            or "unknown model" in err_text
+            or "client specified an invalid argument" in err_text
+        )
         can_fallback_to_openai = (
             selected_provider != "openai" and bool(os.environ.get("OPENAI_API_KEY"))
         )
-        if image_not_supported and can_fallback_to_openai:
+        should_fallback_to_openai = can_fallback_to_openai and (
+            image_not_supported or model_not_found
+        )
+        if should_fallback_to_openai:
             fallback_model = _get_vision_model_for_provider("openai")
             client, settings = _get_llm_client(
                 provider_override="openai",
@@ -1169,31 +1181,41 @@ def _dedupe_generated_image_results(results: list[dict], k: int) -> list[dict]:
 
 def _build_image_query_variants(title: str, tags: list[str], limit: int = 8) -> tuple[list[str], list[str], str]:
     artists = _extract_artist_queries(title, tags)
-    query = artists[0] if artists else title.strip()
+    raw_title = re.sub(r"\s+", " ", (title or "").strip())
+    use_title_as_primary = len(raw_title.split()) >= 2
+    query = raw_title if use_title_as_primary else (artists[0] if artists else raw_title)
     if not query:
         raise HTTPException(status_code=400, detail="Could not infer artist query from title/tags.")
 
     query_variants: list[str] = []
+    if raw_title:
+        query_variants.extend([
+            f"{raw_title} album cover",
+            f"{raw_title} cover art",
+            f"{raw_title} album artwork",
+            raw_title,
+        ])
     if len(artists) >= 2:
         duo_query = " x ".join(artists[:2]).strip()
         if duo_query:
             query_variants.extend([
-                duo_query,
                 f"{duo_query} album cover",
                 f"{duo_query} cover art",
+                f"{duo_query} type beat cover art",
+                duo_query,
             ])
     for artist_name in artists:
         if not artist_name:
             continue
         query_variants.extend([
-            artist_name,
             f"{artist_name} album cover",
             f"{artist_name} cover art",
+            f"{artist_name} type beat cover art",
+            f"{artist_name} album artwork",
+            artist_name,
             f"{artist_name} press photo",
             f"{artist_name} portrait",
         ])
-    if title.strip():
-        query_variants.append(title.strip())
     query_variants.append(query.strip())
 
     seen_q = set()
@@ -1210,6 +1232,16 @@ def _build_image_query_variants(title: str, tags: list[str], limit: int = 8) -> 
         if len(filtered) >= limit:
             break
     return artists, filtered, query
+
+
+def _image_search_mode(query: str, artists: list[str]) -> str:
+    normalized_query = re.sub(r"\s+", " ", (query or "").strip()).lower()
+    normalized_artists = {
+        re.sub(r"\s+", " ", (artist or "").strip()).lower()
+        for artist in (artists or [])
+        if str(artist or "").strip()
+    }
+    return "artist" if normalized_query and normalized_query in normalized_artists else "project"
 
 
 def _search_bing_image_results(query_variants: list[str], artists: list[str], k: int) -> list[dict]:
@@ -1427,6 +1459,88 @@ def _search_stock_image_results(query_variants: list[str], artists: list[str], k
             logging.warning(f"Pixabay image search failed: {str(exc)}")
 
     return results
+
+
+def _filter_generated_image_results(results: list[dict]) -> list[dict]:
+    filtered: list[dict] = []
+    for item in results:
+        source = str(item.get("source") or "").strip().lower()
+        image_url = str(item.get("image_url") or "").strip().lower()
+        artist_name = str(item.get("artist") or "").strip().lower()
+        base_query = str(item.get("base_query") or "").strip().lower()
+        search_mode = str(item.get("search_mode") or "project").strip().lower()
+
+        if not image_url.startswith(("http://", "https://")):
+            continue
+        if any(token in image_url for token in [
+            "placeholder",
+            "default",
+            "avatar",
+            "blank-profile",
+            "default_profile",
+            "gravatar",
+        ]):
+            continue
+        if any(token in image_url for token in [
+            "beatstars",
+            "traktrain",
+            "type-beat",
+            "produced-by",
+        ]):
+            continue
+        if source == "deezer":
+            continue
+        if search_mode == "artist" and source == "itunes" and base_query and artist_name and base_query != artist_name:
+            continue
+        filtered.append(item)
+    return filtered
+
+
+def _rank_generated_image_result(item: dict) -> tuple:
+    source = str(item.get("source") or "").strip().lower()
+    query_used = str(item.get("query_used") or "").strip().lower()
+    image_url = str(item.get("image_url") or "").strip().lower()
+    credit_name = str(item.get("credit_name") or "").strip().lower()
+    artist_name = str(item.get("artist") or "").strip().lower()
+
+    base_query = str(item.get("base_query") or "").strip().lower()
+    search_mode = str(item.get("search_mode") or "project").strip().lower()
+    exact_query_bonus = 0 if (base_query and base_query in query_used) else 1
+    artist_exact_bonus = 0 if (base_query and base_query == artist_name) else 1
+    portrait_query = any(term in query_used for term in ["portrait", "press photo"])
+    cover_query = any(term in query_used for term in ["cover art", "album cover", "album artwork", "type beat cover art"])
+
+    source_rank = {
+        "itunes": 0,
+        "pexels": 1,
+        "pixabay": 2,
+        "bing-images": 3,
+        "deezer": 4,
+    }.get(source, 5)
+
+    if search_mode == "artist":
+        intent_rank = 0 if portrait_query else 1 if artist_exact_bonus == 0 else 2 if cover_query else 3
+    else:
+        intent_rank = 0 if exact_query_bonus == 0 and cover_query else 1 if exact_query_bonus == 0 else 2 if cover_query else 3
+
+    portrait_penalty = 1 if portrait_query and search_mode != "artist" else 0
+    placeholder_penalty = 1 if (
+        "placeholder" in image_url
+        or "default" in image_url
+        or "avatar" in image_url
+        or "blank-profile-picture" in image_url
+        or "default_profile" in image_url
+        or credit_name in {"", "unknown"}
+    ) else 0
+    spammy_art_penalty = 1 if (
+        "produced by" in image_url
+        or "type-beat" in image_url
+        or "beatstars" in image_url
+        or "traktrain" in image_url
+    ) else 0
+    deezer_artist_penalty = 1 if source == "deezer" else 0
+
+    return (intent_rank, source_rank, placeholder_penalty, spammy_art_penalty, deezer_artist_penalty, portrait_penalty, image_url)
 
 
 # ============ Subscription Helper Functions ============
@@ -2701,8 +2815,15 @@ async def _build_channel_analytics_job_payload(current_user: dict) -> dict[str, 
     if not connection:
         raise HTTPException(status_code=400, detail="YouTube account not connected")
 
+    cache_key = _build_ai_cache_key(
+        namespace="channel_analytics",
+        user_id=current_user["id"],
+        payload={"kind": "youtube_channel_overview_v1"},
+    )
+
     return {
         "using_free_monthly_analytics": using_free_monthly_analytics,
+        "cache_key": cache_key,
     }
 
 
@@ -2710,6 +2831,7 @@ async def _execute_channel_analytics_job(job: dict) -> dict:
     user_id = str(job.get("user_id") or "")
     payload = job.get("payload") or {}
     using_free_monthly_analytics = bool(payload.get("using_free_monthly_analytics"))
+    cache_key = str(payload.get("cache_key") or "").strip()
 
     await _update_upload_job(job["id"], progress=10, message="Loading YouTube channel data...")
     connection = await db.youtube_connections.find_one({"user_id": user_id})
@@ -2746,7 +2868,7 @@ async def _execute_channel_analytics_job(job: dict) -> dict:
         forMine=True,
         type='video',
         order='date',
-        maxResults=10
+        maxResults=6
     ).execute()
     video_ids = [item['id']['videoId'] for item in search_response.get('items', [])]
 
@@ -2756,7 +2878,7 @@ async def _execute_channel_analytics_job(job: dict) -> dict:
         for video in videos_response.get('items', []):
             video_stats = video['statistics']
             recent_videos.append({
-                'title': video['snippet']['title'],
+                'title': str(video['snippet']['title'])[:120],
                 'views': int(video_stats.get('viewCount', 0)),
                 'likes': int(video_stats.get('likeCount', 0)),
                 'comments': int(video_stats.get('commentCount', 0)),
@@ -2767,83 +2889,76 @@ async def _execute_channel_analytics_job(job: dict) -> dict:
     total_likes = sum(v['likes'] for v in recent_videos)
     avg_views = total_views / len(recent_videos) if recent_videos else 0
     engagement_rate = (total_likes / total_views * 100) if total_views > 0 else 0
+    video_summary_lines = [
+        f"- {video['title']} | {video['views']} views | {video['likes']} likes | {video['comments']} comments | {video['published_at'][:10]}"
+        for video in recent_videos[:6]
+    ]
+    recent_video_summary = "\n".join(video_summary_lines) if video_summary_lines else "- No recent uploads found"
 
-    analysis_prompt = f"""You are a YouTube SEO expert and growth strategist specializing in helping beat producers blow up their channels like Internet Money did. Analyze this channel deeply and provide COMPREHENSIVE, ACTIONABLE advice.
+    analysis_prompt = f"""You are a YouTube SEO expert and growth strategist for beat producers. Analyze this channel and give actionable advice fast.
 
 CHANNEL DATA:
 - Subscribers: {channel_stats.get('subscriberCount', '0')}
 - Total Views: {channel_stats.get('viewCount', '0')}
 - Total Videos: {channel_stats.get('videoCount', '0')}
-- Average Views per Video (last 10): {avg_views:.0f}
+- Average Views per Video (last {len(recent_videos) or 0}): {avg_views:.0f}
 - Engagement Rate: {engagement_rate:.2f}%
 
 RECENT VIDEOS PERFORMANCE:
-{json.dumps(recent_videos, indent=2)}
+{recent_video_summary}
 
-YOUR MISSION: Help this producer grow their channel from where they are now to 100K+ subscribers. They're a BEGINNER who needs specific, step-by-step guidance.
+YOUR MISSION: Help this producer grow from where they are now. Keep advice specific, practical, and concise.
 
 CRITICAL: You MUST respond with ONLY valid JSON. No markdown, no code blocks, no explanation before or after. Just pure JSON.
 
-Provide your analysis in this EXACT JSON format (be DETAILED and SPECIFIC):
+Provide your analysis in this EXACT JSON format:
 {{
   "channel_health_score": "X/100 - Brief explanation of why",
   "what_works": [
-    "Specific strength 1 with data/evidence",
-    "Specific strength 2 with data/evidence", 
-    "Specific strength 3 with data/evidence",
-    "Specific strength 4 with data/evidence"
+    "Specific strength 1",
+    "Specific strength 2", 
+    "Specific strength 3"
   ],
   "critical_issues": [
-    "Critical problem 1 - Why it's hurting growth",
-    "Critical problem 2 - Why it's hurting growth",
-    "Critical problem 3 - Why it's hurting growth",
-    "Critical problem 4 - Why it's hurting growth"
+    "Critical problem 1",
+    "Critical problem 2",
+    "Critical problem 3"
   ],
   "seo_optimization": [
-    "Title strategy: Specific formula/template to use",
-    "Description strategy: What to include in first 150 characters",
-    "Tag strategy: Types of tags to prioritize (high-volume vs long-tail)",
-    "Thumbnail strategy: Specific visual elements that work for beats",
-    "Upload timing: Best days/times for music content"
+    "Title strategy",
+    "Description strategy",
+    "Tag strategy",
+    "Thumbnail strategy"
   ],
   "content_strategy": [
-    "Video format recommendation: What type of videos to make",
-    "Upload frequency: How often to post and why",
-    "Niche positioning: Specific sub-genre or style to focus on",
-    "Collaboration strategy: Who to work with and how",
-    "Series ideas: 2-3 specific series concepts to start"
+    "Video format recommendation",
+    "Upload frequency",
+    "Niche positioning",
+    "Series idea"
   ],
   "immediate_actions": [
-    "Action 1: Do THIS specific thing in next 24 hours",
-    "Action 2: Do THIS specific thing this week",
-    "Action 3: Do THIS specific thing this month",
-    "Action 4: Start THIS habit from today",
-    "Action 5: Stop doing THIS immediately"
+    "Action 1",
+    "Action 2",
+    "Action 3",
+    "Action 4"
   ],
   "discoverability_tactics": [
-    "Tactic 1: Specific method to appear in more searches",
-    "Tactic 2: How to leverage trending sounds/artists",
-    "Tactic 3: Cross-platform promotion strategy",
-    "Tactic 4: Community engagement approach",
-    "Tactic 5: Algorithm hack specific to beat producers"
+    "Tactic 1",
+    "Tactic 2",
+    "Tactic 3",
+    "Tactic 4"
   ],
-  "growth_roadmap": "A detailed 3-4 paragraph roadmap explaining: (1) Where they are now and why, (2) The exact path to 10K subs with timeline, (3) The path from 10K to 100K, (4) Specific metrics to track weekly. Be like a mentor giving a pep talk with concrete steps.",
+  "growth_roadmap": "A concise roadmap with next milestones and what to track weekly.",
   "internet_money_lessons": [
-    "Lesson 1: Specific tactic Internet Money used that this producer should copy",
-    "Lesson 2: Another Internet Money growth strategy to implement",
-    "Lesson 3: How Internet Money handled [specific challenge] and how to apply it"
+    "Lesson 1",
+    "Lesson 2",
+    "Lesson 3"
   ]
 }}
 
-CRITICAL RULES:
-- Be BRUTALLY HONEST but ENCOURAGING
-- Give SPECIFIC numbers, formulas, and templates
-- Include EXAMPLES of good titles, descriptions, tags
-- Reference real artists/producers when relevant
-- Explain the "WHY" behind every recommendation
-- Assume they know NOTHING about YouTube SEO
-- Make it feel like a 1-on-1 coaching session
-- Focus on DISCOVERABILITY and GROWTH, not just quality content
+- Be specific and concise.
+- Prioritize the highest-impact advice.
+- Focus on discoverability, packaging, and upload consistency.
 """
 
     await _update_upload_job(job["id"], progress=55, message="Generating AI channel insights...")
@@ -2914,8 +3029,7 @@ CRITICAL RULES:
         await _consume_free_monthly_analytics(user_id)
     else:
         await consume_credit(user_id)
-
-    return YouTubeAnalyticsResponse(
+    result = YouTubeAnalyticsResponse(
         channel_name=channel_snippet['title'],
         subscriber_count=int(channel_stats.get('subscriberCount', 0)),
         total_views=int(channel_stats.get('viewCount', 0)),
@@ -2923,6 +3037,17 @@ CRITICAL RULES:
         recent_videos=recent_videos,
         insights=insights
     ).model_dump()
+
+    if cache_key:
+        await _set_cached_ai_payload(
+            cache_key=cache_key,
+            cache_type="channel_analytics",
+            user_id=user_id,
+            payload=result,
+            ttl_seconds=CHANNEL_ANALYTICS_CACHE_TTL_SECONDS,
+        )
+
+    return result
 
 
 async def _process_channel_analytics_job(job: dict) -> None:
@@ -3153,6 +3278,8 @@ async def _execute_thumbnail_check_job(job: dict) -> dict:
         upload = await db.uploads.find_one({"id": image_file_id, "user_id": user_id, "file_type": "image"})
         if not upload:
             raise HTTPException(status_code=404, detail="Referenced image file not found.")
+        if _visual_kind_from_upload(upload) == "video":
+            raise HTTPException(status_code=400, detail="Thumbnail check only supports still images right now. Use a JPG, PNG, or WEBP.")
         if not media_storage.exists(upload):
             raise HTTPException(status_code=404, detail="Referenced image file is missing on server.")
         image_bytes = media_storage.read_bytes(upload)
@@ -3282,7 +3409,10 @@ async def _execute_tag_generation_job(job: dict) -> dict:
         custom_tags=[tag for tag in (payload.get("custom_tags") or []) if isinstance(tag, str)],
         llm_provider=payload.get("llm_provider"),
     )
-    return await generate_tags(request, current_user)
+    result = await generate_tags(request, current_user)
+    if hasattr(result, "model_dump"):
+        return result.model_dump()
+    return result
 
 
 async def _process_tag_generation_job(job: dict) -> None:
@@ -3307,7 +3437,10 @@ async def _execute_tag_join_job(job: dict) -> dict:
         llm_provider=payload.get("llm_provider"),
         enrich_from_sources=bool(payload.get("enrich_from_sources", True)),
     )
-    return await join_tags_ai(request, current_user)
+    result = await join_tags_ai(request, current_user)
+    if hasattr(result, "model_dump"):
+        return result.model_dump()
+    return result
 
 
 async def _process_tag_join_job(job: dict) -> None:
@@ -3353,14 +3486,6 @@ async def _execute_image_search_job(job: dict) -> dict:
         )
         cache_type = "beat_generate_image"
 
-    if cache_key and isinstance(result, dict):
-        await _set_cached_ai_payload(
-            cache_key=cache_key,
-            cache_type=cache_type,
-            user_id=user_id,
-            payload=result,
-            ttl_seconds=IMAGE_SEARCH_CACHE_TTL_SECONDS,
-        )
     return result
 
 
@@ -4039,6 +4164,14 @@ async def get_youtube_analytics(current_user: dict = Depends(get_current_user)):
             detail_message="Too many channel analytics requests. Try again in a few minutes.",
         )
         payload = await _build_channel_analytics_job_payload(current_user)
+        cache_key = str(payload.get("cache_key") or "").strip()
+        if cache_key:
+            cached = await _get_cached_ai_payload(cache_key)
+            if cached:
+                return {"success": True, "queued": False, "cached": True, "result": cached}
+            active_job = await _find_active_background_job(current_user=current_user, job_type="channel_analytics", cache_key=cache_key)
+            if active_job:
+                return {"success": True, "queued": True, "message": "Channel analysis already in progress.", "job": _sanitize_upload_job_doc(active_job)}
         job_doc = await _create_background_job(
             current_user=current_user,
             job_type="channel_analytics",
@@ -7713,11 +7846,9 @@ async def generate_image_suggestions(
             "title": title,
             "tags": tags,
             "k": k,
+            "search_strategy": "v4",
         }
         cache_key = _build_ai_cache_key(namespace="beat_generate_image", user_id=current_user["id"], payload=payload)
-        cached = await _get_cached_ai_payload(cache_key)
-        if cached:
-            return cached
         active_job = await _find_active_background_job(current_user=current_user, job_type="image_search", cache_key=cache_key)
         if active_job:
             return {"success": True, "queued": True, "message": "Image search already in progress.", "job": _sanitize_upload_job_doc(active_job)}
@@ -7731,12 +7862,30 @@ async def generate_image_suggestions(
         return {"success": True, "queued": True, "message": "Image search queued.", "job": _sanitize_upload_job_doc(job_doc)}
     try:
         artists, query_variants, query = _build_image_query_variants(title, tags)
+        search_mode = _image_search_mode(query, artists)
         results: list[dict] = []
-        results.extend(_search_catalog_artist_images(query_variants, artists, k))
-        if len(results) < k:
-            results.extend(_search_stock_image_results(query_variants, artists, k))
-        if len(results) < k:
-            results.extend(_search_bing_image_results(query_variants, artists, k))
+        if search_mode == "artist":
+            artist_queries = [
+                query,
+                f"{query} portrait",
+                f"{query} press photo",
+                f"{query} photoshoot",
+                f"{query} editorial",
+            ]
+            results.extend(_search_bing_image_results(artist_queries, artists, max(k * 4, 12)))
+        else:
+            project_queries = [
+                f"{query} album cover",
+                f"{query} cover art",
+                f"{query} album artwork",
+                query,
+            ]
+            results.extend(_search_catalog_artist_images(project_queries, artists, max(k * 3, 10)))
+            results.extend(_search_bing_image_results(project_queries, artists, max(k * 4, 12)))
+        base_query = query.strip().lower()
+        results = [{**item, "base_query": base_query, "search_mode": search_mode} for item in results]
+        results = _filter_generated_image_results(results)
+        results = sorted(results, key=_rank_generated_image_result)
         result = ImageGenerateResponse(
             query_used=query,
             detected_artists=artists,
@@ -7803,11 +7952,9 @@ async def beathelper_search_images(
                 "context_tags": tags,
                 "k": max(1, min(int(request.k or 8), 12)),
                 "smart_title": smart_title,
+                "search_strategy": "v4",
             }
             cache_key = _build_ai_cache_key(namespace="beathelper_image_search", user_id=current_user["id"], payload=payload)
-            cached = await _get_cached_ai_payload(cache_key)
-            if cached:
-                return cached
             active_job = await _find_active_background_job(current_user=current_user, job_type="image_search", cache_key=cache_key)
             if active_job:
                 return {"success": True, "queued": True, "message": "BeatHelper image search already in progress.", "job": _sanitize_upload_job_doc(active_job)}

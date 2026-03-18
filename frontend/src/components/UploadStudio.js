@@ -48,6 +48,7 @@ const UploadStudio = ({
 }) => {
   // --- State ---
   const [studioOpen, setStudioOpen] = useState(false);
+  const [studioDismissed, setStudioDismissed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
 
@@ -127,6 +128,7 @@ const UploadStudio = ({
 
   const hasAudioReady = Boolean(audioFileId);
   const hasImageReady = Boolean(imageFileId);
+  const studioAssetSignature = `${audioFileId || ""}:${imageFileId || ""}`;
 
   // Refs
   const audioPlayerRef = useRef(null);
@@ -705,7 +707,7 @@ const UploadStudio = ({
          } else if (error.response?.data?.detail) {
             toast.error(typeof error.response.data.detail === "string" ? error.response.data.detail : (error.response.data.detail?.message || "Thumbnail check failed"));
          } else {
-            toast.error("Thumbnail check failed");
+            toast.error(error?.message || "Thumbnail check failed");
          }
       }
     } finally {
@@ -955,11 +957,21 @@ const UploadStudio = ({
   }, [API, currentUploadJob]);
 
   useEffect(() => {
-    if (hasAudioReady && hasImageReady && !studioOpen) {
+    if (hasAudioReady && hasImageReady && !studioOpen && !studioDismissed) {
       toast.success("Files ready! Opening Upload Studio...", { duration: 2000 });
       setStudioOpen(true);
     }
-  }, [hasAudioReady, hasImageReady, studioOpen]);
+  }, [hasAudioReady, hasImageReady, studioOpen, studioDismissed]);
+
+  useEffect(() => {
+    setStudioDismissed(false);
+  }, [studioAssetSignature]);
+
+  const closeStudio = () => {
+    setMobileDrawerOpen(false);
+    setStudioDismissed(true);
+    setStudioOpen(false);
+  };
 
   useEffect(() => {
     if (!audioFileId || !imageFileId) return;
@@ -1108,10 +1120,10 @@ const UploadStudio = ({
             <span className="text-xs bg-secondary px-2 py-0.5 rounded-full text-muted-foreground hidden sm:inline-block">Beta</span>
          </div>
          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => onExitUploadTab?.()}>
-               Exit Upload Tab
+            <Button variant="outline" size="sm" onClick={closeStudio}>
+               Exit Upload Studio
             </Button>
-            <Button variant="ghost" size="icon" onClick={() => setStudioOpen(false)}>
+            <Button variant="ghost" size="icon" onClick={closeStudio}>
                <X className="h-5 w-5" />
             </Button>
          </div>
