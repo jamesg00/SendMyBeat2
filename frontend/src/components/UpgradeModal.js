@@ -50,8 +50,8 @@ const UpgradeModal = ({ open, onClose, onUpgrade, loading }) => {
             bullets={[
               "150 AI generations per month",
               "60 YouTube uploads per month",
-              "BeatHelper queue + templates",
-              "Lower-cost growth plan",
+              "Paid channel analytics",
+              "Lower-cost publishing plan",
             ]}
             cta="Upgrade to Plus"
             loading={loading}
@@ -64,8 +64,8 @@ const UpgradeModal = ({ open, onClose, onUpgrade, loading }) => {
             bullets={[
               "500 AI generations per month",
               "150 YouTube uploads per month",
-              "All BeatHelper automation",
-              "Priority growth workflow",
+              "Paid channel analytics",
+              "Higher monthly publishing room",
             ]}
             cta="Upgrade to Max"
             loading={loading}

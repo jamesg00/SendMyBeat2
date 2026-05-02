@@ -1,106 +1,73 @@
 import os
 import sys
+import tempfile
 import unittest
-from unittest.mock import patch, MagicMock, AsyncMock, call
-import asyncio
-from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
 
-# Setup environment variables before importing server
-os.environ['MONGO_URL'] = 'mongodb://localhost:27017'
-os.environ['JWT_SECRET_KEY'] = 'test_secret'
-os.environ['JWT_ALGORITHM'] = 'HS256'
-os.environ['JWT_EXPIRATION_MINUTES'] = '60'
-os.environ['STRIPE_SECRET_KEY'] = 'sk_test_123'
-os.environ['GOOGLE_CLIENT_ID'] = 'test_client_id'
-os.environ['GOOGLE_CLIENT_SECRET'] = 'test_client_secret'
-os.environ['DB_NAME'] = 'test_db'
-os.environ['HOSTING_COST_USD'] = '3.50'
+from fastapi import HTTPException
 
-# Add parent directory to path to import backend modules if needed
+os.environ["MONGO_URL"] = "mongodb://localhost:27017"
+os.environ["JWT_SECRET_KEY"] = "test_secret"
+os.environ["JWT_ALGORITHM"] = "HS256"
+os.environ["JWT_EXPIRATION_MINUTES"] = "60"
+os.environ["STRIPE_SECRET_KEY"] = "sk_test_123"
+os.environ["GOOGLE_CLIENT_ID"] = "test_client_id"
+os.environ["GOOGLE_CLIENT_SECRET"] = "test_client_secret"
+os.environ["DB_NAME"] = "test_db"
+os.environ["HOSTING_COST_USD"] = "3.50"
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Import the server module
 from backend import server
+
 
 class TestYouTubeUpload(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        # Reset mocks
         self.mock_db = MagicMock()
         server.db = self.mock_db
-
-        self.mock_uploads_dir = Path('/tmp/test_uploads')
-        server.UPLOADS_DIR = self.mock_uploads_dir
-
-        # User setup
         self.user_id = "test_user_id"
         self.current_user = {"id": self.user_id, "username": "test_user"}
-
-        # Default mock responses
-        self.mock_user_sub_status = {
+        self.free_status = {
             "is_subscribed": False,
-            "upload_credits_remaining": 3,
+            "upload_credits_remaining": 1,
             "plan": "free",
-            "resets_at": "2024-01-01T00:00:00Z"
+            "resets_at": "2026-05-02T00:00:00Z",
         }
 
-    async def test_upload_to_youtube_success_free_user(self):
-        """Test successful upload for a free user (watermark added)"""
-        # Mock dependencies
-        with patch('backend.server.get_user_subscription_status', new_callable=AsyncMock) as mock_get_sub, \
-             patch('backend.server.check_and_use_upload_credit', new_callable=AsyncMock) as mock_check_credit, \
-             patch('backend.server.refresh_youtube_token', new_callable=AsyncMock) as mock_refresh_token, \
-             patch('subprocess.run') as mock_subprocess, \
-             patch('backend.server.build') as mock_build, \
-             patch('backend.server.MediaFileUpload') as mock_media_upload, \
-             patch('pathlib.Path.unlink') as mock_unlink, \
-             patch('shutil.which') as mock_shutil_which, \
-             patch('uuid.uuid4') as mock_uuid:
-
-            # Setup mocks
-            mock_get_sub.return_value = self.mock_user_sub_status
-            mock_check_credit.return_value = True
-            mock_refresh_token.return_value = MagicMock()
-            mock_shutil_which.return_value = '/usr/bin/ffmpeg'
-            mock_uuid.return_value = "video_uuid"
-
-            # Ensure upload directory exists
-            self.mock_uploads_dir.mkdir(parents=True, exist_ok=True)
-            dummy_video_path = self.mock_uploads_dir / "video_uuid.mp4"
-            with open(dummy_video_path, "w") as f:
-                f.write("dummy content")
-
-            # DB Mocks
-            self.mock_db.descriptions.find_one = AsyncMock(return_value={
-                "id": "desc_1", "content": "Test Description"
-            })
-            self.mock_db.tag_generations.find_one = AsyncMock(return_value={
-                "id": "tags_1", "tags": ["beat", "instrumental"]
-            })
-            self.mock_db.uploads.find_one = AsyncMock(side_effect=[
-                {"id": "audio_1", "file_path": "/tmp/audio.mp3", "user_id": self.user_id},
-                {"id": "image_1", "file_path": "/tmp/image.jpg", "user_id": self.user_id}
-            ])
-            self.mock_db.growth_streaks.find_one = AsyncMock(return_value=None)
-            self.mock_db.growth_streaks.update_one = AsyncMock()
-
-            # FFmpeg mock
-            mock_subprocess.return_value.returncode = 0
-
-            # YouTube API mock
-            mock_youtube = MagicMock()
-            mock_build.return_value = mock_youtube
-            mock_request = MagicMock()
-            mock_youtube.videos().insert.return_value = mock_request
-            # Simulate chunked upload
-            mock_request.next_chunk.side_effect = [
-                (MagicMock(progress=lambda: 0.5), None),
-                (None, {'id': 'video_123'})
+        self.mock_db.youtube_connections.find_one = AsyncMock(return_value={"user_id": self.user_id})
+        self.mock_db.descriptions.find_one = AsyncMock(return_value={"id": "desc_1", "content": "Test Description"})
+        self.mock_db.tag_generations.find_one = AsyncMock(return_value={"id": "tags_1", "tags": ["beat", "instrumental"]})
+        self.mock_db.uploads.find_one = AsyncMock(
+            side_effect=[
+                {"id": "audio_1", "user_id": self.user_id, "file_type": "audio", "file_path": "audio.mp3"},
+                {"id": "image_1", "user_id": self.user_id, "file_type": "image", "file_path": "image.jpg"},
             ]
+        )
 
-            # Call the function
+    async def test_upload_to_youtube_queues_job(self):
+        queued_job = {
+            "id": "job_123",
+            "type": "youtube_upload",
+            "user_id": self.user_id,
+            "status": "queued",
+            "progress": 0,
+            "message": "Queued YouTube upload job.",
+            "result": None,
+            "error": None,
+            "created_at": "2026-05-01T12:00:00+00:00",
+            "updated_at": "2026-05-01T12:00:00+00:00",
+        }
+
+        with patch("backend.server.get_user_subscription_status", new_callable=AsyncMock) as mock_status, \
+             patch("backend.server.check_and_use_upload_credit", new_callable=AsyncMock) as mock_credit, \
+             patch("backend.server._create_youtube_upload_job", new_callable=AsyncMock) as mock_create_job:
+            mock_status.return_value = self.free_status
+            mock_credit.return_value = True
+            mock_create_job.return_value = queued_job
+
             result = await server.upload_to_youtube(
-                title="Test Video",
+                title="Queued Upload",
                 description_id="desc_1",
                 tags_id="tags_1",
                 privacy_status="private",
@@ -116,113 +83,24 @@ class TestYouTubeUpload(unittest.IsolatedAsyncioTestCase):
                 image_rotation=0.0,
                 background_color="black",
                 remove_watermark=False,
-                current_user=self.current_user
+                current_user=self.current_user,
             )
 
-            # Assertions
-            self.assertTrue(result['success'])
-            self.assertEqual(result['video_id'], 'video_123')
-
-            # Verify FFmpeg call included watermark logic
-            args, _ = mock_subprocess.call_args
-            ffmpeg_cmd = args[0]
-            # Verify watermark filter is present for free user
-            self.assertTrue(any("drawtext=text='Upload your beats for free" in str(arg) for arg in ffmpeg_cmd))
-
-            # Verify credits used
-            mock_check_credit.assert_called_once_with(self.user_id)
-
-    async def test_upload_to_youtube_success_pro_user_remove_watermark(self):
-        """Test successful upload for a pro user removing watermark"""
-        pro_status = self.mock_user_sub_status.copy()
-        pro_status['is_subscribed'] = True
-
-        with patch('backend.server.get_user_subscription_status', new_callable=AsyncMock) as mock_get_sub, \
-             patch('backend.server.check_and_use_upload_credit', new_callable=AsyncMock) as mock_check_credit, \
-             patch('backend.server.refresh_youtube_token', new_callable=AsyncMock) as mock_refresh_token, \
-             patch('subprocess.run') as mock_subprocess, \
-             patch('backend.server.build') as mock_build, \
-             patch('backend.server.MediaFileUpload') as mock_media_upload, \
-             patch('shutil.which') as mock_shutil_which, \
-             patch('uuid.uuid4') as mock_uuid:
-
-            mock_get_sub.return_value = pro_status
-            mock_check_credit.return_value = True
-            mock_refresh_token.return_value = MagicMock()
-            mock_shutil_which.return_value = '/usr/bin/ffmpeg'
-            mock_uuid.return_value = "video_uuid_pro"
-
-            # Ensure upload directory exists
-            self.mock_uploads_dir.mkdir(parents=True, exist_ok=True)
-            dummy_video_path = self.mock_uploads_dir / "video_uuid_pro.mp4"
-            with open(dummy_video_path, "w") as f:
-                f.write("dummy content")
-
-            # DB Mocks
-            self.mock_db.descriptions.find_one = AsyncMock(return_value={"id": "desc_1", "content": "Desc"})
-            self.mock_db.uploads.find_one = AsyncMock(side_effect=[
-                {"id": "audio_1", "file_path": "/tmp/audio.mp3"},
-                {"id": "image_1", "file_path": "/tmp/image.jpg"}
-            ])
-            self.mock_db.growth_streaks.find_one = AsyncMock(return_value=None)
-
-            mock_subprocess.return_value.returncode = 0
-
-            # YouTube API
-            mock_youtube = MagicMock()
-            mock_build.return_value = mock_youtube
-            mock_youtube.videos().insert.return_value.next_chunk.return_value = (None, {'id': 'video_pro'})
-
-            # Call function
-            result = await server.upload_to_youtube(
-                title="Pro Video",
-                description_id="desc_1",
-                tags_id=None,
-                privacy_status="public",
-                audio_file_id="audio_1",
-                image_file_id="image_1",
-                description_override=None,
-                aspect_ratio="16:9",
-                image_scale=1.0,
-                image_scale_x=None,
-                image_scale_y=None,
-                image_pos_x=0.0,
-                image_pos_y=0.0,
-                image_rotation=0.0,
-                background_color="black",
-                remove_watermark=True,
-                current_user=self.current_user
-            )
-
-            self.assertEqual(result['video_id'], 'video_pro')
-
-            # Verify NO watermark in FFmpeg command
-            args, _ = mock_subprocess.call_args
-            ffmpeg_cmd = args[0]
-            # The filter string is one argument, usually joined or passed as list
-            # In the code: '-vf', video_filter
-            # check if drawtext is ABSENT
-            filter_str = ""
-            for i, arg in enumerate(ffmpeg_cmd):
-                if arg == '-vf':
-                    filter_str = ffmpeg_cmd[i+1]
-                    break
-
-            self.assertNotIn("drawtext=text='Upload your beats for free", filter_str)
+        self.assertTrue(result["success"])
+        self.assertTrue(result["queued"])
+        self.assertEqual(result["job"]["id"], "job_123")
+        mock_credit.assert_called_once_with(self.user_id)
+        mock_create_job.assert_called_once()
 
     async def test_upload_to_youtube_no_credits(self):
-        """Test failure when user has no credits"""
-        with patch('backend.server.check_and_use_upload_credit', new_callable=AsyncMock) as mock_check_credit, \
-             patch('backend.server.get_user_subscription_status', new_callable=AsyncMock) as mock_get_sub:
-
-            mock_check_credit.return_value = False
-            mock_get_sub.return_value = self.mock_user_sub_status
-
-            from fastapi import HTTPException
+        with patch("backend.server.get_user_subscription_status", new_callable=AsyncMock) as mock_status, \
+             patch("backend.server.check_and_use_upload_credit", new_callable=AsyncMock) as mock_credit:
+            mock_status.return_value = self.free_status
+            mock_credit.return_value = False
 
             with self.assertRaises(HTTPException) as cm:
                 await server.upload_to_youtube(
-                    title="Fail Video",
+                    title="No Credits",
                     description_id="desc_1",
                     tags_id=None,
                     privacy_status="public",
@@ -238,97 +116,109 @@ class TestYouTubeUpload(unittest.IsolatedAsyncioTestCase):
                     image_rotation=0.0,
                     background_color="black",
                     remove_watermark=False,
-                    current_user=self.current_user
+                    current_user=self.current_user,
                 )
 
-            self.assertEqual(cm.exception.status_code, 402)
-            self.assertIn("Daily upload limit reached", str(cm.exception.detail))
+        self.assertEqual(cm.exception.status_code, 402)
+        self.assertIn("Daily upload limit reached", str(cm.exception.detail))
 
-    async def test_upload_to_youtube_ffmpeg_failure(self):
-        """Test failure when FFmpeg fails"""
-        with patch('backend.server.get_user_subscription_status', new_callable=AsyncMock) as mock_get_sub, \
-             patch('backend.server.check_and_use_upload_credit', new_callable=AsyncMock) as mock_check_credit, \
-             patch('backend.server.refresh_youtube_token', new_callable=AsyncMock) as mock_refresh_token, \
-             patch('subprocess.run') as mock_subprocess, \
-             patch('shutil.which') as mock_shutil_which:
+    async def test_upload_to_youtube_requires_paid_watermark_removal(self):
+        with patch("backend.server.get_user_subscription_status", new_callable=AsyncMock) as mock_status:
+            mock_status.return_value = self.free_status
 
-            mock_get_sub.return_value = self.mock_user_sub_status
-            mock_check_credit.return_value = True
+            with self.assertRaises(HTTPException) as cm:
+                await server.upload_to_youtube(
+                    title="No Watermark",
+                    description_id="desc_1",
+                    tags_id=None,
+                    privacy_status="public",
+                    audio_file_id="audio_1",
+                    image_file_id="image_1",
+                    description_override=None,
+                    aspect_ratio="16:9",
+                    image_scale=1.0,
+                    image_scale_x=None,
+                    image_scale_y=None,
+                    image_pos_x=0.0,
+                    image_pos_y=0.0,
+                    image_rotation=0.0,
+                    background_color="black",
+                    remove_watermark=True,
+                    current_user=self.current_user,
+                )
+
+        self.assertEqual(cm.exception.status_code, 402)
+        self.assertEqual(cm.exception.detail.get("feature"), "remove_watermark")
+
+    async def test_process_youtube_upload_job_success(self):
+        job = {
+            "id": "job_success",
+            "user_id": self.user_id,
+            "payload": {
+                "title": "My Beat",
+                "audio_file_id": "audio_1",
+                "image_file_id": "image_1",
+                "description": "Test Description",
+                "privacy_status": "public",
+                "tags": ["beat"],
+            },
+        }
+        update_job = AsyncMock()
+
+        with tempfile.TemporaryDirectory() as temp_dir, \
+             patch("backend.server._update_upload_job", update_job), \
+             patch("backend.server.refresh_youtube_token", new_callable=AsyncMock) as mock_refresh_token, \
+             patch("backend.server._render_youtube_video", new_callable=AsyncMock) as mock_render, \
+             patch("backend.server.MediaFileUpload") as mock_media_upload, \
+             patch("backend.server.build") as mock_build:
             mock_refresh_token.return_value = MagicMock()
-            mock_shutil_which.return_value = '/usr/bin/ffmpeg'
+            rendered_path = Path(temp_dir) / "rendered.mp4"
+            rendered_path.write_bytes(b"video")
+            mock_render.return_value = rendered_path
 
-            # DB Mocks
-            self.mock_db.descriptions.find_one = AsyncMock(return_value={"id": "desc_1", "content": "Desc"})
-            self.mock_db.uploads.find_one = AsyncMock(side_effect=[
-                {"id": "audio_1", "file_path": "/tmp/audio.mp3"},
-                {"id": "image_1", "file_path": "/tmp/image.jpg"}
-            ])
+            progress_status = MagicMock()
+            progress_status.progress.return_value = 0.5
+            request = MagicMock()
+            request.next_chunk.side_effect = [
+                (progress_status, None),
+                (None, {"id": "yt_video_123"}),
+            ]
+            youtube = MagicMock()
+            youtube.videos().insert.return_value = request
+            mock_build.return_value = youtube
 
-            # FFmpeg mock failure
-            mock_subprocess.return_value.returncode = 1
-            mock_subprocess.return_value.stderr = "FFmpeg Error"
+            await server._process_youtube_upload_job(job)
 
-            from fastapi import HTTPException
+        self.assertGreaterEqual(update_job.await_count, 2)
+        final_kwargs = update_job.await_args_list[-1].kwargs
+        self.assertEqual(final_kwargs["status"], "succeeded")
+        self.assertEqual(final_kwargs["result"]["video_id"], "yt_video_123")
+        self.assertIn("youtube.com/watch?v=yt_video_123", final_kwargs["result"]["video_url"])
 
-            with self.assertRaises(HTTPException) as cm:
-                await server.upload_to_youtube(
-                    title="FFmpeg Fail",
-                    description_id="desc_1",
-                    tags_id=None,
-                    privacy_status="public",
-                    audio_file_id="audio_1",
-                    image_file_id="image_1",
-                    description_override=None,
-                    aspect_ratio="16:9",
-                    image_scale=1.0,
-                    image_scale_x=None,
-                    image_scale_y=None,
-                    image_pos_x=0.0,
-                    image_pos_y=0.0,
-                    image_rotation=0.0,
-                    background_color="black",
-                    remove_watermark=False,
-                    current_user=self.current_user
-                )
+    async def test_process_youtube_upload_job_failure_marks_job_failed(self):
+        job = {
+            "id": "job_fail",
+            "user_id": self.user_id,
+            "payload": {
+                "title": "Broken Beat",
+                "audio_file_id": "audio_1",
+                "image_file_id": "image_1",
+                "description": "Broken description",
+                "privacy_status": "public",
+                "tags": [],
+            },
+        }
+        update_job = AsyncMock()
 
-            self.assertEqual(cm.exception.status_code, 500)
-            self.assertIn("Video creation failed", str(cm.exception.detail))
-
-    async def test_upload_to_youtube_not_connected(self):
-        """Test failure when YouTube is not connected"""
-        with patch('backend.server.check_and_use_upload_credit', new_callable=AsyncMock) as mock_check_credit, \
-             patch('backend.server.get_user_subscription_status', new_callable=AsyncMock) as mock_get_sub, \
-             patch('backend.server.refresh_youtube_token', new_callable=AsyncMock) as mock_refresh_token:
-
-            mock_check_credit.return_value = True
-            mock_get_sub.return_value = self.mock_user_sub_status
-
-            from fastapi import HTTPException
+        with patch("backend.server._update_upload_job", update_job), \
+             patch("backend.server.refresh_youtube_token", new_callable=AsyncMock) as mock_refresh_token:
             mock_refresh_token.side_effect = HTTPException(status_code=400, detail="YouTube account not connected")
+            await server._process_youtube_upload_job(job)
 
-            with self.assertRaises(HTTPException) as cm:
-                await server.upload_to_youtube(
-                    title="No YouTube",
-                    description_id="desc_1",
-                    tags_id=None,
-                    privacy_status="public",
-                    audio_file_id="audio_1",
-                    image_file_id="image_1",
-                    description_override=None,
-                    aspect_ratio="16:9",
-                    image_scale=1.0,
-                    image_scale_x=None,
-                    image_scale_y=None,
-                    image_pos_x=0.0,
-                    image_pos_y=0.0,
-                    image_rotation=0.0,
-                    background_color="black",
-                    remove_watermark=False,
-                    current_user=self.current_user
-                )
+        final_kwargs = update_job.await_args_list[-1].kwargs
+        self.assertEqual(final_kwargs["status"], "failed")
+        self.assertIn("YouTube account not connected", final_kwargs["error"])
 
-            self.assertEqual(cm.exception.status_code, 400)
-            self.assertEqual(cm.exception.detail, "YouTube account not connected")
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

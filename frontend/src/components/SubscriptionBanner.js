@@ -56,41 +56,44 @@ const SubscriptionBanner = ({
       : `${creditsTotal} AI generations + ${uploadsTotal} uploads per month`;
 
     return (
-      <Card className="mb-6 glass-card border-0">
-        <CardContent className="p-4 sm:p-5 md:p-6">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
-            <div className="flex items-center gap-3 sm:gap-4 flex-1">
-              <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-2xl bg-gradient-to-br from-[var(--accent-primary)] to-[var(--accent-secondary)] flex items-center justify-center shadow-lg flex-shrink-0">
-                <Sparkles className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
+      <Card className="glass-card border-0">
+        <CardContent className="px-4 py-3 sm:px-5 sm:py-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[var(--accent-primary)] to-[var(--accent-secondary)] shadow-lg">
+                <Sparkles className="h-5 w-5 text-white" />
               </div>
-              <div className="min-w-0 flex-1">
-                <h3 className="text-lg sm:text-xl font-bold gradient-text">{title}</h3>
-                <p className="text-xs sm:text-sm leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+              <div className="min-w-0">
+                <h3 className="text-sm sm:text-base font-bold gradient-text">{title}</h3>
+                <p className="text-xs sm:text-sm truncate" style={{ color: "var(--text-secondary)" }}>
                   {subline}
                 </p>
               </div>
             </div>
-            <div className="text-center sm:text-right">
-              <p className="text-3xl sm:text-4xl font-bold gradient-text">
-                {`${creditsRemaining}/${creditsTotal}`}
-              </p>
-              <p className="text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>
-                {isMax ? "FAIR USE" : "METERED"}
-              </p>
+
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <div className="inline-flex items-center rounded-full border px-3 py-2 text-xs sm:text-sm" style={{ borderColor: "var(--border-color)" }}>
+                <span className="font-bold mr-2" style={{ color: "var(--text-primary)" }}>
+                  {creditsRemaining}/{creditsTotal}
+                </span>
+                <span style={{ color: "var(--text-secondary)" }}>
+                  {isMax ? "Fair Use" : "Metered"}
+                </span>
+              </div>
+              {showManageButton ? (
+                <Button
+                  onClick={handleManageSubscription}
+                  disabled={loadingPortal}
+                  variant="outline"
+                  className="text-xs sm:text-sm"
+                  style={{ borderColor: "var(--accent-primary)", color: "var(--accent-primary)" }}
+                >
+                  <Settings className="mr-2 h-4 w-4" />
+                  {loadingPortal ? "Loading..." : "Manage"}
+                </Button>
+              ) : null}
             </div>
           </div>
-          {showManageButton ? (
-            <Button
-              onClick={handleManageSubscription}
-              disabled={loadingPortal}
-              variant="outline"
-              className="w-full py-3 sm:py-4 text-sm sm:text-base"
-              style={{ borderColor: "var(--accent-primary)", color: "var(--accent-primary)" }}
-            >
-              <Settings className="mr-2 h-4 w-4" />
-              {loadingPortal ? "Loading..." : "Manage Subscription"}
-            </Button>
-          ) : null}
         </CardContent>
       </Card>
     );
@@ -100,54 +103,36 @@ const SubscriptionBanner = ({
     return null;
   }
 
-  const aiPercentage = creditsTotal > 0 ? (creditsRemaining / creditsTotal) * 100 : 0;
-  const uploadPercentage = uploadsTotal > 0 ? (uploadCreditsRemaining / uploadsTotal) * 100 : 0;
   const isAiLow = creditsRemaining === 0;
   const isUploadLow = uploadCreditsRemaining === 0;
   const isAnyLow = isAiLow || isUploadLow;
 
   return (
-    <Card className={`mb-6 producer-card border-0 ${isAnyLow ? "neon-glow" : ""}`}>
-      <CardContent className="p-4 sm:p-5 md:p-6">
-        <div className="mb-4">
-          <h3 className="text-base sm:text-lg font-bold" style={{ color: "var(--text-primary)" }}>Free Daily Credits</h3>
-          <p className="text-xs" style={{ color: "var(--text-secondary)" }}>{getResetMessage()}</p>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-4">
-          <div className={`producer-card p-3 sm:p-4 rounded-xl ${isAiLow ? "border-2 border-red-500" : ""}`}>
-            <div className="flex flex-col items-center text-center">
-              <div className={`h-10 w-10 sm:h-12 sm:w-12 rounded-full flex items-center justify-center mb-2 ${isAiLow ? "bg-red-500" : "bg-gradient-to-br from-emerald-500 to-green-600"}`}>
-                <Zap className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
-              </div>
-              <p className="text-xs sm:text-sm font-semibold mb-1">AI Generations</p>
-              <div className="text-2xl sm:text-3xl font-bold mb-1">{creditsRemaining}</div>
-              <p className="text-xs mb-2" style={{ color: "var(--text-secondary)" }}>of {creditsTotal} remaining</p>
-              <div className="w-full h-2 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
-                <div className={`h-full ${isAiLow ? "bg-red-500" : "bg-gradient-to-r from-emerald-500 to-green-600"}`} style={{ width: `${aiPercentage}%` }} />
-              </div>
-            </div>
+    <Card className={`${isAnyLow ? "neon-glow" : ""} border-0 producer-card`}>
+      <CardContent className="px-4 py-3 sm:px-5 sm:py-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <h3 className="text-sm sm:text-base font-bold" style={{ color: "var(--text-primary)" }}>Free Daily Credits</h3>
+            <p className="text-xs sm:text-sm" style={{ color: "var(--text-secondary)" }}>{getResetMessage()}</p>
           </div>
 
-          <div className={`producer-card p-3 sm:p-4 rounded-xl ${isUploadLow ? "border-2 border-red-500" : ""}`}>
-            <div className="flex flex-col items-center text-center">
-              <div className={`h-10 w-10 sm:h-12 sm:w-12 rounded-full flex items-center justify-center mb-2 ${isUploadLow ? "bg-red-500" : "bg-gradient-to-br from-green-500 to-emerald-600"}`}>
-                <Upload className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
-              </div>
-              <p className="text-xs sm:text-sm font-semibold mb-1">YouTube Uploads</p>
-              <div className="text-2xl sm:text-3xl font-bold mb-1">{uploadCreditsRemaining}</div>
-              <p className="text-xs mb-2" style={{ color: "var(--text-secondary)" }}>of {uploadsTotal} remaining</p>
-              <div className="w-full h-2 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
-                <div className={`h-full ${isUploadLow ? "bg-red-500" : "bg-gradient-to-r from-green-500 to-emerald-600"}`} style={{ width: `${uploadPercentage}%` }} />
-              </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+            <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-xs sm:text-sm ${isAiLow ? "border-red-500" : ""}`}>
+              <Zap className={`h-4 w-4 ${isAiLow ? "text-red-500" : ""}`} />
+              <span style={{ color: "var(--text-primary)" }}>{creditsRemaining}/{creditsTotal}</span>
+              <span style={{ color: "var(--text-secondary)" }}>AI</span>
             </div>
+            <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-xs sm:text-sm ${isUploadLow ? "border-red-500" : ""}`}>
+              <Upload className={`h-4 w-4 ${isUploadLow ? "text-red-500" : ""}`} />
+              <span style={{ color: "var(--text-primary)" }}>{uploadCreditsRemaining}/{uploadsTotal}</span>
+              <span style={{ color: "var(--text-secondary)" }}>Uploads</span>
+            </div>
+            <Button onClick={onUpgrade} className="btn-modern text-xs sm:text-sm" data-testid="upgrade-banner-btn">
+              <Sparkles className="mr-2 h-4 w-4" />
+              Upgrade
+            </Button>
           </div>
         </div>
-
-        <Button onClick={onUpgrade} className="w-full btn-modern py-5 sm:py-6 text-sm sm:text-base" data-testid="upgrade-banner-btn">
-          <Sparkles className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
-          Upgrade Plan
-        </Button>
       </CardContent>
     </Card>
   );

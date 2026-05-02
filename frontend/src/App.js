@@ -17,7 +17,12 @@ import { clearAuthToken, getAuthToken } from "@/lib/auth";
 
 const BACKEND_URL =
   process.env.REACT_APP_BACKEND_URL || process.env.REACT_APP_API_BASE_URL;
-export const API = `${BACKEND_URL}/api`;
+const API_BASE_URL = (BACKEND_URL || window.location.origin).replace(/\/$/, "");
+export const API = `${API_BASE_URL}/api`;
+
+if (!BACKEND_URL) {
+  console.warn("Missing REACT_APP_BACKEND_URL / REACT_APP_API_BASE_URL. Falling back to current origin for API requests.");
+}
 
 // Axios interceptor for auth token
 axios.interceptors.request.use(
@@ -26,9 +31,28 @@ axios.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (timezone) {
+      config.headers["X-Timezone"] = timezone;
+    }
     return config;
   },
   (error) => {
+    return Promise.reject(error);
+  }
+);
+
+axios.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status = error?.response?.status;
+    const token = getAuthToken();
+    if (status === 401 && token) {
+      clearAuthToken();
+      if (window.location.pathname !== "/") {
+        window.location.assign("/");
+      }
+    }
     return Promise.reject(error);
   }
 );
@@ -86,13 +110,7 @@ function App() {
             />
             <Route
               path="/spotlight"
-              element={
-                isAuthenticated ? (
-                  <ProducerSpotlight />
-                ) : (
-                  <Navigate to="/" replace />
-                )
-              }
+              element={<ProducerSpotlight />}
             />
             <Route
               path="/admin/costs"
@@ -109,16 +127,6 @@ function App() {
               element={
                 isAuthenticated ? (
                   <Dashboard setIsAuthenticated={setIsAuthenticated} />
-                ) : (
-                  <Navigate to="/" replace />
-                )
-              }
-            />
-            <Route
-              path="/grow-in-120"
-              element={
-                isAuthenticated ? (
-                  <Dashboard setIsAuthenticated={setIsAuthenticated} standaloneGrow />
                 ) : (
                   <Navigate to="/" replace />
                 )

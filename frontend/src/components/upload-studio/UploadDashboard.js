@@ -1,5 +1,5 @@
 import React from "react";
-import { Youtube, CheckCircle2, AlertCircle, Music, Image as ImageIcon, Wand2, Search, Sparkles } from "lucide-react";
+import { Youtube, Music, Image as ImageIcon, Wand2, Search, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -31,6 +31,7 @@ const UploadDashboard = ({
   generatedImages,
   generatedImageQuery,
   generatedImageSearchQuery,
+  generatedImageHasMore,
   setGeneratedImageSearchQuery,
   generatingImages,
   handleGenerateImage,
@@ -38,27 +39,31 @@ const UploadDashboard = ({
   currentUploadJob
 }) => {
   return (
-    <Card className="dashboard-card min-h-[400px]">
+    <Card className="dashboard-card min-h-[400px] relative overflow-hidden">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
            <Youtube className="h-5 w-5 text-red-600" />
            New Upload
         </CardTitle>
-        <CardDescription>Upload audio and image to enter the studio.</CardDescription>
+        <CardDescription>Connect YouTube, then upload audio and image to enter the studio.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-         <div className={`p-4 rounded-lg flex items-center justify-between ${youtubeConnected ? 'bg-green-500/10 border border-green-500/20' : 'bg-red-500/10 border border-red-500/20'}`}>
-            <div className="flex items-center gap-3">
-               {youtubeConnected ? <CheckCircle2 className="text-green-500 h-5 w-5"/> : <AlertCircle className="text-red-500 h-5 w-5"/>}
-               <div>
-                  <p className="font-medium text-sm">{youtubeConnected ? `Connected as ${youtubeName}` : "YouTube Disconnected"}</p>
-                  {youtubeConnected && <p className="text-xs opacity-70">{youtubeEmail}</p>}
+         {youtubeConnected && (
+            <div className="p-4 rounded-lg flex items-center justify-between bg-green-500/10 border border-green-500/20">
+               <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500/15 text-green-500">
+                     <Youtube className="h-5 w-5" />
+                  </div>
+                  <div>
+                     <p className="font-medium text-sm">{youtubeName ? `Connected as ${youtubeName}` : "YouTube connected"}</p>
+                     {youtubeEmail && <p className="text-xs opacity-70">{youtubeEmail}</p>}
+                  </div>
                </div>
+               <Button size="sm" variant="outline" onClick={onDisconnectYouTube}>
+                  Disconnect
+               </Button>
             </div>
-            <Button size="sm" variant="outline" onClick={youtubeConnected ? onDisconnectYouTube : onConnectYouTube}>
-               {youtubeConnected ? "Disconnect" : "Connect"}
-            </Button>
-         </div>
+         )}
 
          <div className="grid md:grid-cols-2 gap-4">
             <div
@@ -137,8 +142,20 @@ const UploadDashboard = ({
 
                {!!generatedImages?.length && (
                  <div className="space-y-3">
-                   <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-                     Results {generatedImageQuery ? `for ${generatedImageQuery}` : ""}
+                   <div className="flex items-center justify-between gap-2">
+                     <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                       Results {generatedImageQuery ? `for ${generatedImageQuery}` : ""}
+                     </div>
+                     <Button
+                       type="button"
+                       size="sm"
+                       variant="outline"
+                       onClick={() => handleGenerateImage({ query: generatedImageSearchQuery || generatedImageQuery, findMore: true })}
+                       disabled={generatingImages || !(generatedImageHasMore && (generatedImageSearchQuery || generatedImageQuery))}
+                       className="h-7 px-2 text-[11px]"
+                     >
+                       {generatingImages ? "Loading..." : "Find More"}
+                     </Button>
                    </div>
                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                      {generatedImages.slice(0, 4).map((img) => (
@@ -182,6 +199,25 @@ const UploadDashboard = ({
            </Button>
          )}
       </CardContent>
+
+      {!youtubeConnected && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/88 backdrop-blur-sm px-4">
+          <div className="w-full max-w-md rounded-2xl border border-red-500/30 bg-[var(--card-bg)] p-6 shadow-2xl text-center">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-500/12 text-red-500">
+              <Youtube className="h-6 w-6" />
+            </div>
+            <h3 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
+              Connect YouTube First
+            </h3>
+            <p className="mt-2 text-sm" style={{ color: "var(--text-secondary)" }}>
+              Before uploading audio or artwork, connect the YouTube account you want this beat published to.
+            </p>
+            <Button className="mt-5 w-full" onClick={onConnectYouTube}>
+              Connect YouTube Account
+            </Button>
+          </div>
+        </div>
+      )}
     </Card>
   );
 };

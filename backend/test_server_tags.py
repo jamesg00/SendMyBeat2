@@ -36,20 +36,22 @@ with patch("motor.motor_asyncio.AsyncIOMotorClient"), \
 async def test_generate_tags_success():
     """Test successful tag generation with valid inputs and sufficient credits."""
     # Mock dependencies
-    mock_user = {"id": "user123", "username": "testuser"}
+    mock_user = {"id": "user123", "username": "testuser", "_execute_inline": True}
     request_data = TagGenerationRequest(query="drake type beat", custom_tags=["custom1"])
+    mock_cursor = MagicMock()
+    mock_cursor.to_list = AsyncMock(return_value=[])
 
-    with patch("backend.server.check_and_use_credit", new_callable=AsyncMock) as mock_check_credit, \
+    with patch("backend.server._fetch_youtube_track_seeds_no_api", return_value=[]), \
+         patch("backend.server._fetch_spotify_track_seeds", return_value=[]), \
+         patch("backend.server._fetch_soundcloud_track_seeds", return_value=[]), \
          patch("backend.server.llm_chat", new_callable=AsyncMock) as mock_llm_chat, \
          patch("backend.server.consume_credit", new_callable=AsyncMock) as mock_consume_credit, \
          patch("backend.server.db") as mock_db, \
          patch("backend.server.build") as mock_build:  # Mock Google API build
 
-        # Setup mocks
-        mock_check_credit.return_value = True
-
         # Mock DB calls
         mock_db.users.find_one = AsyncMock(return_value={"id": "user123", "username": "testuser"})
+        mock_db.tag_generations.find.return_value = mock_cursor
         mock_db.tag_generations.insert_one = AsyncMock()
         mock_db.growth_streaks.find_one = AsyncMock(return_value=None)
 
@@ -64,7 +66,6 @@ async def test_generate_tags_success():
         assert response.query == "drake type beat"
         assert "tag1" in response.tags
 
-        mock_check_credit.assert_called_once_with("user123", consume=False)
         mock_consume_credit.assert_called_once_with("user123")
         mock_db.tag_generations.insert_one.assert_called_once()
         mock_llm_chat.assert_called_once()
@@ -96,14 +97,14 @@ async def test_generate_tags_insufficient_credits():
 @pytest.mark.asyncio
 async def test_generate_tags_invalid_provider():
     """Test that a 400 error is raised for an invalid LLM provider."""
-    mock_user = {"id": "user123", "username": "testuser"}
+    mock_user = {"id": "user123", "username": "testuser", "_execute_inline": True}
     request_data = TagGenerationRequest(query="test", llm_provider="invalid_provider")
+    mock_cursor = MagicMock()
+    mock_cursor.to_list = AsyncMock(return_value=[])
 
-    with patch("backend.server.check_and_use_credit", new_callable=AsyncMock) as mock_check_credit, \
-         patch("backend.server.db") as mock_db:
-
-        mock_check_credit.return_value = True
+    with patch("backend.server.db") as mock_db:
         mock_db.users.find_one = AsyncMock(return_value={})
+        mock_db.tag_generations.find.return_value = mock_cursor
 
         with pytest.raises(HTTPException) as exc_info:
             await generate_tags(request_data, current_user=mock_user)
@@ -115,16 +116,19 @@ async def test_generate_tags_invalid_provider():
 @pytest.mark.asyncio
 async def test_generate_tags_llm_failure():
     """Test that a 500 error is raised when the LLM service fails."""
-    mock_user = {"id": "user123", "username": "testuser"}
+    mock_user = {"id": "user123", "username": "testuser", "_execute_inline": True}
     request_data = TagGenerationRequest(query="test")
+    mock_cursor = MagicMock()
+    mock_cursor.to_list = AsyncMock(return_value=[])
 
-    with patch("backend.server.check_and_use_credit", new_callable=AsyncMock) as mock_check_credit, \
+    with patch("backend.server._fetch_youtube_track_seeds_no_api", return_value=[]), \
+         patch("backend.server._fetch_spotify_track_seeds", return_value=[]), \
+         patch("backend.server._fetch_soundcloud_track_seeds", return_value=[]), \
          patch("backend.server.llm_chat", new_callable=AsyncMock) as mock_llm_chat, \
          patch("backend.server.build") as mock_build, \
          patch("backend.server.db") as mock_db:
-
-        mock_check_credit.return_value = True
         mock_db.users.find_one = AsyncMock(return_value={})
+        mock_db.tag_generations.find.return_value = mock_cursor
 
         mock_llm_chat.side_effect = Exception("LLM Error")
 
@@ -138,17 +142,20 @@ async def test_generate_tags_llm_failure():
 @pytest.mark.asyncio
 async def test_generate_tags_youtube_search_failure():
     """Test that tag generation continues even if YouTube search fails."""
-    mock_user = {"id": "user123", "username": "testuser"}
+    mock_user = {"id": "user123", "username": "testuser", "_execute_inline": True}
     request_data = TagGenerationRequest(query="drake type beat")
+    mock_cursor = MagicMock()
+    mock_cursor.to_list = AsyncMock(return_value=[])
 
-    with patch("backend.server.check_and_use_credit", new_callable=AsyncMock) as mock_check_credit, \
+    with patch("backend.server._fetch_youtube_track_seeds_no_api", return_value=[]), \
+         patch("backend.server._fetch_spotify_track_seeds", return_value=[]), \
+         patch("backend.server._fetch_soundcloud_track_seeds", return_value=[]), \
          patch("backend.server.llm_chat", new_callable=AsyncMock) as mock_llm_chat, \
          patch("backend.server.consume_credit", new_callable=AsyncMock) as mock_consume_credit, \
          patch("backend.server.db") as mock_db, \
          patch("backend.server.build") as mock_build:
-
-        mock_check_credit.return_value = True
         mock_db.users.find_one = AsyncMock(return_value={})
+        mock_db.tag_generations.find.return_value = mock_cursor
         mock_db.tag_generations.insert_one = AsyncMock()
         mock_db.growth_streaks.find_one = AsyncMock(return_value=None)
 
@@ -168,13 +175,16 @@ async def test_generate_tags_youtube_search_failure():
 
 @pytest.mark.asyncio
 async def test_generate_tags_excludes_previously_removed_tags():
-    mock_user = {"id": "user123", "username": "testuser"}
+    mock_user = {"id": "user123", "username": "testuser", "_execute_inline": True}
     request_data = TagGenerationRequest(query="drake type beat")
 
     mock_cursor = MagicMock()
     mock_cursor.to_list = AsyncMock(return_value=[{"excluded_tags": ["tag2"]}])
 
-    with patch("backend.server.ensure_has_credit", new_callable=AsyncMock) as mock_credit, \
+    with patch("backend.server._fetch_youtube_track_seeds_no_api", return_value=[]), \
+         patch("backend.server._fetch_spotify_track_seeds", return_value=[]), \
+         patch("backend.server._fetch_soundcloud_track_seeds", return_value=[]), \
+         patch("backend.server.consume_credit", new_callable=AsyncMock) as mock_consume_credit, \
          patch("backend.server.llm_chat", new_callable=AsyncMock) as mock_llm_chat, \
          patch("backend.server.db") as mock_db, \
          patch("backend.server.build") as mock_build:
@@ -191,7 +201,7 @@ async def test_generate_tags_excludes_previously_removed_tags():
         assert "tag2" not in response.tags
         assert "tag1" in response.tags
         assert "tag3" in response.tags
-        mock_credit.assert_awaited_once_with("user123", "generations")
+        mock_consume_credit.assert_awaited_once_with("user123")
 
 
 @pytest.mark.asyncio
@@ -215,6 +225,9 @@ async def test_update_tag_history_tracks_removed_tags():
     with patch("backend.server.db") as mock_db:
         mock_db.tag_generations.find_one = AsyncMock(side_effect=[existing_doc, updated_doc])
         mock_db.tag_generations.update_one = AsyncMock()
+        mock_cursor = MagicMock()
+        mock_cursor.to_list = AsyncMock(return_value=[])
+        mock_db.tag_generations.find.return_value = mock_cursor
 
         response = await update_tag_history("tag-history-1", request_data, current_user=mock_user)
 
@@ -225,7 +238,7 @@ async def test_update_tag_history_tracks_removed_tags():
 
 @pytest.mark.asyncio
 async def test_join_tags_ai_enriches_and_filters_excluded_tags():
-    mock_user = {"id": "user123", "username": "testuser"}
+    mock_user = {"id": "user123", "username": "testuser", "_execute_inline": True}
     request_data = TagJoinRequest(
         queries=["drake type beat", "future type beat"],
         candidate_tags=["drake type beat", "future type beat", "dark trap beat"],
@@ -235,7 +248,7 @@ async def test_join_tags_ai_enriches_and_filters_excluded_tags():
     mock_cursor = MagicMock()
     mock_cursor.to_list = AsyncMock(return_value=[{"excluded_tags": ["dark trap beat"]}])
 
-    with patch("backend.server.ensure_has_credit", new_callable=AsyncMock) as mock_credit, \
+    with patch("backend.server._ensure_pro_user", new_callable=AsyncMock) as mock_ensure_pro, \
          patch("backend.server.consume_credit", new_callable=AsyncMock) as mock_consume_credit, \
          patch("backend.server._collect_join_source_candidates", new_callable=AsyncMock) as mock_collect, \
          patch("backend.server.llm_chat", new_callable=AsyncMock) as mock_llm_chat, \
@@ -265,5 +278,5 @@ async def test_join_tags_ai_enriches_and_filters_excluded_tags():
         assert "drake x future type beat" in response.tags
         assert "monster type beat" in response.tags
         assert "dark trap beat" not in response.tags
-        mock_credit.assert_awaited_once_with("user123", "generations")
+        mock_ensure_pro.assert_awaited_once()
         mock_consume_credit.assert_awaited_once_with("user123")

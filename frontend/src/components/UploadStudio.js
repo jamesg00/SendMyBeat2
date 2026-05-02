@@ -34,6 +34,7 @@ import VisualizerCanvas from "./upload-studio/VisualizerCanvas";
 
 const UploadStudio = ({
   user,
+  analyticsData,
   subscriptionStatus,
   youtubeConnected,
   youtubeProfilePicture,
@@ -84,6 +85,8 @@ const UploadStudio = ({
   const [generatedImages, setGeneratedImages] = useState([]);
   const [generatedImageQuery, setGeneratedImageQuery] = useState("");
   const [generatedImageSearchQuery, setGeneratedImageSearchQuery] = useState("");
+  const [generatedImageSeenUrls, setGeneratedImageSeenUrls] = useState([]);
+  const [generatedImageHasMore, setGeneratedImageHasMore] = useState(false);
   const [generatingImages, setGeneratingImages] = useState(false);
   const [showTools, setShowTools] = useState(false);
 
@@ -344,6 +347,38 @@ const UploadStudio = ({
     };
   }, [audioPreviewUrl, visualizerEnabled, studioOpen]);
 
+  useEffect(() => {
+    return () => {
+      if (audioPreviewUrl?.startsWith("blob:")) {
+        URL.revokeObjectURL(audioPreviewUrl);
+      }
+    };
+  }, [audioPreviewUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (imagePreviewUrl?.startsWith("blob:")) {
+        URL.revokeObjectURL(imagePreviewUrl);
+      }
+    };
+  }, [imagePreviewUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (spectrumRecordImageUrl?.startsWith("blob:")) {
+        URL.revokeObjectURL(spectrumRecordImageUrl);
+      }
+    };
+  }, [spectrumRecordImageUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (centerVisualizerImageUrl?.startsWith("blob:")) {
+        URL.revokeObjectURL(centerVisualizerImageUrl);
+      }
+    };
+  }, [centerVisualizerImageUrl]);
+
   // Visualizer initialization and update moved to VisualizerCanvas component
 
   // Touch & Drag Handling (including Pinch Zoom)
@@ -429,6 +464,11 @@ const UploadStudio = ({
 
   const handleAudioUpload = async (file) => {
     if (!file) return;
+    if (!youtubeConnected) {
+      toast.error("Connect your YouTube account before uploading audio.");
+      onConnectYouTube?.();
+      return;
+    }
     if (file.size / (1024 * 1024) > 200) {
       toast.error("File too large (>200MB)");
       return;
@@ -456,6 +496,11 @@ const UploadStudio = ({
 
   const handleImageUpload = async (file) => {
     if (!file) return;
+    if (!youtubeConnected) {
+      toast.error("Connect your YouTube account before uploading artwork.");
+      onConnectYouTube?.();
+      return;
+    }
     setUploadingImage(true);
     const formData = new FormData();
     formData.append('file', file);
@@ -623,13 +668,22 @@ const UploadStudio = ({
        toast.error("Selected tag set is empty.");
        return;
     }
+    const analyticsSnapshot = analyticsData || user?.channelAnalytics || null;
+    const recentVideos = Array.isArray(analyticsSnapshot?.recent_videos) ? analyticsSnapshot.recent_videos : [];
+    const recentAvgViews = recentVideos.length
+      ? Math.round(recentVideos.reduce((sum, video) => sum + Number(video?.views || 0), 0) / recentVideos.length)
+      : 0;
 
     setAnalyzingBeat(true);
     try {
       const response = await axios.post(`${API}/beat/analyze`, {
         title: uploadTitle,
         tags: tags,
-        description: uploadDescriptionText || ""
+        description: uploadDescriptionText || "",
+        channel_name: analyticsSnapshot?.channel_name || youtubeName || "",
+        subscriber_count: Number(analyticsSnapshot?.subscriber_count || 0),
+        total_videos: Number(analyticsSnapshot?.total_videos || 0),
+        recent_avg_views: recentAvgViews,
       });
       const jobId = response?.data?.job?.id;
       if (!jobId) {
@@ -639,7 +693,12 @@ const UploadStudio = ({
       setBeatAnalysis(result);
       toast.success(`Analysis: ${result.overall_score}/100`);
     } catch (error) {
-      toast.error(getApiErrorMessage(error, "Analysis failed"));
+      if (error.response?.status === 402) {
+        toast.error(getApiErrorMessage(error, "Beat analysis is on paid plans."));
+        onUpgrade();
+      } else {
+        toast.error(getApiErrorMessage(error, "Analysis failed"));
+      }
     } finally {
       setAnalyzingBeat(false);
     }
@@ -716,9 +775,10 @@ const UploadStudio = ({
     }
   };
 
-  const handleGenerateImage = async ({ query = "" } = {}) => {
+  const handleGenerateImage = async ({ query = "", findMore = false } = {}) => {
     const manualQuery = String(query || "").trim();
-    const safeTitle = manualQuery || (uploadTitle || "").trim();
+    const fallbackQuery = generatedImageSearchQuery || generatedImageQuery || "";
+    const safeTitle = manualQuery || fallbackQuery || (uploadTitle || "").trim();
     const tags = tagHistory.find(t => t.id === selectedTagsId)?.tags || [];
     const safeTags = tags.filter(Boolean).map((t) => String(t).trim()).filter(Boolean);
 
@@ -729,23 +789,37 @@ const UploadStudio = ({
 
     setGeneratingImages(true);
     try {
+      const excludedUrls = findMore ? generatedImageSeenUrls : [];
       const response = await axios.post(`${API}/beat/generate-image`, {
         title: safeTitle,
         tags: safeTags,
         k: 6,
+        excluded_urls: excludedUrls,
       });
       const queuedJobId = response?.data?.job?.id;
       const resultPayload = queuedJobId ? await pollBackgroundJobUntilDone(queuedJobId, { intervalMs: 2500, maxAttempts: 120 }) : response.data;
       const results = resultPayload?.results || [];
+      const hasMore = Boolean(resultPayload?.has_more);
+      const nextSeenUrls = results
+        .map((item) => String(item?.image_url || "").trim())
+        .filter(Boolean);
       setGeneratedImages(results);
       setGeneratedImageQuery(resultPayload?.query_used || "");
+      setGeneratedImageSeenUrls((prev) => (findMore ? [...prev, ...nextSeenUrls] : nextSeenUrls));
+      setGeneratedImageHasMore(findMore ? hasMore : results.length > 0);
       if (manualQuery) {
         setGeneratedImageSearchQuery(manualQuery);
       }
       if (!results.length) {
-        toast.error("No image results found. Try a different artist/title.");
+        if (findMore) {
+          setGeneratedImageHasMore(false);
+          toast.error("No more image results found for this search.");
+        } else {
+          setGeneratedImageHasMore(false);
+          toast.error("No image results found. Try a different artist/title.");
+        }
       } else {
-        toast.success("Image options generated. Click one to apply.");
+        toast.success(findMore ? "Loaded more image options." : "Image options generated. Click one to apply.");
       }
     } catch (error) {
       const detail = error?.response?.data?.detail;
@@ -927,11 +1001,13 @@ const UploadStudio = ({
     }
 
     setUploadingToYouTube(true);
+    let failedPolls = 0;
     const interval = window.setInterval(async () => {
       try {
         const response = await axios.get(`${API}/youtube/upload-jobs/${jobId}`);
         const nextJob = response?.data?.job || null;
         if (!nextJob) return;
+        failedPolls = 0;
         setCurrentUploadJob(nextJob);
 
         if (nextJob.status === "succeeded") {
@@ -950,6 +1026,18 @@ const UploadStudio = ({
         }
       } catch (error) {
         console.error("Failed to poll upload job", error);
+        failedPolls += 1;
+        if (
+          error?.response?.status === 404 ||
+          error?.response?.status === 401 ||
+          error?.response?.status === 403 ||
+          failedPolls >= 3
+        ) {
+          window.clearInterval(interval);
+          setUploadingToYouTube(false);
+          setCurrentUploadJob(null);
+          toast.error("Lost connection to the upload job. Refresh and check your recent uploads.");
+        }
       }
     }, 3000);
 
@@ -1005,6 +1093,7 @@ const UploadStudio = ({
           setShowTools={setShowTools}
           analyzingBeat={analyzingBeat}
           handleAnalyzeBeat={handleAnalyzeBeat}
+          canAnalyzeBeat={Boolean(subscriptionStatus?.is_subscribed)}
           checkingThumbnail={checkingThumbnail}
           handleThumbnailCheck={handleThumbnailCheck}
           generatingImages={generatingImages}
@@ -1012,10 +1101,12 @@ const UploadStudio = ({
           generatedImages={generatedImages}
           generatedImageQuery={generatedImageQuery}
           generatedImageSearchQuery={generatedImageSearchQuery}
+          generatedImageHasMore={generatedImageHasMore}
           setGeneratedImageSearchQuery={setGeneratedImageSearchQuery}
           onUseGeneratedImage={handleUseGeneratedImage}
           beatAnalysis={beatAnalysis}
           thumbnailCheckResult={thumbnailCheckResult}
+          onUpgrade={onUpgrade}
         />
 
         <VisualizerSettings
@@ -1099,6 +1190,7 @@ const UploadStudio = ({
         generatedImages={generatedImages}
         generatedImageQuery={generatedImageQuery}
         generatedImageSearchQuery={generatedImageSearchQuery}
+        generatedImageHasMore={generatedImageHasMore}
         setGeneratedImageSearchQuery={setGeneratedImageSearchQuery}
         generatingImages={generatingImages}
         handleGenerateImage={handleGenerateImage}
@@ -1131,6 +1223,29 @@ const UploadStudio = ({
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden relative">
+         {!youtubeConnected && (
+            <div className="absolute inset-0 z-40 flex items-center justify-center bg-background/88 backdrop-blur-sm px-4">
+               <Card className="w-full max-w-md border border-red-500/30 bg-[var(--card-bg)] shadow-2xl">
+                  <CardHeader className="text-center">
+                     <CardTitle className="flex items-center justify-center gap-2 text-lg">
+                        <Youtube className="h-5 w-5 text-red-500" />
+                        Connect YouTube First
+                     </CardTitle>
+                     <CardDescription>
+                        Connect your YouTube account before uploading audio, artwork, or editing this upload.
+                     </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                     <Button className="w-full" onClick={onConnectYouTube}>
+                        Connect YouTube Account
+                     </Button>
+                     <p className="text-center text-xs" style={{ color: "var(--text-secondary)" }}>
+                        This keeps the upload flow tied to the channel you will publish from.
+                     </p>
+                  </CardContent>
+               </Card>
+            </div>
+         )}
 
          {/* Preview Section */}
          <div className={`

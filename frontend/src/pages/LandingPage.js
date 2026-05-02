@@ -46,7 +46,7 @@ const planCards = [
     bullets: [
       "150 AI generations per month",
       "60 YouTube uploads per month",
-      "BeatHelper queue + templates",
+      "Paid channel analytics",
     ],
   },
   {
@@ -56,7 +56,7 @@ const planCards = [
     bullets: [
       "500 AI generations per month",
       "150 YouTube uploads per month",
-      "Priority BeatHelper automation",
+      "Paid channel analytics",
     ],
   },
 ];
@@ -161,19 +161,14 @@ const LandingPage = ({ setIsAuthenticated }) => {
   }, []);
 
   useEffect(() => {
-    if (isMobileHero) {
-      setLiveFrameIndex(liveExampleFrames.length - 1);
-      return undefined;
-    }
-
     const interval = window.setInterval(() => {
       setLiveFrameIndex((current) => (current + 1) % liveExampleFrames.length);
-    }, 1600);
+    }, isMobileHero ? 2200 : 1600);
 
     return () => window.clearInterval(interval);
   }, [isMobileHero]);
 
-  const liveFrame = isMobileHero ? liveExampleFrames[liveExampleFrames.length - 1] : liveExampleFrames[liveFrameIndex];
+  const liveFrame = liveExampleFrames[liveFrameIndex];
 
   const openAuth = (mode) => {
     setAuthMode(mode);
@@ -235,7 +230,7 @@ const LandingPage = ({ setIsAuthenticated }) => {
         <div className="landing-shell-glow-b absolute right-0 top-32 h-[420px] w-[540px] blur-[100px]" />
 
         <div className="container relative z-10 mx-auto px-6">
-          <div className="grid items-center gap-12 lg:grid-cols-[1.15fr_0.85fr]">
+          <div className="grid items-start gap-12 lg:grid-cols-[1.15fr_0.85fr]">
             <div>
               <div className="landing-chip mb-6 inline-flex items-center gap-2 rounded-full px-4 py-2">
                 <span className="landing-chip-dot h-2 w-2 rounded-full" />
@@ -283,14 +278,14 @@ const LandingPage = ({ setIsAuthenticated }) => {
               </div>
             </div>
 
-            <div className={`landing-panel landing-hero-panel rounded-[32px] p-5 ${isMobileHero ? "landing-hero-panel-static" : ""}`}>
+            <div className="landing-panel landing-hero-panel rounded-[32px] p-5">
               <div className="mb-4 flex items-center justify-between">
                 <div>
                   <p className="landing-label text-xs uppercase tracking-[0.28em]">Live Example</p>
-                  <h2 className="landing-panel-title mt-1 text-2xl font-bold">{isMobileHero ? "Upload-ready example" : "From idea to upload-ready"}</h2>
+                  <h2 className="landing-panel-title mt-1 text-2xl font-bold">From idea to upload-ready</h2>
                 </div>
                 <div className="landing-pill rounded-full px-3 py-1 text-xs font-semibold">
-                  {isMobileHero ? "Static view" : "1 workflow"}
+                  1 workflow
                 </div>
               </div>
 
@@ -299,7 +294,7 @@ const LandingPage = ({ setIsAuthenticated }) => {
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <div className="landing-muted-2 text-xs uppercase tracking-[0.2em]">Prompt</div>
                     <div className="landing-example-status flex items-center gap-2 text-xs">
-                      <LoaderCircle className={`h-3.5 w-3.5 ${isMobileHero ? "" : "animate-spin"}`} />
+                      <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
                       <span>{liveFrame.stage}</span>
                     </div>
                   </div>
@@ -307,7 +302,7 @@ const LandingPage = ({ setIsAuthenticated }) => {
                     <span className="landing-example-code-label">prompt</span>
                     <span className="landing-example-code-equals">=</span>
                     <span className="landing-example-code-value">&quot;{liveExamplePrompt}&quot;</span>
-                    {!isMobileHero && <span className="landing-example-caret" aria-hidden="true">|</span>}
+                    <span className="landing-example-caret" aria-hidden="true">|</span>
                   </div>
                   <div className="mt-3">
                     <div className="landing-example-progress-track">
@@ -347,7 +342,7 @@ const LandingPage = ({ setIsAuthenticated }) => {
                     {liveFrame.tags.map((tag) => (
                       <span
                         key={tag}
-                        className={`landing-tag rounded-full px-3 py-1 text-xs ${isMobileHero ? "" : "landing-tag-animated"}`}
+                        className="landing-tag landing-tag-animated rounded-full px-3 py-1 text-xs"
                       >
                         {tag}
                       </span>

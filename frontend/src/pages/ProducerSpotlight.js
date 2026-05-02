@@ -6,9 +6,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogClose } from "@/components/ui/dialog";
 import { Trophy, Star, TrendingUp, Music, User, Globe, Youtube, Instagram, Twitter, ArrowLeft, Crown, BadgeCheck, Shield, Flame, Eye, BarChart3 } from "lucide-react";
 import DarkModeToggle from "@/components/DarkModeToggle";
+import { getAuthToken } from "@/lib/auth";
 import { toast } from "sonner";
 
 const createGlossyAvatarDataUrl = ({ rim, shell, glow, inner, highlight }) => {
@@ -69,6 +70,7 @@ const TIER_CLASS_MAP = {
 
 export default function ProducerSpotlight() {
   const navigate = useNavigate();
+  const isAuthenticated = Boolean(getAuthToken());
   const [spotlightData, setSpotlightData] = useState(null);
   const [myProfile, setMyProfile] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -106,9 +108,11 @@ export default function ProducerSpotlight() {
 
   useEffect(() => {
     fetchSpotlight();
-    fetchMyProfile();
-    checkYouTubeConnection();
-  }, []);
+    if (isAuthenticated) {
+      fetchMyProfile();
+      checkYouTubeConnection();
+    }
+  }, [isAuthenticated]);
 
   const fetchSpotlight = async () => {
     try {
@@ -142,6 +146,11 @@ export default function ProducerSpotlight() {
         twitter: response.data.social_links?.twitter || ""
       });
     } catch (error) {
+      if (error?.response?.status === 401 || error?.response?.status === 403) {
+        setMyProfile(null);
+        setYouTubeConnected(false);
+        return;
+      }
       console.error("Failed to fetch profile", error);
       if (error?.response?.status === 404) {
         setProfileApiMissing(true);
@@ -154,12 +163,18 @@ export default function ProducerSpotlight() {
       const response = await axios.get(`${API}/youtube/status`);
       setYouTubeConnected(Boolean(response.data?.connected));
     } catch (error) {
-      console.error("Failed to check YouTube connection", error);
+      if (error?.response?.status !== 401 && error?.response?.status !== 403) {
+        console.error("Failed to check YouTube connection", error);
+      }
       setYouTubeConnected(false);
     }
   };
 
   const connectYouTube = async () => {
+    if (!isAuthenticated) {
+      navigate("/");
+      return;
+    }
     setConnectingYouTube(true);
     try {
       const response = await axios.get(`${API}/youtube/auth-url`);
@@ -176,6 +191,11 @@ export default function ProducerSpotlight() {
   };
 
   const handleUpdateProfile = async () => {
+    if (!isAuthenticated) {
+      toast.error("Sign in to edit your producer profile.");
+      navigate("/");
+      return;
+    }
     setSavingProfile(true);
     try {
       const updateData = {
@@ -208,6 +228,11 @@ export default function ProducerSpotlight() {
   };
 
   const handleBannerUpload = async (e) => {
+    if (!isAuthenticated) {
+      toast.error("Sign in to edit your producer profile.");
+      navigate("/");
+      return;
+    }
     const file = e.target.files?.[0];
     if (!file) return;
     const allowed = ["image/jpeg", "image/png", "image/webp"];
@@ -235,6 +260,11 @@ export default function ProducerSpotlight() {
   };
 
   const handleAvatarUpload = async (e) => {
+    if (!isAuthenticated) {
+      toast.error("Sign in to edit your producer profile.");
+      navigate("/");
+      return;
+    }
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -267,6 +297,11 @@ export default function ProducerSpotlight() {
   };
 
   const handleVerificationApply = async () => {
+    if (!isAuthenticated) {
+      toast.error("Sign in to apply for verification.");
+      navigate("/");
+      return;
+    }
     const reason = (verificationForm.reason || "").trim();
     if (reason.length < 20) {
       toast.error("Please add a stronger reason (at least 20 characters).");
@@ -513,9 +548,14 @@ export default function ProducerSpotlight() {
         <p className="text-base md:text-lg max-w-2xl mx-auto" style={{ color: "var(--text-secondary)" }}>
           Discover producers, track momentum, and open profile stats without leaving the main dashboard visual system.
         </p>
-        {!youtubeConnected && (
+        {!isAuthenticated && (
           <div className="mx-auto max-w-2xl rounded-2xl border px-4 py-3 text-sm font-medium" style={{ borderColor: "var(--border-color)", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)" }}>
-            Producer Spotlight now requires a connected Google / YouTube account. Existing profiles stay hidden until the account is connected.
+            Producer Spotlight is public. Sign in if you want to create or edit your own profile.
+          </div>
+        )}
+        {isAuthenticated && !youtubeConnected && (
+          <div className="mx-auto max-w-2xl rounded-2xl border px-4 py-3 text-sm font-medium" style={{ borderColor: "var(--border-color)", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)" }}>
+            Connect Google / YouTube to strengthen your producer profile and unlock richer spotlight data.
           </div>
         )}
         <div className="flex flex-wrap justify-center gap-2">
@@ -533,7 +573,11 @@ export default function ProducerSpotlight() {
         <Dialog open={isEditing} onOpenChange={setIsEditing}>
           <DialogTrigger asChild>
             <Button size="lg" className="btn-modern mt-4">
-              {youtubeConnected ? (myProfile?.bio ? "Edit My Profile" : "Join the Spotlight") : "Connect Google to Join"}
+              {!isAuthenticated
+                ? "Sign In to Join"
+                : youtubeConnected
+                  ? (myProfile?.bio ? "Edit My Profile" : "Join the Spotlight")
+                  : "Connect Google to Join"}
             </Button>
           </DialogTrigger>
           <DialogContent className="w-[calc(100vw-1rem)] max-w-2xl max-h-[85vh] overflow-y-auto bg-[var(--card-bg)] border border-[var(--border-color)] p-4 sm:p-6">
@@ -544,11 +588,22 @@ export default function ProducerSpotlight() {
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
-              {!youtubeConnected && (
+              {!isAuthenticated && (
+                <div className="rounded-2xl border p-4 text-sm" style={{ borderColor: "var(--border-color)", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)" }}>
+                  <p className="font-semibold">Sign in first</p>
+                  <p className="mt-1">
+                    Public visitors can browse Producer Spotlight, but only signed-in users can create or edit a profile.
+                  </p>
+                  <Button type="button" className="mt-3 btn-modern" onClick={() => navigate("/")}>
+                    Go to Sign In
+                  </Button>
+                </div>
+              )}
+              {isAuthenticated && !youtubeConnected && (
                 <div className="rounded-2xl border p-4 text-sm" style={{ borderColor: "var(--border-color)", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)" }}>
                   <p className="font-semibold">Connect Google / YouTube first</p>
                   <p className="mt-1">
-                    Producer Spotlight only works for connected accounts. This also applies to people who already joined before this requirement.
+                    Your profile can exist without Google, but connecting YouTube improves identity and stats coverage.
                   </p>
                   <Button type="button" className="mt-3 btn-modern" onClick={connectYouTube} disabled={connectingYouTube}>
                     {connectingYouTube ? "Connecting..." : "Connect Google Account"}
@@ -731,7 +786,7 @@ export default function ProducerSpotlight() {
             Spotlight API returned 404. Backend is running an older version. Deploy/restart backend with latest `server.py` routes.
           </p>
         )}
-        {!youtubeConnected && (
+        {isAuthenticated && !youtubeConnected && (
           <div className="mx-auto max-w-5xl rounded-3xl border border-yellow-400/40 bg-gradient-to-r from-yellow-500/12 via-orange-500/12 to-transparent px-5 py-4 shadow-[0_0_35px_rgba(250,204,21,0.12)]">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="space-y-1">
@@ -891,20 +946,33 @@ export default function ProducerSpotlight() {
       </Dialog>
 
       <Dialog open={producerStatsOpen} onOpenChange={setProducerStatsOpen}>
-        <DialogContent className="w-[calc(100vw-1rem)] max-w-2xl bg-[var(--card-bg)] border border-[var(--border-color)] p-4 sm:p-6">
-          <DialogHeader>
-            <DialogTitle>{selectedProducer?.username || "Producer"} Stats</DialogTitle>
-            <DialogDescription>
-              Spotlight profile, activity metrics, streak, and top beat.
-            </DialogDescription>
-          </DialogHeader>
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-2xl max-h-[calc(100dvh-1rem)] overflow-hidden bg-[var(--card-bg)] border border-[var(--border-color)] p-0">
+          <div className="flex max-h-[calc(100dvh-1rem)] flex-col">
+            <DialogHeader className="sticky top-0 z-10 border-b border-[var(--border-color)] bg-[var(--card-bg)] px-4 py-4 pr-16 sm:px-6">
+              <DialogTitle>{selectedProducer?.username || "Producer"} Stats</DialogTitle>
+              <DialogDescription>
+                Spotlight profile, activity metrics, streak, and top beat.
+              </DialogDescription>
+            </DialogHeader>
 
-          {loadingProducerStats && (
-            <div className="py-6 text-sm text-muted-foreground">Loading producer stats...</div>
-          )}
+            <DialogClose asChild>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="absolute right-4 top-4 z-20"
+              >
+                Close
+              </Button>
+            </DialogClose>
 
-          {!loadingProducerStats && producerStats && (
-            <div className="space-y-4">
+            <div className="overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
+              {loadingProducerStats && (
+                <div className="py-6 text-sm text-muted-foreground">Loading producer stats...</div>
+              )}
+
+              {!loadingProducerStats && producerStats && (
+                <div className="space-y-4">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div className="rounded-lg border p-3">
                   <p className="text-xs text-muted-foreground flex items-center gap-1"><Flame className="h-3 w-3" /> Streak</p>
@@ -991,8 +1059,10 @@ export default function ProducerSpotlight() {
                   Uploads: {producerStats.stats?.audio_uploads || 0} audio / {producerStats.stats?.image_uploads || 0} image
                 </p>
               </div>
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

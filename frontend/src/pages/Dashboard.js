@@ -11,27 +11,22 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import axios from "axios";
 import { API } from "@/App";
 import { toast } from "sonner";
-import { Music, Sparkles, Save, LogOut, Copy, Trash2, Edit, Plus, Youtube, CheckCircle2, AlertCircle, Target, ChevronLeft, ChevronRight, DollarSign, Link, CircleAlert } from "lucide-react";
+import { Music, Sparkles, Save, LogOut, Copy, Trash2, Edit, Plus, Youtube, AlertCircle, Target, ChevronLeft, ChevronRight, DollarSign, Link, CircleAlert, CheckCircle2, Settings } from "lucide-react";
 import DarkModeToggle from "@/components/DarkModeToggle";
 import SubscriptionBanner from "@/components/SubscriptionBanner";
 import UpgradeModal from "@/components/UpgradeModal";
 import AdBanner from "@/components/AdBanner";
 import ProgressBar from "@/components/ProgressBar";
 import ThemeCustomizer from "@/components/ThemeCustomizer";
-import UploadStudio from "@/components/UploadStudio";
-import BeatHelperStudio from "@/components/BeatHelperStudio";
+import PublishWorkflow from "@/components/workflow/PublishWorkflow";
 import { clearAuthToken } from "@/lib/auth";
 
 const TAG_LIMIT = 120;
 const TAG_HISTORY_LIMIT = 100;
 const DEFAULT_TAG_PROVIDER = "grok";
 const DASHBOARD_TABS = [
-  { value: "tags", label: "Tags" },
-  { value: "descriptions", label: "Descriptions" },
-  { value: "upload", label: "Upload" },
-  { value: "analytics", label: "Analytics" },
-  { value: "beathelper", label: "BeatHelper", beatHelperOnly: true },
-  { value: "settings", label: "Settings" },
+  { value: "workflow", label: "Workflow" },
+  { value: "analytics", label: "Analytics", proOnly: true },
 ];
 
 const DESCRIPTION_TEMPLATES = [
@@ -211,38 +206,6 @@ const normalizeAnalyticsData = (raw) => {
   };
 };
 
-const normalizeGrowthData = (raw) => {
-  if (!raw || typeof raw !== "object") return null;
-  return {
-    ...raw,
-    current_streak: toSafeNumber(raw.current_streak, 0),
-    total_days_completed: toSafeNumber(raw.total_days_completed, 0),
-    longest_streak: toSafeNumber(raw.longest_streak, 0),
-    badges_earned: toSafeArray(raw.badges_earned),
-  };
-};
-
-const EMPTY_BEATHELPER_PREVIEW = null;
-
-const normalizeBeatHelperPreview = (payload) => {
-  if (!payload || typeof payload !== "object") return null;
-  if (payload.kind === "video" && payload.preview_url) {
-    const src = String(payload.preview_url).startsWith("http") ? payload.preview_url : `${API}${payload.preview_url}`;
-    return { kind: "video", src };
-  }
-  if (payload.data_url) {
-    return { kind: "image", src: payload.data_url };
-  }
-  return null;
-};
-
-const normalizeCalendarData = (raw) => {
-  if (!raw || typeof raw !== "object") return null;
-  return {
-    ...raw,
-    calendar: raw.calendar && typeof raw.calendar === "object" ? raw.calendar : {},
-  };
-};
 
   const formatTagHistoryLabel = (query = "") => {
     if (!query) return "Untitled";
@@ -265,29 +228,37 @@ const normalizeCalendarData = (raw) => {
     return cleaned || query;
   };
 
-const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
+  const normalizeTagKey = (tag = "") => String(tag || "").trim().toLowerCase();
+
+  const buildTagScoreMap = (scoredTags = []) => {
+    const next = {};
+    (Array.isArray(scoredTags) ? scoredTags : []).forEach((entry) => {
+      const key = normalizeTagKey(entry?.tag);
+      if (key) {
+        next[key] = entry;
+      }
+    });
+    return next;
+  };
+
+const Dashboard = ({ setIsAuthenticated }) => {
   const [user, setUser] = useState(null);
   const [tagQuery, setTagQuery] = useState("");
   const [customTags, setCustomTags] = useState("");
   const [additionalTags, setAdditionalTags] = useState("");
   const [generatedTags, setGeneratedTags] = useState([]);
+  const [generatedTagScores, setGeneratedTagScores] = useState({});
   const [tagDebug, setTagDebug] = useState(null);
   const [showTagDebug, setShowTagDebug] = useState(false);
   const [loadingTags, setLoadingTags] = useState(false);
   const [tagHistory, setTagHistory] = useState([]);
   const [selectedTagHistoryIds, setSelectedTagHistoryIds] = useState([]);
   const [activeTagHistoryId, setActiveTagHistoryId] = useState(null);
-  const [activeTab, setActiveTab] = useState(standaloneGrow ? "grow" : "tags");
+  const [activeTab, setActiveTab] = useState("workflow");
   const [descriptions, setDescriptions] = useState([]);
   const [loadingDescriptions, setLoadingDescriptions] = useState(false);
   const [newDescription, setNewDescription] = useState({ title: "", content: "" });
   const [showAllDescriptionTemplates, setShowAllDescriptionTemplates] = useState(false);
-  const [generateForm, setGenerateForm] = useState({
-    email: "",
-    socials: "",
-    additional_info: ""
-  });
-  const [loadingGenerate, setLoadingGenerate] = useState(false);
   const [editingDesc, setEditingDesc] = useState(null);
 
   // Progress bar states
@@ -317,70 +288,23 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
   // Analytics states
   const [loadingAnalytics, setLoadingAnalytics] = useState(false);
   const [analyticsData, setAnalyticsData] = useState(null);
+  const [previousUtilityTab, setPreviousUtilityTab] = useState("workflow");
 
-  // Grow in 120 states
-  const [growthData, setGrowthData] = useState(null);
-  const [loadingGrowth, setLoadingGrowth] = useState(false);
-  const [calendarData, setCalendarData] = useState(null);
-  const [selectedDay, setSelectedDay] = useState(null);
-
-  // Check-in prompt state
-  const [showCheckinPrompt, setShowCheckinPrompt] = useState(false);
-  const [beatHelperUploads, setBeatHelperUploads] = useState({ audio_uploads: [], image_uploads: [] });
-  const [beatHelperQueue, setBeatHelperQueue] = useState([]);
-  const [loadingBeatHelper, setLoadingBeatHelper] = useState(false);
-  const [beatHelperImagePreview, setBeatHelperImagePreview] = useState(EMPTY_BEATHELPER_PREVIEW);
-  const [loadingBeatHelperPreview, setLoadingBeatHelperPreview] = useState(false);
-  const [beatHelperQueueImagePreviews, setBeatHelperQueueImagePreviews] = useState({});
-  const [uploadingBeatHelperAudio, setUploadingBeatHelperAudio] = useState(false);
-  const [uploadingBeatHelperImage, setUploadingBeatHelperImage] = useState(false);
-  const beatHelperPreviewCacheRef = useRef({});
-  const [beatHelperContact, setBeatHelperContact] = useState({ email: "", phone: "", email_enabled: false, sms_enabled: false });
-  const [beatHelperTemplates, setBeatHelperTemplates] = useState([]);
-  const [beatHelperImageSearchQuery, setBeatHelperImageSearchQuery] = useState("");
-  const [beatHelperImageResults, setBeatHelperImageResults] = useState([]);
-  const [loadingBeatHelperImageSearch, setLoadingBeatHelperImageSearch] = useState(false);
-  const [importingBeatHelperImageUrl, setImportingBeatHelperImageUrl] = useState("");
-  const [newTemplateName, setNewTemplateName] = useState("");
-  const [newTemplateTags, setNewTemplateTags] = useState("");
-  const [editingQueueById, setEditingQueueById] = useState({});
-  const [assistTitlesById, setAssistTitlesById] = useState({});
-  const [beatHelperForm, setBeatHelperForm] = useState({
-    beat_file_id: "",
-    beat_file_name: "",
-    image_file_id: "",
-    image_file_name: "",
-    beat_type: "",
-    target_artist: "",
-    generated_title_override: "",
-    context_tags: "",
-    ai_choose_image: false,
-    approval_timeout_hours: 12,
-    auto_upload_if_no_response: false,
-    notify_channel: "email",
-    privacy_status: "public",
-    template_id: "",
-  });
 
   const [joiningTagsLoading, setJoiningTagsLoading] = useState(false);
   const [joiningTagsProgress, setJoiningTagsProgress] = useState(0);
   const joinProgressIntervalRef = useRef(null);
   const dashboardParallaxRef = useRef(null);
 
-  const isPro = !!subscriptionStatus?.is_subscribed;
   const analyticsPlan = subscriptionStatus?.plan || "free";
   const hasPaidAnalyticsAccess = ["plus", "max"].includes(analyticsPlan);
-  const canUseBeatHelper = ["plus", "max"].includes(subscriptionStatus?.plan);
   const isAdmin = Boolean(user?.is_admin);
   const canViewTagDebug = isAdmin;
-  const visibleTabs = DASHBOARD_TABS.filter((tab) => {
-    if (tab.beatHelperOnly) return canUseBeatHelper;
-    if (tab.proOnly) return isPro;
-    return true;
-  });
-  const adEligibleTabs = ["tags", "descriptions", "upload", "analytics", "beathelper"].includes(activeTab) || standaloneGrow;
+  const visibleTabs = DASHBOARD_TABS;
+  const isAnalyticsLocked = !hasPaidAnalyticsAccess;
+  const adEligibleTabs = ["workflow", "analytics"].includes(activeTab);
   const activeTabIndex = Math.max(0, visibleTabs.findIndex((tab) => tab.value === activeTab));
-  const activeTabLabel = standaloneGrow ? "Grow in 120" : (visibleTabs[activeTabIndex]?.label || "Tags");
+  const activeTabLabel = visibleTabs[activeTabIndex]?.label || "Workflow";
   const desktopTabHighlightStyle = {
     width: `${100 / Math.max(visibleTabs.length, 1)}%`,
     transform: `translateX(${activeTabIndex * 100}%)`,
@@ -437,31 +361,25 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
       return `${x},${Math.max(4, Math.min(96, y))}`;
     }).join(" ")
     : "";
-  const growthToday = new Date().toISOString().split("T")[0];
-  const growthCheckedInToday = Boolean(growthData?.last_checkin_date === growthToday);
-  const growthCompletionPercent = Math.round(((growthData?.total_days_completed || 0) / 120) * 100);
-  const growthCurrentDay = Math.min(120, (growthData?.total_days_completed || 0) + 1);
-  const growthDaysRemaining = Math.max(0, 120 - (growthData?.total_days_completed || 0));
-  const growthRank = (growthData?.current_streak || 0) >= 60
-    ? "Mythic Run"
-    : (growthData?.current_streak || 0) >= 30
-      ? "Locked Legend"
-      : (growthData?.current_streak || 0) >= 14
-        ? "Momentum Beast"
-        : (growthData?.current_streak || 0) >= 7
-          ? "Rising Runner"
-          : "Starter Arc";
-  const nextGrowthMilestone = [7, 14, 30, 60, 90, 120].find((milestone) => milestone > (growthData?.total_days_completed || 0)) || 120;
-  const growthMilestoneGap = Math.max(0, nextGrowthMilestone - (growthData?.total_days_completed || 0));
-
   const goToPreviousTab = () => {
     const previousIndex = (activeTabIndex - 1 + visibleTabs.length) % visibleTabs.length;
-    setActiveTab(visibleTabs[previousIndex].value);
+    const previousTab = visibleTabs[previousIndex]?.value;
+    if (previousTab === "analytics" && isAnalyticsLocked) return;
+    setActiveTab(previousTab);
   };
 
   const goToNextTab = () => {
     const nextIndex = (activeTabIndex + 1) % visibleTabs.length;
-    setActiveTab(visibleTabs[nextIndex].value);
+    const nextTab = visibleTabs[nextIndex]?.value;
+    if (nextTab === "analytics" && isAnalyticsLocked) return;
+    setActiveTab(nextTab);
+  };
+
+  const handleDashboardTabChange = (nextTab) => {
+    if (nextTab === "analytics" && isAnalyticsLocked) {
+      return;
+    }
+    setActiveTab(nextTab);
   };
 
   useEffect(() => {
@@ -470,7 +388,6 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
     fetchTagHistory();
     checkYouTubeConnection();
     fetchSubscriptionStatus();
-    fetchGrowthStatus();
   }, []);
 
   useEffect(() => {
@@ -535,68 +452,12 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
   }, []);
 
   useEffect(() => {
-    if (activeTab === "grow" && isPro && growthData?.challenge_start_date && !calendarData) {
-      fetchCalendar();
+    const isUtilityView = activeTab === "settings";
+    if (!isUtilityView && !visibleTabs.some((tab) => tab.value === activeTab)) {
+      setActiveTab(visibleTabs[0]?.value || "workflow");
     }
-  }, [activeTab, isPro, growthData?.challenge_start_date, calendarData]);
+  }, [activeTab, visibleTabs]);
 
-  useEffect(() => {
-    if (standaloneGrow) {
-      if (activeTab !== "grow") {
-        setActiveTab("grow");
-      }
-      return;
-    }
-    if (!visibleTabs.some((tab) => tab.value === activeTab)) {
-      setActiveTab(visibleTabs[0]?.value || "tags");
-    }
-  }, [activeTab, standaloneGrow, visibleTabs]);
-
-  useEffect(() => {
-    if (activeTab === "beathelper" && canUseBeatHelper) {
-      fetchBeatHelperData();
-    }
-  }, [activeTab, canUseBeatHelper]);
-
-  useEffect(() => {
-    const selectedImageId = (beatHelperForm.image_file_id || "").trim();
-    if (!selectedImageId) {
-      setBeatHelperImagePreview(EMPTY_BEATHELPER_PREVIEW);
-      return;
-    }
-    const cachedPreview = beatHelperPreviewCacheRef.current[selectedImageId];
-    if (cachedPreview) {
-      setBeatHelperImagePreview(cachedPreview);
-      setLoadingBeatHelperPreview(false);
-      return;
-    }
-    let cancelled = false;
-    const loadPreview = async () => {
-      try {
-        setLoadingBeatHelperPreview(true);
-        const response = await axios.get(`${API}/beat-helper/image/${selectedImageId}/preview`);
-        if (!cancelled) {
-          const nextPreview = normalizeBeatHelperPreview(response?.data);
-          if (nextPreview) {
-            beatHelperPreviewCacheRef.current[selectedImageId] = nextPreview;
-          }
-          setBeatHelperImagePreview(nextPreview);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setBeatHelperImagePreview(EMPTY_BEATHELPER_PREVIEW);
-        }
-      } finally {
-        if (!cancelled) {
-          setLoadingBeatHelperPreview(false);
-        }
-      }
-    };
-    loadPreview();
-    return () => {
-      cancelled = true;
-    };
-  }, [beatHelperForm.image_file_id]);
 
   const fetchUser = async () => {
     try {
@@ -641,6 +502,16 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
   const persistTagHistoryEdit = async ({ tagId, nextTags, removedTags = [] }) => {
     if (!tagId) {
       setGeneratedTags(nextTags);
+      setGeneratedTagScores((prev) => {
+        const next = {};
+        nextTags.forEach((tag) => {
+          const existing = prev[normalizeTagKey(tag)];
+          if (existing) {
+            next[normalizeTagKey(tag)] = existing;
+          }
+        });
+        return next;
+      });
       return;
     }
 
@@ -649,6 +520,7 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
       excluded_tags: removedTags,
     });
     setGeneratedTags(response.data?.tags || nextTags);
+    setGeneratedTagScores(buildTagScoreMap(response.data?.scored_tags || []));
     upsertTagHistoryItem(response.data);
   };
 
@@ -691,481 +563,6 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
       throw error;
     } finally {
       setSyncingSubscription(false);
-    }
-  };
-
-  const fetchBeatHelperData = async () => {
-    setLoadingBeatHelper(true);
-    try {
-      const [uploadsRes, queueRes, contactRes, templatesRes] = await Promise.allSettled([
-        axios.get(`${API}/beat-helper/uploads`),
-        axios.get(`${API}/beat-helper/queue`),
-        axios.get(`${API}/beat-helper/contact-settings`),
-        axios.get(`${API}/beat-helper/tag-templates`),
-      ]);
-
-      const uploadsData = uploadsRes.status === "fulfilled"
-        ? uploadsRes.value?.data
-        : { audio_uploads: [], image_uploads: [] };
-      const queueData = queueRes.status === "fulfilled"
-        ? queueRes.value?.data
-        : [];
-      const contactData = contactRes.status === "fulfilled"
-        ? contactRes.value?.data
-        : { email: "", phone: "", email_enabled: false, sms_enabled: false };
-      const templatesData = templatesRes.status === "fulfilled"
-        ? templatesRes.value?.data
-        : [];
-
-      setBeatHelperUploads(uploadsData || { audio_uploads: [], image_uploads: [] });
-      const queueItems = Array.isArray(queueData) ? queueData : [];
-      setBeatHelperQueue(queueItems);
-      setBeatHelperContact(contactData || { email: "", phone: "", email_enabled: false, sms_enabled: false });
-      setBeatHelperTemplates(Array.isArray(templatesData) ? templatesData : []);
-
-      const uniqueImageIds = [...new Set(
-        queueItems
-          .map((item) => (item?.image_file_id || "").trim())
-          .filter(Boolean)
-      )];
-      if (uniqueImageIds.length === 0) {
-        setBeatHelperQueueImagePreviews({});
-      } else {
-        const previewPairs = await Promise.all(
-          uniqueImageIds.map(async (fileId) => {
-            try {
-              if (beatHelperPreviewCacheRef.current[fileId]) {
-                return [fileId, beatHelperPreviewCacheRef.current[fileId]];
-              }
-              const response = await axios.get(`${API}/beat-helper/image/${fileId}/preview`);
-              const nextPreview = normalizeBeatHelperPreview(response?.data);
-              if (nextPreview) {
-                beatHelperPreviewCacheRef.current[fileId] = nextPreview;
-              }
-              return [fileId, nextPreview];
-            } catch (error) {
-              return [fileId, EMPTY_BEATHELPER_PREVIEW];
-            }
-          })
-        );
-        setBeatHelperQueueImagePreviews(Object.fromEntries(previewPairs));
-      }
-
-      const hardFailure = [uploadsRes, queueRes].find(
-        (result) => result.status === "rejected"
-      );
-      if (hardFailure) {
-        const status = hardFailure?.reason?.response?.status;
-        const detail = hardFailure?.reason?.response?.data?.detail;
-        if (status === 402) {
-          toast.error(typeof detail === "string" ? detail : "BeatHelper is a Pro feature.");
-        } else if (status === 401) {
-          toast.error("Session expired. Please log in again.");
-        } else {
-          toast.error(typeof detail === "string" ? detail : "Failed to load core BeatHelper data");
-        }
-      }
-
-      // Soft failures (older backend / partial deploy) should not break the whole tab.
-      [contactRes, templatesRes].forEach((result, idx) => {
-        if (result.status === "rejected") {
-          const endpoint = idx === 0 ? "contact-settings" : "tag-templates";
-          console.warn(`BeatHelper optional endpoint failed: ${endpoint}`, result.reason);
-        }
-      });
-    } catch (error) {
-      const detail = error?.response?.data?.detail;
-      if (error?.response?.status === 402) {
-        toast.error(typeof detail === "string" ? detail : "BeatHelper is a Pro feature.");
-      } else {
-        toast.error("Failed to load BeatHelper data");
-      }
-    } finally {
-      setLoadingBeatHelper(false);
-    }
-  };
-
-  const handleBeatHelperQueue = async (e) => {
-    e.preventDefault();
-    if (!beatHelperForm.beat_file_id) {
-      toast.error("Select a beat audio file");
-      return;
-    }
-    if (!beatHelperForm.image_file_id && !beatHelperForm.ai_choose_image) {
-      toast.error("Select a thumbnail or enable AI image");
-      return;
-    }
-    if (!beatHelperForm.target_artist.trim() || !beatHelperForm.beat_type.trim()) {
-      toast.error("Enter target artist and beat type");
-      return;
-    }
-    try {
-      setLoadingBeatHelper(true);
-      const fullPayload = {
-        beat_file_id: beatHelperForm.beat_file_id,
-        image_file_id: beatHelperForm.image_file_id || null,
-        beat_type: beatHelperForm.beat_type.trim(),
-        target_artist: beatHelperForm.target_artist.trim(),
-        generated_title_override: beatHelperForm.generated_title_override.trim() || null,
-        context_tags: beatHelperForm.context_tags
-          .split(",")
-          .map((t) => t.trim())
-          .filter(Boolean),
-        ai_choose_image: !!beatHelperForm.ai_choose_image,
-        approval_timeout_hours: Number(beatHelperForm.approval_timeout_hours) || 12,
-        auto_upload_if_no_response: !!beatHelperForm.auto_upload_if_no_response,
-        notify_channel: beatHelperForm.notify_channel,
-        privacy_status: beatHelperForm.privacy_status,
-        template_id: beatHelperForm.template_id || null,
-      };
-      await axios.post(`${API}/beat-helper/queue`, fullPayload);
-      toast.success("Beat queued in BeatHelper");
-      setBeatHelperImagePreview(EMPTY_BEATHELPER_PREVIEW);
-      await fetchBeatHelperData();
-    } catch (error) {
-      const noResponse = !error?.response;
-      if (noResponse) {
-        try {
-          // Backward-compatible retry for mixed backend deploys.
-          await axios.post(`${API}/beat-helper/queue`, {
-            beat_file_id: beatHelperForm.beat_file_id,
-            image_file_id: beatHelperForm.image_file_id || null,
-            beat_type: beatHelperForm.beat_type.trim(),
-            target_artist: beatHelperForm.target_artist.trim(),
-            context_tags: beatHelperForm.context_tags.split(",").map((t) => t.trim()).filter(Boolean),
-            ai_choose_image: !!beatHelperForm.ai_choose_image,
-            approval_timeout_hours: Number(beatHelperForm.approval_timeout_hours) || 12,
-            auto_upload_if_no_response: !!beatHelperForm.auto_upload_if_no_response,
-            notify_channel: beatHelperForm.notify_channel,
-            privacy_status: beatHelperForm.privacy_status,
-          });
-          toast.success("Beat queued in BeatHelper");
-          setBeatHelperImagePreview(EMPTY_BEATHELPER_PREVIEW);
-          await fetchBeatHelperData();
-          return;
-        } catch (retryError) {
-          const retryDetail = retryError?.response?.data?.detail;
-          const retryMessage = typeof retryDetail === "string"
-            ? retryDetail
-            : retryError?.message || "Network error: backend unavailable or not updated";
-          toast.error(retryMessage);
-          return;
-        }
-      }
-
-      const detail = error?.response?.data?.detail;
-      const message = typeof detail === "string"
-        ? detail
-        : detail && typeof detail === "object"
-          ? JSON.stringify(detail)
-          : (error?.message || "Failed to queue beat");
-      toast.error(message);
-    } finally {
-      setLoadingBeatHelper(false);
-    }
-  };
-
-  const handleBeatHelperAudioUpload = async (file) => {
-    if (!file) return;
-    if (file.size / (1024 * 1024) > 200) {
-      toast.error("Audio file too large. Max size is 200MB.");
-      return;
-    }
-
-    try {
-      setUploadingBeatHelperAudio(true);
-      const formData = new FormData();
-      formData.append("file", file);
-      const response = await axios.post(`${API}/upload/audio`, formData);
-      const nextFileId = response?.data?.file_id || "";
-      if (!nextFileId) {
-        throw new Error("Upload response missing file_id");
-      }
-      setBeatHelperForm((prev) => ({ ...prev, beat_file_id: nextFileId, beat_file_name: file.name || "Uploaded beat audio" }));
-      toast.success("Beat audio added to BeatHelper");
-    } catch (error) {
-      const detail = error?.response?.data?.detail;
-      toast.error(typeof detail === "string" ? detail : "Failed to upload beat audio");
-    } finally {
-      setUploadingBeatHelperAudio(false);
-    }
-  };
-
-  const handleBeatHelperImageUpload = async (file) => {
-    if (!file) return;
-
-    try {
-      setUploadingBeatHelperImage(true);
-      const formData = new FormData();
-      formData.append("file", file);
-      const response = await axios.post(`${API}/upload/image`, formData);
-      const nextFileId = response?.data?.file_id || "";
-      if (!nextFileId) {
-        throw new Error("Upload response missing file_id");
-      }
-      setBeatHelperForm((prev) => ({
-        ...prev,
-        image_file_id: nextFileId,
-        image_file_name: file.name || "Uploaded visual",
-        ai_choose_image: false,
-      }));
-      toast.success("Thumbnail image added to BeatHelper");
-    } catch (error) {
-      const detail = error?.response?.data?.detail;
-      toast.error(typeof detail === "string" ? detail : "Failed to upload thumbnail image");
-    } finally {
-      setUploadingBeatHelperImage(false);
-    }
-  };
-
-  const handleBeatHelperImageSearch = async ({ autoBuild = false } = {}) => {
-    try {
-      setLoadingBeatHelperImageSearch(true);
-      const payload = {
-        search_query: autoBuild ? "" : beatHelperImageSearchQuery.trim(),
-        target_artist: beatHelperForm.target_artist.trim(),
-        beat_type: beatHelperForm.beat_type.trim(),
-        generated_title_override: beatHelperForm.generated_title_override.trim(),
-        context_tags: beatHelperForm.context_tags
-          .split(",")
-          .map((tag) => tag.trim())
-          .filter(Boolean),
-        k: 8,
-      };
-      const response = await axios.post(`${API}/beat-helper/image-search`, payload);
-      const queuedJobId = response?.data?.job?.id;
-      const resultPayload = queuedJobId ? await pollBackgroundJobUntilDone(queuedJobId, { intervalMs: 2500, maxAttempts: 120 }) : response.data;
-      setBeatHelperImageResults(Array.isArray(resultPayload?.results) ? resultPayload.results : []);
-      if (!autoBuild && beatHelperImageSearchQuery.trim()) {
-        return;
-      }
-      setBeatHelperImageSearchQuery(resultPayload?.query_used || "");
-    } catch (error) {
-      const detail = error?.response?.data?.detail;
-      toast.error(typeof detail === "string" ? detail : (detail?.message || "Failed to search web images"));
-    } finally {
-      setLoadingBeatHelperImageSearch(false);
-    }
-  };
-
-  const handleBeatHelperImportSearchImage = async (result) => {
-    const imageUrl = (result?.image_url || "").trim();
-    if (!imageUrl) {
-      toast.error("Image URL is missing");
-      return;
-    }
-
-    try {
-      setImportingBeatHelperImageUrl(imageUrl);
-      const filenameSeed = [
-        beatHelperForm.target_artist.trim(),
-        beatHelperForm.beat_type.trim(),
-        "web-thumb",
-      ].filter(Boolean).join("-").toLowerCase().replace(/[^a-z0-9-]+/g, "-");
-      const response = await axios.post(`${API}/upload/image-from-url`, {
-        image_url: imageUrl,
-        original_filename: `${filenameSeed || "beathelper"}-${Date.now()}.jpg`,
-      });
-      const nextImageFileId = response?.data?.file_id || "";
-      if (!nextImageFileId) {
-        throw new Error("Import response missing file_id");
-      }
-      const immediatePreview = { kind: "image", src: imageUrl };
-      beatHelperPreviewCacheRef.current[nextImageFileId] = immediatePreview;
-      setBeatHelperImagePreview(immediatePreview);
-      setLoadingBeatHelperPreview(false);
-      setBeatHelperForm((prev) => ({
-        ...prev,
-        image_file_id: nextImageFileId,
-        image_file_name: result?.title || result?.query || "Selected web image",
-        ai_choose_image: false,
-      }));
-      toast.success("Web image added to BeatHelper");
-    } catch (error) {
-      const detail = error?.response?.data?.detail;
-      toast.error(typeof detail === "string" ? detail : "Failed to import selected image");
-    } finally {
-      setImportingBeatHelperImageUrl("");
-    }
-  };
-
-  const handleBeatHelperRequestApproval = async (itemId) => {
-    try {
-      await axios.post(`${API}/beat-helper/queue/${itemId}/request-approval`);
-      toast.success("Approval request triggered");
-      await fetchBeatHelperData();
-    } catch (error) {
-      const detail = error?.response?.data?.detail;
-      toast.error(typeof detail === "string" ? detail : "Failed to request approval");
-    }
-  };
-
-  const handleBeatHelperApproveUpload = async (itemId) => {
-    try {
-      setLoadingBeatHelper(true);
-      const response = await axios.post(`${API}/beat-helper/queue/${itemId}/approve-upload`);
-      toast.success(response?.data?.message || "Uploaded to YouTube");
-      await fetchBeatHelperData();
-    } catch (error) {
-      const detail = error?.response?.data?.detail;
-      if (typeof detail === "string") {
-        toast.error(detail);
-      } else {
-        toast.error(detail?.message || "Failed to upload queued beat");
-      }
-    } finally {
-      setLoadingBeatHelper(false);
-    }
-  };
-
-  const handleBeatHelperSetStatus = async (itemId, status) => {
-    try {
-      await axios.patch(`${API}/beat-helper/queue/${itemId}`, { status });
-      toast.success(`Beat marked as ${status}`);
-      await fetchBeatHelperData();
-    } catch (error) {
-      toast.error("Failed to update beat status");
-    }
-  };
-
-  const handleBeatHelperDelete = async (itemId) => {
-    try {
-      await axios.delete(`${API}/beat-helper/queue/${itemId}`);
-      toast.success("Queue item removed");
-      await fetchBeatHelperData();
-    } catch (error) {
-      toast.error("Failed to delete queue item");
-    }
-  };
-
-  const handleBeatHelperDispatchNow = async () => {
-    try {
-      const response = await axios.post(`${API}/beat-helper/dispatch-daily-now`);
-      if (response?.data?.success) {
-        toast.success("Daily approval dispatch sent");
-      } else {
-        toast.error(`Dispatch skipped: ${response?.data?.reason || "no eligible queued beat"}`);
-      }
-      await fetchBeatHelperData();
-    } catch (error) {
-      const detail = error?.response?.data?.detail;
-      toast.error(typeof detail === "string" ? detail : "Failed to trigger daily dispatch");
-    }
-  };
-
-  const handleBeatHelperCleanupUploads = async () => {
-    try {
-      setLoadingBeatHelper(true);
-      const response = await axios.post(`${API}/beat-helper/uploads/cleanup`);
-      const deletedAudio = Number(response?.data?.deleted_audio_uploads || 0);
-      const deletedImages = Number(response?.data?.deleted_image_uploads || 0);
-      toast.success(`Removed ${deletedAudio} audio file(s) and ${deletedImages} image(s) not in queue`);
-      await fetchBeatHelperData();
-    } catch (error) {
-      const detail = error?.response?.data?.detail;
-      toast.error(typeof detail === "string" ? detail : "Failed to clean orphan uploads");
-    } finally {
-      setLoadingBeatHelper(false);
-    }
-  };
-
-  const handleBeatHelperSaveContact = async (contactOverride = null) => {
-    try {
-      const payload = contactOverride || beatHelperContact;
-      const response = await axios.put(`${API}/beat-helper/contact-settings`, payload);
-      const confirmation = response?.data?.confirmation || {};
-      const emailStatus = confirmation.email_enabled
-        ? (confirmation.email_confirmation_sent ? "email confirmation sent" : "email confirmation failed")
-        : "email disabled";
-      const smsStatus = confirmation.sms_enabled
-        ? (confirmation.sms_confirmation_sent ? "SMS confirmation sent" : "SMS confirmation failed")
-        : "SMS disabled";
-      toast.success(`BeatHelper contact settings saved (${emailStatus}, ${smsStatus})`);
-    } catch (error) {
-      const detail = error?.response?.data?.detail;
-      toast.error(typeof detail === "string" ? detail : "Failed to save contact settings");
-    }
-  };
-
-  const handleBeatHelperCreateTemplate = async () => {
-    const name = newTemplateName.trim();
-    if (!name) {
-      toast.error("Template name is required");
-      return;
-    }
-    try {
-      await axios.post(`${API}/beat-helper/tag-templates`, {
-        name,
-        tags: newTemplateTags.split(",").map((t) => t.trim()).filter(Boolean),
-      });
-      setNewTemplateName("");
-      setNewTemplateTags("");
-      toast.success("Tag template created");
-      await fetchBeatHelperData();
-    } catch (error) {
-      const detail = error?.response?.data?.detail;
-      toast.error(typeof detail === "string" ? detail : "Failed to create template");
-    }
-  };
-
-  const startEditBeatHelperItem = (item) => {
-    setEditingQueueById((prev) => ({
-      ...prev,
-      [item.id]: {
-        generated_title: item.generated_title || "",
-        target_artist: item.target_artist || "",
-        beat_type: item.beat_type || "",
-        generated_description: item.generated_description || "",
-        generated_tags_text: (item.generated_tags || []).join(", "),
-        beat_file_id: item.beat_file_id || "",
-        image_file_id: item.image_file_id || "",
-        beat_file_name: item.beat_original_filename || "",
-        image_file_name: item.image_original_filename || "",
-        template_id: item.template_id || "",
-      },
-    }));
-  };
-
-  const handleBeatHelperAssistTitle = async (itemId) => {
-    const edit = editingQueueById[itemId];
-    if (!edit) return;
-    try {
-      const response = await axios.post(`${API}/beat-helper/assist-title`, {
-        target_artist: edit.target_artist,
-        beat_type: edit.beat_type,
-        current_title: edit.generated_title,
-        context_tags: (edit.generated_tags_text || "").split(",").map((t) => t.trim()).filter(Boolean),
-      });
-      setAssistTitlesById((prev) => ({ ...prev, [itemId]: response?.data?.titles || [] }));
-    } catch (error) {
-      toast.error("Failed to get title suggestions");
-    }
-  };
-
-  const handleBeatHelperSaveEdit = async (itemId) => {
-    const edit = editingQueueById[itemId];
-    if (!edit) return;
-    try {
-      await axios.patch(`${API}/beat-helper/queue/${itemId}/edit`, {
-        generated_title: edit.generated_title,
-        target_artist: edit.target_artist,
-        beat_type: edit.beat_type,
-        generated_description: edit.generated_description,
-        generated_tags: (edit.generated_tags_text || "").split(",").map((t) => t.trim()).filter(Boolean),
-        beat_file_id: edit.beat_file_id || undefined,
-        image_file_id: edit.image_file_id || undefined,
-        template_id: edit.template_id || undefined,
-      });
-      toast.success("Queue item updated");
-      setEditingQueueById((prev) => {
-        const next = { ...prev };
-        delete next[itemId];
-        return next;
-      });
-      await fetchBeatHelperData();
-    } catch (error) {
-      const detail = error?.response?.data?.detail;
-      toast.error(typeof detail === "string" ? detail : "Failed to update queue item");
     }
   };
 
@@ -1263,67 +660,6 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
     }
   };
 
-  const fetchGrowthStatus = async () => {
-    try {
-      const response = await axios.get(`${API}/growth/status`);
-      setGrowthData(normalizeGrowthData(response.data));
-    } catch (error) {
-      console.error("Failed to fetch growth status:", error);
-    }
-  };
-
-  const fetchCalendar = async () => {
-    try {
-      const response = await axios.get(`${API}/growth/calendar`);
-      setCalendarData(normalizeCalendarData(response.data));
-    } catch (error) {
-      console.error("Failed to fetch calendar:", error);
-    }
-  };
-
-  const handleStartChallenge = async () => {
-    setLoadingGrowth(true);
-    try {
-      const response = await axios.post(`${API}/growth/start`);
-      toast.success(response?.data?.message || "Challenge started");
-      await fetchGrowthStatus();
-      await fetchCalendar();
-    } catch (error) {
-      console.error("Failed to start challenge:", error);
-      toast.error("Failed to start challenge");
-    } finally {
-      setLoadingGrowth(false);
-    }
-  };
-
-  const handleCheckin = async () => {
-    setLoadingGrowth(true);
-    try {
-      const response = await axios.post(`${API}/growth/checkin`);
-      toast.success(response?.data?.message || "Checked in");
-      if (response?.data?.badge_unlocked) {
-        toast.success(`🎉 ${response.data.badge_unlocked}`);
-      }
-      await fetchGrowthStatus();
-      await fetchCalendar();
-    } catch (error) {
-      console.error("Failed to checkin:", error);
-      toast.error(error.response?.data?.detail || "Failed to check in");
-    } finally {
-      setLoadingGrowth(false);
-    }
-  };
-
-  const promptCheckin = () => {
-    // Only show if user has started the challenge and hasn't checked in today
-    if (growthData && growthData.challenge_start_date) {
-      const today = new Date().toISOString().split('T')[0];
-      if (growthData.last_checkin_date !== today) {
-        setShowCheckinPrompt(true);
-      }
-    }
-  };
-
   const handleGenerateTags = async (e) => {
     e.preventDefault();
     if (!tagQuery.trim()) {
@@ -1361,6 +697,7 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
       const queuedJobId = response?.data?.job?.id;
       const resultPayload = queuedJobId ? await pollBackgroundJobUntilDone(queuedJobId, { intervalMs: 2500, maxAttempts: 180 }) : response.data;
       setGeneratedTags(resultPayload.tags);
+      setGeneratedTagScores(buildTagScoreMap(resultPayload?.scored_tags || []));
       setActiveTagHistoryId(resultPayload.id);
       setSelectedTagHistoryIds([resultPayload.id]);
       setTagDebug(canViewTagDebug ? resultPayload?.debug || null : null);
@@ -1372,10 +709,6 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
         fetchSubscriptionStatus();
       }, 500);
 
-      // Prompt check-in after successful generation
-      setTimeout(() => {
-        promptCheckin();
-      }, 1000);
     } catch (error) {
       // Check if cancelled
       if (axios.isCancel(error)) {
@@ -1444,7 +777,7 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
     document.body.removeChild(textArea);
   };
 
-  const handleAddMoreTags = () => {
+  const handleAddMoreTags = async () => {
     if (!additionalTags.trim()) {
       toast.error("Please enter tags to add");
       return;
@@ -1477,7 +810,43 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
       return;
     }
 
+    const nextScoreState = (() => {
+      const next = {};
+      uniqueTags.forEach((tag) => {
+        const existing = generatedTagScores[normalizeTagKey(tag)];
+        if (existing) {
+          next[normalizeTagKey(tag)] = existing;
+        }
+      });
+      newTags.forEach((tag) => {
+        const key = normalizeTagKey(tag);
+        if (!next[key]) {
+          next[key] = {
+            tag,
+            score: 52,
+            reason: "Manually added by the user. No model quality rating yet.",
+            source: "manual",
+          };
+        }
+      });
+      return next;
+    })();
+
     setGeneratedTags(uniqueTags);
+    setGeneratedTagScores(nextScoreState);
+    if (activeTagHistoryId) {
+      try {
+        const response = await axios.patch(`${API}/tags/history/${activeTagHistoryId}`, {
+          tags: uniqueTags,
+          added_tags: newTags,
+        });
+        setGeneratedTags(response.data?.tags || uniqueTags);
+        setGeneratedTagScores(buildTagScoreMap(response.data?.scored_tags || []));
+        upsertTagHistoryItem(response.data);
+      } catch (error) {
+        toast.error("Added locally, but failed to save tag feedback");
+      }
+    }
     setTagDebug(null);
     setShowTagDebug(false);
     setAdditionalTags(""); // Clear input
@@ -1519,12 +888,14 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
         nextActiveId === item.id ? item : tagHistory.find((entry) => entry.id === nextActiveId);
       if (nextActiveItem) {
         setGeneratedTags(nextActiveItem.tags || []);
+        setGeneratedTagScores(buildTagScoreMap(nextActiveItem?.scored_tags || []));
         setTagQuery(nextActiveItem.query || "");
         fetchTagDebug(nextActiveItem.id);
         toast.success("Tags loaded!");
       }
     } else {
       setGeneratedTags([]);
+      setGeneratedTagScores({});
       setTagQuery("");
       setTagDebug(null);
       setShowTagDebug(false);
@@ -1569,6 +940,7 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
       }
 
       setGeneratedTags(optimizedTags);
+      setGeneratedTagScores(buildTagScoreMap(joinPayload?.scored_tags || []));
       setTagDebug(null);
       setShowTagDebug(false);
       setTagQuery(joinLabel || "Joined Tags");
@@ -1581,6 +953,7 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
       });
       upsertTagHistoryItem(saveResponse.data);
       setActiveTagHistoryId(saveResponse.data.id);
+      setGeneratedTagScores(buildTagScoreMap(saveResponse.data?.scored_tags || []));
       setJoiningTagsProgress(100);
       toast.success(
         `AI joined ${selectedItems.length} generations! Optimized to ${optimizedTags.length} SEO tags.`
@@ -1599,6 +972,68 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
       }
       setJoiningTagsLoading(false);
       setTimeout(() => setJoiningTagsProgress(0), 500);
+    }
+  };
+
+  const handleClearTagSelection = () => {
+    setSelectedTagHistoryIds([]);
+    setActiveTagHistoryId(null);
+    setGeneratedTags([]);
+    setGeneratedTagScores({});
+    setTagQuery("");
+    setTagDebug(null);
+    setShowTagDebug(false);
+  };
+
+  const handleDeleteTagHistoryItem = async (itemId) => {
+    try {
+      await axios.delete(`${API}/tags/history/${itemId}`);
+      const updatedHistory = tagHistory.filter((t) => t.id !== itemId);
+      setTagHistory(updatedHistory);
+      setSelectedTagHistoryIds((prev) => {
+        const nextSelected = prev.filter((entryId) => entryId !== itemId);
+        if (activeTagHistoryId === itemId) {
+          const nextActiveId = nextSelected[nextSelected.length - 1] || null;
+          if (nextActiveId) {
+            const nextActiveItem = updatedHistory.find((entry) => entry.id === nextActiveId);
+            if (nextActiveItem) {
+              setActiveTagHistoryId(nextActiveId);
+              setGeneratedTags(nextActiveItem.tags || []);
+              setGeneratedTagScores(buildTagScoreMap(nextActiveItem?.scored_tags || []));
+              setTagQuery(nextActiveItem.query || "");
+              fetchTagDebug(nextActiveId);
+            }
+          } else {
+            setActiveTagHistoryId(null);
+            setGeneratedTags([]);
+            setGeneratedTagScores({});
+            setTagQuery("");
+            setTagDebug(null);
+            setShowTagDebug(false);
+          }
+        }
+        return nextSelected;
+      });
+      toast.success("Generation deleted");
+    } catch (error) {
+      toast.error("Failed to delete");
+    }
+  };
+
+  const handleRemoveGeneratedTag = async (tagIndex) => {
+    const removedTag = generatedTags[tagIndex];
+    const nextTags = generatedTags.filter((_, i) => i !== tagIndex);
+    try {
+      await persistTagHistoryEdit({
+        tagId: activeTagHistoryId,
+        nextTags,
+        removedTags: removedTag ? [removedTag] : [],
+      });
+      setTagDebug(null);
+      setShowTagDebug(false);
+      toast.success("Tag removed");
+    } catch (error) {
+      toast.error("Failed to persist tag removal");
     }
   };
 
@@ -1692,45 +1127,6 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
     }
   };
 
-  const handleGenerateDescription = async () => {
-    setLoadingGenerate(true);
-    try {
-      const response = await axios.post(`${API}/descriptions/generate`, {
-        email: generateForm.email,
-        socials: generateForm.socials,
-        additional_info: generateForm.additional_info,
-        key: "",
-        bpm: "",
-        prices: "",
-      });
-      setNewDescription({
-        title: `Generated - Beat Description`,
-        content: response.data.generated_description
-      });
-      toast.success("Description generated! You can edit and save it.");
-
-      // Refresh credits
-      setTimeout(() => {
-        fetchSubscriptionStatus();
-      }, 500);
-    } catch (error) {
-      // Handle credit limit
-      if (error.response?.status === 402) {
-        setShowUpgradeModal(true);
-        toast.error("Daily limit reached! Upgrade to continue.");
-      } else {
-        toast.error(getApiErrorMessage(error, "Failed to generate description"));
-      }
-
-      // Refresh credits even on error
-      setTimeout(() => {
-        fetchSubscriptionStatus();
-      }, 500);
-    } finally {
-      setLoadingGenerate(false);
-    }
-  };
-
   const connectYouTube = async () => {
     try {
       const response = await axios.get(`${API}/youtube/auth-url`);
@@ -1764,6 +1160,17 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
     }
   };
 
+  const openSettingsView = () => {
+    if (activeTab !== "settings") {
+      setPreviousUtilityTab(activeTab || "workflow");
+    }
+    setActiveTab("settings");
+  };
+
+  const closeSettingsView = () => {
+    setActiveTab(previousUtilityTab || "workflow");
+  };
+
   return (
     <div
       ref={dashboardParallaxRef}
@@ -1774,10 +1181,7 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
 
       {/* Header */}
       <div className="glass-card relative mx-2 sm:mx-4 mt-2 sm:mt-4 rounded-xl sm:rounded-2xl border-0 dashboard-card">
-        <div className="absolute right-3 top-3 sm:right-4 sm:top-4 z-10">
-          <DarkModeToggle className="px-2.5 py-2 sm:px-3" />
-        </div>
-        <div className="container mx-auto px-3 sm:px-4 md:px-6 pr-16 sm:pr-20 lg:pr-6 py-3 sm:py-4 dashboard-shell">
+        <div className="container mx-auto px-3 sm:px-4 md:px-6 py-3 sm:py-4 dashboard-shell">
           <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 lg:gap-4">
             <div className="flex flex-1 items-center gap-2 sm:gap-3 md:gap-4 min-w-0 max-w-full">
               <div className="dashboard-brand-mark flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-xl flex-shrink-0">
@@ -1829,26 +1233,6 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
                   </span>
                 </div>
               )}
-              {!youtubeConnected && (
-                <Button
-                  onClick={connectYouTube}
-                  className="gap-1 sm:gap-2 border border-yellow-400/60 bg-gradient-to-r from-yellow-400 to-orange-500 px-3 sm:px-4 py-2 text-xs font-semibold text-black shadow-[0_0_28px_rgba(251,191,36,0.28)] animate-pulse hover:from-yellow-300 hover:to-orange-400 sm:text-sm whitespace-nowrap"
-                >
-                  <Youtube className="h-3 w-3 sm:h-4 sm:w-4" />
-                  <span className="hidden xl:inline">Connect Google</span>
-                  <span className="xl:hidden">Google</span>
-                </Button>
-              )}
-              <Button
-                variant="outline"
-                onClick={() => window.location.href = "/grow-in-120"}
-                className="gap-1 sm:gap-2 border-[var(--border-color)] text-xs sm:text-sm px-3 sm:px-4 py-2 whitespace-nowrap"
-              >
-                <CheckCircle2 className="h-3 w-3 sm:h-4 sm:w-4" />
-                <span className="hidden xl:inline">Grow in 120</span>
-                <span className="xl:hidden">Grow</span>
-              </Button>
-
               <Button
                 variant="outline"
                 onClick={() => window.location.href = '/spotlight'}
@@ -1870,6 +1254,16 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
               )}
               <Button
                 variant="outline"
+                onClick={openSettingsView}
+                className="gap-1 sm:gap-2 border-[var(--border-color)] text-xs sm:text-sm px-3 sm:px-4 py-2"
+                data-testid="header-settings-btn"
+              >
+                <Settings className="h-3 w-3 sm:h-4 sm:w-4" />
+                <span className="hidden xl:inline">Settings</span>
+                <span className="xl:hidden">Prefs</span>
+              </Button>
+              <Button
+                variant="outline"
                 onClick={handleLogout}
                 className="gap-1 sm:gap-2 border-[var(--border-color)] text-xs sm:text-sm px-3 sm:px-4 py-2"
                 data-testid="logout-btn"
@@ -1878,6 +1272,7 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
                 <span className="hidden xl:inline">Logout</span>
                 <span className="xl:hidden">Exit</span>
               </Button>
+              <DarkModeToggle className="px-2.5 py-2 sm:px-3" />
             </div>
           </div>
         </div>
@@ -1933,8 +1328,8 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
           }
         />
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 sm:space-y-6">
-          {!standaloneGrow && (
+        <Tabs value={activeTab} onValueChange={handleDashboardTabChange} className="space-y-4 sm:space-y-6">
+          {activeTab !== "settings" && (
           <div className="sm:hidden w-full max-w-xs mx-auto flex items-center justify-between gap-2 dashboard-tabs px-2 py-1.5">
             <Button
               type="button"
@@ -1970,7 +1365,7 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
           </div>
           )}
 
-          {!standaloneGrow && (
+          {activeTab !== "settings" && (
           <TabsList
             className="hidden sm:grid w-full max-w-3xl mx-auto gap-0.5 text-[10px] sm:text-[11px] dashboard-tabs dashboard-tabs-desktop relative overflow-hidden"
             style={{ gridTemplateColumns: `repeat(${Math.max(visibleTabs.length, 1)}, minmax(0, 1fr))` }}
@@ -1985,85 +1380,121 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
                   key={tab.value}
                   value={tab.value}
                   data-testid={`${tab.value}-tab`}
-                  className={`dashboard-tab-trigger relative z-10 flex min-h-[42px] items-center justify-center px-1.5 py-1 text-center leading-none whitespace-nowrap transition-colors data-[state=active]:bg-transparent data-[state=active]:text-white ${index > 0 ? "dashboard-tab-trigger--separated" : ""}`}
+                  disabled={tab.value === "analytics" && isAnalyticsLocked}
+                  className={`dashboard-tab-trigger relative z-10 flex min-h-[42px] items-center justify-center px-1.5 py-1 text-center leading-none whitespace-nowrap transition-colors data-[state=active]:bg-transparent data-[state=active]:text-white ${index > 0 ? "dashboard-tab-trigger--separated" : ""} ${tab.value === "analytics" && isAnalyticsLocked ? "dashboard-tab-trigger--locked" : ""}`}
                 >
-                  {tab.label}
+                  {tab.value === "analytics" && isAnalyticsLocked ? (
+                    <span className="dashboard-tab-lock-copy">
+                      <span>{tab.label}</span>
+                      <span className="dashboard-tab-lock-badge">Pro Only</span>
+                    </span>
+                  ) : (
+                    tab.label
+                  )}
                 </TabsTrigger>
             ))}
           </TabsList>
           )}
 
-          {canShowAds && !["tags", "descriptions"].includes(activeTab) && (
+          {canShowAds && activeTab !== "workflow" && (
             <AdBanner
               isSubscribed={subscriptionStatus.is_subscribed}
               style={{ marginBottom: "12px" }}
             />
           )}
 
-          {/* BeatHelper Tab (Pro) */}
-          <TabsContent value="beathelper" className="space-y-6 dashboard-section">
-            {!canUseBeatHelper ? (
-              <Card className="dashboard-card">
-                <CardHeader>
-                  <CardTitle>BeatHelper is for Plus and Max</CardTitle>
-                  <CardDescription>
-                    Upgrade to Plus or Max to queue beats, match thumbnails 1:1, and run assisted upload approvals.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Button onClick={() => setShowUpgradeModal(true)}>Upgrade Plan</Button>
-                </CardContent>
-              </Card>
-            ) : (
-              <BeatHelperStudio
-                loadingBeatHelper={loadingBeatHelper}
-                beatHelperUploads={beatHelperUploads}
-                beatHelperQueue={beatHelperQueue}
-                beatHelperImagePreview={beatHelperImagePreview}
-                loadingBeatHelperPreview={loadingBeatHelperPreview}
-                beatHelperQueueImagePreviews={beatHelperQueueImagePreviews}
-                uploadingBeatHelperAudio={uploadingBeatHelperAudio}
-                uploadingBeatHelperImage={uploadingBeatHelperImage}
-                beatHelperContact={beatHelperContact}
-                setBeatHelperContact={setBeatHelperContact}
-                beatHelperTemplates={beatHelperTemplates}
-                beatHelperImageSearchQuery={beatHelperImageSearchQuery}
-                setBeatHelperImageSearchQuery={setBeatHelperImageSearchQuery}
-                beatHelperImageResults={beatHelperImageResults}
-                loadingBeatHelperImageSearch={loadingBeatHelperImageSearch}
-                importingBeatHelperImageUrl={importingBeatHelperImageUrl}
-                beatHelperForm={beatHelperForm}
-                setBeatHelperForm={setBeatHelperForm}
-                newTemplateName={newTemplateName}
-                setNewTemplateName={setNewTemplateName}
-                newTemplateTags={newTemplateTags}
-                setNewTemplateTags={setNewTemplateTags}
-                editingQueueById={editingQueueById}
-                setEditingQueueById={setEditingQueueById}
-                assistTitlesById={assistTitlesById}
-                handleBeatHelperQueue={handleBeatHelperQueue}
-                fetchBeatHelperData={fetchBeatHelperData}
-                handleBeatHelperDispatchNow={handleBeatHelperDispatchNow}
-                handleBeatHelperCleanupUploads={handleBeatHelperCleanupUploads}
-                handleBeatHelperAudioUpload={handleBeatHelperAudioUpload}
-                handleBeatHelperImageUpload={handleBeatHelperImageUpload}
-                handleBeatHelperImageSearch={handleBeatHelperImageSearch}
-                handleBeatHelperImportSearchImage={handleBeatHelperImportSearchImage}
-                handleBeatHelperSaveContact={handleBeatHelperSaveContact}
-                handleBeatHelperCreateTemplate={handleBeatHelperCreateTemplate}
-                handleBeatHelperRequestApproval={handleBeatHelperRequestApproval}
-                handleBeatHelperApproveUpload={handleBeatHelperApproveUpload}
-                handleBeatHelperSetStatus={handleBeatHelperSetStatus}
-                handleBeatHelperDelete={handleBeatHelperDelete}
-                startEditBeatHelperItem={startEditBeatHelperItem}
-                handleBeatHelperAssistTitle={handleBeatHelperAssistTitle}
-                handleBeatHelperSaveEdit={handleBeatHelperSaveEdit}
-              />
-            )}
+          <TabsContent value="workflow" className="space-y-4 sm:space-y-6 dashboard-section">
+            <PublishWorkflow
+              subscriptionStatus={subscriptionStatus}
+              youtubeConnected={youtubeConnected}
+              youtubeProfilePicture={youtubeProfilePicture}
+              youtubeName={youtubeName}
+              youtubeEmail={youtubeEmail}
+              onConnectYouTube={connectYouTube}
+              onDisconnectYouTube={disconnectYouTube}
+              onOpenAnalytics={() => {
+                if (!hasPaidAnalyticsAccess) {
+                  setShowUpgradeModal(true);
+                  return;
+                }
+                setActiveTab("analytics");
+              }}
+              onOpenUpgrade={() => setShowUpgradeModal(true)}
+              hasPaidAnalyticsAccess={hasPaidAnalyticsAccess}
+              tagsSectionProps={{
+                tagHistory,
+                selectedTagHistoryIds,
+                joiningTagsLoading,
+                joiningTagsProgress,
+                handleJoinSelectedTagHistory,
+                handleClearTagSelection,
+                formatTagHistoryLabel,
+                activeTagHistoryId,
+                handleTagHistoryTileClick,
+                handleDeleteTagHistoryItem,
+                generatedTags,
+                loadingTags,
+                handleGenerateTags,
+                copyTags,
+                generatedTagScores,
+                normalizeTagKey,
+                handleRemoveGeneratedTag,
+                additionalTags,
+                setAdditionalTags,
+                tagLimit: TAG_LIMIT,
+                handleAddMoreTags,
+                canViewTagDebug,
+                tagDebug,
+                showTagDebug,
+                setShowTagDebug,
+                tagQuery,
+                setTagQuery,
+              }}
+              descriptionsSectionProps={{
+                descriptions,
+                newDescription,
+                visibleDescriptionTemplates,
+                descriptionTemplates: DESCRIPTION_TEMPLATES,
+                showAllDescriptionTemplates,
+                setShowAllDescriptionTemplates,
+                handleApplyDescriptionTemplate,
+                setNewDescription,
+                handleSaveDescription,
+                loadingDescriptions,
+                expandedDescriptions,
+                editingDesc,
+                setEditingDesc,
+                handleUpdateDescription,
+                handleDeleteDescription,
+                copyDescription,
+                toggleDescriptionExpand,
+              }}
+              uploadStudioProps={{
+                user,
+                analyticsData,
+                subscriptionStatus,
+                youtubeConnected,
+                youtubeProfilePicture,
+                youtubeName,
+                youtubeEmail,
+                descriptions,
+                tagHistory,
+                API,
+                onUpgrade: () => setShowUpgradeModal(true),
+                onDisconnectYouTube: disconnectYouTube,
+                onConnectYouTube: connectYouTube,
+              }}
+            />
           </TabsContent>
 
           {/* Settings Tab */}
           <TabsContent value="settings" className="space-y-6 dashboard-section">
+            <div className="flex justify-start">
+              <Button variant="outline" onClick={closeSettingsView} className="gap-2">
+                <ChevronLeft className="h-4 w-4" />
+                Back
+              </Button>
+            </div>
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
               <Card className="dashboard-card">
                 <CardHeader>
@@ -2128,703 +1559,9 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
             </div>
 
             <ThemeCustomizer
-              isPro={isPro}
+              isPro={Boolean(subscriptionStatus?.is_subscribed)}
               onUpgrade={() => setShowUpgradeModal(true)}
             />
-          </TabsContent>
-
-          {/* Tag Generator Tab */}
-          <TabsContent value="tags" className="space-y-4 sm:space-y-6 dashboard-section">
-          {canShowAds && activeTab === "tags" && (
-            <AdBanner
-              isSubscribed={subscriptionStatus.is_subscribed}
-              style={{ marginBottom: '24px' }}
-            />
-          )}
-
-            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] gap-4 sm:gap-6">
-              <Card className="dashboard-card">
-                <CardHeader className="px-4 sm:px-6 py-4 sm:py-6">
-                  <CardTitle className="flex items-center gap-2 text-base sm:text-lg md:text-xl">
-                    <Sparkles className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 flex-shrink-0" />
-                    <span>Generate YouTube Tags</span>
-                  </CardTitle>
-                  <CardDescription className="text-xs sm:text-sm">AI generates focused tags using YouTube + Spotify + SoundCloud song signals + your custom tags (up to 120 total)</CardDescription>
-                </CardHeader>
-                <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
-                  <form onSubmit={handleGenerateTags} className="space-y-3 sm:space-y-4" data-testid="tag-generator-form">
-                    <div className="space-y-1.5 sm:space-y-2">
-                      <Label htmlFor="tag-query" className="text-sm sm:text-base">Search Query</Label>
-                      <Input
-                        id="tag-query"
-                        placeholder="e.g., lil uzi, travis scott, dark trap beat"
-                        value={tagQuery}
-                        onChange={(e) => setTagQuery(e.target.value)}
-                        data-testid="tag-query-input"
-                        className="text-sm sm:text-base"
-                      />
-                      <p className="text-xs" style={{color: 'var(--text-secondary)'}}>
-                        Tip: Include artist name for popular song "type beat" variations
-                      </p>
-                    </div>
-
-                      <div className="space-y-1.5 sm:space-y-2">
-                        <Label htmlFor="custom-tags" className="text-sm sm:text-base">Your Custom Tags (Optional)</Label>
-                      <Textarea
-                        id="custom-tags"
-                        placeholder="e.g., free for profit, exclusive beat, lease available (comma-separated)"
-                        value={customTags}
-                        onChange={(e) => setCustomTags(e.target.value)}
-                        rows={3}
-                        data-testid="custom-tags-input"
-                        className="text-sm sm:text-base"
-                      />
-                      <p className="text-xs" style={{color: 'var(--text-secondary)'}}>
-                        Add your own tags (comma-separated). Total limit: {TAG_LIMIT} tags
-                      </p>
-                    </div>
-
-                    <Button
-                      type="submit"
-                      className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-sm sm:text-base py-5 sm:py-6"
-                      disabled={loadingTags}
-                      data-testid="generate-tags-btn"
-                    >
-                      {loadingTags ? "Generating Tags..." : "Generate 60-80 Tags (AI + YouTube + Custom)"}
-                    </Button>
-                  </form>
-                </CardContent>
-              </Card>
-
-              <div className="space-y-4 sm:space-y-6">
-                {generatedTags.length > 0 && (
-                  <Card className="dashboard-card" data-testid="generated-tags-section">
-                    <CardHeader className="px-4 sm:px-6 py-4 sm:py-5">
-                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0">
-                        <CardTitle className="text-sm sm:text-base" style={{color: 'var(--text-primary)'}}>
-                          Generated Tags ({generatedTags.length})
-                        </CardTitle>
-                        <div className="flex gap-2 w-full sm:w-auto">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={handleGenerateTags}
-                            className="gap-1 sm:gap-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:from-purple-700 hover:to-blue-700 border-0 text-xs sm:text-sm flex-1 sm:flex-none py-2"
-                            disabled={loadingTags}
-                            data-testid="refine-tags-btn"
-                          >
-                            <Sparkles className="h-3 w-3 sm:h-4 sm:w-4" />
-                            Refine
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={copyTags}
-                            className="gap-1 sm:gap-2 text-xs sm:text-sm flex-1 sm:flex-none py-2"
-                            data-testid="copy-tags-btn"
-                          >
-                            <Copy className="h-3 w-3 sm:h-4 sm:w-4" />
-                            Copy All
-                          </Button>
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6 space-y-4">
-                      <div className="tag-cloud" data-testid="tags-list">
-                        {generatedTags.map((tag, index) => (
-                          <span
-                            key={index}
-                            className="tag-item group relative"
-                            data-testid={`tag-${index}`}
-                          >
-                            {tag}
-                            <button
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                const removedTag = generatedTags[index];
-                                const nextTags = generatedTags.filter((_, i) => i !== index);
-                                try {
-                                  await persistTagHistoryEdit({
-                                    tagId: activeTagHistoryId,
-                                    nextTags,
-                                    removedTags: removedTag ? [removedTag] : [],
-                                  });
-                                  setTagDebug(null);
-                                  setShowTagDebug(false);
-                                  toast.success("Tag removed");
-                                } catch (error) {
-                                  toast.error("Failed to persist tag removal");
-                                }
-                              }}
-                              className="ml-2 text-red-500 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-700"
-                              title="Delete tag"
-                              aria-label="Delete tag"
-                            >
-                              x
-                            </button>
-                          </span>
-                        ))}
-                      </div>
-
-                      {/* Add More Tags Section */}
-                      <div className="p-3 sm:p-4 rounded-lg border-2 border-green-500" style={{backgroundColor: 'var(--bg-secondary)'}}>
-                        <div className="space-y-2 sm:space-y-3">
-                          <div className="flex items-center justify-between">
-                            <Label htmlFor="additional-tags" className="font-semibold text-sm sm:text-base">
-                              <Plus className="inline h-3 w-3 sm:h-4 sm:w-4 mr-1" />
-                              Add More Tags
-                            </Label>
-                            <span className="text-xs sm:text-sm" style={{color: 'var(--text-secondary)'}}>
-                              {generatedTags.length}/{TAG_LIMIT}
-                            </span>
-                          </div>
-                          <Textarea
-                            id="additional-tags"
-                            placeholder="Add more tags (comma-separated)"
-                            value={additionalTags}
-                            onChange={(e) => setAdditionalTags(e.target.value)}
-                            rows={2}
-                            disabled={generatedTags.length >= TAG_LIMIT}
-                            className="text-sm sm:text-base"
-                          />
-                          <Button
-                            size="sm"
-                            onClick={handleAddMoreTags}
-                            disabled={generatedTags.length >= TAG_LIMIT || !additionalTags.trim()}
-                            className="w-full gap-1 sm:gap-2 bg-green-600 hover:bg-green-700 text-sm py-2.5"
-                          >
-                            <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
-                            {generatedTags.length >= TAG_LIMIT ? `Limit Reached (${TAG_LIMIT})` : "Add Tags"}
-                          </Button>
-                        </div>
-                      </div>
-
-                      {canViewTagDebug && tagDebug && (
-                        <div className="p-3 sm:p-4 rounded-lg border" style={{ backgroundColor: "var(--bg-secondary)", borderColor: "var(--border-color)" }}>
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="text-sm sm:text-base font-semibold">Tag Generation Debug</p>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => setShowTagDebug((prev) => !prev)}
-                              className="text-xs sm:text-sm"
-                            >
-                              {showTagDebug ? "Hide Debug" : "Show Debug"}
-                            </Button>
-                          </div>
-                          <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
-                            Source mix, selected tags, and de-duplication drops for this generation.
-                          </p>
-
-                          {showTagDebug && (
-                            <div className="mt-3 space-y-3">
-                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
-                                {Object.entries(tagDebug?.source_counts || {}).map(([key, value]) => (
-                                  <div key={key} className="rounded-md border px-2 py-1" style={{ borderColor: "var(--border-color)" }}>
-                                    <p className="font-semibold">{String(value)}</p>
-                                    <p style={{ color: "var(--text-secondary)" }}>{key.replaceAll("_", " ")}</p>
-                                  </div>
-                                ))}
-                              </div>
-
-                              {Object.keys(tagDebug?.source_status || {}).length > 0 && (
-                                <div className="rounded-md border px-2 py-2 text-xs" style={{ borderColor: "var(--border-color)" }}>
-                                  <p className="font-semibold mb-1">Source Status</p>
-                                  {Object.entries(tagDebug?.source_status || {}).map(([key, value]) => (
-                                    <p key={key} style={{ color: "var(--text-secondary)" }}>
-                                      {key}: {String(value)}
-                                    </p>
-                                  ))}
-                                </div>
-                              )}
-
-                              <div>
-                                <p className="text-xs font-semibold mb-1">Selected Tags (sample)</p>
-                                <div className="max-h-40 overflow-auto space-y-1 text-xs">
-                                  {(tagDebug?.selected_tags || []).slice(0, 18).map((entry, idx) => (
-                                    <div key={`${entry.tag}-${idx}`} className="rounded px-2 py-1 border" style={{ borderColor: "var(--border-color)" }}>
-                                      <span className="font-medium">{entry.tag}</span>{" "}
-                                      <span style={{ color: "var(--text-secondary)" }}>[{entry.source}] {entry.reason}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-
-                              <div>
-                                <p className="text-xs font-semibold mb-1">Dropped Tags (sample)</p>
-                                <div className="max-h-32 overflow-auto space-y-1 text-xs">
-                                  {(tagDebug?.dropped_tags || []).slice(0, 14).map((entry, idx) => (
-                                    <div key={`${entry.tag}-${idx}`} className="rounded px-2 py-1 border" style={{ borderColor: "var(--border-color)" }}>
-                                      <span className="font-medium">{entry.tag}</span>{" "}
-                                      <span style={{ color: "var(--text-secondary)" }}>{entry.reason}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                )}
-
-                {/* Tag History */}
-                {tagHistory.length > 0 && (
-                  <Card className="dashboard-card-muted">
-                    <CardHeader className="px-4 sm:px-6 py-4 sm:py-5">
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                        <CardTitle className="text-sm sm:text-base">Recent Generations</CardTitle>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-xs sm:text-sm" style={{ color: "var(--text-secondary)" }}>
-                            {selectedTagHistoryIds.length} selected
-                          </span>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleJoinSelectedTagHistory}
-                            disabled={selectedTagHistoryIds.length < 2 || joiningTagsLoading}
-                            className="text-xs sm:text-sm"
-                          >
-                            {joiningTagsLoading ? `Joining... ${joiningTagsProgress}%` : "Join Selected"}
-                          </Button>
-                          {selectedTagHistoryIds.length > 0 && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                setSelectedTagHistoryIds([]);
-                                setActiveTagHistoryId(null);
-                                setGeneratedTags([]);
-                                setTagQuery("");
-                                setTagDebug(null);
-                                setShowTagDebug(false);
-                              }}
-                              className="text-xs sm:text-sm"
-                            >
-                              Clear
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                      {joiningTagsLoading && (
-                        <p className="text-xs sm:text-sm" style={{ color: "var(--text-secondary)" }}>
-                          Optimizing combined tags with AI...
-                        </p>
-                      )}
-                    </CardHeader>
-                    <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
-                      <div className="tag-history-scroll">
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                        {tagHistory.slice(0, TAG_HISTORY_LIMIT).map((item) => {
-                          const displayLabel = formatTagHistoryLabel(item.query);
-                          const isSelected = selectedTagHistoryIds.includes(item.id);
-                          const isActive = activeTagHistoryId === item.id;
-                          return (
-                          <div
-                            key={item.id}
-                            className="aspect-square p-4 rounded-lg border-2 transition-all hover:border-purple-500 cursor-pointer relative group flex flex-col justify-between overflow-hidden"
-                            style={{
-                              backgroundColor: 'var(--bg-secondary)',
-                              borderColor: isActive ? 'var(--accent-primary)' : isSelected ? 'var(--accent-secondary)' : 'var(--border-color)'
-                            }}
-                            onClick={() => handleTagHistoryTileClick(item)}
-                            data-testid="tag-history-item"
-                          >
-                            <div className="flex justify-between items-start gap-2">
-                              <div className="min-w-0">
-                                <p
-                                  className="font-medium mb-1 leading-snug break-words"
-                                  style={{color: 'var(--text-primary)'}}
-                                  title={displayLabel}
-                                >
-                                  {displayLabel}
-                                </p>
-                                <p className="text-xs sm:text-sm break-words" style={{color: 'var(--text-secondary)'}}>
-                                  {item.tags.length} tags
-                                </p>
-                              </div>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="opacity-0 group-hover:opacity-100 transition-opacity text-red-500 hover:text-red-700 hover:bg-red-50"
-                                onClick={async (e) => {
-                                  e.stopPropagation();
-                                  try {
-                                    await axios.delete(`${API}/tags/history/${item.id}`);
-                                    const updatedHistory = tagHistory.filter(t => t.id !== item.id);
-                                    setTagHistory(updatedHistory);
-                                    setSelectedTagHistoryIds((prev) => {
-                                      const nextSelected = prev.filter((entryId) => entryId !== item.id);
-                                      if (activeTagHistoryId === item.id) {
-                                        const nextActiveId = nextSelected[nextSelected.length - 1] || null;
-                                        if (nextActiveId) {
-                                          const nextActiveItem = updatedHistory.find((entry) => entry.id === nextActiveId);
-                                          if (nextActiveItem) {
-                                            setActiveTagHistoryId(nextActiveId);
-                                            setGeneratedTags(nextActiveItem.tags || []);
-                                            setTagQuery(nextActiveItem.query || "");
-                                            fetchTagDebug(nextActiveId);
-                                          }
-                                        } else {
-                                          setActiveTagHistoryId(null);
-                                          setGeneratedTags([]);
-                                          setTagQuery("");
-                                          setTagDebug(null);
-                                          setShowTagDebug(false);
-                                        }
-                                      }
-                                      return nextSelected;
-                                    });
-                                    toast.success("Generation deleted");
-                                  } catch (error) {
-                                    toast.error("Failed to delete");
-                                  }
-                                }}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                            <div className="mt-2 text-[11px] sm:text-xs break-words" style={{ color: 'var(--text-secondary)' }}>
-                              {isActive ? "Showing tags" : isSelected ? "Selected for join" : "Click to select"}
-                            </div>
-                          </div>
-                        );
-                        })}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
-            </div>
-          </TabsContent>
-
-          {/* Descriptions Tab */}
-          <TabsContent value="descriptions" className="space-y-4 sm:space-y-6 dashboard-section">
-          {canShowAds && activeTab === "descriptions" && (
-            <AdBanner
-              isSubscribed={subscriptionStatus.is_subscribed}
-              style={{ marginBottom: '24px' }}
-            />
-          )}
-
-            <Card className="dashboard-card description-studio-hero">
-              <CardContent className="px-4 sm:px-6 py-4 sm:py-5">
-                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                  <div>
-                    <p className="text-xs uppercase tracking-widest font-semibold" style={{ color: "var(--text-secondary)" }}>
-                      Description Studio
-                    </p>
-                    <h3 className="text-lg sm:text-2xl font-bold" style={{ color: "var(--text-primary)" }}>
-                      Write faster. Sound bigger. Stay consistent.
-                    </h3>
-                    <p className="text-xs sm:text-sm mt-1" style={{ color: "var(--text-secondary)" }}>
-                      Build scroll-stopping descriptions with AI tools, then keep your best templates ready to deploy.
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 w-full lg:w-auto">
-                    <div className="description-stat-chip">
-                      <p className="description-stat-value">{descriptions.length}</p>
-                      <p className="description-stat-label">My Templates</p>
-                    </div>
-                    <div className="description-stat-chip">
-                      <p className="description-stat-value">{newDescription.content.trim() ? newDescription.content.trim().split(/\s+/).filter(Boolean).length : 0}</p>
-                      <p className="description-stat-label">Draft Words</p>
-                    </div>
-                    <div className="description-stat-chip">
-                      <p className="description-stat-value">{Math.max(5, Math.round(((newDescription.content.trim() ? newDescription.content.trim().split(/\s+/).filter(Boolean).length : 0) / 3) || 0))}s</p>
-                      <p className="description-stat-label">Read Time</p>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 sm:gap-6">
-              <div className="xl:col-span-7 space-y-4 sm:space-y-6">
-                <Card className="dashboard-card description-tool-card">
-                  <CardHeader className="px-4 sm:px-6 py-4 sm:py-6">
-                    <CardTitle className="flex items-center gap-2 text-base sm:text-lg md:text-xl">
-                      <Save className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 flex-shrink-0" />
-                      <span>Create Your Template</span>
-                    </CardTitle>
-                    <CardDescription>Start from a built-in producer template or write your own, then save your edited version into your personal template library.</CardDescription>
-                  </CardHeader>
-                  <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6 space-y-3 sm:space-y-4">
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <Label>Starter Templates</Label>
-                          <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
-                            Built-in description starters. These are not saved to your account until you edit and save one.
-                          </p>
-                        </div>
-                        <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                          {visibleDescriptionTemplates.length} of {DESCRIPTION_TEMPLATES.length} visible
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {visibleDescriptionTemplates.map((template) => (
-                          <button
-                            key={template.id}
-                            type="button"
-                            className="rounded-xl border p-3 text-left transition-colors hover:border-[var(--accent-primary)]"
-                            style={{
-                              borderColor: "var(--border-color)",
-                              backgroundColor: "var(--bg-secondary)",
-                            }}
-                            onClick={() => handleApplyDescriptionTemplate(template)}
-                          >
-                            <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                              {template.name}
-                            </p>
-                            <p className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>
-                              {template.blurb}
-                            </p>
-                          </button>
-                        ))}
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                          Templates only fill the description body.
-                        </p>
-                        {DESCRIPTION_TEMPLATES.length > 2 && (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="shrink-0 text-xs"
-                            onClick={() => setShowAllDescriptionTemplates((prev) => !prev)}
-                          >
-                            {showAllDescriptionTemplates ? "Show Less" : "Show All"}
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="desc-title">Template Name</Label>
-                      <Input
-                        id="desc-title"
-                        placeholder="e.g., Free For Profit Template"
-                        value={newDescription.title}
-                        onChange={(e) => setNewDescription({ ...newDescription, title: e.target.value })}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && newDescription.content.trim()) {
-                            e.preventDefault();
-                            handleSaveDescription();
-                          }
-                        }}
-                        data-testid="desc-title-input"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="desc-content">Content</Label>
-                      <Textarea
-                        id="desc-content"
-                        placeholder="Write your description here..."
-                        rows={9}
-                        value={newDescription.content}
-                        onChange={(e) => setNewDescription({ ...newDescription, content: e.target.value })}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && e.shiftKey && newDescription.title.trim()) {
-                            e.preventDefault();
-                            handleSaveDescription();
-                          }
-                        }}
-                        data-testid="desc-content-input"
-                      />
-                      <div className="flex justify-between items-center text-xs">
-                      <p style={{color: 'var(--text-secondary)'}}>
-                          Press Enter for a new line. Use Shift+Enter to save.
-                        </p>
-                        <p style={{color: 'var(--text-secondary)'}}>
-                          {(newDescription.content || "").length} chars
-                        </p>
-                      </div>
-                    </div>
-                    <Button
-                      onClick={handleSaveDescription}
-                      className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
-                      disabled={loadingDescriptions}
-                      data-testid="save-desc-btn"
-                    >
-                      Save to My Templates
-                    </Button>
-                  </CardContent>
-                </Card>
-
-              </div>
-
-              <div className="xl:col-span-5 space-y-4 sm:space-y-6">
-                <Card className="dashboard-card description-tool-card">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Plus className="h-5 w-5 text-blue-600" />
-                      AI Generate
-                    </CardTitle>
-                    <CardDescription>Build a full description from beat metadata and sales info.</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <Input
-                      placeholder="Email"
-                      value={generateForm.email}
-                      onChange={(e) => setGenerateForm({ ...generateForm, email: e.target.value })}
-                      data-testid="gen-email-input"
-                    />
-                    <Input
-                      placeholder="Socials"
-                      value={generateForm.socials}
-                      onChange={(e) => setGenerateForm({ ...generateForm, socials: e.target.value })}
-                      data-testid="gen-socials-input"
-                    />
-                    <Textarea
-                      placeholder="Additional info"
-                      rows={2}
-                      value={generateForm.additional_info}
-                      onChange={(e) => setGenerateForm({ ...generateForm, additional_info: e.target.value })}
-                      data-testid="gen-additional-input"
-                    />
-                    <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                      Key, BPM, and pricing are now handled in Upload Studio after your beat is loaded.
-                    </p>
-                    <Button
-                      onClick={handleGenerateDescription}
-                      className="w-full"
-                      disabled={loadingGenerate}
-                      data-testid="generate-desc-btn"
-                    >
-                      {loadingGenerate ? "Generating..." : "Generate with AI"}
-                    </Button>
-                  </CardContent>
-                </Card>
-
-                <Card className="dashboard-card producer-card">
-                  <CardHeader>
-                    <CardTitle>My Templates ({descriptions.length})</CardTitle>
-                    <CardDescription>Your saved description templates. Tap any body to expand or collapse quickly.</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    {descriptions.length === 0 ? (
-                      <p className="text-center py-8" style={{color: 'var(--text-secondary)'}} data-testid="no-descriptions-msg">No personal templates yet. Start from a built-in template above or write your own.</p>
-                    ) : (
-                      <div className="space-y-3" data-testid="descriptions-list">
-                        {descriptions.map((desc) => {
-                          const isExpanded = expandedDescriptions.has(desc.id);
-                          const preview = desc.content.substring(0, 150);
-                          const showPreview = !isExpanded && desc.content.length > 150;
-                          const words = desc.content.trim() ? desc.content.trim().split(/\s+/).filter(Boolean).length : 0;
-
-                          return (
-                            <div key={desc.id} className="description-entry-card" data-testid={`desc-item-${desc.id}`}>
-                              <div className="flex items-start justify-between gap-3 mb-2">
-                                <div className="min-w-0">
-                                  <h3 className="font-semibold truncate" style={{color: 'var(--text-primary)'}}>{desc.title}</h3>
-                                  <p className="text-xs" style={{ color: "var(--text-secondary)" }}>{words} words</p>
-                                </div>
-                                <div className="flex gap-2">
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => copyDescription(desc.content)}
-                                    data-testid={`copy-desc-${desc.id}`}
-                                  >
-                                    <Copy className="h-4 w-4" />
-                                  </Button>
-                                  <Dialog>
-                                    <DialogTrigger asChild>
-                                      <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        onClick={() => setEditingDesc(desc)}
-                                        data-testid={`edit-desc-${desc.id}`}
-                                      >
-                                        <Edit className="h-4 w-4" />
-                                      </Button>
-                                    </DialogTrigger>
-                                    <DialogContent>
-                                      <DialogHeader>
-                                        <DialogTitle>Edit Description</DialogTitle>
-                                        <DialogDescription>Make changes to your description</DialogDescription>
-                                      </DialogHeader>
-                                      {editingDesc && (
-                                        <div className="space-y-4">
-                                          <Input
-                                            value={editingDesc.title}
-                                            onChange={(e) => setEditingDesc({ ...editingDesc, title: e.target.value })}
-                                            data-testid="edit-title-input"
-                                          />
-                                          <Textarea
-                                            rows={8}
-                                            value={editingDesc.content}
-                                            onChange={(e) => setEditingDesc({ ...editingDesc, content: e.target.value })}
-                                            data-testid="edit-content-input"
-                                          />
-                                          <Button onClick={handleUpdateDescription} className="w-full" data-testid="update-desc-btn">
-                                            Save Changes
-                                          </Button>
-                                        </div>
-                                      )}
-                                    </DialogContent>
-                                  </Dialog>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                                    onClick={() => handleDeleteDescription(desc.id)}
-                                    data-testid={`delete-desc-${desc.id}`}
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              </div>
-                              <div
-                                className="text-sm whitespace-pre-wrap cursor-pointer"
-                                style={{ color: "var(--text-primary)" }}
-                                onClick={() => toggleDescriptionExpand(desc.id)}
-                              >
-                                {showPreview ? (
-                                  <>
-                                    {preview}...
-                                    <span className="description-expand-hint">Click to expand</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    {desc.content}
-                                    {desc.content.length > 150 && (
-                                      <span className="description-expand-hint block mt-2">Click to collapse</span>
-                                    )}
-                                  </>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
-          </TabsContent>
-
-          {/* YouTube Upload Tab (Refactored) */}
-          <TabsContent value="upload" className="space-y-6 dashboard-section">
-             <UploadStudio
-               user={user}
-               subscriptionStatus={subscriptionStatus}
-               youtubeConnected={youtubeConnected}
-               youtubeProfilePicture={youtubeProfilePicture}
-               youtubeName={youtubeName}
-               youtubeEmail={youtubeEmail}
-               descriptions={descriptions}
-               tagHistory={tagHistory}
-               API={API}
-               onUpgrade={() => setShowUpgradeModal(true)}
-               onDisconnectYouTube={disconnectYouTube}
-               onConnectYouTube={connectYouTube}
-             />
           </TabsContent>
 
           {/* YouTube Analytics Tab */}
@@ -2838,7 +1575,7 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
                 <CardDescription>
                   {hasPaidAnalyticsAccess
                     ? "Get AI-powered insights on your channel performance (uses 1 AI credit)"
-                    : "Free plan includes 1 channel analysis per month. Upgrade for ongoing analytics access."}
+                    : "Channel analytics is available on paid plans."}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -2846,7 +1583,7 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
                   <Alert>
                     <AlertCircle className="h-4 w-4" />
                     <AlertDescription>
-                      Free users get 1 channel analysis each month. Upgrade to Plus or Max for more analytics usage.
+                      Channel analytics is a paid feature. Upgrade to Plus or Max to unlock channel analysis.
                     </AlertDescription>
                   </Alert>
                 )}
@@ -2858,7 +1595,7 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
                         Connect your YouTube account first to analyze your channel.
                       </AlertDescription>
                     </Alert>
-                  ) : (
+                  ) : hasPaidAnalyticsAccess ? (
                     <Button
                       onClick={handleAnalyzeChannel}
                       disabled={loadingAnalytics}
@@ -2866,6 +1603,14 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
                     >
                       <Sparkles className="mr-2 h-5 w-5" />
                       {loadingAnalytics ? "Analyzing..." : "Analyze My Channel"}
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={() => setShowUpgradeModal(true)}
+                      className="w-full btn-modern"
+                    >
+                      <Sparkles className="mr-2 h-5 w-5" />
+                      Upgrade For Channel Analytics
                     </Button>
                   )}
 
@@ -3187,303 +1932,6 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
                 </div>
               </CardContent>
             </Card>
-          </TabsContent>          {/* Grow in 120 Tab */}
-          <TabsContent value="grow" className="space-y-4 sm:space-y-6 dashboard-section">
-            {standaloneGrow && (
-              <div className="flex justify-start">
-                <Button
-                  variant="outline"
-                  onClick={() => window.location.href = "/dashboard"}
-                  className="gap-2 border-[var(--border-color)]"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                  Back to Dashboard
-                </Button>
-              </div>
-            )}
-            <div className="grow-quest-shell relative">
-              <div
-                style={{
-                  filter: isPro ? "none" : "blur(6px)",
-                  pointerEvents: isPro ? "auto" : "none"
-                }}
-              >
-                {!growthData?.challenge_start_date ? (
-                  <Card className="dashboard-card grow-quest-hero grow-gameboard-card">
-                    <CardContent className="p-8 sm:p-12">
-                      <div className="grow-gameboard-onboarding">
-                        <div className="grow-orbit grow-orbit-a" aria-hidden="true" />
-                        <div className="grow-orbit grow-orbit-b" aria-hidden="true" />
-                        <div className="grow-onboarding-copy text-center">
-                          <div className="grow-chip mx-auto">Challenge Mode</div>
-                          <h3 className="mt-4 text-3xl sm:text-5xl font-extrabold grow-game-title">Grow in 120</h3>
-                          <p className="mt-4 text-sm sm:text-base max-w-2xl mx-auto" style={{ color: "var(--text-secondary)" }}>
-                            Turn your upload routine into a streak machine. Hit the board every day, clear your mission, fill the quest map, and stack momentum until the whole run is complete.
-                          </p>
-                        </div>
-                        <div className="grow-onboarding-grid">
-                          <div className="grow-hype-card">
-                            <p className="grow-hype-label">Loop</p>
-                            <p className="grow-hype-value">Create</p>
-                            <p className="grow-hype-sub">Generate tags, sharpen descriptions, upload, repeat.</p>
-                          </div>
-                          <div className="grow-hype-card">
-                            <p className="grow-hype-label">Reward</p>
-                            <p className="grow-hype-value">Streaks</p>
-                            <p className="grow-hype-sub">Every check-in adds visible momentum and badge unlocks.</p>
-                          </div>
-                          <div className="grow-hype-card">
-                            <p className="grow-hype-label">Target</p>
-                            <p className="grow-hype-value">120 Days</p>
-                            <p className="grow-hype-sub">A full-season consistency run built for producers.</p>
-                          </div>
-                        </div>
-                        <div className="mt-8 flex flex-col items-center gap-3">
-                          <Button
-                            onClick={handleStartChallenge}
-                            disabled={loadingGrowth}
-                            className="btn-modern text-base sm:text-lg py-6 px-12 grow-claim-button"
-                          >
-                            {loadingGrowth ? "Loading Quest..." : "Start My 120-Day Run"}
-                          </Button>
-                          <p className="text-xs uppercase tracking-[0.2em]" style={{ color: "var(--text-secondary)" }}>
-                            Build the habit. Protect the streak. Finish the arc.
-                          </p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ) : (
-                  <div className="space-y-4 sm:space-y-6">
-                    <Card className="dashboard-card grow-quest-hero grow-gameboard-card">
-                      <CardContent className="p-4 sm:p-6 space-y-5">
-                        <div className="grow-gameboard-top">
-                          <div className="min-w-0">
-                            <div className="grow-chip">Producer Quest Board</div>
-                            <h3 className="mt-3 text-3xl sm:text-4xl font-extrabold grow-game-title">
-                              Day {growthCurrentDay} / 120
-                            </h3>
-                            <p className="mt-2 text-sm sm:text-base" style={{ color: "var(--text-secondary)" }}>
-                              {growthCheckedInToday
-                                ? "Today's check-in is locked. Keep the rhythm going tomorrow."
-                                : "Today's streak is still unclaimed. Finish a task and stamp the board."}
-                            </p>
-                          </div>
-                          <div className="grow-quest-rank grow-rank-panel">
-                            <p className="text-xs uppercase tracking-wider">Current Rank</p>
-                            <p className="font-bold text-lg">{growthRank}</p>
-                            <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
-                              {growthMilestoneGap} day{growthMilestoneGap === 1 ? "" : "s"} until the next milestone
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="grow-arc-track" aria-hidden="true">
-                          <div className="grow-arc-fill" style={{ width: `${growthCompletionPercent}%` }} />
-                        </div>
-
-                        <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
-                          <div className="grow-stat-card grow-stat-card-hot">
-                            <p className="grow-stat-kicker">Heat</p>
-                            <p className="grow-stat-value">{growthData.current_streak} 🔥</p>
-                            <p className="grow-stat-label">Live Streak</p>
-                          </div>
-                          <div className="grow-stat-card">
-                            <p className="grow-stat-kicker">XP</p>
-                            <p className="grow-stat-value">{growthData.total_days_completed}/120</p>
-                            <p className="grow-stat-label">Days Cleared</p>
-                          </div>
-                          <div className="grow-stat-card">
-                            <p className="grow-stat-kicker">Peak</p>
-                            <p className="grow-stat-value">{growthData.longest_streak} 🏆</p>
-                            <p className="grow-stat-label">Best Run</p>
-                          </div>
-                          <div className="grow-stat-card">
-                            <p className="grow-stat-kicker">Finish</p>
-                            <p className="grow-stat-value">{growthCompletionPercent}%</p>
-                            <p className="grow-stat-label">{growthDaysRemaining} days left</p>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6">
-                      <Card className="dashboard-card lg:col-span-4 grow-mission-hub">
-                        <CardHeader>
-                          <CardTitle className="text-lg flex items-center gap-2">
-                            <Target className="h-5 w-5 text-blue-500" />
-                            Daily Mission Hub
-                          </CardTitle>
-                          <CardDescription>Touch one productive action, then claim today.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                          <div className="grow-daily-status">
-                            <div>
-                              <p className="text-xs uppercase tracking-[0.2em]" style={{ color: "var(--text-secondary)" }}>
-                                Status
-                              </p>
-                              <p className="text-2xl font-extrabold gradient-text">
-                                {growthCheckedInToday ? "Claimed" : "Ready"}
-                              </p>
-                            </div>
-                            <div className={`grow-status-pulse ${growthCheckedInToday ? "is-complete" : ""}`}>
-                              {growthCheckedInToday ? "✓" : "!"}
-                            </div>
-                          </div>
-
-                          <div className="space-y-2 text-sm">
-                            <div className="grow-mission-item">
-                              <span className="grow-mission-dot">1</span>
-                              <div>
-                                <p className="font-semibold">Generate a fresh tag run</p>
-                                <p className="text-xs" style={{ color: "var(--text-secondary)" }}>Wake up your next upload idea.</p>
-                              </div>
-                            </div>
-                            <div className="grow-mission-item">
-                              <span className="grow-mission-dot">2</span>
-                              <div>
-                                <p className="font-semibold">Refine or write a description</p>
-                                <p className="text-xs" style={{ color: "var(--text-secondary)" }}>Keep the upload pipeline moving.</p>
-                              </div>
-                            </div>
-                            <div className="grow-mission-item">
-                              <span className="grow-mission-dot">3</span>
-                              <div>
-                                <p className="font-semibold">Upload or queue a beat</p>
-                                <p className="text-xs" style={{ color: "var(--text-secondary)" }}>Progress counts. Momentum matters.</p>
-                              </div>
-                            </div>
-                          </div>
-                          <Button
-                            onClick={handleCheckin}
-                            disabled={loadingGrowth}
-                            className="w-full btn-modern py-4 grow-claim-button"
-                          >
-                            <CheckCircle2 className="mr-2 h-5 w-5" />
-                            {loadingGrowth ? "Stamping..." : growthCheckedInToday ? "Today's Claim Locked" : "Claim Today's Streak"}
-                          </Button>
-                          <p className="text-xs text-center" style={{ color: "var(--text-secondary)" }}>
-                            {growthCheckedInToday ? "You already banked today's progress." : "One click after any real task. Keep it honest and keep it moving."}
-                          </p>
-                        </CardContent>
-                      </Card>
-
-                      <Card className="dashboard-card lg:col-span-8 grow-map-card">
-                        <CardHeader>
-                          <div className="flex flex-wrap justify-between gap-2 items-center">
-                            <CardTitle className="text-lg">120-Day Quest Map</CardTitle>
-                            <Button onClick={fetchCalendar} variant="outline" size="sm">Refresh</Button>
-                          </div>
-                          <CardDescription>Hit completed tiles, avoid missed breaks, and inspect each day like a level node.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                          <div className="grow-map-stats">
-                            <div className="grow-mini-pill">Next milestone: Day {nextGrowthMilestone}</div>
-                            <div className="grow-mini-pill">{growthDaysRemaining} days to finish</div>
-                            <div className="grow-mini-pill">{growthData.badges_earned?.length || 0} rewards unlocked</div>
-                          </div>
-                          {calendarData && (
-                            <div className="grid grid-cols-5 sm:grid-cols-8 lg:grid-cols-10 gap-2">
-                              {Object.entries(calendarData.calendar || {}).slice(0, 120).map(([date, statusData], index) => {
-                                const dayNumber = index + 1;
-                                const safeStatusData = statusData && typeof statusData === "object" ? statusData : null;
-                                const status = typeof statusData === "string" ? statusData : (safeStatusData?.status || "future");
-                                const activity = safeStatusData?.activity || null;
-                                const tileClass =
-                                  status === "completed" ? "grow-tile-complete" :
-                                  status === "missed" ? "grow-tile-missed" :
-                                  status === "today" ? "grow-tile-today" :
-                                  "grow-tile-future";
-
-                                return (
-                                  <button
-                                    key={date}
-                                    type="button"
-                                    className={`grow-calendar-tile ${tileClass}`}
-                                    onClick={() => setSelectedDay({ date, status, dayNumber, activity })}
-                                    title={`Day ${dayNumber} - ${date}`}
-                                  >
-                                    <span className="grow-day-id">D{dayNumber}</span>
-                                    {status === "completed" && <span className="text-[10px] font-extrabold">✓</span>}
-                                    {status === "missed" && <span className="text-[10px] font-extrabold">X</span>}
-                                    {status === "today" && <span className="text-[10px] font-extrabold">NOW</span>}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          )}
-
-                          {selectedDay && (
-                            <div className="grow-day-panel">
-                              <div className="flex justify-between items-start gap-2">
-                                <div>
-                                  <p className="font-bold gradient-text text-lg">Day {selectedDay.dayNumber}</p>
-                                  <p className="text-sm" style={{ color: "var(--text-secondary)" }}>{selectedDay.date}</p>
-                                </div>
-                                <Button variant="ghost" size="sm" onClick={() => setSelectedDay(null)}>×</Button>
-                              </div>
-                              <div className="mt-3 text-sm">
-                                {selectedDay.status === "completed" && (
-                                  <p className="text-green-600 font-semibold">Mission cleared: {selectedDay.activity || "activity recorded"}</p>
-                                )}
-                                {selectedDay.status === "missed" && (
-                                  <p className="text-red-600 font-semibold">Missed day. Momentum broke here.</p>
-                                )}
-                                {selectedDay.status === "today" && (
-                                  <p className="text-purple-600 font-semibold">Live mission node. Do one real task, then lock it in.</p>
-                                )}
-                                {selectedDay.status === "future" && (
-                                  <p style={{ color: "var(--text-secondary)" }}>Future tile. Protect the run until you get here.</p>
-                                )}
-                              </div>
-                            </div>
-                          )}
-
-                          <div className="flex flex-wrap gap-2 text-xs">
-                            <span className="grow-legend-chip"><span className="grow-dot bg-green-500" /> Complete</span>
-                            <span className="grow-legend-chip"><span className="grow-dot bg-red-500" /> Missed</span>
-                            <span className="grow-legend-chip"><span className="grow-dot bg-purple-500" /> Today</span>
-                            <span className="grow-legend-chip"><span className="grow-dot bg-gray-500" /> Future</span>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </div>
-
-                    {growthData.badges_earned?.length > 0 && (
-                      <Card className="dashboard-card grow-reward-vault">
-                        <CardHeader>
-                          <CardTitle className="text-lg">🏆 Reward Vault</CardTitle>
-                          <CardDescription>Visible proof you stayed locked in.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="flex flex-wrap gap-2">
-                            {growthData.badges_earned.map((badge, idx) => (
-                              <span key={idx} className="grow-badge-chip">{badge}</span>
-                            ))}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {!isPro && (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="text-center p-6 rounded-xl border-2 shadow-lg max-w-md"
-                    style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--accent-primary)' }}
-                  >
-                    <p className="text-lg font-semibold mb-2">Unlock Grow in 120</p>
-                    <p className="text-sm mb-4" style={{color: 'var(--text-secondary)'}}>
-                      Premium-only momentum tracking. Upgrade to access the 120-day challenge.
-                    </p>
-                    <Button onClick={() => setShowUpgradeModal(true)} className="btn-modern">
-                      Upgrade Plan
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </div>
           </TabsContent>
         </Tabs>
       </div>
@@ -3496,56 +1944,8 @@ const Dashboard = ({ setIsAuthenticated, standaloneGrow = false }) => {
         loading={upgradingSubscription}
       />
 
-      {/* Check-in Prompt Dialog */}
-      <Dialog open={showCheckinPrompt} onOpenChange={setShowCheckinPrompt}>
-        <DialogContent className="sm:max-w-md" data-testid="checkin-prompt-dialog">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <span className="text-2xl">🔥</span>
-              Keep Your Streak Alive!
-            </DialogTitle>
-            <DialogDescription>
-              Great work! You just completed an activity. Check in now to maintain your Grow in 120 streak!
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            {growthData && (
-              <div className="text-center p-4 rounded-lg" style={{backgroundColor: 'var(--bg-secondary)'}}>
-                <p className="text-3xl font-bold gradient-text mb-1">{growthData.current_streak}</p>
-                <p className="text-sm font-semibold" style={{color: 'var(--text-secondary)'}}>Day Streak</p>
-              </div>
-            )}
-            <div className="flex gap-2">
-              <Button
-                onClick={async () => {
-                  setShowCheckinPrompt(false);
-                  await handleCheckin();
-                }}
-                className="flex-1 btn-modern"
-                data-testid="checkin-now-btn"
-              >
-                <CheckCircle2 className="mr-2 h-5 w-5" />
-                Check In Now
-              </Button>
-              <Button
-                onClick={() => setShowCheckinPrompt(false)}
-                variant="outline"
-                className="flex-1"
-                data-testid="checkin-later-btn"
-              >
-                Maybe Later
-              </Button>
-            </div>
-            <p className="text-xs text-center" style={{color: 'var(--text-secondary)'}}>
-              You can also check in from the Grow in 120 page anytime
-            </p>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };
 
 export default Dashboard;
-
-

@@ -50,13 +50,14 @@ class TestSubscriptionStatus:
 
         with patch('backend.server.db') as mock_db:
             mock_db.users.find_one = AsyncMock(return_value=user_doc)
+            mock_db.users.update_one = AsyncMock()
 
             status = await server.get_user_subscription_status("pro_user")
 
             assert status['is_subscribed'] is True
-            assert status['plan'] == 'pro'
-            assert status['credits_remaining'] == -1
-            assert status['upload_credits_remaining'] == -1
+            assert status['plan'] == 'plus'
+            assert status['credits_remaining'] == server._get_paid_plan_limits('plus')['ai_credits']
+            assert status['upload_credits_remaining'] == server._get_paid_plan_limits('plus')['upload_credits']
 
     async def test_free_user_new_day_reset(self):
         """Test free user credits reset on a new day."""
@@ -95,8 +96,8 @@ class TestSubscriptionStatus:
             # Verify status
             assert status['is_subscribed'] is False
             assert status['plan'] == 'free'
-            assert status['credits_remaining'] == 3
-            assert status['upload_credits_remaining'] == 3
+            assert status['credits_remaining'] == 2
+            assert status['upload_credits_remaining'] == 1
 
             # Verify resets_at is correctly calculated for tomorrow
             expected_resets_at = "2024-01-03T00:00:00+00:00"
@@ -134,8 +135,8 @@ class TestSubscriptionStatus:
             # Verify status
             assert status['is_subscribed'] is False
             assert status['plan'] == 'free'
-            assert status['credits_remaining'] == 2 # 3 - 1
-            assert status['upload_credits_remaining'] == 1 # 3 - 2
+            assert status['credits_remaining'] == 1 # 2 - 1
+            assert status['upload_credits_remaining'] == 0 # 1 - 2 floored at 0
 
     async def test_free_user_exhausted_credits(self):
         """Test free user with no credits remaining."""
@@ -166,5 +167,5 @@ class TestSubscriptionStatus:
             mock_db.users.update_one.assert_not_called()
 
             assert status['is_subscribed'] is False
-            assert status['credits_remaining'] == 0 # Max(0, 3-5)
+            assert status['credits_remaining'] == 0 # Max(0, 2-5)
             assert status['upload_credits_remaining'] == 0

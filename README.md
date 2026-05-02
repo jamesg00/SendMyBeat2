@@ -15,7 +15,6 @@ The product is built around a fast publish loop:
 - Beat tools: beat analysis, beat fix, thumbnail check
 - Artwork finder: web image/artwork search for artist and project-inspired visuals
 - YouTube analytics: channel analysis with AI growth recommendations
-- BeatHelper: queue-based planning and upload workflow helpers
 - Producer Spotlight: public producer profiles with fallback avatars and optional Google connection
 - Growth tools: `Grow in 120` challenge and streak tracking
 

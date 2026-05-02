@@ -38,16 +38,29 @@ import ipaddress
 from cryptography.fernet import Fernet, InvalidToken as FernetInvalidToken
 from io import BytesIO
 from PIL import Image, ImageOps
-from storage import media_storage
-from services.background_jobs import BackgroundJobService
-from services.spotlight_service import SpotlightService
-from models_spotlight import (
-    ProducerProfile,
-    ProducerProfileUpdate,
-    SpotlightResponse,
-    VerificationApplicationRequest,
-    VerificationReviewRequest,
-)
+from zoneinfo import ZoneInfo
+try:
+    from backend.storage import media_storage
+    from backend.services.background_jobs import BackgroundJobService
+    from backend.services.spotlight_service import SpotlightService
+    from backend.models_spotlight import (
+        ProducerProfile,
+        ProducerProfileUpdate,
+        SpotlightResponse,
+        VerificationApplicationRequest,
+        VerificationReviewRequest,
+    )
+except ImportError:
+    from storage import media_storage
+    from services.background_jobs import BackgroundJobService
+    from services.spotlight_service import SpotlightService
+    from models_spotlight import (
+        ProducerProfile,
+        ProducerProfileUpdate,
+        SpotlightResponse,
+        VerificationApplicationRequest,
+        VerificationReviewRequest,
+    )
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -95,10 +108,6 @@ SENDGRID_FROM_EMAIL = os.environ.get('SENDGRID_FROM_EMAIL')
 VERIFICATION_REVIEW_EMAIL = os.environ.get("VERIFICATION_REVIEW_EMAIL", "jamesbeatsmanagement1234@gmail.com").strip()
 TEXTBELT_API_KEY = os.environ.get('TEXTBELT_API_KEY')
 REMINDER_SERIALIZER = URLSafeSerializer(REMINDER_SECRET)
-BEATHELPER_DEFAULT_APPROVAL_TIMEOUT_HOURS = int(os.environ.get("BEATHELPER_DEFAULT_APPROVAL_TIMEOUT_HOURS", "12"))
-BEATHELPER_DEFAULT_NOTIFY_CHANNEL = os.environ.get("BEATHELPER_DEFAULT_NOTIFY_CHANNEL", "email").strip().lower()
-BEATHELPER_SCHEDULER_INTERVAL_SECONDS = int(os.environ.get("BEATHELPER_SCHEDULER_INTERVAL_SECONDS", "300"))
-BEATHELPER_AUTO_DISPATCH_ENABLED = os.environ.get("BEATHELPER_AUTO_DISPATCH_ENABLED", "true").strip().lower() == "true"
 MAX_AUDIO_UPLOAD_BYTES = 200 * 1024 * 1024
 MAX_IMAGE_UPLOAD_BYTES = 12 * 1024 * 1024
 AUTH_RATE_LIMIT_WINDOW_SECONDS = 300
@@ -146,6 +155,31 @@ def _client_ip(request: Request) -> str:
     real_ip = request.headers.get("x-real-ip", "").strip()
     host = forwarded_for or real_ip or (request.client.host if request.client else "unknown")
     return host or "unknown"
+
+
+def _get_request_timezone(request: Request | None) -> timezone | ZoneInfo:
+    raw = (request.headers.get("x-timezone") if request else "") or ""
+    tz_name = raw.strip()
+    if tz_name:
+        try:
+            return ZoneInfo(tz_name)
+        except Exception:
+            logging.warning(f"Invalid x-timezone header received: {tz_name}")
+    return timezone.utc
+
+
+def _get_request_day_bounds(request: Request | None) -> dict[str, Any]:
+    tzinfo = _get_request_timezone(request)
+    now_local = datetime.now(tzinfo)
+    local_today = now_local.date()
+    start_local = datetime.combine(local_today, datetime.min.time(), tzinfo=tzinfo)
+    end_local = start_local + timedelta(days=1)
+    return {
+        "timezone": tzinfo,
+        "today": local_today.isoformat(),
+        "start_utc_iso": start_local.astimezone(timezone.utc).isoformat(),
+        "end_utc_iso": end_local.astimezone(timezone.utc).isoformat(),
+    }
 
 
 def _check_rate_limit(bucket_key: str, limit: int, window_seconds: int) -> None:
@@ -374,7 +408,6 @@ MAX_NET_REVENUE_USD = float(os.environ.get("MAX_NET_REVENUE_USD", "10.95"))
 # ============ LLM Helper ============
 _llm_client = None
 _llm_config = None
-_beathelper_scheduler_task: asyncio.Task | None = None
 _upload_job_worker_task: asyncio.Task | None = None
 _spotlight_refresh_task: asyncio.Task | None = None
 UPLOAD_JOB_POLL_INTERVAL_SECONDS = int(os.environ.get("UPLOAD_JOB_POLL_INTERVAL_SECONDS", "2"))
@@ -811,17 +844,6 @@ class DescriptionUpdate(BaseModel):
     title: Optional[str] = None
     content: Optional[str] = None
 
-class RefineDescriptionRequest(BaseModel):
-    description: str
-
-class GenerateDescriptionRequest(BaseModel):
-    email: Optional[str] = None
-    socials: Optional[str] = None
-    key: Optional[str] = None
-    bpm: Optional[str] = None
-    prices: Optional[str] = None
-    additional_info: Optional[str] = None
-
 class TagGenerationRequest(BaseModel):
     query: str
     custom_tags: Optional[List[str]] = []  # User's custom tags
@@ -834,6 +856,7 @@ class TagHistorySaveRequest(BaseModel):
 class TagHistoryUpdateRequest(BaseModel):
     tags: List[str]
     excluded_tags: Optional[List[str]] = []
+    added_tags: Optional[List[str]] = []
 
 class TagJoinRequest(BaseModel):
     queries: List[str]
@@ -862,7 +885,9 @@ class TagGenerationResponse(BaseModel):
     user_id: str
     query: str
     tags: List[str]
+    scored_tags: List[Dict[str, Any]] = Field(default_factory=list)
     excluded_tags: Optional[List[str]] = None
+    feedback_summary: Dict[str, int] = Field(default_factory=dict)
     debug: Optional[Dict[str, Any]] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -909,6 +934,10 @@ class BeatAnalysisRequest(BaseModel):
     title: str
     tags: List[str]
     description: str = ""
+    channel_name: str = ""
+    subscriber_count: int = 0
+    total_videos: int = 0
+    recent_avg_views: int = 0
 
 class BeatAnalysisResponse(BaseModel):
     overall_score: int  # 0-100
@@ -919,6 +948,14 @@ class BeatAnalysisResponse(BaseModel):
     weaknesses: List[str]
     suggestions: List[str]
     predicted_performance: str  # "Poor", "Average", "Good", "Excellent"
+    competition_level: Optional[str] = None
+    title_diagnosis: Optional[str] = None
+    small_channel_strategy: Optional[str] = None
+    packaging_priority: Optional[str] = None
+    better_title_angles: List[str] = Field(default_factory=list)
+    tag_strategy: Optional[str] = None
+    channel_stage: Optional[str] = None
+    channel_fit: Optional[str] = None
 
 class BeatFixRequest(BaseModel):
     title: str
@@ -941,6 +978,9 @@ class ThumbnailCheckResponse(BaseModel):
     suggestions: List[str]
     text_overlay_suggestion: str
     branding_suggestion: str
+    ctr_risk: Optional[str] = None
+    packaging_priority: Optional[str] = None
+    hook_alignment: Optional[str] = None
 
 class GeneratedImageResult(BaseModel):
     id: str
@@ -956,19 +996,13 @@ class ImageGenerateRequest(BaseModel):
     title: str
     tags: List[str] = []
     k: int = 6
+    excluded_urls: List[str] = []
 
 class ImageGenerateResponse(BaseModel):
     query_used: str
     detected_artists: List[str]
     results: List[GeneratedImageResult]
-
-class BeatHelperImageSearchRequest(BaseModel):
-    search_query: Optional[str] = None
-    target_artist: Optional[str] = None
-    beat_type: Optional[str] = None
-    generated_title_override: Optional[str] = None
-    context_tags: List[str] = []
-    k: int = 8
+    has_more: bool = False
 
 class UploadImageFromUrlRequest(BaseModel):
     image_url: str
@@ -993,7 +1027,7 @@ class CheckinResponse(BaseModel):
 
 class SubscriptionStatus(BaseModel):
     is_subscribed: bool
-    plan: Literal["free", "plus", "max"]
+    plan: Literal["free", "plus", "max", "pro"]
     daily_credits_remaining: int
     daily_credits_total: int
     upload_credits_remaining: int
@@ -1026,78 +1060,6 @@ class OpsControlsUpdateRequest(BaseModel):
     disabled_features: Optional[Dict[str, bool]] = None
     queue_job_types_when_busy: Optional[Dict[str, bool]] = None
     overload_message: Optional[str] = None
-
-
-class BeatHelperQueueCreateRequest(BaseModel):
-    beat_file_id: str
-    image_file_id: Optional[str] = None
-    beat_type: str
-    target_artist: str
-    context_tags: List[str] = []
-    ai_choose_image: bool = False
-    approval_timeout_hours: int = BEATHELPER_DEFAULT_APPROVAL_TIMEOUT_HOURS
-    auto_upload_if_no_response: bool = False
-    notify_channel: Literal["none", "email", "sms", "email_sms"] = "email"
-    privacy_status: Literal["public", "unlisted", "private"] = "public"
-    generated_title_override: Optional[str] = None
-    template_id: Optional[str] = None
-
-
-class BeatHelperQueueUpdateRequest(BaseModel):
-    status: Literal["queued", "pending_approval", "approved", "skipped", "expired"]
-
-
-class BeatHelperQueueEditRequest(BaseModel):
-    generated_title: Optional[str] = None
-    target_artist: Optional[str] = None
-    beat_type: Optional[str] = None
-    generated_description: Optional[str] = None
-    generated_tags: Optional[List[str]] = None
-    context_tags: Optional[List[str]] = None
-    beat_file_id: Optional[str] = None
-    image_file_id: Optional[str] = None
-    notify_channel: Optional[Literal["none", "email", "sms", "email_sms"]] = None
-    privacy_status: Optional[Literal["public", "unlisted", "private"]] = None
-    approval_timeout_hours: Optional[int] = None
-    auto_upload_if_no_response: Optional[bool] = None
-    template_id: Optional[str] = None
-
-
-class BeatHelperContactSettingsRequest(BaseModel):
-    email: Optional[str] = None
-    phone: Optional[str] = None
-    email_enabled: bool = False
-    sms_enabled: bool = False
-
-
-class BeatHelperTagTemplateCreateRequest(BaseModel):
-    name: str
-    tags: List[str] = []
-
-
-class BeatHelperTagTemplateUpdateRequest(BaseModel):
-    name: Optional[str] = None
-    tags: Optional[List[str]] = None
-
-
-class BeatHelperStageUploadRequest(BaseModel):
-    file_id: str
-
-
-class BeatHelperAssistTitleRequest(BaseModel):
-    target_artist: str
-    beat_type: str
-    current_title: Optional[str] = None
-    context_tags: List[str] = []
-
-
-class BeatHelperUserResponseRequest(BaseModel):
-    action: Literal["approve", "skip", "change"]
-    generated_title: Optional[str] = None
-    target_artist: Optional[str] = None
-    beat_type: Optional[str] = None
-    beat_file_id: Optional[str] = None
-    image_file_id: Optional[str] = None
 
 
 THEME_ALLOWED_VARIABLES = {
@@ -1165,12 +1127,13 @@ def _sanitize_theme_variables(raw_variables: Any) -> Dict[str, str]:
     return safe
 
 
-def _dedupe_generated_image_results(results: list[dict], k: int) -> list[dict]:
+def _dedupe_generated_image_results(results: list[dict], k: int, excluded_urls: set[str] | None = None) -> list[dict]:
     deduped: list[dict] = []
     seen = set()
+    excluded_urls = excluded_urls or set()
     for item in results:
         url = (item.get("image_url") or "").strip()
-        if not url or url in seen:
+        if not url or url in seen or url in excluded_urls:
             continue
         seen.add(url)
         deduped.append(item)
@@ -1552,10 +1515,13 @@ def _current_month_key() -> str:
 async def _get_user_monthly_llm_cost(user_id: str) -> float:
     now = datetime.now(timezone.utc)
     start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    result = await db.usage_logs.aggregate([
-        {"$match": {"user_id": user_id, "timestamp": {"$gte": start}}},
-        {"$group": {"_id": None, "total_cost": {"$sum": "$cost"}}}
-    ]).to_list(1)
+    try:
+        result = await db.usage_logs.aggregate([
+            {"$match": {"user_id": user_id, "timestamp": {"$gte": start}}},
+            {"$group": {"_id": None, "total_cost": {"$sum": "$cost"}}}
+        ]).to_list(1)
+    except (AttributeError, TypeError):
+        return 0.0
     if not result:
         return 0.0
     return float(result[0].get("total_cost") or 0.0)
@@ -1601,6 +1567,9 @@ def _resolve_subscription_plan(user_doc: dict) -> str:
     plan = (user_doc.get("subscription_plan") or "").strip().lower()
     subscription_status = str(user_doc.get("subscription_status") or "").strip().lower()
     has_billing_link = bool(user_doc.get("stripe_subscription_id") or user_doc.get("stripe_customer_id"))
+
+    if plan == "pro":
+        plan = "plus"
 
     if plan in {"plus", "max"} and _is_paid_subscription_status(subscription_status):
         return plan
@@ -1824,7 +1793,10 @@ async def check_and_use_credit(user_id: str, consume: bool = True) -> bool:
     """Check if user has credits and optionally use one. Returns True if allowed."""
     status = await get_user_subscription_status(user_id)
 
-    if status['plan'] in {"plus", "max"}:
+    if status['plan'] == "pro":
+        return True
+
+    if status['plan'] in {"plus", "max", "pro"}:
         if status.get("cost_guardrail_hit"):
             return False
         if status['credits_remaining'] <= 0:
@@ -1852,7 +1824,9 @@ async def check_and_use_credit(user_id: str, consume: bool = True) -> bool:
 async def consume_credit(user_id: str) -> None:
     """Consume one credit for free users after a successful operation."""
     status = await get_user_subscription_status(user_id)
-    if status['plan'] in {"plus", "max"}:
+    if status['plan'] == "pro":
+        return
+    if status['plan'] in {"plus", "max", "pro"}:
         await db.users.update_one(
             {"id": user_id},
             {"$inc": {"plus_monthly_ai_used": 1}}
@@ -1867,7 +1841,10 @@ async def check_and_use_upload_credit(user_id: str) -> bool:
     """Check if user has upload credits and use one. Returns True if successful."""
     status = await get_user_subscription_status(user_id)
 
-    if status['plan'] in {"plus", "max"}:
+    if status['plan'] == "pro":
+        return True
+
+    if status['plan'] in {"plus", "max", "pro"}:
         if status['upload_credits_remaining'] <= 0:
             return False
         await db.users.update_one(
@@ -1897,7 +1874,7 @@ async def ensure_has_credit(user_id: str, feature_name: str = "generations") -> 
     if not has_credit:
         status = await get_user_subscription_status(user_id)
         guardrail_hit = bool(status.get("cost_guardrail_hit"))
-        message = f"Limit reached. Upgrade your plan for more {feature_name}."
+        message = f"Daily limit reached. Upgrade your plan for more {feature_name}."
         if guardrail_hit:
             if status.get("plan") == "plus":
                 message = "Your Plus monthly AI cost guardrail was reached. Upgrade to Max for more monthly capacity."
@@ -1910,43 +1887,6 @@ async def ensure_has_credit(user_id: str, feature_name: str = "generations") -> 
                 "resets_at": status.get('resets_at')
             }
         )
-
-
-async def _can_use_free_monthly_analytics(user_id: str) -> bool:
-    user_doc = await db.users.find_one(
-        {"id": user_id},
-        {"analytics_free_usage_month": 1, "analytics_free_usage_count": 1}
-    )
-    current_month = datetime.now(timezone.utc).strftime("%Y-%m")
-    if not user_doc:
-        return False
-
-    used_month = str(user_doc.get("analytics_free_usage_month") or "")
-    used_count = int(user_doc.get("analytics_free_usage_count") or 0)
-    if used_month != current_month:
-        return True
-    return used_count < 1
-
-
-async def _consume_free_monthly_analytics(user_id: str) -> None:
-    user_doc = await db.users.find_one(
-        {"id": user_id},
-        {"analytics_free_usage_month": 1, "analytics_free_usage_count": 1}
-    )
-    current_month = datetime.now(timezone.utc).strftime("%Y-%m")
-    used_month = str((user_doc or {}).get("analytics_free_usage_month") or "")
-
-    if used_month != current_month:
-        await db.users.update_one(
-            {"id": user_id},
-            {"$set": {"analytics_free_usage_month": current_month, "analytics_free_usage_count": 1}},
-        )
-        return
-
-    await db.users.update_one(
-        {"id": user_id},
-        {"$inc": {"analytics_free_usage_count": 1}},
-    )
 
 
 # ============ Auth Helper Functions ============
@@ -2074,16 +2014,19 @@ async def _set_cached_ai_payload(
 
 
 async def _find_active_background_job(*, current_user: dict, job_type: str, cache_key: str) -> Optional[dict]:
-    return await db.upload_jobs.find_one(
-        {
-            "user_id": current_user["id"],
-            "type": job_type,
-            "status": {"$in": ["queued", "processing"]},
-            "payload.cache_key": cache_key,
-        },
-        {"_id": 0},
-        sort=[("created_at", -1)],
-    )
+    try:
+        return await db.upload_jobs.find_one(
+            {
+                "user_id": current_user["id"],
+                "type": job_type,
+                "status": {"$in": ["queued", "processing"]},
+                "payload.cache_key": cache_key,
+            },
+            {"_id": 0},
+            sort=[("created_at", -1)],
+        )
+    except (AttributeError, TypeError):
+        return None
 
 
 def _default_ops_controls() -> dict[str, Any]:
@@ -2102,8 +2045,6 @@ def _default_ops_controls() -> dict[str, Any]:
             "image_search": False,
             "beat_analysis": False,
             "beat_fix": False,
-            "description_generate": False,
-            "description_refine": False,
         },
         "queue_job_types_when_busy": {
             "youtube_upload": True,
@@ -2139,7 +2080,10 @@ def _merge_ops_controls(raw: Optional[dict]) -> dict[str, Any]:
 
 
 async def _get_ops_controls() -> dict[str, Any]:
-    doc = await db.system_settings.find_one({"key": "ops_controls"}, {"_id": 0, "value": 1, "updated_at": 1})
+    try:
+        doc = await db.system_settings.find_one({"key": "ops_controls"}, {"_id": 0, "value": 1, "updated_at": 1})
+    except (AttributeError, TypeError):
+        return _default_ops_controls()
     value = dict(doc.get("value") or {}) if doc else {}
     if doc and doc.get("updated_at") and "updated_at" not in value:
         value["updated_at"] = doc.get("updated_at")
@@ -2168,21 +2112,26 @@ async def _get_background_job_stats() -> dict[str, Any]:
     pipeline = [
         {"$group": {"_id": "$status", "count": {"$sum": 1}}},
     ]
-    rows = await db.upload_jobs.aggregate(pipeline).to_list(None)
+    try:
+        rows = await db.upload_jobs.aggregate(pipeline).to_list(None)
+        failed_recent = await db.upload_jobs.count_documents(
+            {
+                "status": "failed",
+                "updated_at": {"$gte": (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()},
+            }
+        )
+        oldest_queued = await db.upload_jobs.find_one(
+            {"status": "queued"},
+            {"_id": 0, "created_at": 1, "type": 1},
+            sort=[("created_at", 1)],
+        )
+    except (AttributeError, TypeError):
+        rows = []
+        failed_recent = 0
+        oldest_queued = None
     counts = {str(row.get("_id") or ""): int(row.get("count") or 0) for row in rows}
     queued = counts.get("queued", 0)
     processing = counts.get("processing", 0)
-    failed_recent = await db.upload_jobs.count_documents(
-        {
-            "status": "failed",
-            "updated_at": {"$gte": (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()},
-        }
-    )
-    oldest_queued = await db.upload_jobs.find_one(
-        {"status": "queued"},
-        {"_id": 0, "created_at": 1, "type": 1},
-        sort=[("created_at", 1)],
-    )
     return {
         "queued": queued,
         "processing": processing,
@@ -2270,12 +2219,15 @@ async def _guard_heavy_feature(
 
     job_stats = await _get_background_job_stats()
     if job_type:
-        user_active_jobs = await db.upload_jobs.count_documents(
-            {
-                "user_id": current_user["id"],
-                "status": {"$in": ["queued", "processing"]},
-            }
-        )
+        try:
+            user_active_jobs = await db.upload_jobs.count_documents(
+                {
+                    "user_id": current_user["id"],
+                    "status": {"$in": ["queued", "processing"]},
+                }
+            )
+        except (AttributeError, TypeError):
+            user_active_jobs = 0
         if user_active_jobs >= int(controls.get("max_user_active_jobs") or OPS_DEFAULT_MAX_USER_ACTIVE_JOBS):
             raise HTTPException(status_code=429, detail={"message": "You already have too many active jobs running. Wait for one to finish.", "code": "too_many_active_jobs"})
 
@@ -2386,34 +2338,169 @@ async def _update_upload_job(
     )
 
 
-async def _finalize_beathelper_upload_job(job: dict, *, success: bool, result: dict | None = None, error: str | None = None) -> None:
-    payload = job.get("payload") or {}
-    item_id = payload.get("beat_helper_item_id")
-    if not item_id:
-        return
+async def _claim_next_background_job() -> dict | None:
+    return await background_job_service.claim_next_job()
 
-    updates: dict[str, Any] = {"updated_at": _safe_iso_now()}
-    if success:
-        updates.update({
-            "status": "uploaded",
-            "uploaded_at": _safe_iso_now(),
-            "video_id": (result or {}).get("video_id"),
-            "video_url": (result or {}).get("video_url"),
-            "upload_job_id": job.get("id"),
-            "upload_job_status": "succeeded",
-        })
-    else:
-        updates.update({
-            "status": "upload_failed",
-            "upload_job_id": job.get("id"),
-            "upload_job_status": "failed",
-            "upload_error": error,
-        })
 
-    await db.beat_helper_queue.update_one(
-        {"id": item_id, "user_id": job.get("user_id")},
-        {"$set": updates},
+async def _requeue_stale_background_jobs() -> None:
+    await background_job_service.requeue_stale_jobs()
+
+
+async def _process_background_job(job: dict) -> None:
+    await background_job_service.process_job(job)
+
+
+async def _background_job_worker_loop() -> None:
+    await background_job_service.worker_loop()
+
+
+async def _create_background_job(
+    *,
+    current_user: dict,
+    job_type: str,
+    payload: dict[str, Any],
+    message: str = "Queued for background processing.",
+) -> dict:
+    return await background_job_service.create_job(
+        current_user=current_user,
+        job_type=job_type,
+        payload=payload,
+        message=message,
     )
+
+
+def _resolve_ffmpeg_binary() -> str:
+    ffmpeg_bin = shutil.which("ffmpeg")
+    if not ffmpeg_bin:
+        raise HTTPException(status_code=500, detail="FFmpeg is not installed on the server.")
+    return ffmpeg_bin
+
+
+def _escape_ffmpeg_text(value: str) -> str:
+    text = str(value or "")
+    text = text.replace("\\", "\\\\")
+    text = text.replace(":", r"\:")
+    text = text.replace("'", r"\'")
+    text = text.replace("%", r"\%")
+    text = text.replace(",", r"\,")
+    text = text.replace("[", r"\[")
+    text = text.replace("]", r"\]")
+    return text
+
+
+def _build_youtube_watermark_filter(*, target_w: int, target_h: int, background_color: str) -> str:
+    text = _escape_ffmpeg_text("Upload your beats for free on SendMyBeat")
+    font_color = "black@0.78" if background_color == "white" else "white@0.78"
+    border_color = "white@0.38" if background_color == "white" else "black@0.45"
+    font_size = max(22, min(34, int(target_w * 0.022)))
+    margin_x = max(24, int(target_w * 0.025))
+    margin_y = max(20, int(target_h * 0.03))
+    return (
+        f"drawtext=text='{text}':"
+        f"fontcolor={font_color}:"
+        f"fontsize={font_size}:"
+        f"x=w-text_w-{margin_x}:"
+        f"y=h-text_h-{margin_y}:"
+        f"borderw=2:"
+        f"bordercolor={border_color}"
+    )
+
+
+def _build_render_filter(payload: dict[str, Any]) -> str:
+    target_w = int(payload["target_w"])
+    target_h = int(payload["target_h"])
+    scale_x = float(payload["image_scale_x"])
+    scale_y = float(payload["image_scale_y"])
+    pos_x = float(payload["image_pos_x"])
+    pos_y = float(payload["image_pos_y"])
+    rotation_degrees = float(payload["image_rotation"])
+    background_color = str(payload["background_color"])
+    rotation_radians = rotation_degrees * 3.141592653589793 / 180.0
+
+    overlay_x = f"(W-w)/2+({pos_x:.4f}*W*0.25)"
+    overlay_y = f"(H-h)/2+({pos_y:.4f}*H*0.25)"
+    filter_chain = (
+        f"color=c={background_color}:s={target_w}x{target_h}:r=30[bg];"
+        f"[0:v]scale=iw*{scale_x:.4f}:ih*{scale_y:.4f},"
+        f"rotate={rotation_radians:.8f}:c=none:ow=rotw(iw):oh=roth(ih)[art];"
+        f"[bg][art]overlay=x='{overlay_x}':y='{overlay_y}':shortest=1[composite]"
+    )
+    if not payload.get("remove_watermark"):
+        watermark_filter = _build_youtube_watermark_filter(
+            target_w=target_w,
+            target_h=target_h,
+            background_color=background_color,
+        )
+        filter_chain += f";[composite]{watermark_filter}[vout]"
+    else:
+        filter_chain += ";[composite]null[vout]"
+    return filter_chain
+
+
+async def _render_youtube_video(
+    *,
+    audio_upload: dict,
+    image_upload: dict,
+    payload: dict[str, Any],
+) -> Path:
+    ffmpeg_bin = _resolve_ffmpeg_binary()
+    output_path = media_storage.create_temp_path(".mp4")
+    visual_kind = _visual_kind_from_upload(image_upload)
+    filter_complex = _build_render_filter(payload)
+
+    async with media_storage.local_path_for_processing(image_upload) as image_path:
+        async with media_storage.local_path_for_processing(audio_upload) as audio_path:
+            command = [ffmpeg_bin, "-y"]
+            if visual_kind == "video":
+                command.extend(["-stream_loop", "-1", "-i", str(image_path)])
+            else:
+                command.extend(["-loop", "1", "-framerate", "30", "-i", str(image_path)])
+
+            command.extend(
+                [
+                    "-i",
+                    str(audio_path),
+                    "-filter_complex",
+                    filter_complex,
+                    "-map",
+                    "[vout]",
+                    "-map",
+                    "1:a",
+                    "-c:v",
+                    "libx264",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-c:a",
+                    "aac",
+                    "-b:a",
+                    "192k",
+                    "-r",
+                    "30",
+                    "-movflags",
+                    "+faststart",
+                    "-shortest",
+                    str(output_path),
+                ]
+            )
+
+            completed = await asyncio.to_thread(
+                subprocess.run,
+                command,
+                capture_output=True,
+                text=True,
+            )
+
+    if completed.returncode != 0:
+        try:
+            output_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+        raise HTTPException(
+            status_code=500,
+            detail=f"Video creation failed: {(completed.stderr or completed.stdout or 'FFmpeg failed').strip()}",
+        )
+
+    return output_path
 
 
 async def _build_youtube_upload_job_payload(
@@ -2435,59 +2522,78 @@ async def _build_youtube_upload_job_payload(
     image_rotation: float,
     background_color: str,
     remove_watermark: bool,
-    beat_helper_item_id: str | None = None,
 ) -> dict[str, Any]:
-    user_id = current_user["id"]
-    user_sub_status = await get_user_subscription_status(user_id)
-    is_subscribed = bool(user_sub_status.get("is_subscribed", False))
+    safe_title = str(title or "").strip()
+    if not safe_title:
+        raise HTTPException(status_code=400, detail="Title is required.")
 
-    if remove_watermark and not is_subscribed:
+    safe_privacy_status = str(privacy_status or "public").strip().lower()
+    if safe_privacy_status not in {"public", "private", "unlisted"}:
+        raise HTTPException(status_code=400, detail="privacy_status must be public, private, or unlisted.")
+
+    sub_status = await get_user_subscription_status(current_user["id"])
+    if remove_watermark and sub_status.get("plan") not in {"plus", "max"}:
         raise HTTPException(
             status_code=402,
             detail={
-                "message": "Watermark removal is a Pro feature. Upgrade to Pro to remove watermarks!",
+                "message": "Watermark removal requires a Plus or Max plan.",
                 "feature": "remove_watermark",
-            }
+            },
         )
 
-    has_credit = await check_and_use_upload_credit(user_id)
-    if not has_credit:
-        status_doc = await get_user_subscription_status(user_id)
-        raise HTTPException(
-            status_code=402,
-            detail={
-                "message": "Upload limit reached. Upgrade to Plus or Max for more monthly uploads.",
-                "resets_at": status_doc.get("resets_at"),
-            }
+    connection = await db.youtube_connections.find_one({"user_id": current_user["id"]}, {"_id": 0, "user_id": 1})
+    if not connection:
+        raise HTTPException(status_code=400, detail="YouTube account not connected")
+
+    safe_description_override = str(description_override or "").strip()
+    description_doc = None
+    if safe_description_override:
+        description_content = safe_description_override
+    else:
+        safe_description_id = str(description_id or "").strip()
+        if not safe_description_id:
+            raise HTTPException(status_code=400, detail="description_id is required when no description override is provided.")
+        description_doc = await db.descriptions.find_one(
+            {"id": safe_description_id, "user_id": current_user["id"]},
+            {"_id": 0},
         )
+        if not description_doc:
+            raise HTTPException(status_code=404, detail="Referenced description not found.")
+        description_content = str(description_doc.get("content") or "").strip()
 
-    desc_doc = await db.descriptions.find_one({"id": description_id, "user_id": user_id})
-    if not desc_doc:
-        raise HTTPException(status_code=404, detail="Description not found")
+    if not description_content:
+        raise HTTPException(status_code=400, detail="Description content cannot be empty.")
 
-    description_text = str(description_override or desc_doc.get("content") or "").strip()
-    promo_line = "Visit www.sendmybeat.com to upload beats for free!"
-    if not is_subscribed:
-        if description_text.lower().startswith(promo_line.lower()):
-            pass
-        elif description_text:
-            description_text = f"{promo_line}\n{description_text}"
-        else:
-            description_text = promo_line
+    safe_audio_file_id = str(audio_file_id or "").strip()
+    safe_image_file_id = str(image_file_id or "").strip()
+    if not safe_audio_file_id or not safe_image_file_id:
+        raise HTTPException(status_code=400, detail="audio_file_id and image_file_id are required.")
 
-    tags: list[str] = []
-    if tags_id:
-        tags_doc = await db.tag_generations.find_one({"id": tags_id, "user_id": user_id})
-        if tags_doc:
-            tags = _clean_youtube_tags(tags_doc.get("tags") or [])
-            logging.info(
-                f"Using {len(tags)} tags out of {len(tags_doc.get('tags') or [])} generated for async upload job"
-            )
+    audio_upload = await db.uploads.find_one(
+        {"id": safe_audio_file_id, "user_id": current_user["id"], "file_type": "audio"},
+        {"_id": 0},
+    )
+    if not audio_upload:
+        raise HTTPException(status_code=404, detail="Referenced audio file not found.")
 
-    audio_file = await db.uploads.find_one({"id": audio_file_id, "user_id": user_id})
-    image_file = await db.uploads.find_one({"id": image_file_id, "user_id": user_id})
-    if not audio_file or not image_file:
-        raise HTTPException(status_code=404, detail="Audio and image files are required")
+    image_upload = await db.uploads.find_one(
+        {"id": safe_image_file_id, "user_id": current_user["id"], "file_type": "image"},
+        {"_id": 0},
+    )
+    if not image_upload:
+        raise HTTPException(status_code=404, detail="Referenced image file not found.")
+
+    tags_doc = None
+    clean_tags: list[str] = []
+    safe_tags_id = str(tags_id or "").strip()
+    if safe_tags_id:
+        tags_doc = await db.tag_generations.find_one(
+            {"id": safe_tags_id, "user_id": current_user["id"]},
+            {"_id": 0},
+        )
+        if not tags_doc:
+            raise HTTPException(status_code=404, detail="Referenced tag generation not found.")
+        clean_tags = _clean_youtube_tags(tags_doc.get("tags"))
 
     render_settings = _normalize_upload_render_settings(
         aspect_ratio=aspect_ratio,
@@ -2500,251 +2606,120 @@ async def _build_youtube_upload_job_payload(
         background_color=background_color,
     )
 
+    has_credit = await check_and_use_upload_credit(current_user["id"])
+    if not has_credit:
+        status = await get_user_subscription_status(current_user["id"])
+        raise HTTPException(
+            status_code=402,
+            detail={
+                "message": "Daily upload limit reached. Upgrade your plan for more uploads.",
+                "resets_at": status.get("resets_at"),
+            },
+        )
+
     return {
-        "title": str(title or "").strip(),
-        "description_id": description_id,
-        "tags_id": tags_id or "",
-        "privacy_status": str(privacy_status or "public").strip() or "public",
-        "audio_file_id": audio_file_id,
-        "image_file_id": image_file_id,
-        "description_text": description_text,
-        "tags": tags,
+        "title": safe_title,
+        "description_id": str(description_doc.get("id") or description_id or "").strip(),
+        "description": description_content,
+        "tags_id": safe_tags_id,
+        "tags": clean_tags,
+        "privacy_status": safe_privacy_status,
+        "audio_file_id": safe_audio_file_id,
+        "image_file_id": safe_image_file_id,
         "remove_watermark": bool(remove_watermark),
-        "is_subscribed": is_subscribed,
-        "beat_helper_item_id": beat_helper_item_id or "",
-        "render_settings": render_settings,
+        **render_settings,
     }
 
 
-async def _create_background_job(
-    *,
-    current_user: dict,
-    job_type: str,
-    payload: dict[str, Any],
-    message: str = "Queued for background processing.",
-) -> dict:
-    return await background_job_service.create_job(
-        current_user=current_user,
-        job_type=job_type,
-        payload=payload,
-        message=message,
-    )
-
-
 async def _create_youtube_upload_job(*, current_user: dict, payload: dict[str, Any]) -> dict:
-    job_doc = await _create_background_job(
+    return await _create_background_job(
         current_user=current_user,
         job_type="youtube_upload",
         payload=payload,
-        message="Queued for background processing.",
+        message="Queued YouTube upload job.",
     )
 
-    beat_helper_item_id = payload.get("beat_helper_item_id")
-    if beat_helper_item_id:
-        now = _safe_iso_now()
-        await db.beat_helper_queue.update_one(
-            {"id": beat_helper_item_id, "user_id": current_user["id"]},
-            {"$set": {
-                "status": "uploading",
-                "upload_job_id": job_doc["id"],
-                "upload_job_status": "queued",
-                "updated_at": now,
-            }}
-        )
 
-    return job_doc
-
-
-def _ensure_ffmpeg_available() -> str:
-    ffmpeg_path = shutil.which('ffmpeg')
-    if ffmpeg_path:
-        logging.info(f"Using FFmpeg at: {ffmpeg_path}")
-        return ffmpeg_path
-
-    logging.warning("FFmpeg not found, attempting to install...")
-    try:
-        subprocess.run(['apt-get', 'update'], capture_output=True, timeout=120)
-        subprocess.run(['apt-get', 'install', '-y', 'ffmpeg'], capture_output=True, timeout=300)
-        ffmpeg_path = shutil.which('ffmpeg')
-        if ffmpeg_path:
-            logging.info(f"FFmpeg successfully installed at {ffmpeg_path}")
-            return ffmpeg_path
-        raise RuntimeError("FFmpeg installation failed")
-    except Exception as install_error:
-        logging.error(f"Failed to install FFmpeg: {str(install_error)}")
-        raise RuntimeError("FFmpeg not available. Please contact support or install FFmpeg on the server.")
-
-
-async def _auto_checkin_growth_upload(user_id: str) -> None:
-    try:
-        today = datetime.now(timezone.utc).date().isoformat()
-        growth = await db.growth_streaks.find_one({"user_id": user_id})
-
-        if growth and growth.get('last_checkin_date') != today:
-            last_checkin = growth.get('last_checkin_date')
-            current_streak = growth.get('current_streak', 0)
-
-            if last_checkin:
-                last_date = datetime.fromisoformat(last_checkin).date()
-                today_date = datetime.fromisoformat(today).date()
-                days_diff = (today_date - last_date).days
-                if days_diff == 1:
-                    current_streak += 1
-                elif days_diff > 1:
-                    current_streak = 1
-            else:
-                current_streak = 1
-
-            total_days = growth.get('total_days_completed', 0) + 1
-            longest_streak = max(growth.get('longest_streak', 0), current_streak)
-            calendar = growth.get('calendar', {})
-            calendar[today] = {"status": "completed", "activity": "youtube_upload"}
-
-            await db.growth_streaks.update_one(
-                {"user_id": user_id},
-                {"$set": {
-                    "current_streak": current_streak,
-                    "longest_streak": longest_streak,
-                    "total_days_completed": total_days,
-                    "last_checkin_date": today,
-                    "calendar": calendar,
-                }}
-            )
-            logging.info(f"Auto check-in complete for user {user_id}")
-    except Exception as exc:
-        logging.error(f"Auto checkin failed: {str(exc)}")
-
-
-async def _execute_youtube_upload_pipeline(job: dict) -> dict:
-    payload = job.get("payload") or {}
+async def _execute_youtube_upload_job(job: dict) -> dict:
     user_id = str(job.get("user_id") or "")
-    current_user = {"id": user_id}
+    payload = job.get("payload") or {}
+    job_id = str(job.get("id") or "")
 
-    await _update_upload_job(job["id"], progress=10, message="Refreshing YouTube connection...")
+    title = str(payload.get("title") or "").strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="Missing job title.")
+
+    audio_file_id = str(payload.get("audio_file_id") or "").strip()
+    image_file_id = str(payload.get("image_file_id") or "").strip()
+    if not audio_file_id or not image_file_id:
+        raise HTTPException(status_code=400, detail="Missing job file references.")
+
+    audio_upload = await db.uploads.find_one(
+        {"id": audio_file_id, "user_id": user_id, "file_type": "audio"},
+        {"_id": 0},
+    )
+    if not audio_upload:
+        raise HTTPException(status_code=404, detail="Audio upload not found.")
+
+    image_upload = await db.uploads.find_one(
+        {"id": image_file_id, "user_id": user_id, "file_type": "image"},
+        {"_id": 0},
+    )
+    if not image_upload:
+        raise HTTPException(status_code=404, detail="Image upload not found.")
+
+    await _update_upload_job(job_id, progress=20, message="Refreshing YouTube connection...")
     credentials = await refresh_youtube_token(user_id)
 
-    await _update_upload_job(job["id"], progress=20, message="Loading upload assets...")
-    audio_file = await db.uploads.find_one({"id": payload.get("audio_file_id"), "user_id": user_id})
-    image_file = await db.uploads.find_one({"id": payload.get("image_file_id"), "user_id": user_id})
-    if not audio_file or not image_file:
-        raise RuntimeError("Audio and image files are required")
-
-    visual_kind = _visual_kind_from_upload(image_file)
-    ffmpeg_path = _ensure_ffmpeg_available()
-
-    render_settings = payload.get("render_settings") or {}
-    target_w = int(render_settings.get("target_w") or 1280)
-    target_h = int(render_settings.get("target_h") or 720)
-    scale_x = min(float(render_settings.get("image_scale_x") or 1.0), 1.0)
-    scale_y = min(float(render_settings.get("image_scale_y") or 1.0), 1.0)
-    image_pos_x = float(render_settings.get("image_pos_x") or 0.0)
-    image_pos_y = float(render_settings.get("image_pos_y") or 0.0)
-    image_rotation = float(render_settings.get("image_rotation") or 0.0)
-    background_color = str(render_settings.get("background_color") or "black")
-    fit_expr = f"min({target_w}/iw\\,{target_h}/ih)"
-
-    rotation_filter = ""
-    if abs(image_rotation) > 0.01:
-        rotation_filter = f"rotate={image_rotation}*PI/180:c={background_color}:ow=rotw(iw):oh=roth(ih),"
-
-    video_filter = (
-        f"scale=iw*{fit_expr}*{scale_x}:ih*{fit_expr}*{scale_y},"
-        f"{rotation_filter}"
-        f"pad={target_w}:{target_h}:(ow-iw)/2+(ow-iw)/2*{image_pos_x}:(oh-ih)/2+(oh-ih)/2*{image_pos_y}:{background_color}"
+    await _update_upload_job(job_id, progress=40, message="Rendering video...")
+    rendered_video_path = await _render_youtube_video(
+        audio_upload=audio_upload,
+        image_upload=image_upload,
+        payload=payload,
     )
 
-    should_add_watermark = not bool(payload.get("is_subscribed")) or not bool(payload.get("remove_watermark"))
-    if should_add_watermark:
-        watermark_text = 'Upload your beats for free: https://sendmybeat.com'
-        watermark_text_escaped = watermark_text.replace(':', r'\:').replace('/', r'\/')
-        video_filter += (
-            f",drawtext=text='{watermark_text_escaped}':fontcolor=white:fontsize=20:x=20:y=20:"
-            "fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:box=1:boxcolor=black@0.6:boxborderw=8"
-        )
-
-    video_path = media_storage.create_temp_path(".mp4")
-
     try:
-        await _update_upload_job(job["id"], progress=40, message="Rendering video with FFmpeg...")
-        async with media_storage.local_path_for_processing(audio_file) as audio_path, media_storage.local_path_for_processing(image_file) as image_path:
-            audio_ext = audio_path.suffix.lower()
-            copy_audio = audio_ext in (".mp3", ".m4a", ".aac")
-            audio_args = ['-c:a', 'copy'] if copy_audio else ['-c:a', 'aac', '-b:a', '320k', '-ar', '48000']
-
-            if visual_kind == "video":
-                ffmpeg_cmd = [
-                    ffmpeg_path, '-stream_loop', '-1', '-i', str(image_path), '-i', str(audio_path),
-                    '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28',
-                    *audio_args, '-pix_fmt', 'yuv420p', '-vf', video_filter, '-shortest', '-movflags', '+faststart',
-                    '-threads', '0', '-y', str(video_path)
-                ]
-            else:
-                ffmpeg_cmd = [
-                    ffmpeg_path, '-loop', '1', '-framerate', '0.5', '-i', str(image_path), '-i', str(audio_path),
-                    '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', '-tune', 'stillimage', *audio_args,
-                    '-pix_fmt', 'yuv420p', '-vf', video_filter, '-shortest', '-movflags', '+faststart', '-threads', '0',
-                    '-y', str(video_path)
-                ]
-
-            result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True, timeout=600)
-        if result.returncode != 0:
-            raise RuntimeError(f"Video creation failed: {(result.stderr or '')[:500]}")
-
-        await _update_upload_job(job["id"], progress=70, message="Uploading video to YouTube...")
-        youtube = build('youtube', 'v3', credentials=credentials)
-        snippet = {
-            'title': str(payload.get("title") or "")[:100],
-            'description': str(payload.get("description_text") or "")[:5000],
-            'categoryId': '10',
-        }
-        tags = payload.get("tags") or []
-        if tags:
-            snippet['tags'] = tags
-
-        body = {
-            'snippet': snippet,
-            'status': {
-                'privacyStatus': payload.get("privacy_status") or "public",
-                'selfDeclaredMadeForKids': False,
+        await _update_upload_job(job_id, progress=70, message="Uploading to YouTube...")
+        youtube = build("youtube", "v3", credentials=credentials)
+        upload_body = {
+            "snippet": {
+                "title": title,
+                "description": str(payload.get("description") or "").strip(),
+                "tags": [tag for tag in (payload.get("tags") or []) if isinstance(tag, str)],
+                "categoryId": "10",
+            },
+            "status": {
+                "privacyStatus": str(payload.get("privacy_status") or "public"),
             },
         }
-
-        file_size = video_path.stat().st_size
-        chunk_size = 10 * 1024 * 1024 if file_size > 50 * 1024 * 1024 else 5 * 1024 * 1024
-        media = MediaFileUpload(str(video_path), chunksize=chunk_size, resumable=True)
-        request = youtube.videos().insert(part='snippet,status', body=body, media_body=media)
+        media_upload = MediaFileUpload(str(rendered_video_path), chunksize=-1, resumable=True, mimetype="video/mp4")
+        request = youtube.videos().insert(
+            part="snippet,status",
+            body=upload_body,
+            media_body=media_upload,
+        )
 
         response = None
-        retries = 0
-        max_retries = 5
-        while response is None and retries < max_retries:
-            try:
-                status, response = request.next_chunk()
-                if status:
-                    progress = 70 + int(status.progress() * 25)
-                    await _update_upload_job(job["id"], progress=progress, message=f"Uploading to YouTube... {int(status.progress() * 100)}%")
-            except Exception as exc:
-                retries += 1
-                logging.error(f"Upload error for job {job['id']} (retry {retries}/{max_retries}): {str(exc)}")
-                if retries >= max_retries:
-                    raise RuntimeError(f"YouTube upload failed after {max_retries} retries: {str(exc)}")
+        while response is None:
+            status, response = await asyncio.to_thread(request.next_chunk)
+            if status is not None:
+                progress = 70 + int(float(status.progress()) * 25)
+                await _update_upload_job(job_id, progress=min(95, progress), message="Uploading to YouTube...")
 
-        result_payload = {
+        video_id = str((response or {}).get("id") or "").strip()
+        if not video_id:
+            raise HTTPException(status_code=500, detail="YouTube did not return a video ID.")
+
+        video_url = f"https://www.youtube.com/watch?v={video_id}"
+        return {
             "success": True,
-            "message": "Video uploaded to YouTube successfully!",
-            "video_id": response['id'],
-            "video_url": f"https://www.youtube.com/watch?v={response['id']}",
-            "title": payload.get("title"),
-            "privacy_status": payload.get("privacy_status"),
-            "tags_count": len(tags),
+            "video_id": video_id,
+            "video_url": video_url,
+            "message": "Video uploaded successfully!",
         }
-
-        await _auto_checkin_growth_upload(user_id)
-        return result_payload
     finally:
         try:
-            if video_path.exists():
-                video_path.unlink()
+            rendered_video_path.unlink(missing_ok=True)
         except Exception:
             pass
 
@@ -2752,17 +2727,16 @@ async def _execute_youtube_upload_pipeline(job: dict) -> dict:
 async def _process_youtube_upload_job(job: dict) -> None:
     job_id = job["id"]
     try:
-        result = await _execute_youtube_upload_pipeline(job)
+        result = await _execute_youtube_upload_job(job)
         await _update_upload_job(
             job_id,
             status="succeeded",
             progress=100,
-            message="Upload completed successfully.",
+            message="YouTube upload complete.",
             result=result,
             error=None,
             extra_updates={"completed_at": _safe_iso_now(), "worker_id": UPLOAD_JOB_WORKER_ID},
         )
-        await _finalize_beathelper_upload_job(job, success=True, result=result)
     except Exception as exc:
         error_message = str(exc)
         logging.error(f"YouTube upload job {job_id} failed: {error_message}")
@@ -2770,46 +2744,15 @@ async def _process_youtube_upload_job(job: dict) -> None:
             job_id,
             status="failed",
             progress=100,
-            message="Upload failed.",
+            message="YouTube upload failed.",
             error=error_message,
             extra_updates={"failed_at": _safe_iso_now(), "worker_id": UPLOAD_JOB_WORKER_ID},
         )
-        await _finalize_beathelper_upload_job(job, success=False, error=error_message)
-
-
-async def _claim_next_background_job() -> dict | None:
-    return await background_job_service.claim_next_job()
-
-
-async def _requeue_stale_background_jobs() -> None:
-    await background_job_service.requeue_stale_jobs()
-
-
-async def _process_background_job(job: dict) -> None:
-    await background_job_service.process_job(job)
-
-
-async def _background_job_worker_loop() -> None:
-    await background_job_service.worker_loop()
 
 
 async def _build_channel_analytics_job_payload(current_user: dict) -> dict[str, Any]:
-    subscription_status = await get_user_subscription_status(current_user['id'])
-    analytics_plan = subscription_status.get("plan") or "free"
-    using_free_monthly_analytics = analytics_plan == "free"
-
-    if using_free_monthly_analytics:
-        free_analytics_available = await _can_use_free_monthly_analytics(current_user['id'])
-        if not free_analytics_available:
-            raise HTTPException(
-                status_code=402,
-                detail={
-                    "message": "Free users get 1 channel analysis per month. Upgrade to Plus or Max for more analytics access.",
-                    "resets_at": subscription_status.get("resets_at"),
-                }
-            )
-    else:
-        await ensure_has_credit(current_user['id'], "analytics")
+    await _ensure_pro_user(current_user, "Channel analysis")
+    await ensure_has_credit(current_user['id'], "analytics")
 
     connection = await db.youtube_connections.find_one({"user_id": current_user['id']})
     if not connection:
@@ -2822,7 +2765,6 @@ async def _build_channel_analytics_job_payload(current_user: dict) -> dict[str, 
     )
 
     return {
-        "using_free_monthly_analytics": using_free_monthly_analytics,
         "cache_key": cache_key,
     }
 
@@ -2830,7 +2772,6 @@ async def _build_channel_analytics_job_payload(current_user: dict) -> dict[str, 
 async def _execute_channel_analytics_job(job: dict) -> dict:
     user_id = str(job.get("user_id") or "")
     payload = job.get("payload") or {}
-    using_free_monthly_analytics = bool(payload.get("using_free_monthly_analytics"))
     cache_key = str(payload.get("cache_key") or "").strip()
 
     await _update_upload_job(job["id"], progress=10, message="Loading YouTube channel data...")
@@ -3025,10 +2966,7 @@ Provide your analysis in this EXACT JSON format:
             ]
         }
 
-    if using_free_monthly_analytics:
-        await _consume_free_monthly_analytics(user_id)
-    else:
-        await consume_credit(user_id)
+    await consume_credit(user_id)
     result = YouTubeAnalyticsResponse(
         channel_name=channel_snippet['title'],
         subscriber_count=int(channel_stats.get('subscriberCount', 0)),
@@ -3061,10 +2999,155 @@ async def _process_channel_analytics_job(job: dict) -> None:
         await _update_upload_job(job_id, status="failed", progress=100, message="Channel analysis failed.", error=error_message, extra_updates={"failed_at": _safe_iso_now(), "worker_id": UPLOAD_JOB_WORKER_ID})
 
 
+def _competition_level_from_title(title: str, artist_queries: list[str]) -> str:
+    title_lc = (title or "").lower()
+    artist_count = len([artist for artist in artist_queries if artist])
+    specificity_hits = sum(
+        1
+        for token in re.split(r"\s+", title_lc)
+        if token and token not in _TAG_NOISE_WORDS and len(token) >= 5
+    )
+    if artist_count >= 2 and specificity_hits <= 6:
+        return "High"
+    if "type beat" in title_lc and specificity_hits <= 4:
+        return "High"
+    if specificity_hits >= 8:
+        return "Medium"
+    return "Medium"
+
+
+def _suggest_title_angles(title: str, tags: list[str]) -> list[str]:
+    artists = _extract_artist_queries(title, tags)
+    primary_artist = artists[0] if artists else "artist"
+    secondary_artist = artists[1] if len(artists) > 1 else "adjacent artist"
+    ideas = [
+        f"{primary_artist} type beat | darker long-tail phrase with one strong mood word",
+        f"{primary_artist} x {secondary_artist} type beat | search-friendly crossover angle",
+        f"{primary_artist} type beat - project or era inspired title instead of a generic year tag",
+    ]
+    deduped: list[str] = []
+    seen = set()
+    for idea in ideas:
+        key = idea.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(idea)
+    return deduped[:3]
+
+
+def _channel_stage_from_context(subscriber_count: int, total_videos: int, recent_avg_views: int) -> str:
+    subs = max(0, int(subscriber_count or 0))
+    videos = max(0, int(total_videos or 0))
+    avg_views = max(0, int(recent_avg_views or 0))
+    if subs >= 50000 or avg_views >= 5000:
+        return "Established"
+    if subs >= 5000 or avg_views >= 800:
+        return "Emerging"
+    if videos >= 30 and (subs >= 1000 or avg_views >= 250):
+        return "Emerging"
+    return "Growing"
+
+
+def _augment_beat_analysis(*, request: BeatAnalysisRequest, analysis: dict[str, Any]) -> dict[str, Any]:
+    title = str(request.title or "").strip()
+    tags = [str(tag).strip() for tag in (request.tags or []) if str(tag).strip()]
+    artists = _extract_artist_queries(title, tags)
+    competition_level = _competition_level_from_title(title, artists)
+    better_title_angles = _suggest_title_angles(title, tags)
+    channel_stage = _channel_stage_from_context(
+        int(request.subscriber_count or 0),
+        int(request.total_videos or 0),
+        int(request.recent_avg_views or 0),
+    )
+
+    title_lc = title.lower()
+    long_tail_signals = sum(
+        1 for token in re.split(r"\s+", title_lc)
+        if token and token not in _TAG_NOISE_WORDS and len(token) >= 5
+    )
+    title_diagnosis = (
+        "Title is readable, but it is still competing in a crowded artist lane. Add one stronger mood, era, or crossover angle."
+        if competition_level == "High"
+        else "Title has some useful specificity. Keep the artist lane clear and avoid bloating it with extra filler words."
+    )
+    if "free" in title_lc and long_tail_signals <= 5:
+        title_diagnosis = "Leading with 'free' can weaken the click unless the rest of the title is unusually sharp."
+
+    small_channel_strategy = "For smaller channels, avoid chasing the broadest artist phrase alone. Target one artist lane plus one specific mood, era, or crossover that is easier to win."
+    if channel_stage == "Emerging":
+        small_channel_strategy = "You have some signal already. Keep the artist lane recognizable, but tighten the angle so the title and thumbnail feel like one specific promise."
+    elif channel_stage == "Established":
+        small_channel_strategy = "You can take a slightly broader angle than a tiny channel, but the title still needs a distinct mood or project-era hook to earn clicks."
+    elif competition_level != "High":
+        small_channel_strategy = "This angle is more reachable than a broad generic phrase. Keep tags and thumbnail tightly matched to the exact lane."
+
+    packaging_priority = (
+        "Packaging is the bottleneck. Tighten the title angle and thumbnail hook before uploading."
+        if int(analysis.get("title_score") or 0) < 78
+        else "Thumbnail and first-click clarity matter more than adding more tags now."
+    )
+    tag_strategy = (
+        "Use fewer but sharper tags: core artist intent, one crossover lane, 2-3 mood/subgenre terms, and a handful of song or era references."
+    )
+    if channel_stage == "Established":
+        tag_strategy = "You can support the main phrase with a few broader discovery tags, but keep most tags tightly tied to the title promise and listener intent."
+    elif channel_stage == "Emerging":
+        tag_strategy = "Stay disciplined: one clear artist lane, one crossover if it truly fits, and only a few mood/subgenre tags that reinforce the same click promise."
+
+    channel_fit = (
+        "This title lane is realistic for a growing producer."
+        if competition_level != "High" or channel_stage in {"Emerging", "Established"}
+        else "This lane is probably too crowded for a smaller channel unless the thumbnail and beat are unusually strong."
+    )
+    if channel_stage == "Established" and competition_level == "High":
+        channel_fit = "The lane is crowded, but your channel has more room to compete if the packaging is sharp."
+
+    merged = dict(analysis)
+    merged["competition_level"] = competition_level
+    merged["title_diagnosis"] = title_diagnosis
+    merged["small_channel_strategy"] = small_channel_strategy
+    merged["packaging_priority"] = packaging_priority
+    merged["better_title_angles"] = better_title_angles
+    merged["tag_strategy"] = tag_strategy
+    merged["channel_stage"] = channel_stage
+    merged["channel_fit"] = channel_fit
+    return merged
+
+
+def _augment_thumbnail_analysis(*, title: str, analysis: dict[str, Any]) -> dict[str, Any]:
+    title_lc = (title or "").lower()
+    score = int(analysis.get("score") or 0)
+    ctr_risk = "High" if score < 65 else ("Medium" if score < 80 else "Low")
+    hook_alignment = (
+        "Thumbnail needs to instantly match the promise of the title and artist lane."
+        if "type beat" in title_lc
+        else "Thumbnail needs a clearer, faster hook that matches the exact upload promise."
+    )
+    packaging_priority = (
+        "Fix the first-click problem before worrying about more tags."
+        if ctr_risk in {"High", "Medium"}
+        else "Packaging is serviceable. Keep the thumbnail simple and title-aligned."
+    )
+    merged = dict(analysis)
+    merged["ctr_risk"] = ctr_risk
+    merged["hook_alignment"] = hook_alignment
+    merged["packaging_priority"] = packaging_priority
+    return merged
+
+
 async def _execute_beat_analysis_job(job: dict) -> dict:
     payload = job.get("payload") or {}
+    user_id = str(job.get("user_id") or "")
     request = BeatAnalysisRequest(**payload)
-    analysis_prompt = f"""You are a YouTube SEO expert analyzing a beat upload. Evaluate this beat's potential performance:
+    analysis_prompt = f"""You are a YouTube packaging strategist for type beat producers.
+Do NOT act like a generic SEO writer. Judge whether this upload angle is actually realistic for a smaller producer trying to get clicks and search traffic.
+
+CHANNEL CONTEXT:
+- Channel name: {request.channel_name or "Unknown"}
+- Subscribers: {int(request.subscriber_count or 0)}
+- Total videos: {int(request.total_videos or 0)}
+- Recent average views: {int(request.recent_avg_views or 0)}
 
 TITLE: {request.title}
 
@@ -3092,7 +3175,19 @@ Analyze and provide ONLY valid JSON in this format:
     "Specific actionable suggestion 2",
     "Specific actionable suggestion 3"
   ],
-  "predicted_performance": "Good"
+  "predicted_performance": "Good",
+  "competition_level": "High",
+  "channel_stage": "Growing",
+  "channel_fit": "is this title lane realistic for this channel right now",
+  "title_diagnosis": "short diagnosis of whether the title angle is too broad, realistic, or weak",
+  "small_channel_strategy": "what a small producer should do differently here",
+  "packaging_priority": "the single most important next fix before upload",
+  "better_title_angles": [
+    "Alternative title angle 1",
+    "Alternative title angle 2",
+    "Alternative title angle 3"
+  ],
+  "tag_strategy": "brief note about how tight or bloated the tag set is"
 }}
 
 SCORING CRITERIA:
@@ -3102,9 +3197,16 @@ SCORING CRITERIA:
 - Overall Score: Average of all scores
 
 PREDICTED PERFORMANCE: "Poor" (0-40), "Average" (41-65), "Good" (66-85), "Excellent" (86-100)
+COMPETITION LEVEL: "Low", "Medium", or "High"
 
-Be honest but encouraging. Focus on actionable improvements.
-If tags look stuffed or irrelevant, explicitly say so and recommend a smaller, high-intent set (20-40)."""
+Rules:
+- Be honest, not flattering.
+- Assume the channel is still growing unless the metadata is unusually sharp.
+- If channel context is provided, tailor the advice to that stage instead of giving generic advice.
+- If the title is broad, generic, or trapped in a crowded artist lane, say that directly.
+- If tags look stuffed or irrelevant, explicitly say so and recommend a smaller, high-intent set (20-40).
+- "better_title_angles" should give more winnable alternatives, not random rewrites.
+- "packaging_priority" should be one decisive bottleneck, not a vague summary."""
 
     response = await llm_chat(
         system_message="You are a YouTube SEO expert who helps beat producers optimize their uploads for maximum discoverability. You provide specific, actionable feedback.",
@@ -3122,10 +3224,13 @@ If tags look stuffed or irrelevant, explicitly say so and recommend a smaller, h
             end = response_text.find('```', start)
             response_text = response_text[start:end].strip()
         analysis = _parse_llm_json_response(response_text)
+        analysis = _augment_beat_analysis(request=request, analysis=analysis)
+        await consume_credit(user_id)
         return BeatAnalysisResponse(**analysis).model_dump()
     except Exception as e:
         logging.error(f"Failed to parse beat analysis: {str(e)}")
-        return BeatAnalysisResponse(
+        await consume_credit(user_id)
+        fallback = BeatAnalysisResponse(
             overall_score=70,
             title_score=70,
             tags_score=70,
@@ -3135,6 +3240,7 @@ If tags look stuffed or irrelevant, explicitly say so and recommend a smaller, h
             suggestions=["Try analyzing again", "Ensure title includes artist name", "Add more specific tags"],
             predicted_performance="Average"
         ).model_dump()
+        return _augment_beat_analysis(request=request, analysis=fallback)
 
 
 async def _process_beat_analysis_job(job: dict) -> None:
@@ -3326,7 +3432,10 @@ Return STRICT JSON with this exact schema:
   "issues": ["..."],
   "suggestions": ["..."],
   "text_overlay_suggestion": "short text idea for the thumbnail",
-  "branding_suggestion": "one short branding tweak"
+  "branding_suggestion": "one short branding tweak",
+  "ctr_risk": "Low, Medium, or High",
+  "packaging_priority": "the most important next thumbnail fix",
+  "hook_alignment": "how well the thumbnail matches the title promise"
 }}
 """
 
@@ -3352,7 +3461,10 @@ Do not add commentary. Return exactly one JSON object with this schema:
   "issues": ["..."],
   "suggestions": ["..."],
   "text_overlay_suggestion": "short text idea for the thumbnail",
-  "branding_suggestion": "one short branding tweak"
+  "branding_suggestion": "one short branding tweak",
+  "ctr_risk": "Low, Medium, or High",
+  "packaging_priority": "the most important next thumbnail fix",
+  "hook_alignment": "how well the thumbnail matches the title promise"
 }}
 
 If a field is missing, infer a safe value.
@@ -3369,12 +3481,11 @@ RAW INPUT:
                 user_id=user_id,
             )
             analysis = _parse_llm_json_response(normalized_text)
-        await consume_credit(user_id)
+        analysis = _augment_thumbnail_analysis(title=title, analysis=analysis)
         return ThumbnailCheckResponse(**analysis).model_dump()
     except Exception as e:
         logging.error(f"Failed to parse thumbnail analysis: {str(e)} | raw_response={response_text[:1200]}")
-        await consume_credit(user_id)
-        return ThumbnailCheckResponse(
+        fallback = ThumbnailCheckResponse(
             score=55,
             verdict="Thumbnail analysis completed but formatting failed.",
             strengths=["Clear subject or artwork present"],
@@ -3383,6 +3494,7 @@ RAW INPUT:
             text_overlay_suggestion="FUTURE x UZI TYPE BEAT",
             branding_suggestion="Add a consistent corner badge with your logo",
         ).model_dump()
+        return _augment_thumbnail_analysis(title=title, analysis=fallback)
 
 
 async def _process_thumbnail_check_job(job: dict) -> None:
@@ -3461,30 +3573,15 @@ async def _execute_image_search_job(job: dict) -> dict:
     current_user = {"id": user_id, "_execute_inline": True}
     request_kind = str(payload.get("request_kind") or "beat_generate_image")
     cache_key = str(payload.get("cache_key") or "")
-
-    if request_kind == "beathelper_image_search":
-        result = await beathelper_search_images(
-            BeatHelperImageSearchRequest(
-                search_query=payload.get("search_query"),
-                target_artist=payload.get("target_artist"),
-                beat_type=payload.get("beat_type"),
-                generated_title_override=payload.get("generated_title_override"),
-                context_tags=[tag for tag in (payload.get("context_tags") or []) if isinstance(tag, str)],
-                k=int(payload.get("k") or 8),
-            ),
-            current_user,
-        )
-        cache_type = "beathelper_image_search"
-    else:
-        result = await generate_image_suggestions(
-            ImageGenerateRequest(
-                title=str(payload.get("title") or ""),
-                tags=[tag for tag in (payload.get("tags") or []) if isinstance(tag, str)],
-                k=int(payload.get("k") or 6),
-            ),
-            current_user,
-        )
-        cache_type = "beat_generate_image"
+    result = await generate_image_suggestions(
+        ImageGenerateRequest(
+            title=str(payload.get("title") or ""),
+            tags=[tag for tag in (payload.get("tags") or []) if isinstance(tag, str)],
+            k=int(payload.get("k") or 6),
+        ),
+        current_user,
+    )
+    cache_type = "beat_generate_image"
 
     return result
 
@@ -3539,80 +3636,6 @@ async def _estimate_best_upload_hour_utc(user_id: str) -> int:
         return max(buckets.items(), key=lambda pair: pair[1])[0]
     except Exception:
         return 18
-
-
-async def _generate_beathelper_metadata(
-    *,
-    target_artist: str,
-    beat_type: str,
-    context_tags: list[str],
-    user_id: str,
-) -> dict:
-    prompt = (
-        "Generate metadata for a YouTube type beat upload.\n"
-        f"Target artist: {target_artist}\n"
-        f"Beat type/style: {beat_type}\n"
-        f"Extra context tags: {', '.join(context_tags[:25]) if context_tags else 'none'}\n\n"
-        "Return strict JSON with keys: title, tags, description.\n"
-        "- title: <= 100 chars, high-intent SEO, no BPM, no key.\n"
-        "- tags: array of 25-40 concise tags, no duplicates, high intent only.\n"
-        "- description: concise producer-focused upload description with CTA, no BPM/key/prices.\n"
-    )
-
-    fallback_title = f"{target_artist} Type Beat - {beat_type.title()} Instrumental"
-    fallback_tags = [
-        f"{target_artist} type beat",
-        f"{target_artist} instrumental",
-        f"{target_artist} type beat instrumental",
-        f"{beat_type} type beat",
-        f"{beat_type} instrumental",
-    ] + [tag for tag in context_tags if isinstance(tag, str) and tag.strip()]
-    fallback_desc = (
-        f"{target_artist} type beat in a {beat_type} style.\n"
-        "If you want more beats like this, subscribe and drop a comment with the next artist/style."
-    )
-
-    try:
-        response_text = await llm_chat(
-            system_message="You are an expert YouTube SEO producer assistant. Output JSON only.",
-            user_message=prompt,
-            temperature=0.35,
-            user_id=user_id,
-        )
-        payload = _parse_llm_json_response(response_text)
-        title = str(payload.get("title") or "").strip() or fallback_title
-        tags_raw = payload.get("tags") or []
-        if not isinstance(tags_raw, list):
-            tags_raw = []
-        seen = set()
-        tags: list[str] = []
-        for tag in tags_raw + fallback_tags:
-            cleaned = re.sub(r"\s+", " ", str(tag or "").strip())
-            if not cleaned:
-                continue
-            key = cleaned.lower()
-            if key in seen:
-                continue
-            seen.add(key)
-            tags.append(cleaned)
-            if len(tags) >= 40:
-                break
-        description = str(payload.get("description") or "").strip() or fallback_desc
-        return {"title": title[:100], "tags": tags, "description": description}
-    except Exception:
-        return {"title": fallback_title[:100], "tags": fallback_tags[:40], "description": fallback_desc}
-
-
-def _build_beathelper_approval_message(item: dict) -> str:
-    artist = item.get("target_artist", "artist")
-    title = item.get("generated_title") or item.get("beat_original_filename") or "your next beat"
-    return (
-        f"BeatHelper wants to upload: '{title}'.\n"
-        f"Style target: {artist}\n"
-        f"Tags: {', '.join((item.get('generated_tags') or [])[:8])}\n"
-        f"Template: {(item.get('template_name') or 'default')}\n"
-        "Reply in dashboard: Approve, Skip, or Choose another beat."
-    )
 
 
 def _normalize_tag_list(raw_tags: list[str] | None, limit: int = 40) -> list[str]:
@@ -3696,212 +3719,6 @@ def _send_verification_application_email(
         f"Submitted At: {submitted_at.isoformat()}\n"
     )
     return _send_email_notification(VERIFICATION_REVIEW_EMAIL, subject, message)
-
-
-async def _dispatch_beathelper_approval_request(item: dict, user_doc: dict, source: str = "manual") -> dict:
-    user_id = (user_doc or {}).get("id")
-    if not user_id:
-        return {"success": False, "status": "failed", "detail": "Missing user id"}
-
-    now = datetime.now(timezone.utc)
-    expires_at = now + timedelta(hours=max(1, int(item.get("approval_timeout_hours", BEATHELPER_DEFAULT_APPROVAL_TIMEOUT_HOURS))))
-    subject = "BeatHelper approval request"
-    message = _build_beathelper_approval_message(item)
-
-    email = (user_doc or {}).get("email") or ""
-    phone = (user_doc or {}).get("phone") or ""
-    notify_channel = (item.get("notify_channel") or "none").lower()
-
-    email_sent = False
-    sms_sent = False
-    if notify_channel in {"email", "email_sms"}:
-        email_sent = _send_email_notification(email, subject, message)
-    if notify_channel in {"sms", "email_sms"}:
-        sms_sent = _send_sms_notification(phone, message)
-
-    if notify_channel == "none":
-        notification_status = "none"
-    else:
-        notification_status = "sent" if (email_sent or sms_sent) else "failed"
-
-    await db.beat_helper_queue.update_one(
-        {"id": item["id"], "user_id": user_id},
-        {"$set": {
-            "status": "pending_approval",
-            "approval_requested_at": now.isoformat(),
-            "approval_expires_at": expires_at.isoformat(),
-            "last_notification_status": notification_status,
-            "last_notification_source": source,
-            "updated_at": _safe_iso_now(),
-        }}
-    )
-
-    return {
-        "success": True,
-        "status": notification_status,
-        "approval_expires_at": expires_at.isoformat(),
-    }
-
-
-async def _process_expired_beathelper_pending_items() -> dict:
-    now = datetime.now(timezone.utc)
-    pending_items = await db.beat_helper_queue.find(
-        {"status": "pending_approval"},
-        {"_id": 0}
-    ).to_list(2000)
-
-    expired_count = 0
-    auto_uploaded = 0
-    for item in pending_items:
-        expires_raw = (item.get("approval_expires_at") or "").strip()
-        if not expires_raw:
-            continue
-        try:
-            expires_at = datetime.fromisoformat(expires_raw.replace("Z", "+00:00"))
-        except Exception:
-            continue
-        if expires_at.tzinfo is None:
-            expires_at = expires_at.replace(tzinfo=timezone.utc)
-        if expires_at > now:
-            continue
-
-        expired_count += 1
-        if item.get("auto_upload_if_no_response"):
-            try:
-                user_doc = await db.users.find_one({"id": item.get("user_id")}, {"_id": 0, "id": 1, "username": 1})
-                if user_doc:
-                    await beathelper_approve_and_upload(
-                        item_id=item["id"],
-                        current_user={"id": user_doc["id"], "username": user_doc.get("username", "")},
-                    )
-                    auto_uploaded += 1
-                    continue
-            except Exception as e:
-                logging.warning(f"BeatHelper auto-upload on expiry failed for {item.get('id')}: {str(e)}")
-
-        await db.beat_helper_queue.update_one(
-            {"id": item["id"], "user_id": item.get("user_id")},
-            {"$set": {"status": "expired", "updated_at": _safe_iso_now()}}
-        )
-
-    return {"expired": expired_count, "auto_uploaded": auto_uploaded}
-
-
-async def _dispatch_daily_beathelper_for_user(user_id: str, source: str = "daily_auto") -> dict:
-    user_doc = await db.users.find_one(
-        {"id": user_id},
-        {
-            "_id": 0,
-            "id": 1,
-            "username": 1,
-            "email": 1,
-            "phone": 1,
-            "reminder_email_enabled": 1,
-            "reminder_sms_enabled": 1,
-            "beathelper_last_dispatch_date": 1,
-            "beathelper_last_dispatch_at": 1,
-            "beathelper_last_no_queue_reminder_date": 1,
-            "beathelper_last_no_queue_reminder_at": 1,
-        }
-    )
-    if not user_doc:
-        return {"dispatched": False, "reason": "user_missing"}
-
-    status = await get_user_subscription_status(user_id)
-    if not status.get("is_subscribed"):
-        return {"dispatched": False, "reason": "not_subscribed"}
-
-    today = datetime.now(timezone.utc).date().isoformat()
-    if source == "daily_auto" and (user_doc.get("beathelper_last_dispatch_date") or "") == today:
-        return {"dispatched": False, "reason": "already_dispatched_today"}
-
-    queued_items = await db.beat_helper_queue.find(
-        {"user_id": user_id, "status": "queued"},
-        {"_id": 0}
-    ).to_list(500)
-    if not queued_items:
-        reminder_subject = "BeatHelper queue is empty"
-        reminder_message = (
-            f"Hey @{user_doc.get('username') or 'producer'}, your BeatHelper queue is empty today.\n\n"
-            "Add new beats so BeatHelper can send you daily upload approvals.\n"
-            f"Open dashboard: {FRONTEND_URL}/dashboard"
-        )
-        sms_message = (
-            f"BeatHelper: no beats queued today. Add beats here: {FRONTEND_URL}/dashboard"
-        )
-
-        email_enabled = bool(user_doc.get("reminder_email_enabled"))
-        sms_enabled = bool(user_doc.get("reminder_sms_enabled"))
-        email = (user_doc.get("email") or "").strip()
-        phone = (user_doc.get("phone") or "").strip()
-
-        email_sent = False
-        sms_sent = False
-        if email_enabled and email:
-            email_sent = _send_email_notification(email, reminder_subject, reminder_message)
-        if sms_enabled and phone:
-            sms_sent = _send_sms_notification(phone, sms_message)
-
-        if source == "daily_auto":
-            await db.users.update_one(
-                {"id": user_id},
-                {"$set": {
-                    "beathelper_last_dispatch_date": today,
-                    "beathelper_last_dispatch_at": _safe_iso_now(),
-                    "beathelper_last_no_queue_reminder_date": today,
-                    "beathelper_last_no_queue_reminder_at": _safe_iso_now(),
-                }}
-            )
-
-        reminder_status = "none"
-        if email_enabled or sms_enabled:
-            reminder_status = "sent" if (email_sent or sms_sent) else "failed"
-        return {
-            "dispatched": False,
-            "reason": "no_queued_items",
-            "reminder_status": reminder_status,
-            "email_enabled": email_enabled,
-            "sms_enabled": sms_enabled,
-            "email_sent": email_sent,
-            "sms_sent": sms_sent,
-        }
-
-    chosen = random.choice(queued_items)
-    result = await _dispatch_beathelper_approval_request(chosen, user_doc, source=source)
-    if source == "daily_auto":
-        await db.users.update_one(
-            {"id": user_id},
-            {"$set": {
-                "beathelper_last_dispatch_date": today,
-                "beathelper_last_dispatch_at": _safe_iso_now(),
-            }}
-        )
-    return {"dispatched": True, "item_id": chosen.get("id"), **result}
-
-
-async def _run_beathelper_daily_scheduler_once() -> dict:
-    expired_result = await _process_expired_beathelper_pending_items()
-    user_ids = await db.beat_helper_queue.distinct("user_id", {"status": "queued"})
-    dispatched = 0
-    for user_id in user_ids:
-        try:
-            result = await _dispatch_daily_beathelper_for_user(user_id, source="daily_auto")
-            if result.get("dispatched"):
-                dispatched += 1
-        except Exception as e:
-            logging.warning(f"BeatHelper daily dispatch failed for user {user_id}: {str(e)}")
-    return {"users_dispatched": dispatched, **expired_result}
-
-
-async def _beathelper_scheduler_loop():
-    while True:
-        try:
-            result = await _run_beathelper_daily_scheduler_once()
-            if result.get("users_dispatched") or result.get("expired"):
-                logging.info(f"BeatHelper scheduler tick: {result}")
-        except Exception as e:
-            logging.error(f"BeatHelper scheduler loop error: {str(e)}")
-        await asyncio.sleep(max(60, BEATHELPER_SCHEDULER_INTERVAL_SECONDS))
 
 
 # ============ Auth Routes ============
@@ -4190,7 +4007,7 @@ async def get_youtube_analytics(current_user: dict = Depends(get_current_user)):
 
 # ============ Grow in 120 Routes ============
 @api_router.post("/growth/start")
-async def start_growth_challenge(current_user: dict = Depends(get_current_user)):
+async def start_growth_challenge(request: Request, current_user: dict = Depends(get_current_user)):
     """Start the 120-day growth challenge"""
     try:
         # Check if user already has an active challenge
@@ -4204,7 +4021,7 @@ async def start_growth_challenge(current_user: dict = Depends(get_current_user))
             }
         
         # Create new challenge
-        today = datetime.now(timezone.utc).date().isoformat()
+        today = _get_request_day_bounds(request)["today"]
         growth_data = {
             "user_id": current_user['id'],
             "current_streak": 0,
@@ -4230,39 +4047,47 @@ async def start_growth_challenge(current_user: dict = Depends(get_current_user))
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.post("/growth/checkin", response_model=CheckinResponse)
-async def daily_checkin(current_user: dict = Depends(get_current_user)):
+async def daily_checkin(request: Request, current_user: dict = Depends(get_current_user)):
     """Manual daily check-in - requires user to have completed work today"""
     try:
-        today = datetime.now(timezone.utc).date().isoformat()
-        
-        # Check if user did any work today
-        work_done = False
+        day_bounds = _get_request_day_bounds(request)
+        today = day_bounds["today"]
+        start_utc_iso = day_bounds["start_utc_iso"]
+        end_utc_iso = day_bounds["end_utc_iso"]
         
         # Check for tag generation today
         tag_today = await db.tag_generations.find_one({
             "user_id": current_user['id'],
-            "created_at": {"$gte": today}
+            "created_at": {"$gte": start_utc_iso, "$lt": end_utc_iso}
         })
         
         # Check for description activity today
         desc_today = await db.descriptions.find_one({
             "user_id": current_user['id'],
             "$or": [
-                {"created_at": {"$gte": today}},
-                {"updated_at": {"$gte": today}}
+                {"created_at": {"$gte": start_utc_iso, "$lt": end_utc_iso}},
+                {"updated_at": {"$gte": start_utc_iso, "$lt": end_utc_iso}}
             ]
+        })
+
+        upload_today = await db.upload_jobs.find_one({
+            "user_id": current_user['id'],
+            "type": "youtube_upload",
+            "status": "succeeded",
+            "$or": [
+                {"completed_at": {"$gte": start_utc_iso, "$lt": end_utc_iso}},
+                {"updated_at": {"$gte": start_utc_iso, "$lt": end_utc_iso}},
+            ],
         })
         
         # If no work done, reject check-in
-        if not tag_today and not desc_today:
+        if not tag_today and not desc_today and not upload_today:
             return CheckinResponse(
                 success=False,
                 message="⚠️ You must generate tags, create a description, or upload to YouTube before checking in!",
                 current_streak=0,
                 total_days=0
             )
-        
-        work_done = True
         
         # Get or create growth streak
         growth = await db.growth_streaks.find_one({"user_id": current_user['id']})
@@ -4324,6 +4149,8 @@ async def daily_checkin(current_user: dict = Depends(get_current_user)):
             activity_done = "tag_generation"
         elif desc_today:
             activity_done = "description_work"
+        elif upload_today:
+            activity_done = "youtube_upload"
         
         calendar[today] = {
             "status": "completed",
@@ -4406,7 +4233,7 @@ async def get_growth_status(current_user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.get("/growth/calendar")
-async def get_growth_calendar(current_user: dict = Depends(get_current_user)):
+async def get_growth_calendar(request: Request, current_user: dict = Depends(get_current_user)):
     """Get 120-day calendar view"""
     try:
         growth = await db.growth_streaks.find_one({"user_id": current_user['id']})
@@ -4419,7 +4246,7 @@ async def get_growth_calendar(current_user: dict = Depends(get_current_user)):
             }
         
         start_date = datetime.fromisoformat(growth['challenge_start_date']).date()
-        today = datetime.now(timezone.utc).date()
+        today = datetime.fromisoformat(_get_request_day_bounds(request)["today"]).date()
         calendar = growth.get('calendar', {})
         
         # Generate full 120-day calendar
@@ -4755,76 +4582,169 @@ def _normalize_excluded_tags(raw_tags: list[str] | None, limit: int = 120) -> li
     return _normalize_tag_list(raw_tags, limit=limit)
 
 
-async def _beathelper_queue_upload_refs(user_id: str) -> set[str]:
-    queue_docs = await db.beat_helper_queue.find(
-        {"user_id": user_id},
-        {"_id": 0, "beat_file_id": 1, "image_file_id": 1},
-    ).to_list(500)
-    refs: set[str] = set()
-    for doc in queue_docs:
-        beat_id = str(doc.get("beat_file_id") or "").strip()
-        image_id = str(doc.get("image_file_id") or "").strip()
-        if beat_id:
-            refs.add(beat_id)
-        if image_id:
-            refs.add(image_id)
-    return refs
+def _build_tag_feedback_maps(prior_generations: list[dict[str, Any]]) -> tuple[dict[str, int], dict[str, int]]:
+    kept_counts: dict[str, int] = {}
+    removed_counts: dict[str, int] = {}
+
+    for doc in prior_generations:
+        for tag in (doc.get("tags") or []):
+            key = _tag_exact_key(str(tag or ""))
+            if key:
+                kept_counts[key] = kept_counts.get(key, 0) + 1
+        for tag in (doc.get("excluded_tags") or []):
+            key = _tag_exact_key(str(tag or ""))
+            if key:
+                removed_counts[key] = removed_counts.get(key, 0) + 1
+
+    return kept_counts, removed_counts
 
 
-async def _mark_uploads_as_beathelper_managed(user_id: str, upload_ids: list[str]) -> None:
-    valid_ids = [value.strip() for value in upload_ids if value and value.strip()]
-    if not valid_ids:
-        return
-    await db.uploads.update_many(
-        {"id": {"$in": valid_ids}, "user_id": user_id},
-        {"$set": {"beathelper_managed": True, "beathelper_last_linked_at": _safe_iso_now()}},
+def _score_tag_candidate(
+    *,
+    tag: str,
+    query: str,
+    artist_name: str,
+    beat_tokens: set[str],
+    source: str,
+    kept_count: int = 0,
+    removed_count: int = 0,
+) -> dict[str, Any]:
+    exact = _tag_exact_key(tag)
+    words = [word for word in exact.split() if word]
+    query_key = _tag_exact_key(query)
+    artist_key = _tag_exact_key(artist_name)
+    query_tokens = {token for token in query_key.split() if token}
+
+    relevance = 40
+    if artist_key and artist_key in exact:
+        relevance += 20
+    overlap = len(query_tokens.intersection(words))
+    relevance += min(18, overlap * 5)
+    if "type beat" in exact:
+        relevance += 10
+
+    intent = 36
+    if "type beat" in exact:
+        intent += 18
+    if "instrumental" in exact:
+        intent += 7
+    if len(words) >= 3:
+        intent += 4
+
+    specificity = 42
+    if 2 <= len(words) <= 4:
+        specificity += 18
+    elif len(words) >= 5:
+        specificity += 12
+    if any(token in beat_tokens for token in words):
+        specificity += 10
+
+    clarity = 70
+    if re.search(r"\btype beat\b", exact):
+        clarity += 10
+    if re.search(r"\b[a-z0-9]+ x [a-z0-9]+\b", exact):
+        clarity += 4
+    if re.search(r"\s{2,}", tag):
+        clarity -= 10
+
+    feedback_boost = min(12, kept_count * 3)
+    feedback_penalty = min(20, removed_count * 5)
+
+    generic_penalty = 0
+    if _is_low_intent_tag(tag):
+        generic_penalty += 18
+    if any(token in _GENERIC_BEAT_MODIFIERS for token in words) and "type beat" not in exact:
+        generic_penalty += 8
+    if len(words) == 1:
+        generic_penalty += 10
+
+    source_bonus = {
+        "youtube": 8,
+        "youtube_titles": 8,
+        "youtube_tracks": 8,
+        "spotify": 6,
+        "spotify_tracks": 6,
+        "soundcloud": 5,
+        "soundcloud_tracks": 5,
+        "custom": 4,
+        "llm": 2,
+    }.get(source, 1)
+
+    raw_score = (
+        relevance
+        + intent
+        + specificity
+        + clarity
+        + feedback_boost
+        + source_bonus
+        - feedback_penalty
+        - generic_penalty
     )
+    score = max(1, min(100, round(raw_score / 2.1)))
+
+    if removed_count > kept_count and removed_count > 0:
+        reason = "Previously removed by the user, so this tag is deprioritized."
+    elif artist_key and artist_key in exact and "type beat" in exact:
+        reason = "Strong direct artist-intent tag with clear type-beat search value."
+    elif any(token in beat_tokens for token in words):
+        reason = "Good niche fit for the beat lane and likely useful as a discovery tag."
+    elif generic_penalty > 0:
+        reason = "Somewhat generic compared to stronger niche tags."
+    else:
+        reason = "Relevant tag, but not as targeted as the highest-intent search terms."
+
+    return {
+        "tag": tag,
+        "score": score,
+        "breakdown": {
+            "relevance": max(0, min(100, relevance)),
+            "intent": max(0, min(100, intent)),
+            "specificity": max(0, min(100, specificity)),
+            "clarity": max(0, min(100, clarity)),
+            "feedback_boost": feedback_boost,
+            "feedback_penalty": feedback_penalty,
+            "generic_penalty": generic_penalty,
+            "source_bonus": source_bonus,
+        },
+        "source": source,
+        "reason": reason,
+        "feedback_counts": {
+            "kept": kept_count,
+            "removed": removed_count,
+        },
+    }
 
 
-def _delete_upload_file(upload_doc: dict) -> None:
-    try:
-        media_storage.delete(upload_doc)
-    except Exception as exc:
-        logging.warning(f"Failed to delete upload file {upload_doc.get('id')}: {str(exc)}")
+def _score_tag_list(
+    *,
+    tags: list[str],
+    query: str,
+    artist_name: str,
+    beat_tokens: set[str],
+    source_map: dict[str, str] | None = None,
+    kept_counts: dict[str, int] | None = None,
+    removed_counts: dict[str, int] | None = None,
+) -> list[dict[str, Any]]:
+    scored = []
+    source_map = source_map or {}
+    kept_counts = kept_counts or {}
+    removed_counts = removed_counts or {}
 
+    for tag in tags:
+        key = _tag_exact_key(tag)
+        scored.append(
+            _score_tag_candidate(
+                tag=tag,
+                query=query,
+                artist_name=artist_name,
+                beat_tokens=beat_tokens,
+                source=source_map.get(key, "llm"),
+                kept_count=kept_counts.get(key, 0),
+                removed_count=removed_counts.get(key, 0),
+            )
+        )
 
-async def _cleanup_unreferenced_beathelper_uploads(user_id: str, upload_ids: list[str]) -> None:
-    candidate_ids = [value.strip() for value in upload_ids if value and value.strip()]
-    if not candidate_ids:
-        return
-
-    queue_refs = await _beathelper_queue_upload_refs(user_id)
-    for upload_id in candidate_ids:
-        if upload_id in queue_refs:
-            continue
-        upload_doc = await db.uploads.find_one({"id": upload_id, "user_id": user_id}, {"_id": 0})
-        if not upload_doc or not upload_doc.get("beathelper_managed"):
-            continue
-        _delete_upload_file(upload_doc)
-        await db.uploads.delete_one({"id": upload_id, "user_id": user_id})
-
-
-async def _cleanup_all_unqueued_uploads(user_id: str) -> dict[str, int]:
-    queue_refs = await _beathelper_queue_upload_refs(user_id)
-    uploads = await db.uploads.find(
-        {"user_id": user_id, "file_type": {"$in": ["audio", "image"]}, "beathelper_managed": True},
-        {"_id": 0, "id": 1, "file_type": 1, "file_path": 1, "storage_backend": 1, "storage_key": 1, "stored_filename": 1},
-    ).to_list(5000)
-
-    deleted_audio = 0
-    deleted_images = 0
-    for upload_doc in uploads:
-        upload_id = str(upload_doc.get("id") or "").strip()
-        if not upload_id or upload_id in queue_refs:
-            continue
-        _delete_upload_file(upload_doc)
-        await db.uploads.delete_one({"id": upload_id, "user_id": user_id})
-        if upload_doc.get("file_type") == "audio":
-            deleted_audio += 1
-        elif upload_doc.get("file_type") == "image":
-            deleted_images += 1
-
-    return {"deleted_audio_uploads": deleted_audio, "deleted_image_uploads": deleted_images}
+    return sorted(scored, key=lambda item: (-int(item.get("score", 0)), item.get("tag", "")))
 
 
 def _is_generic_artist_modifier_tag(tag: str, artist_name: str, seed_tokens: set[str]) -> bool:
@@ -5203,7 +5123,7 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
         query_key = _normalize_query_key(request.query)
         prior_generations = await db.tag_generations.find(
             {"user_id": current_user["id"], "query_key": query_key},
-            {"_id": 0, "excluded_tags": 1},
+            {"_id": 0, "tags": 1, "excluded_tags": 1},
         ).to_list(50)
         excluded_tag_keys = {
             _tag_exact_key(tag)
@@ -5211,6 +5131,7 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
             for tag in (doc.get("excluded_tags") or [])
             if _tag_exact_key(tag)
         }
+        kept_tag_counts, removed_tag_counts = _build_tag_feedback_maps(prior_generations)
         
         # Extract artist name from query (e.g., "drake type beat" -> "drake")
         artist_name = _normalize_artist_query(request.query)
@@ -5519,6 +5440,31 @@ Optional candidate inspirations from YouTube/Spotify/SoundCloud/custom inputs:
             "dropped_tags": dropped_debug,
         }
 
+        beat_tokens = {
+            token
+            for token in _tag_exact_key(request.query).split()
+            if token and token not in _TAG_NOISE_WORDS
+        }
+        source_lookup = {
+            _tag_exact_key(entry.get("tag", "")): entry.get("source", "llm")
+            for entry in selected_tags_debug
+            if _tag_exact_key(entry.get("tag", ""))
+        }
+        scored_tags = _score_tag_list(
+            tags=final_tags,
+            query=request.query,
+            artist_name=artist_name,
+            beat_tokens=beat_tokens,
+            source_map=source_lookup,
+            kept_counts=kept_tag_counts,
+            removed_counts=removed_tag_counts,
+        )
+        feedback_summary = {
+            "prior_kept_signals": sum(kept_tag_counts.values()),
+            "prior_removed_signals": sum(removed_tag_counts.values()),
+            "generation_count": len(prior_generations),
+        }
+
         logging.info(
             f"Generated refined tags: {len(final_tags)} final, "
             f"{len(unique_candidate_pool)} candidates considered"
@@ -5529,7 +5475,9 @@ Optional candidate inspirations from YouTube/Spotify/SoundCloud/custom inputs:
             user_id=current_user['id'],
             query=request.query,
             tags=final_tags,
+            scored_tags=scored_tags,
             excluded_tags=[],
+            feedback_summary=feedback_summary,
             debug=debug_info if _can_view_tag_debug(current_user) else None,
         )
         
@@ -5646,11 +5594,26 @@ async def save_tag_history(request: TagHistorySaveRequest, current_user: dict = 
     if len(unique_tags) > 120:
         raise HTTPException(status_code=400, detail="Tag limit exceeded (max 120)")
 
+    artist_name = _normalize_artist_query(request.query)
+    beat_tokens = {
+        token
+        for token in _tag_exact_key(request.query).split()
+        if token and token not in _TAG_NOISE_WORDS
+    }
+    scored_tags = _score_tag_list(
+        tags=unique_tags,
+        query=request.query.strip(),
+        artist_name=artist_name,
+        beat_tokens=beat_tokens,
+    )
+
     tag_gen = TagGenerationResponse(
         user_id=current_user['id'],
         query=request.query.strip(),
         tags=unique_tags,
+        scored_tags=scored_tags,
         excluded_tags=[],
+        feedback_summary={"accepted_count": len(unique_tags), "removed_count": 0, "added_count": 0, "edited_count": 0},
     )
 
     tag_doc = tag_gen.model_dump()
@@ -5683,14 +5646,54 @@ async def update_tag_history(tag_id: str, request: TagHistoryUpdateRequest, curr
         tag for tag in (existing.get("tags") or [])
         if _tag_exact_key(tag) and _tag_exact_key(tag) not in new_tag_keys
     ]
+    added_tags = _normalize_tag_list(request.added_tags, limit=120)
+    added_tag_keys = {_tag_exact_key(tag) for tag in added_tags if _tag_exact_key(tag)}
+    added_from_existing = [
+        tag for tag in unique_tags
+        if _tag_exact_key(tag) and _tag_exact_key(tag) not in existing_tag_keys
+    ]
+    edited_count = max(0, len(added_from_existing) - len(added_tag_keys))
     excluded_all = _append_unique_tags(excluded_all, removed_from_existing, max_tags=120)
+
+    feedback_summary = existing.get("feedback_summary") if isinstance(existing.get("feedback_summary"), dict) else {}
+    next_feedback_summary = {
+        "accepted_count": int(feedback_summary.get("accepted_count") or 0) + len(unique_tags),
+        "removed_count": int(feedback_summary.get("removed_count") or 0) + len(removed_from_existing),
+        "added_count": int(feedback_summary.get("added_count") or 0) + len(added_from_existing),
+        "edited_count": int(feedback_summary.get("edited_count") or 0) + edited_count,
+    }
+
+    artist_name = _normalize_artist_query(existing.get("query", ""))
+    beat_tokens = {
+        token
+        for token in _tag_exact_key(existing.get("query", "")).split()
+        if token and token not in _TAG_NOISE_WORDS
+    }
+    try:
+        prior_generations = await db.tag_generations.find(
+            {"user_id": current_user["id"], "query_key": existing.get("query_key") or _normalize_query_key(existing.get("query", ""))},
+            {"_id": 0, "tags": 1, "excluded_tags": 1},
+        ).to_list(50)
+    except (AttributeError, TypeError):
+        prior_generations = []
+    kept_tag_counts, removed_tag_counts = _build_tag_feedback_maps(prior_generations)
+    scored_tags = _score_tag_list(
+        tags=unique_tags,
+        query=existing.get("query", ""),
+        artist_name=artist_name,
+        beat_tokens=beat_tokens,
+        kept_counts=kept_tag_counts,
+        removed_counts=removed_tag_counts,
+    )
 
     await db.tag_generations.update_one(
         {"id": tag_id, "user_id": current_user["id"]},
         {
             "$set": {
                 "tags": unique_tags,
+                "scored_tags": scored_tags,
                 "excluded_tags": excluded_all,
+                "feedback_summary": next_feedback_summary,
             }
         },
     )
@@ -5717,6 +5720,7 @@ async def join_tags_ai(request: TagJoinRequest, current_user: dict = Depends(get
         raise HTTPException(status_code=400, detail="You can join up to 3 tag generations at once.")
     if not request.candidate_tags:
         raise HTTPException(status_code=400, detail="Candidate tags are required.")
+    await _ensure_pro_user(current_user, "Tag join")
 
     if not current_user.get("_execute_inline"):
         await _guard_heavy_feature(current_user=current_user, feature_key="tag_join", job_type="tag_join")
@@ -5983,123 +5987,6 @@ async def delete_description(description_id: str, current_user: dict = Depends(g
     
     return {"message": "Description deleted successfully"}
 
-@api_router.post("/descriptions/refine")
-async def refine_description(request: RefineDescriptionRequest, current_user: dict = Depends(get_current_user)):
-    try:
-        await _guard_heavy_feature(current_user=current_user, feature_key="description_refine", queue_allowed_when_busy=False)
-        _enforce_action_rate_limit(
-            f"description_refine:{current_user['id']}",
-            limit=12,
-            window_seconds=600,
-            detail_message="Too many description refine requests. Please wait a few minutes.",
-        )
-        await ensure_has_credit(current_user['id'], "generations")
-        cache_payload = {"description": (request.description or "").strip()}
-        cache_key = _build_ai_cache_key(namespace="description_refine", user_id=current_user["id"], payload=cache_payload)
-        cached = await _get_cached_ai_payload(cache_key)
-        if cached:
-            await consume_credit(current_user['id'])
-            return cached
-        prompt = f"""Refine and improve this YouTube beat description:
-
-{request.description}
-
-Make it more engaging, professional, and optimized for YouTube. Keep the same information but improve the structure, flow, and appeal. Return only the refined description."""
-        
-        response = await llm_chat(
-            system_message="You are an expert at refining YouTube beat descriptions to maximize engagement and professionalism.",
-            user_message=prompt,
-        )
-        result = {"refined_description": response.strip()}
-        await _set_cached_ai_payload(
-            cache_key=cache_key,
-            cache_type="description_refine",
-            user_id=current_user["id"],
-            payload=result,
-            ttl_seconds=METADATA_CACHE_TTL_SECONDS,
-        )
-        await consume_credit(current_user['id'])
-        return result
-        
-    except Exception as e:
-        logging.error(f"Error refining description: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to refine description: {str(e)}")
-
-@api_router.post("/descriptions/generate")
-async def generate_description(request: GenerateDescriptionRequest, current_user: dict = Depends(get_current_user)):
-    try:
-        await _guard_heavy_feature(current_user=current_user, feature_key="description_generate", queue_allowed_when_busy=False)
-        _enforce_action_rate_limit(
-            f"description_generate:{current_user['id']}",
-            limit=12,
-            window_seconds=600,
-            detail_message="Too many description generation requests. Please wait a few minutes.",
-        )
-        await ensure_has_credit(current_user['id'], "generations")
-        cache_payload = {
-            "email": request.email or "",
-            "socials": request.socials or "",
-            "key": request.key or "",
-            "bpm": request.bpm or "",
-            "prices": request.prices or "",
-            "additional_info": request.additional_info or "",
-        }
-        cache_key = _build_ai_cache_key(namespace="description_generate", user_id=current_user["id"], payload=cache_payload)
-        cached = await _get_cached_ai_payload(cache_key)
-        if cached:
-            await consume_credit(current_user['id'])
-            return cached
-        
-        info_parts = []
-        if request.key:
-            info_parts.append(f"Key: {request.key}")
-        if request.bpm:
-            info_parts.append(f"BPM: {request.bpm}")
-        if request.prices:
-            info_parts.append(f"Prices: {request.prices}")
-        if request.email:
-            info_parts.append(f"Contact Email: {request.email}")
-        if request.socials:
-            info_parts.append(f"Social Media: {request.socials}")
-        if request.additional_info:
-            info_parts.append(f"Additional Info: {request.additional_info}")
-        
-        beat_info = "\n".join(info_parts)
-        
-        prompt = f"""Create a professional and engaging YouTube beat description using this information:
-
-{beat_info}
-
-The description should:
-- Be attention-grabbing and professional
-- Include all provided information naturally
-- Have clear sections (about the beat, purchase info, contact)
-- Use emojis strategically
-- Include a call-to-action
-- Be optimized for YouTube
-
-Return only the complete description."""
-        
-        response = await llm_chat(
-            system_message="You are an expert at creating compelling YouTube beat descriptions that convert viewers into buyers.",
-            user_message=prompt,
-        )
-        result = {"generated_description": response.strip()}
-        await _set_cached_ai_payload(
-            cache_key=cache_key,
-            cache_type="description_generate",
-            user_id=current_user["id"],
-            payload=result,
-            ttl_seconds=METADATA_CACHE_TTL_SECONDS,
-        )
-        await consume_credit(current_user['id'])
-        return result
-        
-    except Exception as e:
-        logging.error(f"Error generating description: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to generate description: {str(e)}")
-
-
 # ============ File Upload Routes ============
 @api_router.post("/upload/audio")
 async def upload_audio(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
@@ -6232,787 +6119,6 @@ async def get_my_uploads(current_user: dict = Depends(get_current_user)):
     return uploads
 
 
-# ============ BeatHelper Routes (Pro) ============
-@api_router.get("/beat-helper/uploads")
-async def beathelper_get_uploads(current_user: dict = Depends(get_current_user)):
-    await _ensure_pro_user(current_user, "BeatHelper")
-    queue_refs = await _beathelper_queue_upload_refs(current_user["id"])
-    uploads = await db.uploads.find(
-        {
-            "user_id": current_user["id"],
-            "$or": [
-                {"id": {"$in": list(queue_refs) or ["__none__"]}},
-                {"beathelper_managed": True},
-            ],
-        },
-        {"_id": 0, "id": 1, "original_filename": 1, "file_type": 1, "uploaded_at": 1, "media_kind": 1}
-    ).sort("uploaded_at", -1).to_list(500)
-    audio = [item for item in uploads if item.get("file_type") == "audio"]
-    images = [item for item in uploads if item.get("file_type") == "image"]
-    return {"audio_uploads": audio, "image_uploads": images}
-
-
-@api_router.post("/beat-helper/uploads/stage")
-async def beathelper_stage_upload(payload: BeatHelperStageUploadRequest, current_user: dict = Depends(get_current_user)):
-    await _ensure_pro_user(current_user, "BeatHelper")
-    file_id = (payload.file_id or "").strip()
-    if not file_id:
-        raise HTTPException(status_code=400, detail="file_id is required.")
-    upload = await db.uploads.find_one(
-        {"id": file_id, "user_id": current_user["id"], "file_type": {"$in": ["audio", "image"]}},
-        {"_id": 0, "id": 1},
-    )
-    if not upload:
-        raise HTTPException(status_code=404, detail="Upload not found.")
-    await _mark_uploads_as_beathelper_managed(current_user["id"], [file_id])
-    return {"success": True, "file_id": file_id}
-
-
-@api_router.post("/beat-helper/uploads/cleanup")
-async def beathelper_cleanup_uploads(current_user: dict = Depends(get_current_user)):
-    await _ensure_pro_user(current_user, "BeatHelper")
-    result = await _cleanup_all_unqueued_uploads(current_user["id"])
-    return {"success": True, **result}
-
-
-@api_router.get("/beat-helper/image/{file_id}/preview")
-async def beathelper_get_image_preview(file_id: str, current_user: dict = Depends(get_current_user)):
-    await _ensure_pro_user(current_user, "BeatHelper")
-    upload = await db.uploads.find_one({
-        "id": file_id.strip(),
-        "user_id": current_user["id"],
-        "file_type": "image",
-    })
-    if not upload:
-        raise HTTPException(status_code=404, detail="Image not found.")
-
-    if not media_storage.exists(upload):
-        raise HTTPException(status_code=404, detail="Image file missing on server.")
-
-    visual_kind = _visual_kind_from_upload(upload)
-    if visual_kind == "video":
-        return {
-            "file_id": upload.get("id"),
-            "filename": upload.get("original_filename"),
-            "kind": "video",
-            "preview_url": f"/api/beat-helper/visual/{upload.get('id')}/stream",
-        }
-
-    image_bytes = media_storage.read_bytes(upload)
-    data_url = _image_data_url_from_bytes(image_bytes, max_dimensions=(480, 480), fit="contain", quality=72)
-    return {"file_id": upload.get("id"), "filename": upload.get("original_filename"), "kind": "image", "data_url": data_url}
-
-
-@api_router.get("/beat-helper/visual/{file_id}/stream")
-async def beathelper_stream_visual(file_id: str, current_user: dict = Depends(get_current_user)):
-    await _ensure_pro_user(current_user, "BeatHelper")
-    upload = await db.uploads.find_one({
-        "id": file_id.strip(),
-        "user_id": current_user["id"],
-        "file_type": "image",
-    })
-    if not upload:
-        raise HTTPException(status_code=404, detail="Visual not found.")
-    if not media_storage.exists(upload):
-        raise HTTPException(status_code=404, detail="Visual file missing on server.")
-    ext = media_storage.get_suffix(upload)
-    media_type = {
-        ".jpg": "image/jpeg",
-        ".jpeg": "image/jpeg",
-        ".png": "image/png",
-        ".webp": "image/webp",
-        ".webm": "video/webm",
-        ".mp4": "video/mp4",
-        ".mov": "video/quicktime",
-        ".m4v": "video/mp4",
-    }.get(ext, "application/octet-stream")
-    return media_storage.stream_response(
-        upload,
-        media_type=media_type,
-        filename=upload.get("original_filename") or upload.get("stored_filename"),
-    )
-
-
-@api_router.get("/beat-helper/queue")
-async def beathelper_get_queue(current_user: dict = Depends(get_current_user)):
-    await _ensure_pro_user(current_user, "BeatHelper")
-    items = await db.beat_helper_queue.find(
-        {"user_id": current_user["id"]},
-        {"_id": 0}
-    ).sort("created_at", -1).to_list(200)
-    return items
-
-
-@api_router.get("/beat-helper/contact-settings")
-async def beathelper_get_contact_settings(current_user: dict = Depends(get_current_user)):
-    await _ensure_pro_user(current_user, "BeatHelper")
-    user_doc = await db.users.find_one(
-        {"id": current_user["id"]},
-        {"_id": 0, "email": 1, "phone": 1, "reminder_email_enabled": 1, "reminder_sms_enabled": 1}
-    )
-    return {
-        "email": (user_doc or {}).get("email") or "",
-        "phone": (user_doc or {}).get("phone") or "",
-        "email_enabled": bool((user_doc or {}).get("reminder_email_enabled")),
-        "sms_enabled": bool((user_doc or {}).get("reminder_sms_enabled")),
-    }
-
-
-@api_router.put("/beat-helper/contact-settings")
-async def beathelper_update_contact_settings(
-    request: BeatHelperContactSettingsRequest,
-    current_user: dict = Depends(get_current_user),
-):
-    await _ensure_pro_user(current_user, "BeatHelper")
-    email = (request.email or "").strip()
-    phone = re.sub(r"\s+", "", (request.phone or "").strip())
-    if email and "@" not in email:
-        raise HTTPException(status_code=400, detail="Invalid email format.")
-    if phone and not re.match(r"^\+?[0-9]{7,15}$", phone):
-        raise HTTPException(status_code=400, detail="Invalid phone format. Use digits with optional leading +.")
-
-    await db.users.update_one(
-        {"id": current_user["id"]},
-        {"$set": {
-            "email": email or None,
-            "phone": phone or None,
-            "reminder_email_enabled": bool(request.email_enabled),
-            "reminder_sms_enabled": bool(request.sms_enabled),
-        }}
-    )
-
-    username = (current_user.get("username") or "producer").strip()
-    confirmation_subject = "BeatHelper notifications enabled"
-    confirmation_message = (
-        f"Hey {username}, BeatHelper notifications are now enabled for your account.\n\n"
-        "You will receive beat queue updates on this channel based on your selected settings.\n"
-        "If this was not you, update your notification settings in dashboard immediately."
-    )
-    sms_message = (
-        f"BeatHelper: Notifications enabled for @{username}. "
-        "You will receive beat queue updates on this number."
-    )
-
-    email_confirmation_sent = False
-    sms_confirmation_sent = False
-    if request.email_enabled and email:
-        email_confirmation_sent = _send_email_notification(email, confirmation_subject, confirmation_message)
-    if request.sms_enabled and phone:
-        sms_confirmation_sent = _send_sms_notification(phone, sms_message)
-
-    await db.users.update_one(
-        {"id": current_user["id"]},
-        {"$set": {
-            "beathelper_contact_confirmation_sent_at": _safe_iso_now(),
-            "beathelper_contact_confirmation_status": {
-                "email_enabled": bool(request.email_enabled),
-                "sms_enabled": bool(request.sms_enabled),
-                "email_confirmation_sent": bool(email_confirmation_sent),
-                "sms_confirmation_sent": bool(sms_confirmation_sent),
-            },
-        }}
-    )
-
-    return {
-        "success": True,
-        "confirmation": {
-            "email_enabled": bool(request.email_enabled),
-            "sms_enabled": bool(request.sms_enabled),
-            "email_confirmation_sent": bool(email_confirmation_sent),
-            "sms_confirmation_sent": bool(sms_confirmation_sent),
-        }
-    }
-
-
-@api_router.get("/beat-helper/tag-templates")
-async def beathelper_get_tag_templates(current_user: dict = Depends(get_current_user)):
-    await _ensure_pro_user(current_user, "BeatHelper")
-    templates = await db.beat_helper_tag_templates.find(
-        {"user_id": current_user["id"]},
-        {"_id": 0}
-    ).sort("updated_at", -1).to_list(200)
-    return templates
-
-
-@api_router.post("/beat-helper/tag-templates")
-async def beathelper_create_tag_template(
-    request: BeatHelperTagTemplateCreateRequest,
-    current_user: dict = Depends(get_current_user),
-):
-    await _ensure_pro_user(current_user, "BeatHelper")
-    name = (request.name or "").strip()
-    if not name:
-        raise HTTPException(status_code=400, detail="Template name is required.")
-    tags = _normalize_tag_list(request.tags, limit=80)
-    template = {
-        "id": str(uuid.uuid4()),
-        "user_id": current_user["id"],
-        "name": name[:80],
-        "tags": tags,
-        "created_at": _safe_iso_now(),
-        "updated_at": _safe_iso_now(),
-    }
-    await db.beat_helper_tag_templates.insert_one(template)
-    return template
-
-
-@api_router.patch("/beat-helper/tag-templates/{template_id}")
-async def beathelper_update_tag_template(
-    template_id: str,
-    request: BeatHelperTagTemplateUpdateRequest,
-    current_user: dict = Depends(get_current_user),
-):
-    await _ensure_pro_user(current_user, "BeatHelper")
-    updates: dict = {"updated_at": _safe_iso_now()}
-    if request.name is not None:
-        name = request.name.strip()
-        if not name:
-            raise HTTPException(status_code=400, detail="Template name cannot be empty.")
-        updates["name"] = name[:80]
-    if request.tags is not None:
-        updates["tags"] = _normalize_tag_list(request.tags, limit=80)
-
-    result = await db.beat_helper_tag_templates.update_one(
-        {"id": template_id, "user_id": current_user["id"]},
-        {"$set": updates},
-    )
-    if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Template not found.")
-    return {"success": True}
-
-
-@api_router.delete("/beat-helper/tag-templates/{template_id}")
-async def beathelper_delete_tag_template(template_id: str, current_user: dict = Depends(get_current_user)):
-    await _ensure_pro_user(current_user, "BeatHelper")
-    result = await db.beat_helper_tag_templates.delete_one({"id": template_id, "user_id": current_user["id"]})
-    if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Template not found.")
-    return {"success": True}
-
-
-@api_router.post("/beat-helper/assist-title")
-async def beathelper_assist_title(
-    request: BeatHelperAssistTitleRequest,
-    current_user: dict = Depends(get_current_user),
-):
-    await _ensure_pro_user(current_user, "BeatHelper")
-    target_artist = request.target_artist.strip()
-    beat_type = request.beat_type.strip()
-    if not target_artist or not beat_type:
-        raise HTTPException(status_code=400, detail="target_artist and beat_type are required.")
-
-    current_title = (request.current_title or "").strip()
-    prompt = (
-        "Generate 5 high-converting YouTube type beat titles.\n"
-        f"Artist: {target_artist}\n"
-        f"Beat Type: {beat_type}\n"
-        f"Current title: {current_title or 'none'}\n"
-        f"Context tags: {', '.join(request.context_tags[:20]) if request.context_tags else 'none'}\n"
-        "Rules: no BPM, no key, <= 100 chars each, plain text.\n"
-        "Return JSON: {\"titles\": [\"...\", \"...\", ...]}"
-    )
-    try:
-        raw = await llm_chat(
-            system_message="You are a YouTube SEO assistant for producers. Output JSON only.",
-            user_message=prompt,
-            temperature=0.5,
-            user_id=current_user["id"],
-        )
-        parsed = _parse_llm_json_response(raw)
-        titles = parsed.get("titles") if isinstance(parsed.get("titles"), list) else []
-        cleaned = []
-        seen = set()
-        for title in titles:
-            value = re.sub(r"\s+", " ", str(title or "").strip())
-            if not value:
-                continue
-            key = value.lower()
-            if key in seen:
-                continue
-            seen.add(key)
-            cleaned.append(value[:100])
-            if len(cleaned) >= 5:
-                break
-        if not cleaned:
-            cleaned = [f"{target_artist} Type Beat - {beat_type.title()} Instrumental"]
-        return {"titles": cleaned}
-    except Exception:
-        return {"titles": [f"{target_artist} Type Beat - {beat_type.title()} Instrumental"]}
-
-
-@api_router.post("/beat-helper/queue")
-async def beathelper_create_queue_item(
-    request: BeatHelperQueueCreateRequest,
-    current_user: dict = Depends(get_current_user),
-):
-    try:
-        await _ensure_pro_user(current_user, "BeatHelper")
-
-        if not request.beat_file_id.strip():
-            raise HTTPException(status_code=400, detail="beat_file_id is required.")
-        if not request.target_artist.strip() or not request.beat_type.strip():
-            raise HTTPException(status_code=400, detail="target_artist and beat_type are required.")
-
-        beat_file = await db.uploads.find_one({
-            "id": request.beat_file_id,
-            "user_id": current_user["id"],
-            "file_type": "audio",
-        })
-        if not beat_file:
-            raise HTTPException(status_code=404, detail="Beat audio file not found.")
-
-        image_file_id = (request.image_file_id or "").strip()
-        image_file = None
-        if image_file_id:
-            image_file = await db.uploads.find_one({
-                "id": image_file_id,
-                "user_id": current_user["id"],
-                "file_type": "image",
-            })
-            if not image_file:
-                raise HTTPException(status_code=404, detail="Selected thumbnail image not found.")
-
-        if not image_file and request.ai_choose_image:
-            ai_query = f"{request.target_artist} type beat {request.beat_type}".strip()
-            image_suggestions = await generate_image_suggestions(
-                ImageGenerateRequest(title=ai_query, tags=request.context_tags or [], k=1),
-                current_user,
-            )
-            if image_suggestions.results:
-                chosen = image_suggestions.results[0]
-                imported = await upload_image_from_url(
-                    UploadImageFromUrlRequest(
-                        image_url=chosen.image_url,
-                        original_filename=f"{request.target_artist}-ai-thumb.jpg",
-                    ),
-                    current_user,
-                )
-                image_file_id = imported.get("file_id")
-                image_file = await db.uploads.find_one({
-                    "id": image_file_id,
-                    "user_id": current_user["id"],
-                    "file_type": "image",
-                })
-
-        if not image_file:
-            raise HTTPException(
-                status_code=400,
-                detail="A thumbnail is required. Pick one manually or enable AI image selection."
-            )
-
-        duplicate_beat = await db.beat_helper_queue.find_one({
-            "user_id": current_user["id"],
-            "status": {"$in": ["queued", "pending_approval", "approved"]},
-            "beat_file_id": request.beat_file_id,
-        })
-        if duplicate_beat:
-            raise HTTPException(status_code=409, detail="This beat is already queued.")
-
-        duplicate_image = await db.beat_helper_queue.find_one({
-            "user_id": current_user["id"],
-            "status": {"$in": ["queued", "pending_approval", "approved"]},
-            "image_file_id": image_file.get("id"),
-        })
-        if duplicate_image:
-            raise HTTPException(status_code=409, detail="This thumbnail is already used in another active queue item.")
-
-        approval_timeout_hours = max(1, min(72, int(request.approval_timeout_hours or BEATHELPER_DEFAULT_APPROVAL_TIMEOUT_HOURS)))
-        notify_channel = (request.notify_channel or BEATHELPER_DEFAULT_NOTIFY_CHANNEL or "email").strip().lower()
-        if notify_channel not in {"none", "email", "sms", "email_sms"}:
-            notify_channel = "email"
-
-        metadata = await _generate_beathelper_metadata(
-            target_artist=request.target_artist,
-            beat_type=request.beat_type,
-            context_tags=request.context_tags or [],
-            user_id=current_user["id"],
-        )
-        template_id = (request.template_id or "").strip()
-        template_doc = None
-        if template_id:
-            template_doc = await db.beat_helper_tag_templates.find_one(
-                {"id": template_id, "user_id": current_user["id"]},
-                {"_id": 0}
-            )
-            if template_doc:
-                metadata["tags"] = _normalize_tag_list((template_doc.get("tags") or []) + (metadata.get("tags") or []))
-
-        description_id = str(uuid.uuid4())
-        description_doc = {
-            "id": description_id,
-            "user_id": current_user["id"],
-            "title": f"BeatHelper - {metadata['title'][:80]}",
-            "content": metadata["description"],
-            "is_ai_generated": True,
-            "created_at": _safe_iso_now(),
-            "updated_at": _safe_iso_now(),
-        }
-        await db.descriptions.insert_one(description_doc)
-
-        tags_id = str(uuid.uuid4())
-        tags_doc = {
-            "id": tags_id,
-            "user_id": current_user["id"],
-            "query": f"{request.target_artist} {request.beat_type}".strip(),
-            "tags": metadata["tags"],
-            "created_at": _safe_iso_now(),
-        }
-        await db.tag_generations.insert_one(tags_doc)
-
-        best_hour_utc = await _estimate_best_upload_hour_utc(current_user["id"])
-        now_utc = datetime.now(timezone.utc)
-        scheduled_for = now_utc.replace(hour=best_hour_utc, minute=0, second=0, microsecond=0)
-        if scheduled_for <= now_utc:
-            scheduled_for = scheduled_for + timedelta(days=1)
-
-        item_id = str(uuid.uuid4())
-        queue_doc = {
-            "id": item_id,
-            "user_id": current_user["id"],
-            "status": "queued",
-            "beat_file_id": request.beat_file_id,
-            "beat_original_filename": beat_file.get("original_filename"),
-            "image_file_id": image_file.get("id"),
-            "image_original_filename": image_file.get("original_filename"),
-            "target_artist": request.target_artist.strip(),
-            "beat_type": request.beat_type.strip(),
-            "context_tags": request.context_tags or [],
-            "ai_choose_image": bool(request.ai_choose_image),
-            "approval_timeout_hours": approval_timeout_hours,
-            "auto_upload_if_no_response": bool(request.auto_upload_if_no_response),
-            "notify_channel": notify_channel,
-            "privacy_status": request.privacy_status,
-            "best_upload_hour_utc": int(best_hour_utc),
-            "scheduled_for_utc": scheduled_for.isoformat(),
-            "generated_title": metadata["title"],
-            "generated_tags": metadata["tags"],
-            "generated_description": metadata["description"],
-            "template_id": template_id or None,
-            "template_name": (template_doc or {}).get("name"),
-            "description_id": description_id,
-            "tags_id": tags_id,
-            "created_at": _safe_iso_now(),
-            "updated_at": _safe_iso_now(),
-            "approval_requested_at": None,
-            "approval_expires_at": None,
-            "last_notification_status": "none",
-        }
-
-        override_title = (request.generated_title_override or "").strip()
-        if override_title:
-            queue_doc["generated_title"] = override_title[:100]
-            description_doc["title"] = f"BeatHelper - {override_title[:80]}"
-            await db.descriptions.update_one(
-                {"id": description_id, "user_id": current_user["id"]},
-                {"$set": {"title": description_doc["title"], "updated_at": _safe_iso_now()}},
-            )
-
-        await db.beat_helper_queue.insert_one(queue_doc)
-        await _mark_uploads_as_beathelper_managed(
-            current_user["id"],
-            [request.beat_file_id, image_file.get("id") if image_file else ""],
-        )
-        return queue_doc
-    except HTTPException:
-        raise
-    except Exception as e:
-        logging.error(f"beathelper_create_queue_item error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to queue beat: {str(e)}")
-
-
-@api_router.post("/beat-helper/queue/{item_id}/request-approval")
-async def beathelper_request_approval(item_id: str, current_user: dict = Depends(get_current_user)):
-    await _ensure_pro_user(current_user, "BeatHelper")
-    item = await db.beat_helper_queue.find_one({"id": item_id, "user_id": current_user["id"]})
-    if not item:
-        raise HTTPException(status_code=404, detail="Queue item not found.")
-    user_doc = await db.users.find_one(
-        {"id": current_user["id"]},
-        {"_id": 0, "id": 1, "username": 1, "email": 1, "phone": 1}
-    ) or {"id": current_user["id"], "username": current_user.get("username", "")}
-    dispatch_result = await _dispatch_beathelper_approval_request(item, user_doc, source="manual")
-
-    return {
-        "success": True,
-        "status": dispatch_result.get("status", "failed"),
-        "approval_expires_at": dispatch_result.get("approval_expires_at"),
-        "message": "Approval request sent. Beat will not upload until approved unless auto-upload is enabled.",
-    }
-
-
-@api_router.post("/beat-helper/dispatch-daily-now")
-async def beathelper_dispatch_daily_now(current_user: dict = Depends(get_current_user)):
-    """Manual trigger so user can test SMS/email dispatch immediately."""
-    await _ensure_pro_user(current_user, "BeatHelper")
-    result = await _dispatch_daily_beathelper_for_user(current_user["id"], source="manual_test")
-    if not result.get("dispatched"):
-        return {"success": False, **result}
-    return {"success": True, **result}
-
-
-@api_router.post("/beat-helper/queue/{item_id}/approve-upload")
-async def beathelper_approve_and_upload(item_id: str, current_user: dict = Depends(get_current_user)):
-    await _ensure_pro_user(current_user, "BeatHelper")
-    item = await db.beat_helper_queue.find_one({"id": item_id, "user_id": current_user["id"]})
-    if not item:
-        raise HTTPException(status_code=404, detail="Queue item not found.")
-
-    if item.get("status") == "uploaded":
-        return {"success": True, "message": "Already uploaded.", "video_url": item.get("video_url")}
-
-    payload = await _build_youtube_upload_job_payload(
-        current_user=current_user,
-        title=item.get("generated_title") or item.get("beat_original_filename") or "Beat upload",
-        description_id=item.get("description_id"),
-        tags_id=item.get("tags_id"),
-        privacy_status=item.get("privacy_status", "public"),
-        audio_file_id=item.get("beat_file_id"),
-        image_file_id=item.get("image_file_id"),
-        description_override=item.get("generated_description"),
-        aspect_ratio="16:9",
-        image_scale=1.0,
-        image_scale_x=None,
-        image_scale_y=None,
-        image_pos_x=0.0,
-        image_pos_y=0.0,
-        image_rotation=0.0,
-        background_color="black",
-        remove_watermark=True,
-        beat_helper_item_id=item_id,
-    )
-    job_doc = await _create_youtube_upload_job(current_user=current_user, payload=payload)
-    return {
-        "success": True,
-        "queued": True,
-        "message": "Upload queued. BeatHelper will update the item when YouTube upload finishes.",
-        "job": _sanitize_upload_job_doc(job_doc),
-    }
-
-
-@api_router.patch("/beat-helper/queue/{item_id}")
-async def beathelper_update_queue_item(
-    item_id: str,
-    request: BeatHelperQueueUpdateRequest,
-    current_user: dict = Depends(get_current_user),
-):
-    await _ensure_pro_user(current_user, "BeatHelper")
-    result = await db.beat_helper_queue.update_one(
-        {"id": item_id, "user_id": current_user["id"]},
-        {"$set": {"status": request.status, "updated_at": _safe_iso_now()}},
-    )
-    if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Queue item not found.")
-    return {"success": True}
-
-
-@api_router.post("/beat-helper/queue/{item_id}/respond")
-async def beathelper_respond_to_request(
-    item_id: str,
-    request: BeatHelperUserResponseRequest,
-    current_user: dict = Depends(get_current_user),
-):
-    await _ensure_pro_user(current_user, "BeatHelper")
-    if request.action == "approve":
-        return await beathelper_approve_and_upload(item_id=item_id, current_user=current_user)
-    if request.action == "skip":
-        await db.beat_helper_queue.update_one(
-            {"id": item_id, "user_id": current_user["id"]},
-            {"$set": {"status": "skipped", "updated_at": _safe_iso_now()}},
-        )
-        return {"success": True, "status": "skipped"}
-
-    # change
-    patch_payload = BeatHelperQueueEditRequest(
-        generated_title=request.generated_title,
-        target_artist=request.target_artist,
-        beat_type=request.beat_type,
-        beat_file_id=request.beat_file_id,
-        image_file_id=request.image_file_id,
-    )
-    return await beathelper_edit_queue_item(
-        item_id=item_id,
-        request=patch_payload,
-        current_user=current_user,
-    )
-
-
-@api_router.patch("/beat-helper/queue/{item_id}/edit")
-async def beathelper_edit_queue_item(
-    item_id: str,
-    request: BeatHelperQueueEditRequest,
-    current_user: dict = Depends(get_current_user),
-):
-    await _ensure_pro_user(current_user, "BeatHelper")
-    item = await db.beat_helper_queue.find_one({"id": item_id, "user_id": current_user["id"]}, {"_id": 0})
-    if not item:
-        raise HTTPException(status_code=404, detail="Queue item not found.")
-
-    updates: dict[str, Any] = {"updated_at": _safe_iso_now()}
-
-    old_upload_ids_to_cleanup: list[str] = []
-
-    if request.beat_file_id:
-        beat_doc = await db.uploads.find_one({
-            "id": request.beat_file_id,
-            "user_id": current_user["id"],
-            "file_type": "audio",
-        })
-        if not beat_doc:
-            raise HTTPException(status_code=404, detail="Selected beat audio not found.")
-        duplicate_beat = await db.beat_helper_queue.find_one({
-            "id": {"$ne": item_id},
-            "user_id": current_user["id"],
-            "status": {"$in": ["queued", "pending_approval", "approved"]},
-            "beat_file_id": request.beat_file_id,
-        })
-        if duplicate_beat:
-            raise HTTPException(status_code=409, detail="This beat is already queued elsewhere.")
-        previous_beat_id = str(item.get("beat_file_id") or "").strip()
-        if previous_beat_id and previous_beat_id != request.beat_file_id:
-            old_upload_ids_to_cleanup.append(previous_beat_id)
-        updates["beat_file_id"] = request.beat_file_id
-        updates["beat_original_filename"] = beat_doc.get("original_filename")
-
-    if request.image_file_id:
-        image_doc = await db.uploads.find_one({
-            "id": request.image_file_id,
-            "user_id": current_user["id"],
-            "file_type": "image",
-        })
-        if not image_doc:
-            raise HTTPException(status_code=404, detail="Selected image not found.")
-        duplicate_image = await db.beat_helper_queue.find_one({
-            "id": {"$ne": item_id},
-            "user_id": current_user["id"],
-            "status": {"$in": ["queued", "pending_approval", "approved"]},
-            "image_file_id": request.image_file_id,
-        })
-        if duplicate_image:
-            raise HTTPException(status_code=409, detail="This thumbnail is already used in another active queue item.")
-        previous_image_id = str(item.get("image_file_id") or "").strip()
-        if previous_image_id and previous_image_id != request.image_file_id:
-            old_upload_ids_to_cleanup.append(previous_image_id)
-        updates["image_file_id"] = request.image_file_id
-        updates["image_original_filename"] = image_doc.get("original_filename")
-
-    if request.generated_title is not None:
-        title = request.generated_title.strip()
-        if not title:
-            raise HTTPException(status_code=400, detail="Title cannot be empty.")
-        updates["generated_title"] = title[:100]
-
-    if request.target_artist is not None:
-        artist = request.target_artist.strip()
-        if not artist:
-            raise HTTPException(status_code=400, detail="Artist cannot be empty.")
-        updates["target_artist"] = artist
-
-    if request.beat_type is not None:
-        beat_type = request.beat_type.strip()
-        if not beat_type:
-            raise HTTPException(status_code=400, detail="Beat type cannot be empty.")
-        updates["beat_type"] = beat_type
-
-    if request.generated_description is not None:
-        updates["generated_description"] = request.generated_description.strip()
-
-    if request.generated_tags is not None:
-        updates["generated_tags"] = _normalize_tag_list(request.generated_tags, limit=80)
-
-    if request.context_tags is not None:
-        updates["context_tags"] = _normalize_tag_list(request.context_tags, limit=50)
-
-    if request.notify_channel is not None:
-        updates["notify_channel"] = request.notify_channel
-
-    if request.privacy_status is not None:
-        updates["privacy_status"] = request.privacy_status
-
-    if request.approval_timeout_hours is not None:
-        updates["approval_timeout_hours"] = max(1, min(72, int(request.approval_timeout_hours)))
-
-    if request.auto_upload_if_no_response is not None:
-        updates["auto_upload_if_no_response"] = bool(request.auto_upload_if_no_response)
-
-    if request.template_id is not None:
-        template_id = (request.template_id or "").strip()
-        if not template_id:
-            updates["template_id"] = None
-            updates["template_name"] = None
-        else:
-            template_doc = await db.beat_helper_tag_templates.find_one(
-                {"id": template_id, "user_id": current_user["id"]},
-                {"_id": 0}
-            )
-            if not template_doc:
-                raise HTTPException(status_code=404, detail="Tag template not found.")
-            updates["template_id"] = template_id
-            updates["template_name"] = template_doc.get("name")
-            if request.generated_tags is None:
-                updates["generated_tags"] = _normalize_tag_list(
-                    (template_doc.get("tags") or []) + (item.get("generated_tags") or []),
-                    limit=80,
-                )
-
-    await db.beat_helper_queue.update_one(
-        {"id": item_id, "user_id": current_user["id"]},
-        {"$set": updates},
-    )
-
-    new_upload_ids = []
-    if "beat_file_id" in updates:
-        new_upload_ids.append(updates["beat_file_id"])
-    if "image_file_id" in updates:
-        new_upload_ids.append(updates["image_file_id"])
-    await _mark_uploads_as_beathelper_managed(current_user["id"], new_upload_ids)
-    await _cleanup_unreferenced_beathelper_uploads(current_user["id"], old_upload_ids_to_cleanup)
-
-    # Keep linked docs in sync for upload behavior.
-    set_desc = {}
-    if "generated_description" in updates:
-        set_desc["content"] = updates["generated_description"]
-    if "generated_title" in updates:
-        set_desc["title"] = f"BeatHelper - {updates['generated_title'][:80]}"
-    if set_desc:
-        set_desc["updated_at"] = _safe_iso_now()
-        await db.descriptions.update_one(
-            {"id": item.get("description_id"), "user_id": current_user["id"]},
-            {"$set": set_desc},
-        )
-
-    if "generated_tags" in updates:
-        await db.tag_generations.update_one(
-            {"id": item.get("tags_id"), "user_id": current_user["id"]},
-            {"$set": {"tags": updates["generated_tags"]}},
-        )
-
-    refreshed = await db.beat_helper_queue.find_one({"id": item_id, "user_id": current_user["id"]}, {"_id": 0})
-    return {"success": True, "item": refreshed}
-
-
-@api_router.delete("/beat-helper/queue/{item_id}")
-async def beathelper_delete_queue_item(item_id: str, current_user: dict = Depends(get_current_user)):
-    await _ensure_pro_user(current_user, "BeatHelper")
-    item = await db.beat_helper_queue.find_one({"id": item_id, "user_id": current_user["id"]}, {"_id": 0})
-    if not item:
-        raise HTTPException(status_code=404, detail="Queue item not found.")
-
-    result = await db.beat_helper_queue.delete_one({"id": item_id, "user_id": current_user["id"]})
-    if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Queue item not found.")
-
-    if item.get("description_id"):
-        await db.descriptions.delete_one({"id": item.get("description_id"), "user_id": current_user["id"]})
-    if item.get("tags_id"):
-        await db.tag_generations.delete_one({"id": item.get("tags_id"), "user_id": current_user["id"]})
-
-    await _cleanup_unreferenced_beathelper_uploads(
-        current_user["id"],
-        [item.get("beat_file_id", ""), item.get("image_file_id", "")],
-    )
-    return {"success": True}
-
-
 # ============ YouTube Helper Functions ============
 async def refresh_youtube_token(user_id: str) -> Credentials:
     """Refresh YouTube access token if expired"""
@@ -7080,6 +6186,7 @@ async def refresh_youtube_token(user_id: str) -> Credentials:
 async def analyze_beat(request: BeatAnalysisRequest, current_user: dict = Depends(get_current_user)):
     """Create a background job for beat analysis."""
     try:
+        await _ensure_pro_user(current_user, "Beat analysis")
         await _guard_heavy_feature(current_user=current_user, feature_key="beat_analysis", job_type="beat_analysis")
         _enforce_action_rate_limit(
             f"beat_analysis:{current_user['id']}",
@@ -7087,6 +6194,7 @@ async def analyze_beat(request: BeatAnalysisRequest, current_user: dict = Depend
             window_seconds=600,
             detail_message="Too many beat analysis requests. Please wait a few minutes.",
         )
+        await ensure_has_credit(current_user['id'], "beat analyses")
         job_doc = await _create_background_job(
             current_user=current_user,
             job_type="beat_analysis",
@@ -7094,6 +6202,8 @@ async def analyze_beat(request: BeatAnalysisRequest, current_user: dict = Depend
             message="Queued beat analysis job.",
         )
         return {"success": True, "queued": True, "message": "Beat analysis queued.", "job": _sanitize_upload_job_doc(job_doc)}
+    except HTTPException:
+        raise
     except Exception as e:
         logging.error(f"Beat analysis queueing error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -7522,7 +6632,7 @@ async def get_my_producer_profile(current_user: dict = Depends(get_current_user)
 
 
 @api_router.get("/producers/{user_id}/stats")
-async def get_producer_stats(user_id: str, current_user: dict = Depends(get_current_user)):
+async def get_producer_stats(user_id: str):
     """Detailed spotlight card stats for modal view."""
     cached = await db.producer_stats_cache.find_one({"user_id": user_id}, {"_id": 0, "payload": 1})
     if cached and isinstance(cached.get("payload"), dict):
@@ -7798,6 +6908,7 @@ async def review_verification_application(
 async def fix_beat(request: BeatFixRequest, current_user: dict = Depends(get_current_user)):
     """Create a background job for beat fixes."""
     try:
+        await _ensure_pro_user(current_user, "Beat fix")
         await _guard_heavy_feature(current_user=current_user, feature_key="beat_fix", job_type="beat_fix")
         _enforce_action_rate_limit(
             f"beat_fix:{current_user['id']}",
@@ -7830,6 +6941,11 @@ async def generate_image_suggestions(
     title = (request.title or "").strip()
     tags = request.tags or []
     k = max(1, min(int(request.k or 6), 12))
+    excluded_urls = {
+        str(url or "").strip()
+        for url in (request.excluded_urls or [])
+        if str(url or "").strip()
+    }
     if not title and not tags:
         raise HTTPException(status_code=400, detail="title or tags are required.")
 
@@ -7846,6 +6962,7 @@ async def generate_image_suggestions(
             "title": title,
             "tags": tags,
             "k": k,
+            "excluded_urls": sorted(excluded_urls),
             "search_strategy": "v4",
         }
         cache_key = _build_ai_cache_key(namespace="beat_generate_image", user_id=current_user["id"], payload=payload)
@@ -7864,6 +6981,7 @@ async def generate_image_suggestions(
         artists, query_variants, query = _build_image_query_variants(title, tags)
         search_mode = _image_search_mode(query, artists)
         results: list[dict] = []
+        needed_results = min(max((len(excluded_urls) + k) * 3, 18), 96)
         if search_mode == "artist":
             artist_queries = [
                 query,
@@ -7872,7 +6990,7 @@ async def generate_image_suggestions(
                 f"{query} photoshoot",
                 f"{query} editorial",
             ]
-            results.extend(_search_bing_image_results(artist_queries, artists, max(k * 4, 12)))
+            results.extend(_search_bing_image_results(artist_queries, artists, needed_results))
         else:
             project_queries = [
                 f"{query} album cover",
@@ -7880,16 +6998,27 @@ async def generate_image_suggestions(
                 f"{query} album artwork",
                 query,
             ]
-            results.extend(_search_catalog_artist_images(project_queries, artists, max(k * 3, 10)))
-            results.extend(_search_bing_image_results(project_queries, artists, max(k * 4, 12)))
+            results.extend(_search_catalog_artist_images(project_queries, artists, min(max((len(excluded_urls) + k) * 2, 12), 72)))
+            results.extend(_search_bing_image_results(project_queries, artists, needed_results))
         base_query = query.strip().lower()
         results = [{**item, "base_query": base_query, "search_mode": search_mode} for item in results]
         results = _filter_generated_image_results(results)
         results = sorted(results, key=_rank_generated_image_result)
+        deduped_results = _dedupe_generated_image_results(results, k, excluded_urls)
+        unique_urls = []
+        seen_urls = set()
+        for item in results:
+            url = (item.get("image_url") or "").strip()
+            if not url or url in seen_urls or url in excluded_urls:
+                continue
+            seen_urls.add(url)
+            unique_urls.append(url)
+        has_more = len(unique_urls) > len(deduped_results)
         result = ImageGenerateResponse(
             query_used=query,
             detected_artists=artists,
-            results=_dedupe_generated_image_results(results, k)
+            results=deduped_results,
+            has_more=has_more,
         ).model_dump()
         if current_user.get("_execute_inline"):
             return result
@@ -7899,87 +7028,6 @@ async def generate_image_suggestions(
     except Exception as e:
         logging.error(f"generate_image_suggestions error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to generate image suggestions: {str(e)}")
-
-
-@api_router.post("/beat-helper/image-search")
-async def beathelper_search_images(
-    request: BeatHelperImageSearchRequest,
-    current_user: dict = Depends(get_current_user),
-):
-    try:
-        await _ensure_pro_user(current_user, "BeatHelper")
-        if not current_user.get("_execute_inline"):
-            await _guard_heavy_feature(current_user=current_user, feature_key="image_search", job_type="image_search")
-            _enforce_action_rate_limit(
-                f"beathelper_image_search:{current_user['id']}",
-                limit=12,
-                window_seconds=600,
-                detail_message="Too many BeatHelper image searches. Please wait a few minutes.",
-            )
-
-        parts = [
-            (request.search_query or "").strip(),
-            (request.generated_title_override or "").strip(),
-            (request.target_artist or "").strip(),
-            f"{(request.target_artist or '').strip()} {((request.beat_type or '').strip())} type beat".strip(),
-        ]
-        title = next((part for part in parts if part), "")
-        tags = [tag for tag in (request.context_tags or []) if isinstance(tag, str) and tag.strip()]
-        if not title and not tags:
-            raise HTTPException(status_code=400, detail="Provide a search query, title, artist, or context tags.")
-
-        smart_title = title
-        if not (request.search_query or "").strip() and (request.target_artist or "").strip():
-            artist_name = (request.target_artist or "").strip()
-            beat_type = (request.beat_type or "").strip()
-            context_hint = tags[0] if tags else ""
-            smart_title = " ".join(
-                value for value in [
-                    artist_name,
-                    beat_type,
-                    "type beat cover art",
-                    context_hint,
-                ] if value
-            ).strip()
-
-        if not current_user.get("_execute_inline"):
-            payload = {
-                "request_kind": "beathelper_image_search",
-                "search_query": request.search_query or "",
-                "target_artist": request.target_artist or "",
-                "beat_type": request.beat_type or "",
-                "generated_title_override": request.generated_title_override or "",
-                "context_tags": tags,
-                "k": max(1, min(int(request.k or 8), 12)),
-                "smart_title": smart_title,
-                "search_strategy": "v4",
-            }
-            cache_key = _build_ai_cache_key(namespace="beathelper_image_search", user_id=current_user["id"], payload=payload)
-            active_job = await _find_active_background_job(current_user=current_user, job_type="image_search", cache_key=cache_key)
-            if active_job:
-                return {"success": True, "queued": True, "message": "BeatHelper image search already in progress.", "job": _sanitize_upload_job_doc(active_job)}
-            payload["cache_key"] = cache_key
-            job_doc = await _create_background_job(
-                current_user=current_user,
-                job_type="image_search",
-                payload=payload,
-                message="Queued BeatHelper image search.",
-            )
-            return {"success": True, "queued": True, "message": "BeatHelper image search queued.", "job": _sanitize_upload_job_doc(job_doc)}
-
-        return await generate_image_suggestions(
-            ImageGenerateRequest(
-                title=smart_title,
-                tags=tags,
-                k=max(1, min(int(request.k or 8), 12)),
-            ),
-            current_user,
-        )
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logging.error(f"beathelper_search_images error: {str(exc)}")
-        raise HTTPException(status_code=500, detail="Failed to search BeatHelper images.")
 
 
 # ============ Thumbnail Checker Route ============
@@ -8003,7 +7051,6 @@ async def check_thumbnail(
             window_seconds=600,
             detail_message="Too many thumbnail check requests. Please wait a few minutes.",
         )
-        await ensure_has_credit(current_user['id'], "thumbnail checks")
 
         if not title.strip() or not tags.strip() or not description.strip():
             raise HTTPException(
@@ -8332,7 +7379,7 @@ spotlight_service = SpotlightService(
 
 @app.on_event("startup")
 async def startup_background_tasks():
-    global _beathelper_scheduler_task, _upload_job_worker_task, _spotlight_refresh_task
+    global _upload_job_worker_task, _spotlight_refresh_task
     _validate_security_configuration()
     await _requeue_stale_background_jobs()
     if _upload_job_worker_task is None:
@@ -8341,20 +7388,14 @@ async def startup_background_tasks():
     if _spotlight_refresh_task is None:
         _spotlight_refresh_task = asyncio.create_task(_spotlight_refresh_loop())
         logger.info("Spotlight refresh loop started")
-    if BEATHELPER_AUTO_DISPATCH_ENABLED and _beathelper_scheduler_task is None:
-        _beathelper_scheduler_task = asyncio.create_task(_beathelper_scheduler_loop())
-        logger.info("BeatHelper daily scheduler started")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
-    global _beathelper_scheduler_task, _upload_job_worker_task, _spotlight_refresh_task
+    global _upload_job_worker_task, _spotlight_refresh_task
     if _upload_job_worker_task:
         _upload_job_worker_task.cancel()
         _upload_job_worker_task = None
     if _spotlight_refresh_task:
         _spotlight_refresh_task.cancel()
         _spotlight_refresh_task = None
-    if _beathelper_scheduler_task:
-        _beathelper_scheduler_task.cancel()
-        _beathelper_scheduler_task = None
     client.close()

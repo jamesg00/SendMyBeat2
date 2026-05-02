@@ -1,38 +1,37 @@
-import React from 'react';
-import { render, screen, fireEvent, act } from '@testing-library/react';
-import '@testing-library/jest-dom';
-import SubscriptionBanner from '../SubscriptionBanner';
-import axios from 'axios';
-import { toast } from 'sonner';
+import React from "react";
+import { render, screen, fireEvent, act } from "@testing-library/react";
+import "@testing-library/jest-dom";
+import axios from "axios";
+import { toast } from "sonner";
+import SubscriptionBanner from "../SubscriptionBanner";
 
-// Mock dependencies
-jest.mock('axios');
-jest.mock('sonner', () => ({
+jest.mock("axios");
+jest.mock("sonner", () => ({
   toast: {
     error: jest.fn(),
   },
 }));
 
-// Mock lucide-react icons
-jest.mock('lucide-react', () => ({
+jest.mock("lucide-react", () => ({
   Zap: () => <div data-testid="icon-zap">Zap</div>,
   Sparkles: () => <div data-testid="icon-sparkles">Sparkles</div>,
   Upload: () => <div data-testid="icon-upload">Upload</div>,
   Settings: () => <div data-testid="icon-settings">Settings</div>,
 }));
 
-// Mock UI components
-jest.mock('@/components/ui/card', () => ({
+jest.mock("@/components/ui/card", () => ({
   Card: ({ children, className }) => <div className={className} data-testid="ui-card">{children}</div>,
   CardContent: ({ children, className }) => <div className={className} data-testid="ui-card-content">{children}</div>,
 }));
-jest.mock('@/components/ui/button', () => ({
+
+jest.mock("@/components/ui/button", () => ({
   Button: ({ children, onClick, disabled, className, ...props }) => (
     <button
+      type="button"
       onClick={onClick}
       disabled={disabled}
       className={className}
-      data-testid={props['data-testid'] || "ui-button"}
+      data-testid={props["data-testid"] || "ui-button"}
       {...props}
     >
       {children}
@@ -40,154 +39,133 @@ jest.mock('@/components/ui/button', () => ({
   ),
 }));
 
-describe('SubscriptionBanner', () => {
+describe("SubscriptionBanner", () => {
   const defaultProps = {
     creditsRemaining: 3,
     uploadCreditsRemaining: 3,
-    resetsAt: new Date(Date.now() + 86400000).toISOString(), // 24h from now
+    resetsAt: new Date(Date.now() + 86400000).toISOString(),
     isSubscribed: false,
     onUpgrade: jest.fn(),
-    API: 'http://localhost:8000',
+    API: "http://localhost:8000",
   };
 
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  test('renders Free tier correctly with full credits', () => {
+  test("renders free tier compact summary", () => {
     render(<SubscriptionBanner {...defaultProps} />);
 
-    expect(screen.getByText('Free Daily Credits')).toBeInTheDocument();
-    expect(screen.getByText('AI Generations')).toBeInTheDocument();
-    expect(screen.getByText('YouTube Uploads')).toBeInTheDocument();
-
-    // Check credit counts
-    const creditCounts = screen.getAllByText('3');
-    expect(creditCounts.length).toBeGreaterThanOrEqual(2); // One for AI, one for Uploads
-
-    expect(screen.getByText('Want Unlimited? Upgrade to Pro')).toBeInTheDocument();
+    expect(screen.getByText("Free Daily Credits")).toBeInTheDocument();
+    expect(screen.getByText("AI")).toBeInTheDocument();
+    expect(screen.getByText("Uploads")).toBeInTheDocument();
+    expect(screen.getAllByText("3/3")).toHaveLength(2);
+    expect(screen.getByTestId("upgrade-banner-btn")).toHaveTextContent("Upgrade");
   });
 
-  test('renders Pro tier correctly', () => {
-    render(<SubscriptionBanner {...defaultProps} isSubscribed={true} />);
+  test("renders subscribed plan summary", () => {
+    render(
+      <SubscriptionBanner
+        {...defaultProps}
+        isSubscribed={true}
+        plan="plus"
+      />
+    );
 
-    expect(screen.getByText('SendMyBeat Pro')).toBeInTheDocument();
-    expect(screen.getByText(/Unlimited AI generations/)).toBeInTheDocument();
-    expect(screen.getByText('UNLIMITED')).toBeInTheDocument();
-
-    const manageBtn = screen.getByText('Manage Subscription');
-    expect(manageBtn).toBeInTheDocument();
-    expect(screen.queryByText('Free Daily Credits')).not.toBeInTheDocument();
+    expect(screen.getByText("SendMyBeat Plus")).toBeInTheDocument();
+    expect(screen.getByText("3 AI generations + 3 uploads per month")).toBeInTheDocument();
+    expect(screen.getByText("Metered")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /manage/i })).toBeInTheDocument();
   });
 
-  test('renders error state when credits are undefined', () => {
-    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-    const props = { ...defaultProps, creditsRemaining: undefined };
-    render(<SubscriptionBanner {...props} />);
+  test("returns null when free credit data is missing", () => {
+    const { container } = render(
+      <SubscriptionBanner
+        {...defaultProps}
+        creditsRemaining={undefined}
+      />
+    );
 
-    expect(screen.getByText(/Unable to load credit information/i)).toBeInTheDocument();
-    consoleSpy.mockRestore();
+    expect(container).toBeEmptyDOMElement();
   });
 
-  test('displays warning when AI credits are low (0)', () => {
-    const props = { ...defaultProps, creditsRemaining: 0 };
-    render(<SubscriptionBanner {...props} />);
-
-    // Check for specific warning message
-    expect(screen.getByText('🚫 No AI generations left for today')).toBeInTheDocument();
-
-    // Check that the upgrade button is prominent (not "Want Unlimited?...")
-    expect(screen.getByTestId('upgrade-banner-btn')).toBeInTheDocument();
-    expect(screen.getByText('Upgrade to Pro - Unlimited Access')).toBeInTheDocument();
-  });
-
-  test('displays warning when Upload credits are low (0)', () => {
-    const props = { ...defaultProps, uploadCreditsRemaining: 0 };
-    render(<SubscriptionBanner {...props} />);
-
-    expect(screen.getByText('🚫 No uploads left for today')).toBeInTheDocument();
-    expect(screen.getByTestId('upgrade-banner-btn')).toBeInTheDocument();
-  });
-
-  test('displays warning when ALL credits are low (0)', () => {
-    const props = { ...defaultProps, creditsRemaining: 0, uploadCreditsRemaining: 0 };
-    render(<SubscriptionBanner {...props} />);
-
-    expect(screen.getByText('🚫 All free credits used for today')).toBeInTheDocument();
-    expect(screen.getByTestId('upgrade-banner-btn')).toBeInTheDocument();
-  });
-
-  test('onUpgrade is called when upgrade button is clicked', () => {
+  test("calls onUpgrade when upgrade button is clicked", () => {
     render(<SubscriptionBanner {...defaultProps} />);
 
-    fireEvent.click(screen.getByText('Want Unlimited? Upgrade to Pro'));
+    fireEvent.click(screen.getByTestId("upgrade-banner-btn"));
     expect(defaultProps.onUpgrade).toHaveBeenCalledTimes(1);
   });
 
-  test('manage subscription flow', async () => {
-    axios.post.mockResolvedValueOnce({ data: { url: 'http://stripe.com/portal' } });
+  test("shows low-credit state through counter values", () => {
+    render(
+      <SubscriptionBanner
+        {...defaultProps}
+        creditsRemaining={0}
+        uploadCreditsRemaining={1}
+      />
+    );
 
-    // Mock window.location.href
+    expect(screen.getByText("0/3")).toBeInTheDocument();
+    expect(screen.getByText("1/3")).toBeInTheDocument();
+    expect(screen.getByTestId("upgrade-banner-btn")).toBeInTheDocument();
+  });
+
+  test("manage subscription flow redirects to portal", async () => {
+    axios.post.mockResolvedValueOnce({ data: { url: "http://stripe.com/portal" } });
+
     delete window.location;
-    window.location = { href: '' };
+    window.location = { href: "" };
 
-    render(<SubscriptionBanner {...defaultProps} isSubscribed={true} />);
+    render(
+      <SubscriptionBanner
+        {...defaultProps}
+        isSubscribed={true}
+        plan="plus"
+      />
+    );
 
-    const manageBtn = screen.getByText('Manage Subscription');
-    fireEvent.click(manageBtn);
+    fireEvent.click(screen.getByRole("button", { name: /manage/i }));
 
-    // Should show loading state
-    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /loading/i })).toBeInTheDocument();
 
-    // Wait for async action
     await act(async () => {
-        await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
     expect(axios.post).toHaveBeenCalledWith(`${defaultProps.API}/subscription/portal`);
-    expect(window.location.href).toBe('http://stripe.com/portal');
+    expect(window.location.href).toBe("http://stripe.com/portal");
   });
 
-  test('manage subscription failure handles error', async () => {
-    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-    axios.post.mockRejectedValueOnce(new Error('Network error'));
+  test("manage subscription failure shows toast", async () => {
+    axios.post.mockRejectedValueOnce(new Error("Network error"));
 
-    render(<SubscriptionBanner {...defaultProps} isSubscribed={true} />);
+    render(
+      <SubscriptionBanner
+        {...defaultProps}
+        isSubscribed={true}
+        plan="plus"
+      />
+    );
 
-    const manageBtn = screen.getByText('Manage Subscription');
-    fireEvent.click(manageBtn);
+    fireEvent.click(screen.getByRole("button", { name: /manage/i }));
 
     await act(async () => {
-        await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
-    expect(toast.error).toHaveBeenCalledWith('Failed to open subscription management');
-    // Should return to normal state
-    expect(screen.getByText('Manage Subscription')).toBeInTheDocument();
-    consoleSpy.mockRestore();
+    expect(toast.error).toHaveBeenCalledWith("Failed to open subscription management");
+    expect(screen.getByRole("button", { name: /manage/i })).toBeInTheDocument();
   });
 
-  test('reset timer logic', () => {
-    // Mock Date.now to a fixed timestamp
-    const now = 1600000000000; // specific time
-    const resetsAt = new Date(now + 3661000).toISOString(); // 1h 1m 1s later
+  test("shows reset countdown text", () => {
+    const now = 1600000000000;
+    const resetsAt = new Date(now + 3661000).toISOString();
 
     jest.useFakeTimers();
     jest.setSystemTime(now);
 
-    const props = { ...defaultProps, resetsAt };
+    render(<SubscriptionBanner {...defaultProps} resetsAt={resetsAt} />);
 
-    // We need to re-render or trigger an update for the timer to show correctly if it depends on state.
-    // The component sets state in useEffect, which might be tricky with fake timers if not handled carefully.
-    // However, initial render uses Date.now(), so let's render AFTER setting system time.
-
-    // Wait, the component sets initial state: useState(Date.now()).
-    // So if we setSystemTime before render, it should pick it up.
-
-    // We need to trigger the low credit state to see the reset message
-    render(<SubscriptionBanner {...props} creditsRemaining={0} />);
-
-    // 3661 seconds = 1h 1m 1s
     expect(screen.getByText(/Resets in 1h 1m/)).toBeInTheDocument();
 
     jest.useRealTimers();

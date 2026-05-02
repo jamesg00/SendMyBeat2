@@ -10,6 +10,7 @@ const AIToolsPanel = ({
   setShowTools,
   analyzingBeat,
   handleAnalyzeBeat,
+  canAnalyzeBeat,
   checkingThumbnail,
   handleThumbnailCheck,
   generatingImages,
@@ -17,10 +18,12 @@ const AIToolsPanel = ({
   generatedImages,
   generatedImageQuery,
   generatedImageSearchQuery,
+  generatedImageHasMore,
   setGeneratedImageSearchQuery,
   onUseGeneratedImage,
   beatAnalysis,
-  thumbnailCheckResult
+  thumbnailCheckResult,
+  onUpgrade,
 }) => {
   const actionButtonStyle = (accent) => ({
     color: accent,
@@ -67,12 +70,12 @@ const AIToolsPanel = ({
              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Button
                    variant="outline"
-                   onClick={handleAnalyzeBeat}
+                   onClick={canAnalyzeBeat ? handleAnalyzeBeat : onUpgrade}
                    disabled={analyzingBeat}
                    className="transition-colors hover:bg-secondary/70"
                    style={actionButtonStyle("var(--accent-primary)")}
                 >
-                   {analyzingBeat ? "..." : <><Target className="mr-2 h-4 w-4"/> Analyze Beat</>}
+                   {analyzingBeat ? "..." : <><Target className="mr-2 h-4 w-4"/>{canAnalyzeBeat ? "Analyze Beat" : "Analyze Beat (Pro)"}</>}
                 </Button>
                 <Button
                    variant="outline"
@@ -85,15 +88,82 @@ const AIToolsPanel = ({
                 </Button>
              </div>
 
+             {!canAnalyzeBeat ? (
+                <div className="rounded-md border border-border bg-secondary/20 p-3 text-xs text-muted-foreground">
+                   Beat analysis is on paid plans. Free users can still use artwork search and thumbnail check here.
+                </div>
+             ) : null}
+
              {beatAnalysis && (
                 <div className="p-3 bg-secondary/50 rounded-md text-sm space-y-2">
                    <div className="flex justify-between font-bold">
                       <span>Score: {beatAnalysis.overall_score}/100</span>
                       <span>{beatAnalysis.predicted_performance}</span>
                    </div>
-                   <div className="text-xs text-muted-foreground">
-                      {beatAnalysis.suggestions[0]}
+                   <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
+                      {beatAnalysis.channel_stage ? (
+                         <div className="rounded border border-border bg-background/40 p-2">
+                            <div className="font-semibold">Channel Stage</div>
+                            <div className="text-muted-foreground">{beatAnalysis.channel_stage}</div>
+                         </div>
+                      ) : null}
+                      {beatAnalysis.competition_level ? (
+                         <div className="rounded border border-border bg-background/40 p-2">
+                            <div className="font-semibold">Competition</div>
+                            <div className="text-muted-foreground">{beatAnalysis.competition_level}</div>
+                         </div>
+                      ) : null}
+                      {beatAnalysis.packaging_priority ? (
+                         <div className="rounded border border-border bg-background/40 p-2">
+                            <div className="font-semibold">Main Fix</div>
+                            <div className="text-muted-foreground">{beatAnalysis.packaging_priority}</div>
+                         </div>
+                      ) : null}
                    </div>
+                   {beatAnalysis.title_diagnosis ? (
+                      <div className="text-xs text-muted-foreground">
+                         <span className="font-semibold text-foreground">Title diagnosis: </span>
+                         {beatAnalysis.title_diagnosis}
+                      </div>
+                   ) : null}
+                   {beatAnalysis.channel_fit ? (
+                      <div className="text-xs text-muted-foreground">
+                         <span className="font-semibold text-foreground">Channel fit: </span>
+                         {beatAnalysis.channel_fit}
+                      </div>
+                   ) : null}
+                   {beatAnalysis.small_channel_strategy ? (
+                      <div className="text-xs text-muted-foreground">
+                         <span className="font-semibold text-foreground">Strategy: </span>
+                         {beatAnalysis.small_channel_strategy}
+                      </div>
+                   ) : null}
+                   {beatAnalysis.better_title_angles?.length > 0 ? (
+                      <div className="text-xs">
+                         <div className="font-semibold">Better Title Angles</div>
+                         <ul className="list-disc pl-4 text-muted-foreground space-y-1">
+                            {beatAnalysis.better_title_angles.slice(0, 3).map((angle, idx) => (
+                               <li key={`angle-${idx}`}>{angle}</li>
+                            ))}
+                         </ul>
+                      </div>
+                   ) : null}
+                   {beatAnalysis.tag_strategy ? (
+                      <div className="text-xs text-muted-foreground">
+                         <span className="font-semibold text-foreground">Tag strategy: </span>
+                         {beatAnalysis.tag_strategy}
+                      </div>
+                   ) : null}
+                   {beatAnalysis.suggestions?.length > 0 ? (
+                      <div className="text-xs">
+                         <div className="font-semibold">Best Next Moves</div>
+                         <ul className="list-disc pl-4 text-muted-foreground space-y-1">
+                            {beatAnalysis.suggestions.slice(0, 3).map((suggestion, idx) => (
+                               <li key={`beat-suggestion-${idx}`}>{suggestion}</li>
+                            ))}
+                         </ul>
+                      </div>
+                   ) : null}
                 </div>
              )}
              {thumbnailCheckResult && (
@@ -102,6 +172,26 @@ const AIToolsPanel = ({
                       <span>Score: {thumbnailCheckResult.score}/100</span>
                       <span>{thumbnailCheckResult.verdict}</span>
                    </div>
+                   <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
+                      {thumbnailCheckResult.ctr_risk ? (
+                         <div className="rounded border border-border bg-background/40 p-2">
+                            <div className="font-semibold">CTR Risk</div>
+                            <div className="text-muted-foreground">{thumbnailCheckResult.ctr_risk}</div>
+                         </div>
+                      ) : null}
+                      {thumbnailCheckResult.packaging_priority ? (
+                         <div className="rounded border border-border bg-background/40 p-2">
+                            <div className="font-semibold">Main Fix</div>
+                            <div className="text-muted-foreground">{thumbnailCheckResult.packaging_priority}</div>
+                         </div>
+                      ) : null}
+                   </div>
+                   {thumbnailCheckResult.hook_alignment ? (
+                      <div className="text-xs text-muted-foreground">
+                         <span className="font-semibold text-foreground">Hook alignment: </span>
+                         {thumbnailCheckResult.hook_alignment}
+                      </div>
+                   ) : null}
                    {thumbnailCheckResult.issues?.length > 0 && (
                       <div className="text-xs">
                          <div className="font-semibold">Main Issues</div>
@@ -146,8 +236,20 @@ const AIToolsPanel = ({
                    <div className="text-xs font-semibold text-muted-foreground">
                       No thumbnail yet? Search artist visuals and apply one.
                    </div>
-                   <div className="text-[11px] text-muted-foreground">
-                      Source: {generatedImageQuery || "artist search"}
+                   <div className="flex items-center justify-between gap-2">
+                      <div className="text-[11px] text-muted-foreground">
+                         Source: {generatedImageQuery || "artist search"}
+                      </div>
+                      <Button
+                         type="button"
+                         size="sm"
+                         variant="outline"
+                         onClick={() => handleGenerateImage({ query: generatedImageSearchQuery || generatedImageQuery, findMore: true })}
+                         disabled={generatingImages || !(generatedImageHasMore && (generatedImageSearchQuery || generatedImageQuery))}
+                         className="h-7 px-2 text-[11px]"
+                      >
+                         {generatingImages ? "Loading..." : "Find More"}
+                      </Button>
                    </div>
                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                       {generatedImages.map((img) => (

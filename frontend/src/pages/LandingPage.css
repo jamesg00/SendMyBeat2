@@ -161,6 +161,7 @@
 .landing-output-shell {
   border: 1px solid rgba(61, 220, 122, 0.2);
   background: rgba(61, 220, 122, 0.06);
+  min-height: 506px;
 }
 
 .landing-example-status {
@@ -228,11 +229,13 @@
   gap: 10px;
   font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
   min-height: 190px;
+  align-content: start;
 }
 
 .landing-example-console-line {
   display: grid;
   gap: 4px;
+  min-height: 48px;
 }
 
 .landing-example-console-key {
@@ -442,17 +445,29 @@
     transform: none !important;
   }
 
-  .landing-hero-panel-static .landing-example-progress-fill {
-    transition: none;
+  .landing-page .container {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
   }
 
-  .landing-hero-panel-static .landing-tag-window {
-    min-height: auto;
+  .landing-hero-panel {
+    padding: 1rem;
   }
 
-  .landing-hero-panel-static .landing-example-console,
-  .landing-hero-panel-static .landing-example-prompt {
+  .landing-output-shell {
     min-height: 0;
+  }
+
+  .landing-example-console {
+    min-height: 170px;
+  }
+
+  .landing-example-console-line {
+    min-height: 42px;
+  }
+
+  .landing-tag-window {
+    min-height: 88px;
   }
 }
 
