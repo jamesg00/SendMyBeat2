@@ -52,7 +52,7 @@ const AIToolsPanel = ({
                    <Input
                       value={generatedImageSearchQuery}
                       onChange={(e) => setGeneratedImageSearchQuery?.(e.target.value)}
-                      placeholder="Lil Uzi cover art"
+                      placeholder="Lil Uzi Vert rapper aesthetic"
                       className="min-w-0 sm:flex-1"
                    />
                    <Button

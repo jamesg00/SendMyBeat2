@@ -24,11 +24,7 @@ const clearAiVariables = () => {
 };
 
 export const ThemeProvider = ({ children }) => {
-  // Default to 'matrix' to preserve existing look
-  const [theme, setTheme] = useState(() => {
-    const stored = localStorage.getItem("app-theme") || "matrix";
-    return stored === "minimal" ? "matrix" : stored;
-  });
+  const [theme, setTheme] = useState("dark");
   const [aiTheme, setAiTheme] = useState(() => {
     try {
       const raw = localStorage.getItem(AI_THEME_STORAGE_KEY);
@@ -39,22 +35,27 @@ export const ThemeProvider = ({ children }) => {
   });
 
   useEffect(() => {
+    const resolvedTheme = "dark";
+    const root = window.document.documentElement;
     const body = window.document.body;
 
     // Remove old theme classes/attributes
     body.removeAttribute("data-theme");
+    root.classList.remove("light");
+    body.classList.remove("light");
 
     // Apply new theme
-    body.setAttribute("data-theme", theme);
-    localStorage.setItem("app-theme", theme);
+    body.setAttribute("data-theme", resolvedTheme);
+    root.classList.add("dark");
+    body.classList.add("dark");
+    localStorage.setItem("app-theme", resolvedTheme);
 
-    // Handle special matrix effects
-    if (theme === 'matrix') {
-        body.classList.add('matrix-mode');
-    } else {
-        body.classList.remove('matrix-mode');
+    // Disable old alternate theme effects now that the app is permanently dark
+    body.classList.remove("matrix-mode");
+
+    if (theme !== resolvedTheme) {
+      setTheme(resolvedTheme);
     }
-
   }, [theme]);
 
   useEffect(() => {

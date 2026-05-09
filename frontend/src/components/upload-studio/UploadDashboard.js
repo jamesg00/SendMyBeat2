@@ -39,21 +39,19 @@ const UploadDashboard = ({
   currentUploadJob
 }) => {
   return (
-    <Card className="dashboard-card min-h-[400px] relative overflow-hidden">
+    <Card className="dashboard-card min-h-[400px] relative overflow-hidden terminal-panel-card">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-           <Youtube className="h-5 w-5 text-red-600" />
+           <Youtube className="h-5 w-5 text-[var(--accent-primary)]" />
            New Upload
         </CardTitle>
         <CardDescription>Connect YouTube, then upload audio and image to enter the studio.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
          {youtubeConnected && (
-            <div className="p-4 rounded-lg flex items-center justify-between bg-green-500/10 border border-green-500/20">
+            <div className="terminal-inline-status">
                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500/15 text-green-500">
-                     <Youtube className="h-5 w-5" />
-                  </div>
+                  <span className="terminal-status-dot" />
                   <div>
                      <p className="font-medium text-sm">{youtubeName ? `Connected as ${youtubeName}` : "YouTube connected"}</p>
                      {youtubeEmail && <p className="text-xs opacity-70">{youtubeEmail}</p>}
@@ -67,43 +65,43 @@ const UploadDashboard = ({
 
          <div className="grid md:grid-cols-2 gap-4">
             <div
-              className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${isAudioDragActive ? 'border-blue-500 bg-blue-500/10' : 'border-slate-700 hover:border-slate-500'}`}
+              className={`terminal-upload-zone p-8 text-center transition-all ${isAudioDragActive ? 'terminal-upload-zone--active' : ''}`}
               onDragOver={(e) => { e.preventDefault(); setIsAudioDragActive(true); }}
               onDragLeave={() => setIsAudioDragActive(false)}
               onDrop={(e) => { e.preventDefault(); setIsAudioDragActive(false); handleAudioUpload(e.dataTransfer.files[0]); }}
             >
                <Input type="file" accept={AUDIO_EXTENSIONS.join(',')} className="hidden" id="audio-input" onChange={(e) => handleAudioUpload(e.target.files[0])} />
                <label htmlFor="audio-input" className="cursor-pointer flex flex-col items-center gap-3">
-                  <div className="h-12 w-12 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-500">
+                  <div className="h-12 w-12 flex items-center justify-center text-[var(--accent-primary)]">
                      <Music className="h-6 w-6" />
                   </div>
                   <div>
                      <p className="font-medium">Upload Audio</p>
                      <p className="text-xs text-slate-500">MP3, WAV, FLAC</p>
                   </div>
-                  {uploadingAudio && <div className="text-xs text-blue-400">Uploading... {uploadProgress}%</div>}
-                  {audioFile && <div className="text-xs text-green-500 font-medium break-all">{audioFile.name}</div>}
+                  {uploadingAudio && <div className="text-xs text-[var(--accent-primary)]">Uploading... {uploadProgress}%</div>}
+                  {audioFile && <div className="text-xs text-[var(--accent-primary)] font-medium break-all">{audioFile.name}</div>}
                </label>
             </div>
 
             <div
-              className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${isImageDragActive ? 'border-purple-500 bg-purple-500/10' : 'border-slate-700 hover:border-slate-500'}`}
+              className={`terminal-upload-zone p-8 text-center transition-all ${isImageDragActive ? 'terminal-upload-zone--active' : ''}`}
               onDragOver={(e) => { e.preventDefault(); setIsImageDragActive(true); }}
               onDragLeave={() => setIsImageDragActive(false)}
               onDrop={(e) => { e.preventDefault(); setIsImageDragActive(false); handleImageUpload(e.dataTransfer.files[0]); }}
             >
                <Input type="file" accept={IMAGE_EXTENSIONS.join(',')} className="hidden" id="image-input" onChange={(e) => handleImageUpload(e.target.files[0])} />
                <label htmlFor="image-input" className="cursor-pointer flex flex-col items-center gap-3">
-                  <div className="h-12 w-12 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-500">
+                  <div className="h-12 w-12 flex items-center justify-center text-[var(--accent-primary)]">
                      <ImageIcon className="h-6 w-6" />
                   </div>
                   <div>
                      <p className="font-medium">Upload Artwork</p>
                      <p className="text-xs text-slate-500">JPG, PNG, WEBP</p>
                   </div>
-                  {uploadingImage && <div className="text-xs text-purple-400">Uploading...</div>}
+                  {uploadingImage && <div className="text-xs text-[var(--accent-primary)]">Uploading...</div>}
                   {hasImageReady && (
-                    <div className="text-xs text-green-500 font-medium break-all">
+                    <div className="text-xs text-[var(--accent-primary)] font-medium break-all">
                       {selectedImageLabel || imageFile?.name || "Selected image ready"}
                     </div>
                   )}
@@ -111,7 +109,7 @@ const UploadDashboard = ({
             </div>
          </div>
 
-         <Card className="dashboard-card border-l-4 border-l-emerald-500 shadow-sm">
+         <Card className="dashboard-card terminal-panel-card">
             <CardHeader className="pb-3">
                <CardTitle className="flex items-center gap-2 text-base font-semibold">
                   <Sparkles className="h-4 w-4 text-emerald-400" />
@@ -126,7 +124,7 @@ const UploadDashboard = ({
                   <Input
                      value={generatedImageSearchQuery}
                      onChange={(e) => setGeneratedImageSearchQuery(e.target.value)}
-                     placeholder="Lil Uzi cover art"
+                     placeholder="Lil Uzi Vert rapper aesthetic"
                      className="min-w-0 sm:flex-1"
                   />
                   <Button
@@ -162,7 +160,7 @@ const UploadDashboard = ({
                        <button
                          key={img.id}
                          type="button"
-                         className="group overflow-hidden rounded-lg border border-border bg-background transition-colors hover:border-primary"
+                         className="group overflow-hidden border border-border bg-background transition-colors hover:border-primary"
                          onClick={() => handleUseGeneratedImage(img)}
                        >
                           <SearchResultImage
@@ -182,8 +180,8 @@ const UploadDashboard = ({
          </Card>
 
          {currentUploadJob && ["queued", "processing"].includes(currentUploadJob.status) && (
-           <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm">
-             <p className="font-medium text-emerald-400">
+           <div className="terminal-job-status px-4 py-3 text-sm">
+             <p className="font-medium text-[var(--accent-primary)]">
                YouTube upload {currentUploadJob.status === "queued" ? "queued" : "processing"}
              </p>
              <p className="mt-1 text-xs text-muted-foreground">
@@ -194,16 +192,16 @@ const UploadDashboard = ({
          )}
 
          {audioFile && hasImageReady && (
-           <Button onClick={() => setStudioOpen(true)} className="w-full py-6 text-lg bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700">
+           <Button onClick={() => setStudioOpen(true)} variant="outline" className="w-full py-6 text-lg terminal-publish-button">
               Enter Studio <Wand2 className="ml-2 h-5 w-5" />
            </Button>
          )}
       </CardContent>
 
       {!youtubeConnected && (
-        <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/88 backdrop-blur-sm px-4">
-          <div className="w-full max-w-md rounded-2xl border border-red-500/30 bg-[var(--card-bg)] p-6 shadow-2xl text-center">
-            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-500/12 text-red-500">
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/88 px-4">
+          <div className="w-full max-w-md border border-[var(--border-color)] bg-[var(--card-bg)] p-6 text-center">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center text-[var(--accent-primary)]">
               <Youtube className="h-6 w-6" />
             </div>
             <h3 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>

@@ -174,6 +174,41 @@ async def test_generate_tags_youtube_search_failure():
 
 
 @pytest.mark.asyncio
+async def test_generate_tags_prompt_flags_underground_artist_context():
+    mock_user = {"id": "user123", "username": "testuser", "_execute_inline": True}
+    request_data = TagGenerationRequest(query="slayr type beat")
+    mock_cursor = MagicMock()
+    mock_cursor.to_list = AsyncMock(return_value=[])
+
+    with patch("backend.server._fetch_artist_context_from_youtube_api", return_value={
+        "artist_name": "slayr",
+        "channel_found": False,
+        "channel_title": None,
+        "top_video_titles": [],
+        "type_beat_search_results": [],
+        "is_likely_underground": True,
+    }), \
+         patch("backend.server._fetch_spotify_track_seeds", return_value=[]), \
+         patch("backend.server._fetch_soundcloud_track_seeds", return_value=[]), \
+         patch("backend.server.llm_chat", new_callable=AsyncMock) as mock_llm_chat, \
+         patch("backend.server.consume_credit", new_callable=AsyncMock), \
+         patch("backend.server.db") as mock_db, \
+         patch("backend.server.build") as mock_build:
+        mock_db.users.find_one = AsyncMock(return_value={})
+        mock_db.tag_generations.find.return_value = mock_cursor
+        mock_db.tag_generations.insert_one = AsyncMock()
+        mock_db.growth_streaks.find_one = AsyncMock(return_value=None)
+        mock_build.return_value = MagicMock()
+        mock_llm_chat.return_value = '{"tags": ["slayr type beat", "underground rage type beat"]}'
+
+        await generate_tags(request_data, current_user=mock_user)
+
+        prompt = mock_llm_chat.await_args.kwargs["user_message"]
+        assert 'Do NOT default to mainstream artists with similar names' in prompt
+        assert '"slayr" appears to be underground' in prompt
+
+
+@pytest.mark.asyncio
 async def test_generate_tags_excludes_previously_removed_tags():
     mock_user = {"id": "user123", "username": "testuser", "_execute_inline": True}
     request_data = TagGenerationRequest(query="drake type beat")

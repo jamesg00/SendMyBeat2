@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogClose } from "@/components/ui/dialog";
 import { Trophy, Star, TrendingUp, Music, User, Globe, Youtube, Instagram, Twitter, ArrowLeft, Crown, BadgeCheck, Shield, Flame, Eye, BarChart3 } from "lucide-react";
-import DarkModeToggle from "@/components/DarkModeToggle";
 import { getAuthToken } from "@/lib/auth";
 import { toast } from "sonner";
 
@@ -536,7 +535,6 @@ export default function ProducerSpotlight() {
             <ArrowLeft className="h-4 w-4" />
             Back to Dashboard
           </Button>
-          <DarkModeToggle inline />
         </div>
 
       {/* Hero Section */}

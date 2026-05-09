@@ -1142,6 +1142,30 @@ def _dedupe_generated_image_results(results: list[dict], k: int, excluded_urls: 
     return deduped
 
 
+_ARTWORK_SHOPPING_TERMS = {
+    "bag",
+    "bags",
+    "handbag",
+    "handbags",
+    "purse",
+    "purses",
+    "backpack",
+    "wallet",
+    "fashion",
+    "luxury",
+    "shop",
+    "shopping",
+    "buy",
+    "sale",
+    "retail",
+    "product",
+    "products",
+}
+
+
+_ARTWORK_NEGATIVE_QUERY_SUFFIX = "-bag -bags -handbag -handbags -purse -purses -backpack -wallet -fashion -luxury -shop -shopping -buy -sale"
+
+
 def _build_image_query_variants(title: str, tags: list[str], limit: int = 8) -> tuple[list[str], list[str], str]:
     artists = _extract_artist_queries(title, tags)
     raw_title = re.sub(r"\s+", " ", (title or "").strip())
@@ -1178,6 +1202,12 @@ def _build_image_query_variants(title: str, tags: list[str], limit: int = 8) -> 
             artist_name,
             f"{artist_name} press photo",
             f"{artist_name} portrait",
+            f"{artist_name} rapper aesthetic wallpaper",
+            f"{artist_name} hip hop wallpaper",
+            f"{artist_name} rapper editorial photo",
+            f"{artist_name} rapper photoshoot",
+            f"{artist_name} music cover art",
+            f"{artist_name} dark aesthetic wallpaper",
         ])
     query_variants.append(query.strip())
 
@@ -1191,7 +1221,7 @@ def _build_image_query_variants(title: str, tags: list[str], limit: int = 8) -> 
         if key in seen_q:
             continue
         seen_q.add(key)
-        filtered.append(normalized)
+        filtered.append(f"{normalized} {_ARTWORK_NEGATIVE_QUERY_SUFFIX}".strip())
         if len(filtered) >= limit:
             break
     return artists, filtered, query
@@ -1430,8 +1460,11 @@ def _filter_generated_image_results(results: list[dict]) -> list[dict]:
         source = str(item.get("source") or "").strip().lower()
         image_url = str(item.get("image_url") or "").strip().lower()
         artist_name = str(item.get("artist") or "").strip().lower()
+        query_used = str(item.get("query_used") or "").strip().lower()
+        credit_name = str(item.get("credit_name") or "").strip().lower()
         base_query = str(item.get("base_query") or "").strip().lower()
         search_mode = str(item.get("search_mode") or "project").strip().lower()
+        searchable_text = " ".join([image_url, artist_name, query_used, credit_name])
 
         if not image_url.startswith(("http://", "https://")):
             continue
@@ -1454,6 +1487,11 @@ def _filter_generated_image_results(results: list[dict]) -> list[dict]:
         if source == "deezer":
             continue
         if search_mode == "artist" and source == "itunes" and base_query and artist_name and base_query != artist_name:
+            continue
+        if search_mode == "artist" and any(
+            re.search(rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])", searchable_text)
+            for term in _ARTWORK_SHOPPING_TERMS
+        ):
             continue
         filtered.append(item)
     return filtered
@@ -4511,6 +4549,145 @@ def _normalize_artist_query(query: str) -> str:
     return text
 
 
+def _text_mentions_artist(text: str, artist_name: str) -> bool:
+    artist_key = _tag_exact_key(artist_name)
+    text_key = _tag_exact_key(text)
+    if not artist_key or not text_key:
+        return False
+    return re.search(rf"(?<![a-z0-9]){re.escape(artist_key)}(?![a-z0-9])", text_key) is not None
+
+
+def _dedupe_text_items(values: list[str], limit: int = 10) -> list[str]:
+    results: list[str] = []
+    seen: set[str] = set()
+    for raw in values:
+        clean = re.sub(r"\s+", " ", str(raw or "").strip())
+        if not clean:
+            continue
+        key = clean.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        results.append(clean)
+        if len(results) >= limit:
+            break
+    return results
+
+
+def _fetch_artist_context_from_youtube_api(youtube: Any, artist_name: str) -> dict[str, Any]:
+    artist_query = (artist_name or "").strip()
+    empty_context = {
+        "artist_name": artist_query,
+        "channel_found": False,
+        "channel_title": None,
+        "top_video_titles": [],
+        "type_beat_search_results": [],
+        "is_likely_underground": True,
+    }
+    if not artist_query:
+        return empty_context
+
+    def _safe_execute(request_builder: Any) -> dict[str, Any]:
+        try:
+            payload = request_builder.execute()
+            return payload if isinstance(payload, dict) else {}
+        except Exception:
+            return {}
+
+    channel_payload = _safe_execute(
+        youtube.search().list(
+            q=f'"{artist_query}"',
+            part="snippet",
+            type="channel",
+            maxResults=5,
+        )
+    )
+    channel_title = None
+    for item in channel_payload.get("items", []) or []:
+        snippet = item.get("snippet") or {}
+        candidate_title = snippet.get("title") or ""
+        if _text_mentions_artist(candidate_title, artist_query):
+            channel_title = candidate_title
+            break
+
+    top_video_payload = _safe_execute(
+        youtube.search().list(
+            q=f'"{artist_query}"',
+            part="snippet",
+            type="video",
+            videoCategoryId="10",
+            order="viewCount",
+            maxResults=10,
+        )
+    )
+    top_video_titles = _dedupe_text_items(
+        [
+            (item.get("snippet") or {}).get("title", "")
+            for item in (top_video_payload.get("items", []) or [])
+            if _text_mentions_artist((item.get("snippet") or {}).get("title", ""), artist_query)
+            or _text_mentions_artist((item.get("snippet") or {}).get("channelTitle", ""), artist_query)
+        ],
+        limit=10,
+    )
+
+    type_beat_payload = _safe_execute(
+        youtube.search().list(
+            q=f'"{artist_query}" type beat',
+            part="snippet",
+            type="video",
+            order="relevance",
+            maxResults=10,
+        )
+    )
+    type_beat_titles = _dedupe_text_items(
+        [
+            (item.get("snippet") or {}).get("title", "")
+            for item in (type_beat_payload.get("items", []) or [])
+            if _text_mentions_artist((item.get("snippet") or {}).get("title", ""), artist_query)
+            or _text_mentions_artist((item.get("snippet") or {}).get("channelTitle", ""), artist_query)
+        ],
+        limit=10,
+    )
+
+    signal_count = len(top_video_titles) + len(type_beat_titles)
+    return {
+        "artist_name": artist_query,
+        "channel_found": bool(channel_title),
+        "channel_title": channel_title,
+        "top_video_titles": top_video_titles,
+        "type_beat_search_results": type_beat_titles,
+        "is_likely_underground": signal_count < 6,
+    }
+
+
+def _fetch_artist_context_no_api(artist_name: str) -> dict[str, Any]:
+    artist_query = (artist_name or "").strip()
+    if not artist_query:
+        return {
+            "artist_name": "",
+            "channel_found": False,
+            "channel_title": None,
+            "top_video_titles": [],
+            "type_beat_search_results": [],
+            "is_likely_underground": True,
+        }
+
+    youtube_seeds = _fetch_youtube_track_seeds_no_api(artist_query)
+    type_beat_results = [
+        tag for tag in _fetch_youtube_typebeat_tags_no_api(artist_query, limit=10)
+        if _text_mentions_artist(tag, artist_query)
+    ]
+    signal_count = len(youtube_seeds) + len(type_beat_results)
+    return {
+        "artist_name": artist_query,
+        "channel_found": False,
+        "channel_title": None,
+        "top_video_titles": _dedupe_text_items(youtube_seeds, limit=10),
+        "type_beat_search_results": _dedupe_text_items(type_beat_results, limit=10),
+        "is_likely_underground": signal_count < 6,
+    }
+
+
 def _tag_exact_key(tag: str) -> str:
     key = (tag or "").lower()
     key = re.sub(r"[^a-z0-9\s]", " ", key)
@@ -4991,6 +5168,78 @@ def _fetch_youtube_typebeat_tags_no_api(query: str, limit: int = 18) -> list[str
         return []
 
 
+def _build_tag_generation_prompt(
+    *,
+    request_query: str,
+    artist_name: str,
+    target_count: int,
+    candidate_tags_text: str,
+    artist_context: dict[str, Any],
+) -> str:
+    channel_info = (
+        f"Their YouTube channel appears to be '{artist_context.get('channel_title')}'."
+        if artist_context.get("channel_found") and artist_context.get("channel_title")
+        else "No clearly matching major YouTube channel was confirmed from the search context."
+    )
+    top_videos = "\n".join(artist_context.get("top_video_titles") or []) or "No trusted video titles found."
+    type_beat_results = "\n".join(artist_context.get("type_beat_search_results") or []) or "No trusted type beat search results found."
+    underground_note = ""
+    if artist_context.get("is_likely_underground"):
+        underground_note = f"""
+IMPORTANT: "{artist_name}" appears to be underground, emerging, or sparsely documented.
+- Do NOT default to mainstream artists with similar names.
+- Do NOT generate tags for unrelated artists if the name is ambiguous.
+- If search context is limited, stay anchored to the exact artist string "{artist_name}" and the niche signals below.
+- Prefer real niche search intent over generic broad genre filler.
+"""
+
+    return f"""You are an expert YouTube SEO specialist for beat producers.
+
+Create ONE refined YouTube tag set for: "{request_query}".
+
+GOAL:
+- Maximize discoverability for beat producers.
+- Keep tags tightly relevant and high-intent.
+- Return exactly {target_count} tags (or as close as possible, min 50).
+
+ARTIST GROUNDING:
+Artist name: {artist_name}
+{channel_info}
+{underground_note}
+
+REAL SEARCH CONTEXT:
+Most trusted video/title signals:
+{top_videos}
+
+What appears for "{artist_name} type beat":
+{type_beat_results}
+
+Optional candidate inspirations from YouTube/Spotify/SoundCloud/custom inputs:
+{candidate_tags_text}
+
+STRICT RULES:
+1) NO generic/filler tags like "chill beat", "vibe", "music", "instrumental music".
+2) NO redundant near-duplicates. Do NOT output multiple wording swaps for the same base keyword.
+3) Focus on search intent: exact artist type-beat terms, adjacent niche artists, specific subgenre/mood/tempo, era/project/song influence.
+4) Keep most tags short and practical (2-5 words), but allow a few long-tail queries.
+5) Every tag must be useful for THIS exact query context.
+6) If candidates are provided, use only the strongest ones (do not include all).
+7) Avoid low-value producer-only terms unless directly relevant: "free download", "no copyright", "fl studio", "logic pro", "ableton".
+8) Use the trusted context above to avoid mistaken artist-name swaps. Example: if the artist is underground, do not substitute a bigger mainstream artist with a similar name.
+9) If song/project/title signals are provided, include at least 10 tags directly based on those signals.
+10) Do NOT invent song names, collaborators, or projects that are not strongly implied by the trusted context.
+11) Return STRICT JSON only in this schema:
+{{"tags":["tag1","tag2","tag3"]}}
+
+Required diversity mix (approximate):
+- 20-24 core artist/search intent tags
+- 10-14 adjacent artist crossover tags
+- 10-14 subgenre/mood/tempo tags
+- 8-12 era/project/song influence tags
+- 4-8 long-tail discovery tags
+"""
+
+
 def _build_join_query_candidates(queries: list[str]) -> list[str]:
     normalized_queries = [
         _clean_tag_text(_normalize_artist_query(query))
@@ -5136,8 +5385,16 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
         # Extract artist name from query (e.g., "drake type beat" -> "drake")
         artist_name = _normalize_artist_query(request.query)
         
-        # Search YouTube for artist's popular songs
+        # Search YouTube for artist context with exact-name grounding
         youtube_type_beat_tags: list[str] = []
+        artist_context = {
+            "artist_name": artist_name,
+            "channel_found": False,
+            "channel_title": None,
+            "top_video_titles": [],
+            "type_beat_search_results": [],
+            "is_likely_underground": True,
+        }
         source_status = {
             "youtube": "missing",
             "spotify": "missing",
@@ -5157,31 +5414,41 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
                     raise RuntimeError("Missing YOUTUBE_API_KEY/GOOGLE_API_KEY")
                 youtube = build('youtube', 'v3', developerKey=youtube_api_key)
                 source_status["youtube"] = "youtube_api_key"
-            
-            # Search for artist's popular songs
-            search_response = youtube.search().list(
-                q=artist_name,
-                part='snippet',
-                type='video',
-                videoCategoryId='10',  # Music category
-                order='viewCount',  # Get most popular
-                maxResults=10
-            ).execute()
-            
-            # Extract popular song/title seeds and create one strong variation per title.
-            for item in search_response.get('items', []):
-                title = item['snippet']['title']
+
+            artist_context = _fetch_artist_context_from_youtube_api(youtube, artist_name)
+            source_status["youtube_context"] = "context_found" if (
+                artist_context.get("top_video_titles") or artist_context.get("type_beat_search_results")
+            ) else "context_empty"
+
+            for title in artist_context.get("top_video_titles", []):
                 song_seed = _extract_song_seed(title, artist_name)
                 if not song_seed:
                     continue
                 youtube_type_beat_tags.append(f"{song_seed} type beat")
-            
-            logging.info(f"Found {len(youtube_type_beat_tags)} YouTube song variations for {artist_name}")
+
+            for title in artist_context.get("type_beat_search_results", []):
+                candidate = _extract_typebeat_title_candidate(title, artist_name)
+                if candidate:
+                    youtube_type_beat_tags.append(candidate)
+
+            youtube_type_beat_tags = _append_unique_tags([], youtube_type_beat_tags, max_tags=28)
+            logging.info(
+                f"Found {len(youtube_type_beat_tags)} grounded YouTube tag variations for {artist_name}"
+            )
         except Exception as e:
             logging.warning(f"YouTube search for popular songs failed: {str(e)}")
-            fallback_youtube_seeds = await asyncio.to_thread(_fetch_youtube_track_seeds_no_api, artist_name)
-            youtube_type_beat_tags = [f"{seed} type beat" for seed in fallback_youtube_seeds]
-            source_status["youtube"] = "youtube_web_fallback" if fallback_youtube_seeds else "youtube_failed"
+            artist_context = await asyncio.to_thread(_fetch_artist_context_no_api, artist_name)
+            fallback_youtube_tags: list[str] = []
+            for title in artist_context.get("top_video_titles", []):
+                seed = _extract_song_seed(title, artist_name)
+                if seed:
+                    fallback_youtube_tags.append(f"{seed} type beat")
+            fallback_youtube_tags.extend(artist_context.get("type_beat_search_results", []))
+            youtube_type_beat_tags = _append_unique_tags([], fallback_youtube_tags, max_tags=28)
+            source_status["youtube"] = "youtube_web_fallback" if youtube_type_beat_tags else "youtube_failed"
+            source_status["youtube_context"] = "fallback_context_found" if (
+                artist_context.get("top_video_titles") or artist_context.get("type_beat_search_results")
+            ) else "fallback_context_empty"
 
         spotify_seeds, soundcloud_seeds = await asyncio.gather(
             asyncio.to_thread(_fetch_spotify_track_seeds, artist_name),
@@ -5230,36 +5497,13 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
                 source_priority_pool.append(candidate)
 
         candidate_tags_text = ", ".join(unique_candidate_pool[:80]) if unique_candidate_pool else "None"
-        prompt = f"""Create ONE refined YouTube tag set for: "{request.query}".
-
-GOAL:
-- Maximize discoverability for beat producers.
-- Keep tags tightly relevant and high-intent.
-- Return exactly {target_count} tags (or as close as possible, min 50).
-
-STRICT RULES:
-1) NO generic/filler tags like "chill beat", "vibe", "music", "instrumental music".
-2) NO redundant near-duplicates. Do NOT output multiple wording swaps for the same base keyword.
-3) Focus on search intent: artist type-beat terms, close related artists, specific subgenre/mood/tempo, era/project/song influence.
-4) Keep most tags short and practical (2-5 words), but allow a few long-tail queries.
-5) Every tag must be useful for THIS exact query context.
-6) If candidates are provided, use only the strongest ones (do not include all).
-7) Avoid low-value producer-only terms unless directly relevant: "free download", "no copyright", "fl studio", "logic pro", "ableton".
-8) Return STRICT JSON only in this schema:
-{{"tags":["tag1","tag2","tag3"]}}
-9) If song-based candidates are provided, include at least 10 tags directly based on those song/title candidates.
-10) Avoid generic artist+modifier tags like "artist emotional beat", "artist vibe beat", "artist flow beat" unless tied to a real song/project reference.
-
-Required diversity mix (approximate):
-- 20-24 core artist/search intent tags
-- 10-14 adjacent artist crossover tags
-- 10-14 subgenre/mood/tempo tags
-- 8-12 era/project/song influence tags
-- 4-8 long-tail discovery tags
-
-Optional candidate inspirations from YouTube/Spotify/SoundCloud/custom inputs:
-{candidate_tags_text}
-"""
+        prompt = _build_tag_generation_prompt(
+            request_query=request.query,
+            artist_name=artist_name,
+            target_count=target_count,
+            candidate_tags_text=candidate_tags_text,
+            artist_context=artist_context,
+        )
         
         response = await llm_chat(
             system_message="You are an expert YouTube SEO specialist for beat producers. Produce a refined, high-intent final tag list only. Return strict JSON.",
@@ -5432,6 +5676,7 @@ Optional candidate inspirations from YouTube/Spotify/SoundCloud/custom inputs:
         debug_info = {
             "query": request.query,
             "artist_seed": artist_name,
+            "artist_context": artist_context,
             "source_status": source_status,
             "source_counts": source_counts,
             "top_up_used": len(final_tags) > llm_selected_count,

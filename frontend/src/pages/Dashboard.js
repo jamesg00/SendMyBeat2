@@ -11,13 +11,11 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import axios from "axios";
 import { API } from "@/App";
 import { toast } from "sonner";
-import { Music, Sparkles, Save, LogOut, Copy, Trash2, Edit, Plus, Youtube, AlertCircle, Target, ChevronLeft, ChevronRight, DollarSign, Link, CircleAlert, CheckCircle2, Settings } from "lucide-react";
-import DarkModeToggle from "@/components/DarkModeToggle";
+import { Sparkles, Save, LogOut, Copy, Trash2, Edit, Plus, Youtube, AlertCircle, Target, ChevronLeft, ChevronRight, DollarSign, Link, CircleAlert, CheckCircle2, Settings } from "lucide-react";
 import SubscriptionBanner from "@/components/SubscriptionBanner";
 import UpgradeModal from "@/components/UpgradeModal";
 import AdBanner from "@/components/AdBanner";
 import ProgressBar from "@/components/ProgressBar";
-import ThemeCustomizer from "@/components/ThemeCustomizer";
 import PublishWorkflow from "@/components/workflow/PublishWorkflow";
 import { clearAuthToken } from "@/lib/auth";
 
@@ -305,10 +303,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const adEligibleTabs = ["workflow", "analytics"].includes(activeTab);
   const activeTabIndex = Math.max(0, visibleTabs.findIndex((tab) => tab.value === activeTab));
   const activeTabLabel = visibleTabs[activeTabIndex]?.label || "Workflow";
-  const desktopTabHighlightStyle = {
-    width: `${100 / Math.max(visibleTabs.length, 1)}%`,
-    transform: `translateX(${activeTabIndex * 100}%)`,
-  };
   const canShowAds = Boolean(
     subscriptionStatus &&
     !subscriptionStatus.is_subscribed &&
@@ -1180,22 +1174,19 @@ const Dashboard = ({ setIsAuthenticated }) => {
       <div className="dashboard-grid-layer" aria-hidden="true" />
 
       {/* Header */}
-      <div className="glass-card relative mx-2 sm:mx-4 mt-2 sm:mt-4 rounded-xl sm:rounded-2xl border-0 dashboard-card">
+      <div className="terminal-topbar">
         <div className="container mx-auto px-3 sm:px-4 md:px-6 py-3 sm:py-4 dashboard-shell">
           <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 lg:gap-4">
             <div className="flex flex-1 items-center gap-2 sm:gap-3 md:gap-4 min-w-0 max-w-full">
-              <div className="dashboard-brand-mark flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-xl flex-shrink-0">
-                <Music className="h-6 w-6 sm:h-7 sm:w-7 fill-current text-black" />
-              </div>
               <div className="min-w-0 flex-1">
-                <h1 className="dashboard-brand-title text-lg sm:text-xl md:text-2xl font-bold gradient-text">SendMyBeat</h1>
+                <h1 className="dashboard-brand-title text-lg sm:text-xl md:text-2xl font-bold">SENDMYBEAT</h1>
                 {user && (
                   <p
                     className="dashboard-brand-subtitle text-xs sm:text-sm truncate max-w-[180px] sm:max-w-[260px] md:max-w-[340px] lg:max-w-[420px]"
                     style={{ color: "var(--text-secondary)" }}
                     title={`Welcome back, ${user.username}`}
                   >
-                    Welcome back, {user.username}
+                    {user.username}
                   </p>
                 )}
               </div>
@@ -1205,47 +1196,34 @@ const Dashboard = ({ setIsAuthenticated }) => {
               {subscriptionStatus && !subscriptionStatus.is_subscribed && (
                 <Button
                   onClick={() => setShowUpgradeModal(true)}
-                  className="btn-modern text-xs sm:text-sm px-3 sm:px-4 py-2 whitespace-nowrap"
+                  variant="outline"
+                  className="terminal-header-button text-xs sm:text-sm px-3 sm:px-4 py-2 whitespace-nowrap"
                   data-testid="header-upgrade-btn"
                 >
                   <Sparkles className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                  Upgrade Plan
+                  Plan
                 </Button>
               )}
 
               {/* Show Pro badge for subscribed users */}
               {subscriptionStatus && subscriptionStatus.is_subscribed && (
-                <div className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-gradient-to-r from-[var(--accent-primary)] to-[var(--accent-secondary)] text-white font-semibold text-xs sm:text-sm whitespace-nowrap">
-                  {subscriptionStatus.plan === "max" ? "Max Member" : "Plus Member"}
-                </div>
-              )}
-
-              {/* YouTube Profile Picture */}
-              {youtubeConnected && youtubeProfilePicture && (
-                <div className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-full min-w-0 max-w-full xl:max-w-[340px]" style={{backgroundColor: 'var(--bg-secondary)'}}>
-                  <img
-                    src={youtubeProfilePicture}
-                    alt={youtubeName || youtubeEmail}
-                    className="h-6 w-6 sm:h-8 sm:w-8 rounded-full border-2 border-[var(--accent-primary)]"
-                  />
-                  <span className="text-xs sm:text-sm font-medium hidden xl:block truncate max-w-[250px]" style={{color: 'var(--text-primary)'}}>
-                    {youtubeName || youtubeEmail}
-                  </span>
+                <div className="terminal-plan-badge px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm whitespace-nowrap">
+                  {subscriptionStatus.plan === "max" ? "MAX" : "PLUS"}
                 </div>
               )}
               <Button
                 variant="outline"
                 onClick={() => window.location.href = '/spotlight'}
-                className="gap-1 sm:gap-2 border-[var(--border-color)] text-xs sm:text-sm px-3 sm:px-4 py-2 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border-yellow-500/50 hover:bg-yellow-500/30"
+                className="terminal-header-button gap-1 sm:gap-2 text-xs sm:text-sm px-3 sm:px-4 py-2"
               >
-                <Target className="h-3 w-3 sm:h-4 sm:w-4 text-yellow-500" />
-                <span className="hidden xl:inline font-bold text-yellow-500">Spotlight</span>
+                <Target className="h-3 w-3 sm:h-4 sm:w-4" />
+                <span className="hidden xl:inline font-bold">Spotlight</span>
               </Button>
               {isAdmin && (
                 <Button
                   variant="outline"
                   onClick={() => window.location.href = '/admin/costs'}
-                  className="gap-1 sm:gap-2 border-[var(--border-color)] text-xs sm:text-sm px-3 sm:px-4 py-2"
+                  className="terminal-header-button gap-1 sm:gap-2 text-xs sm:text-sm px-3 sm:px-4 py-2"
                   title="View Backend Costs"
                 >
                   <DollarSign className="h-3 w-3 sm:h-4 sm:w-4" />
@@ -1255,24 +1233,23 @@ const Dashboard = ({ setIsAuthenticated }) => {
               <Button
                 variant="outline"
                 onClick={openSettingsView}
-                className="gap-1 sm:gap-2 border-[var(--border-color)] text-xs sm:text-sm px-3 sm:px-4 py-2"
+                className="terminal-header-button gap-1 sm:gap-2 text-xs sm:text-sm px-3 sm:px-4 py-2"
                 data-testid="header-settings-btn"
               >
                 <Settings className="h-3 w-3 sm:h-4 sm:w-4" />
-                <span className="hidden xl:inline">Settings</span>
+                <span className="hidden xl:inline">Prefs</span>
                 <span className="xl:hidden">Prefs</span>
               </Button>
               <Button
                 variant="outline"
                 onClick={handleLogout}
-                className="gap-1 sm:gap-2 border-[var(--border-color)] text-xs sm:text-sm px-3 sm:px-4 py-2"
+                className="terminal-header-button gap-1 sm:gap-2 text-xs sm:text-sm px-3 sm:px-4 py-2"
                 data-testid="logout-btn"
               >
                 <LogOut className="h-3 w-3 sm:h-4 sm:w-4" />
-                <span className="hidden xl:inline">Logout</span>
+                <span className="hidden xl:inline">Exit</span>
                 <span className="xl:hidden">Exit</span>
               </Button>
-              <DarkModeToggle className="px-2.5 py-2 sm:px-3" />
             </div>
           </div>
         </div>
@@ -1370,11 +1347,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
             className="hidden sm:grid w-full max-w-3xl mx-auto gap-0.5 text-[10px] sm:text-[11px] dashboard-tabs dashboard-tabs-desktop relative overflow-hidden"
             style={{ gridTemplateColumns: `repeat(${Math.max(visibleTabs.length, 1)}, minmax(0, 1fr))` }}
           >
-            <div
-              className="absolute left-0 top-0 h-full rounded-xl bg-gradient-to-r from-[var(--accent-primary)] to-[var(--accent-secondary)] shadow-md border border-[var(--border-color)] transition-transform duration-300 ease-out"
-              style={desktopTabHighlightStyle}
-              aria-hidden="true"
-            />
             {visibleTabs.map((tab, index) => (
                 <TabsTrigger
                   key={tab.value}
@@ -1557,11 +1529,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
                 </CardContent>
               </Card>
             </div>
-
-            <ThemeCustomizer
-              isPro={Boolean(subscriptionStatus?.is_subscribed)}
-              onUpgrade={() => setShowUpgradeModal(true)}
-            />
           </TabsContent>
 
           {/* YouTube Analytics Tab */}
@@ -1934,6 +1901,23 @@ const Dashboard = ({ setIsAuthenticated }) => {
             </Card>
           </TabsContent>
         </Tabs>
+
+        <div className="terminal-streak-bar">
+          <div className="terminal-streak-meta">
+            <span className="terminal-streak-value">12</span>
+            <span className="terminal-streak-label">DAY STREAK</span>
+          </div>
+          <div className="terminal-streak-days" aria-hidden="true">
+            <span className="terminal-streak-day terminal-streak-day--done" />
+            <span className="terminal-streak-day terminal-streak-day--done" />
+            <span className="terminal-streak-day terminal-streak-day--done" />
+            <span className="terminal-streak-day terminal-streak-day--done" />
+            <span className="terminal-streak-day terminal-streak-day--done" />
+            <span className="terminal-streak-day terminal-streak-day--today" />
+            <span className="terminal-streak-day" />
+          </div>
+          <div className="terminal-streak-copy">GROW IN 120 · STATIC WORKSPACE BAR</div>
+        </div>
       </div>
 
       {/* Upgrade Modal */}

@@ -34,9 +34,9 @@ const DarkModeToggle = ({ inline = false, className = "" }) => {
       data-testid="dark-mode-toggle"
     >
       {isDark ? (
-        <Sun className="h-5 w-5 text-yellow-500" />
+        <Sun className="h-5 w-5 text-white" />
       ) : (
-        <Moon className="h-5 w-5 text-indigo-600" />
+        <Moon className="h-5 w-5 text-[#00ff41]" />
       )}
     </button>
   );

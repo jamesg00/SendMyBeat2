@@ -494,3 +494,58 @@
     transform: translateY(0);
   }
 }
+
+/* Terminal landing overrides */
+.landing-page {
+  background: #000000 !important;
+  color: #ffffff !important;
+}
+
+.landing-nav,
+.landing-panel,
+.landing-info-card,
+.landing-plan-shell,
+.landing-plan-card,
+.landing-workflow-card,
+.landing-upload-shell,
+.landing-growth-shell,
+.landing-auth-dialog,
+.landing-chip,
+.landing-pill,
+.landing-input-shell,
+.landing-output-shell,
+.landing-example-prompt,
+.landing-example-console,
+.landing-stat,
+.landing-tag,
+.landing-tag-muted,
+.landing-auth-input {
+  background: #000000 !important;
+  border: 1px solid #111111 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+.landing-nav {
+  border-bottom: 1px solid #00ff41 !important;
+}
+
+.landing-brand-mark,
+.landing-icon-box,
+.landing-icon-box-red,
+.landing-icon-box-gold {
+  background: transparent !important;
+  border: 1px solid #111111 !important;
+  color: #00ff41 !important;
+}
+
+.landing-shell-glow-a,
+.landing-shell-glow-b {
+  display: none !important;
+}
+
+.landing-workflow-card:hover,
+.landing-primary-btn:hover,
+.landing-cta-btn:hover {
+  transform: none !important;
+}

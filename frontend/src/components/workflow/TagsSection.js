@@ -37,6 +37,199 @@ const TagsSection = ({
   setTagQuery,
 }) => {
   const [resultsCollapsed, setResultsCollapsed] = useState(mode === "results");
+  const hasGeneratedTags = generatedTags.length > 0;
+
+  const renderResultsPanel = ({ inline = false } = {}) => (
+    <div
+      className={`workflow-output-card ${hasGeneratedTags ? "" : "workflow-output-card--empty"} ${inline ? "workflow-inline-output" : ""}`}
+      data-testid="generated-tags-section"
+    >
+      <div className="workflow-inline-output-header">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0">
+          <div className="min-w-0">
+            <h3 className="text-sm sm:text-base font-semibold" style={{ color: "var(--text-primary)" }}>
+              Generated Tags {hasGeneratedTags ? `(${generatedTags.length})` : ""}
+            </h3>
+            {!hasGeneratedTags && (
+              <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
+                Run a search to load your first tag set.
+              </p>
+            )}
+          </div>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => setResultsCollapsed((prev) => !prev)}
+              className="gap-1 text-xs sm:text-sm"
+              aria-expanded={!resultsCollapsed}
+            >
+              {resultsCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+              {resultsCollapsed ? "Expand" : "Collapse"}
+            </Button>
+            {hasGeneratedTags ? (
+              <div className="flex gap-2 flex-1 sm:flex-none">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={handleGenerateTags}
+                  className="gap-1 sm:gap-2 text-xs sm:text-sm flex-1 sm:flex-none py-2"
+                  disabled={loadingTags}
+                  data-testid="refine-tags-btn"
+                >
+                  <Sparkles className="h-3 w-3 sm:h-4 sm:w-4" />
+                  Refine
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={copyTags}
+                  className="gap-1 sm:gap-2 text-xs sm:text-sm flex-1 sm:flex-none py-2"
+                  data-testid="copy-tags-btn"
+                >
+                  <Copy className="h-3 w-3 sm:h-4 sm:w-4" />
+                  Copy All
+                </Button>
+              </div>
+            ) : (
+              <span className="tags-inline-stat">Waiting for first run</span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {!resultsCollapsed && (
+        <div className="workflow-inline-output-body">
+          {hasGeneratedTags ? (
+            <div className="tag-cloud" data-testid="tags-list">
+              {generatedTags.map((tag, index) => (
+                <span
+                  key={index}
+                  className="tag-item group relative"
+                  data-testid={`tag-${index}`}
+                  title={generatedTagScores[normalizeTagKey(tag)]?.reason || tag}
+                >
+                  {generatedTagScores[normalizeTagKey(tag)]?.score ? (
+                    <span className="mr-2 inline-flex rounded-full border px-1.5 py-0.5 text-[10px] font-semibold" style={{ borderColor: "var(--border-color)", color: "var(--text-secondary)" }}>
+                      {generatedTagScores[normalizeTagKey(tag)]?.score}
+                    </span>
+                  ) : null}
+                  {tag}
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      await handleRemoveGeneratedTag(index);
+                    }}
+                    className="ml-2 text-red-500 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-700"
+                    title="Delete tag"
+                    aria-label="Delete tag"
+                  >
+                    x
+                  </button>
+                </span>
+              ))}
+            </div>
+          ) : (
+            <div className="workflow-output-empty-state rounded-lg border border-dashed px-4 py-6 text-center text-sm" style={{ borderColor: "var(--border-color)", color: "var(--text-secondary)" }}>
+              Your generated tag set will appear here after the first run.
+            </div>
+          )}
+
+          {hasGeneratedTags && (
+            <div className="workflow-inline-output-tools">
+              <div className="space-y-2 sm:space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="additional-tags" className="font-semibold text-sm sm:text-base">
+                    <Plus className="inline h-3 w-3 sm:h-4 sm:w-4 mr-1" />
+                    Add More Tags
+                  </Label>
+                  <span className="text-xs sm:text-sm" style={{ color: "var(--text-secondary)" }}>
+                    {generatedTags.length}/{tagLimit}
+                  </span>
+                </div>
+                <Textarea
+                  id="additional-tags"
+                  placeholder="Add more tags (comma-separated)"
+                  value={additionalTags}
+                  onChange={(e) => setAdditionalTags(e.target.value)}
+                  rows={2}
+                  disabled={generatedTags.length >= tagLimit}
+                  className="text-sm sm:text-base"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleAddMoreTags}
+                  disabled={generatedTags.length >= tagLimit || !additionalTags.trim()}
+                  className="w-full gap-1 sm:gap-2 text-sm py-2.5"
+                >
+                  <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
+                  {generatedTags.length >= tagLimit ? `Limit Reached (${tagLimit})` : "Add Tags"}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {canViewTagDebug && hasGeneratedTags && (
+            <div className="workflow-inline-output-tools">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm sm:text-base font-semibold">Tag Generation Debug</p>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowTagDebug((prev) => !prev)}
+                  className="text-xs sm:text-sm"
+                  disabled={!tagDebug}
+                >
+                  {showTagDebug ? "Hide Debug" : "Show Debug"}
+                </Button>
+              </div>
+              {tagDebug ? (
+                <>
+                  <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
+                    Source mix, selected tags, and de-duplication drops for this generation.
+                  </p>
+
+                  {showTagDebug && (
+                    <div className="mt-3 space-y-3">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                        {Object.entries(tagDebug?.source_counts || {}).map(([key, value]) => (
+                          <div key={key} className="rounded-md border px-2 py-1" style={{ borderColor: "var(--border-color)" }}>
+                            <p className="font-semibold">{String(value)}</p>
+                            <p style={{ color: "var(--text-secondary)" }}>{key.replaceAll("_", " ")}</p>
+                          </div>
+                        ))}
+                      </div>
+
+                      {Object.keys(tagDebug?.source_status || {}).length > 0 && (
+                        <div className="rounded-md border px-2 py-2 text-xs" style={{ borderColor: "var(--border-color)" }}>
+                          <p className="font-semibold mb-1">Source Status</p>
+                          {Object.entries(tagDebug?.source_status || {}).map(([key, value]) => (
+                            <p key={key} style={{ color: "var(--text-secondary)" }}>
+                              {key}: {String(value)}
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="mt-2 text-xs" style={{ color: "var(--text-secondary)" }}>
+                  Debug data will appear here after a tag generation is loaded.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
   const renderEditorCard = () => (
     <Card className="dashboard-card tags-studio-card h-full">
       <CardHeader className="px-4 sm:px-6 py-4 sm:py-6">
@@ -92,6 +285,7 @@ const TagsSection = ({
                   {selectedTagHistoryIds.length} selected
                 </span>
                 <Button
+                  type="button"
                   variant="outline"
                   size="sm"
                   onClick={handleJoinSelectedTagHistory}
@@ -102,6 +296,7 @@ const TagsSection = ({
                 </Button>
                 {selectedTagHistoryIds.length > 0 && (
                   <Button
+                    type="button"
                     variant="ghost"
                     size="sm"
                     onClick={handleClearTagSelection}
@@ -148,6 +343,7 @@ const TagsSection = ({
                             </p>
                           </div>
                           <Button
+                            type="button"
                             variant="ghost"
                             size="sm"
                             className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity text-red-500 hover:text-red-700 hover:bg-red-50 flex-shrink-0"
@@ -178,201 +374,26 @@ const TagsSection = ({
 
           <Button
             type="submit"
-            className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-sm sm:text-base py-5 sm:py-6"
+            className="w-full text-sm sm:text-base py-5 sm:py-6"
             disabled={loadingTags}
             data-testid="generate-tags-btn"
           >
             {loadingTags ? "Generating Tags..." : "Generate 60-80 Tags"}
           </Button>
+
+          {renderResultsPanel({ inline: true })}
         </form>
       </CardContent>
     </Card>
   );
 
-  const hasGeneratedTags = generatedTags.length > 0;
-
-  const renderResultsCard = () => (
-    <Card className={`dashboard-card h-full workflow-output-card ${hasGeneratedTags ? "" : "workflow-output-card--empty"}`} data-testid="generated-tags-section">
-      <CardHeader className="px-4 sm:px-6 py-4 sm:py-5">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0">
-          <CardTitle className="text-sm sm:text-base" style={{ color: "var(--text-primary)" }}>
-            Generated Tags {hasGeneratedTags ? `(${generatedTags.length})` : ""}
-          </CardTitle>
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setResultsCollapsed((prev) => !prev)}
-              className="gap-1 text-xs sm:text-sm"
-              aria-expanded={!resultsCollapsed}
-            >
-              {resultsCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
-              {resultsCollapsed ? "Expand" : "Collapse"}
-            </Button>
-          {hasGeneratedTags ? (
-            <div className="flex gap-2 flex-1 sm:flex-none">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleGenerateTags}
-                className="gap-1 sm:gap-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:from-purple-700 hover:to-blue-700 border-0 text-xs sm:text-sm flex-1 sm:flex-none py-2"
-                disabled={loadingTags}
-                data-testid="refine-tags-btn"
-              >
-                <Sparkles className="h-3 w-3 sm:h-4 sm:w-4" />
-                Refine
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={copyTags}
-                className="gap-1 sm:gap-2 text-xs sm:text-sm flex-1 sm:flex-none py-2"
-                data-testid="copy-tags-btn"
-              >
-                <Copy className="h-3 w-3 sm:h-4 sm:w-4" />
-                Copy All
-              </Button>
-            </div>
-          ) : (
-            <span className="tags-inline-stat">Waiting for first run</span>
-          )}
-          </div>
-        </div>
-      </CardHeader>
-      {!resultsCollapsed && (
-      <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6 space-y-4">
-        {hasGeneratedTags ? (
-          <div className="tag-cloud" data-testid="tags-list">
-            {generatedTags.map((tag, index) => (
-              <span
-                key={index}
-                className="tag-item group relative"
-                data-testid={`tag-${index}`}
-                title={generatedTagScores[normalizeTagKey(tag)]?.reason || tag}
-              >
-                {generatedTagScores[normalizeTagKey(tag)]?.score ? (
-                  <span className="mr-2 inline-flex rounded-full border px-1.5 py-0.5 text-[10px] font-semibold" style={{ borderColor: "var(--border-color)", color: "var(--text-secondary)" }}>
-                    {generatedTagScores[normalizeTagKey(tag)]?.score}
-                  </span>
-                ) : null}
-                {tag}
-                <button
-                  onClick={async (e) => {
-                    e.stopPropagation();
-                    await handleRemoveGeneratedTag(index);
-                  }}
-                  className="ml-2 text-red-500 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-700"
-                  title="Delete tag"
-                  aria-label="Delete tag"
-                >
-                  x
-                </button>
-              </span>
-            ))}
-          </div>
-        ) : (
-          <div className="workflow-output-empty-state rounded-lg border border-dashed px-4 py-6 text-center text-sm" style={{ borderColor: "var(--border-color)", color: "var(--text-secondary)" }}>
-            Your generated tag set will appear here after the first run.
-          </div>
-        )}
-
-        {hasGeneratedTags && (
-          <div className="p-3 sm:p-4 rounded-lg border-2 border-green-500" style={{ backgroundColor: "var(--bg-secondary)" }}>
-            <div className="space-y-2 sm:space-y-3">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="additional-tags" className="font-semibold text-sm sm:text-base">
-                  <Plus className="inline h-3 w-3 sm:h-4 sm:w-4 mr-1" />
-                  Add More Tags
-                </Label>
-                <span className="text-xs sm:text-sm" style={{ color: "var(--text-secondary)" }}>
-                  {generatedTags.length}/{tagLimit}
-                </span>
-              </div>
-              <Textarea
-                id="additional-tags"
-                placeholder="Add more tags (comma-separated)"
-                value={additionalTags}
-                onChange={(e) => setAdditionalTags(e.target.value)}
-                rows={2}
-                disabled={generatedTags.length >= tagLimit}
-                className="text-sm sm:text-base"
-              />
-              <Button
-                size="sm"
-                onClick={handleAddMoreTags}
-                disabled={generatedTags.length >= tagLimit || !additionalTags.trim()}
-                className="w-full gap-1 sm:gap-2 bg-green-600 hover:bg-green-700 text-sm py-2.5"
-              >
-                <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
-                {generatedTags.length >= tagLimit ? `Limit Reached (${tagLimit})` : "Add Tags"}
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {canViewTagDebug && hasGeneratedTags && (
-          <div className="p-3 sm:p-4 rounded-lg border" style={{ backgroundColor: "var(--bg-secondary)", borderColor: "var(--border-color)" }}>
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-sm sm:text-base font-semibold">Tag Generation Debug</p>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setShowTagDebug((prev) => !prev)}
-                className="text-xs sm:text-sm"
-                disabled={!tagDebug}
-              >
-                {showTagDebug ? "Hide Debug" : "Show Debug"}
-              </Button>
-            </div>
-            {tagDebug ? (
-              <>
-              <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
-                  Source mix, selected tags, and de-duplication drops for this generation.
-                </p>
-
-                {showTagDebug && (
-                  <div className="mt-3 space-y-3">
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
-                      {Object.entries(tagDebug?.source_counts || {}).map(([key, value]) => (
-                        <div key={key} className="rounded-md border px-2 py-1" style={{ borderColor: "var(--border-color)" }}>
-                          <p className="font-semibold">{String(value)}</p>
-                          <p style={{ color: "var(--text-secondary)" }}>{key.replaceAll("_", " ")}</p>
-                        </div>
-                      ))}
-                    </div>
-
-                    {Object.keys(tagDebug?.source_status || {}).length > 0 && (
-                      <div className="rounded-md border px-2 py-2 text-xs" style={{ borderColor: "var(--border-color)" }}>
-                        <p className="font-semibold mb-1">Source Status</p>
-                        {Object.entries(tagDebug?.source_status || {}).map(([key, value]) => (
-                          <p key={key} style={{ color: "var(--text-secondary)" }}>
-                            {key}: {String(value)}
-                          </p>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </>
-            ) : (
-              <p className="mt-2 text-xs" style={{ color: "var(--text-secondary)" }}>
-                Debug data will appear here after a tag generation is loaded.
-              </p>
-            )}
-          </div>
-        )}
-      </CardContent>
-      )}
-    </Card>
-  );
-
   if (mode === "editor") return renderEditorCard();
-  if (mode === "results") return renderResultsCard();
+  if (mode === "results") return renderResultsPanel();
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6">
       {renderEditorCard()}
-      {renderResultsCard()}
+      {renderResultsPanel()}
     </div>
   );
 };

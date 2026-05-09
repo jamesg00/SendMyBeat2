@@ -1152,7 +1152,8 @@ const UploadStudio = ({
         <div className="pt-4">
            <Button
               size="lg"
-              className="w-full text-lg shadow-xl shadow-red-500/20 bg-red-600 hover:bg-red-700"
+              variant="outline"
+              className="w-full text-lg terminal-publish-button"
               onClick={handleYouTubeUploadAsync}
               disabled={uploadingToYouTube}
            >
@@ -1202,14 +1203,14 @@ const UploadStudio = ({
 
   // --- STUDIO OVERLAY (SPLIT VIEW) ---
   return (
-    <div className={`fixed inset-0 z-50 bg-background/95 backdrop-blur-md flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-300`}>
+    <div className={`fixed inset-0 z-50 bg-background/95 flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-300`}>
       {audioPreviewUrl && <audio ref={audioPlayerRef} src={audioPreviewUrl} preload="metadata" />}
 
       {/* Header */}
-      <div className="flex-none h-14 border-b bg-background/50 backdrop-blur px-4 flex items-center justify-between z-50">
+      <div className="flex-none h-14 border-b bg-background px-4 flex items-center justify-between z-50">
          <div className="flex items-center gap-2">
             <span className="font-bold text-lg gradient-text">Upload Studio</span>
-            <span className="text-xs bg-secondary px-2 py-0.5 rounded-full text-muted-foreground hidden sm:inline-block">Beta</span>
+            <span className="text-xs px-2 py-0.5 text-muted-foreground hidden sm:inline-block">LIVE</span>
          </div>
          <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={closeStudio}>
@@ -1224,12 +1225,12 @@ const UploadStudio = ({
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden relative">
          {!youtubeConnected && (
-            <div className="absolute inset-0 z-40 flex items-center justify-center bg-background/88 backdrop-blur-sm px-4">
-               <Card className="w-full max-w-md border border-red-500/30 bg-[var(--card-bg)] shadow-2xl">
+            <div className="absolute inset-0 z-40 flex items-center justify-center bg-background/88 px-4">
+               <Card className="w-full max-w-md border border-[var(--border-color)] bg-[var(--card-bg)]">
                   <CardHeader className="text-center">
                      <CardTitle className="flex items-center justify-center gap-2 text-lg">
-                        <Youtube className="h-5 w-5 text-red-500" />
-                        Connect YouTube First
+                        <Youtube className="h-5 w-5 text-[var(--accent-primary)]" />
+                        Connect YouTube To Allow Uploads
                      </CardTitle>
                      <CardDescription>
                         Connect your YouTube account before uploading audio, artwork, or editing this upload.

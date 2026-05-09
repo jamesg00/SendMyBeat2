@@ -679,6 +679,9 @@ html:not(.dark) .dashboard-tab-trigger--separated::before {
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 12px;
   margin-top: 14px;
+  max-height: 360px;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .description-saved-card {
@@ -1316,12 +1319,12 @@ html:not(.dark) .dashboard-tab-trigger--separated::before {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  max-height: 400px;
+  max-height: 320px;
   overflow-y: auto;
-  padding: 20px;
-  background: var(--bg-secondary);
-  border-radius: 16px;
-  border: 1px solid var(--border-color);
+  padding: 14px;
+  background: var(--terminal-bg-soft);
+  border-radius: 0;
+  border: 1px solid var(--terminal-border);
 }
 
 .tag-history-scroll {
@@ -1332,12 +1335,12 @@ html:not(.dark) .dashboard-tab-trigger--separated::before {
 
 .tag-item {
   padding: 8px 16px;
-  background: var(--card-bg);
-  border: 1px solid var(--border-color);
-  border-radius: 20px;
+  background: #060606;
+  border: 1px solid #1a1a1a;
+  border-radius: 0;
   font-size: 13px;
   font-weight: 500;
-  color: var(--text-primary);
+  color: #ffffff;
   transition: all 0.2s ease;
   cursor: default;
   font-family: 'Space Mono', monospace;
@@ -1345,17 +1348,17 @@ html:not(.dark) .dashboard-tab-trigger--separated::before {
 
 body.dark .tag-item,
 .dark .tag-item {
-  color: #000;
-  background: #e8e8e8;
-  border-color: #c0c0c0;
+  color: #ffffff;
+  background: #060606;
+  border-color: #1a1a1a;
 }
 
 .tag-item:hover {
-  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
-  color: white;
-  border-color: transparent;
-  transform: translateY(-2px) scale(1.05);
-  box-shadow: 0 4px 12px var(--glow);
+  background: #090909;
+  color: #ffffff;
+  border-color: var(--terminal-border-strong);
+  transform: none;
+  box-shadow: none;
 }
 
 @media (max-width: 640px) {
@@ -2005,5 +2008,657 @@ body[data-theme="glass"] .dashboard-tabs [role="tab"][data-state="active"] {
 
 body[data-theme="glass"] .dashboard-tabs [role="tab"]:not([data-state="active"]):hover {
   color: #dbeafe !important;
+}
+
+/* Terminal Workspace Redesign */
+body[data-theme="light"] {
+  --terminal-bg: #ffffff;
+  --terminal-bg-soft: #f7f7f7;
+  --terminal-border: #111111;
+  --terminal-border-strong: #007a20;
+  --terminal-text: #000000;
+  --terminal-text-soft: #555555;
+  --terminal-text-mid: #aaaaaa;
+  --terminal-accent: #007a20;
+  --terminal-accent-soft: rgba(0, 122, 32, 0.08);
+  --terminal-accent-contrast: #ffffff;
+  --terminal-today: #007a20;
+}
+
+body[data-theme="dark"],
+html.dark body[data-theme],
+body.dark[data-theme],
+html.dark body:not([data-theme]),
+body.dark:not([data-theme]) {
+  --terminal-bg: #000000;
+  --terminal-bg-soft: #050505;
+  --terminal-border: #111111;
+  --terminal-border-strong: #00ff41;
+  --terminal-text: #ffffff;
+  --terminal-text-soft: #aaaaaa;
+  --terminal-text-mid: #555555;
+  --terminal-accent: #00ff41;
+  --terminal-accent-soft: rgba(0, 255, 65, 0.03);
+  --terminal-accent-contrast: #000000;
+  --terminal-today: #007a20;
+}
+
+html:not(.dark) body[data-theme]:not([data-theme="dark"]),
+body:not(.dark)[data-theme]:not([data-theme="dark"]),
+html:not(.dark) body:not([data-theme]),
+body:not(.dark):not([data-theme]) {
+  --terminal-bg: #ffffff;
+  --terminal-bg-soft: #f7f7f7;
+  --terminal-border: #111111;
+  --terminal-border-strong: #007a20;
+  --terminal-text: #000000;
+  --terminal-text-soft: #555555;
+  --terminal-text-mid: #aaaaaa;
+  --terminal-accent: #007a20;
+  --terminal-accent-soft: rgba(0, 122, 32, 0.08);
+  --terminal-accent-contrast: #ffffff;
+  --terminal-today: #007a20;
+}
+
+body,
+.App {
+  --bg-primary: var(--terminal-bg) !important;
+  --bg-secondary: var(--terminal-bg-soft) !important;
+  --bg-tertiary: var(--terminal-border) !important;
+  --text-primary: var(--terminal-text) !important;
+  --text-secondary: var(--terminal-text-soft) !important;
+  --accent-primary: var(--terminal-accent) !important;
+  --accent-secondary: var(--terminal-accent) !important;
+  --border-color: var(--terminal-border) !important;
+  --card-bg: var(--terminal-bg) !important;
+  --shadow: transparent !important;
+  --glow: transparent !important;
+  font-family: "Courier New", monospace !important;
+  background: var(--terminal-bg) !important;
+  color: var(--terminal-text) !important;
+}
+
+h1, h2, h3, h4, h5, h6, button, input, textarea, select, [role="tab"], .card-title, .card-description {
+  font-family: "Courier New", monospace !important;
+}
+
+* {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
+
+.gradient-text,
+.landing-page .gradient-text {
+  background: none !important;
+  -webkit-text-fill-color: currentColor !important;
+  color: var(--terminal-accent) !important;
+}
+
+.glass-card,
+.dashboard-card,
+.dashboard-card-muted,
+.producer-card,
+.game-card,
+.landing-panel,
+.landing-info-card,
+.landing-plan-card,
+.landing-workflow-card,
+.landing-upload-shell,
+.landing-growth-shell,
+.landing-auth-dialog,
+.workflow-upload-shell,
+.workflow-toolbar-card,
+.terminal-panel-card {
+  background: var(--terminal-bg) !important;
+  border: 1px solid var(--terminal-border) !important;
+  box-shadow: none !important;
+}
+
+.dashboard-parallax-bg,
+.dashboard-grid-layer {
+  background: var(--terminal-bg) !important;
+}
+
+.dashboard-grid-layer {
+  opacity: 0.22;
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--terminal-accent) 10%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--terminal-accent) 10%, transparent) 1px, transparent 1px) !important;
+  background-size: 28px 28px !important;
+}
+
+.terminal-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  width: 100%;
+  background: var(--terminal-bg);
+  border-bottom: 1px solid var(--terminal-border-strong);
+}
+
+.dashboard-brand-title {
+  color: var(--terminal-accent) !important;
+  letter-spacing: 2px;
+}
+
+.dashboard-brand-subtitle {
+  color: var(--terminal-text-soft) !important;
+}
+
+.terminal-header-button,
+.dark-mode-toggle,
+.subscription-strip-button,
+.workflow-toolbar-strip button,
+.workflow-upload-shell button,
+.app-footer-link,
+.landing-auth-link-btn,
+.landing-ghost-btn,
+.landing-primary-btn,
+.landing-cta-btn,
+.landing-outline-btn {
+  background: transparent !important;
+  color: var(--terminal-text-soft) !important;
+  border: 1px solid #333333 !important;
+  transition: border-color 0.15s ease, color 0.15s ease !important;
+}
+
+.terminal-header-button:hover,
+.dark-mode-toggle:hover,
+.subscription-strip-button:hover,
+.workflow-toolbar-strip button:hover,
+.workflow-upload-shell button:hover,
+.app-footer-link:hover,
+.landing-auth-link-btn:hover,
+.landing-ghost-btn:hover,
+.landing-primary-btn:hover,
+.landing-cta-btn:hover,
+.landing-outline-btn:hover {
+  color: var(--terminal-accent) !important;
+  border-color: var(--terminal-border-strong) !important;
+  background: transparent !important;
+}
+
+.terminal-plan-badge {
+  border: 1px solid #333333;
+  color: var(--terminal-text-soft);
+  background: transparent;
+  letter-spacing: 1px;
+}
+
+.subscription-strip {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 16px;
+  background: var(--terminal-bg-soft);
+  border-bottom: 1px solid var(--terminal-border);
+}
+
+.subscription-strip-section {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.subscription-strip-label,
+.workflow-section-kicker,
+.landing-label,
+.landing-kicker,
+.panel-label,
+.spot-title,
+.recent-label {
+  font-size: 11px !important;
+  letter-spacing: 2px !important;
+  text-transform: uppercase !important;
+  color: var(--terminal-text-mid) !important;
+}
+
+.subscription-track {
+  flex: 1;
+  min-width: 80px;
+  height: 2px;
+  background: var(--terminal-border);
+}
+
+.subscription-fill {
+  height: 2px;
+  background: var(--terminal-accent);
+}
+
+.subscription-strip-value {
+  color: var(--terminal-accent);
+  font-size: 12px;
+}
+
+.subscription-strip-meta {
+  color: var(--terminal-text-mid);
+  font-size: 12px;
+}
+
+.dashboard-tabs,
+.dashboard-tabs-desktop,
+[role="tablist"] {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+}
+
+.dashboard-tab-trigger,
+[role="tab"] {
+  border: none !important;
+  border-bottom: 2px solid transparent !important;
+  background: transparent !important;
+  color: var(--terminal-text-mid) !important;
+  letter-spacing: 1px;
+}
+
+.dashboard-tab-trigger[data-state="active"],
+[role="tab"][data-state="active"] {
+  color: var(--terminal-accent) !important;
+  border-bottom-color: var(--terminal-border-strong) !important;
+}
+
+.dashboard-tab-trigger--separated::before,
+.dashboard-tab-lock-badge {
+  display: none !important;
+}
+
+.workflow-toolbar-strip {
+  display: flex;
+  justify-content: flex-end;
+  border-bottom: 1px solid var(--terminal-border);
+  padding-bottom: 12px;
+}
+
+.terminal-workflow-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-top: 1px solid var(--terminal-border);
+  border-bottom: 1px solid var(--terminal-border);
+}
+
+.terminal-workflow-column {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 0;
+}
+
+.terminal-workflow-column:first-child {
+  border-right: 1px solid var(--terminal-border);
+}
+
+.workflow-metadata-heading {
+  padding: 0;
+}
+
+.workflow-step-strip {
+  gap: 8px;
+}
+
+.workflow-step-pill {
+  border: none !important;
+  padding: 0 !important;
+  color: var(--terminal-text-mid) !important;
+  background: transparent !important;
+  letter-spacing: 1px;
+}
+
+.workflow-step-pill--done {
+  color: var(--terminal-accent) !important;
+}
+
+.tags-studio-card,
+.description-studio-card,
+.workflow-output-card,
+.terminal-panel-card {
+  border-left: 2px solid var(--terminal-border-strong) !important;
+}
+
+.card-header,
+[data-slot="card-header"] {
+  border-bottom: 1px solid var(--terminal-border);
+}
+
+.card-title,
+.panel-title,
+.workflow-section-title,
+.landing-panel-title {
+  color: var(--terminal-text) !important;
+}
+
+.card-description,
+.workflow-section-copy,
+.landing-muted,
+.landing-muted-2,
+.description-panel-note,
+.tip,
+.run-tags,
+.prod-sub,
+.app-footer-text {
+  color: var(--terminal-text-soft) !important;
+}
+
+.tags-studio-chip,
+.description-studio-chip,
+.tags-recent-panel,
+.description-templates-panel,
+.description-entry-card,
+.tags-recent-tile,
+.description-template-button,
+.description-inline-stat,
+.description-inline-meta,
+.tags-inline-stat,
+.tag-item,
+.landing-stat,
+.landing-tag,
+.landing-tag-muted {
+  background: var(--terminal-bg-soft) !important;
+  border: 1px solid var(--terminal-border) !important;
+}
+
+.tags-recent-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.tags-recent-tile:hover,
+.description-template-button:hover,
+.description-entry-card:hover {
+  border-color: var(--terminal-border-strong) !important;
+  transform: none !important;
+}
+
+.workflow-inline-output {
+  margin-top: 16px;
+  border: 1px solid var(--terminal-border) !important;
+  background: var(--terminal-bg) !important;
+}
+
+.workflow-inline-output-header {
+  padding: 12px 14px;
+  border-top: 1px solid var(--terminal-border);
+  border-bottom: 1px solid var(--terminal-border);
+}
+
+.workflow-inline-output-body {
+  padding: 14px;
+  display: grid;
+  gap: 14px;
+}
+
+.workflow-inline-output-tools {
+  border: 1px solid var(--terminal-border);
+  background: var(--terminal-bg-soft);
+  padding: 12px;
+}
+
+.workflow-inline-output .tag-item {
+  color: #ffffff !important;
+  background: #060606 !important;
+  border-color: #1a1a1a !important;
+}
+
+input,
+textarea,
+select,
+.landing-auth-input,
+.input-field {
+  background: var(--terminal-bg-soft) !important;
+  color: var(--terminal-accent) !important;
+  border: 1px solid #222222 !important;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #333333 !important;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--terminal-border-strong) !important;
+  outline: none !important;
+}
+
+.terminal-inline-status,
+.workflow-status-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--terminal-border);
+  background: var(--terminal-bg);
+}
+
+.terminal-status-dot {
+  width: 6px;
+  height: 6px;
+  background: var(--terminal-accent);
+  display: inline-block;
+}
+
+.terminal-upload-zone {
+  border: 1px solid #222222 !important;
+  background: var(--terminal-bg) !important;
+}
+
+.terminal-upload-zone:hover,
+.terminal-upload-zone--active {
+  border-color: var(--terminal-border-strong) !important;
+  background: var(--terminal-accent-soft) !important;
+}
+
+.terminal-publish-button {
+  background: transparent !important;
+  color: var(--terminal-accent) !important;
+  border: 1px solid var(--terminal-border-strong) !important;
+}
+
+.terminal-job-status {
+  border: 1px solid var(--terminal-border);
+  background: var(--terminal-bg-soft);
+}
+
+.producer-card,
+.spotlight-section-card,
+.spotlight-profile-shell,
+.spotlight-profile-card,
+.spotlight-leaderboard-card {
+  background: var(--terminal-bg) !important;
+  border: 1px solid var(--terminal-border) !important;
+}
+
+.producer-card::before,
+.landing-shell-glow-a,
+.landing-shell-glow-b,
+.description-studio-hero::after {
+  display: none !important;
+}
+
+.app-footer {
+  border-top: 1px solid var(--terminal-border);
+  background: var(--terminal-bg);
+}
+
+.app-footer-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.app-footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.app-footer-link,
+.app-footer-text,
+.app-footer-title {
+  color: var(--terminal-text-mid) !important;
+}
+
+.landing-page {
+  background: var(--terminal-bg) !important;
+  color: var(--terminal-text) !important;
+}
+
+.landing-nav {
+  background: var(--terminal-bg) !important;
+  border-bottom: 1px solid var(--terminal-border-strong) !important;
+  backdrop-filter: none !important;
+}
+
+.landing-brand-mark,
+.landing-icon-box,
+.landing-icon-box-red,
+.landing-icon-box-gold,
+.app-footer-logo,
+.app-footer-icon {
+  background: transparent !important;
+  color: var(--terminal-accent) !important;
+  border: 1px solid var(--terminal-border) !important;
+}
+
+.landing-chip,
+.landing-pill,
+.landing-input-shell,
+.landing-output-shell,
+.landing-example-prompt,
+.landing-example-console,
+.landing-plan-shell,
+.landing-plan-card,
+.landing-workflow-card,
+.landing-upload-shell,
+.landing-growth-shell,
+.landing-auth-dialog,
+.landing-info-card,
+.landing-panel {
+  background: var(--terminal-bg) !important;
+  border: 1px solid var(--terminal-border) !important;
+}
+
+.landing-example-progress-track {
+  background: var(--terminal-border) !important;
+  border-radius: 0 !important;
+}
+
+.landing-example-progress-fill {
+  background: var(--terminal-accent) !important;
+}
+
+.landing-accent-text,
+.landing-output-label,
+.landing-plan-price,
+.landing-chip-dot,
+.landing-example-code-label,
+.landing-example-caret {
+  color: var(--terminal-accent) !important;
+  background: none !important;
+}
+
+.terminal-streak-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 1px solid var(--terminal-border);
+  padding: 10px 20px;
+}
+
+.terminal-streak-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.terminal-streak-value {
+  font-size: 24px;
+  color: var(--terminal-accent);
+  font-weight: 700;
+}
+
+.terminal-streak-label,
+.terminal-streak-copy {
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--terminal-text-mid);
+}
+
+.terminal-streak-days {
+  display: flex;
+  gap: 4px;
+}
+
+.terminal-streak-day {
+  width: 8px;
+  height: 8px;
+  background: var(--terminal-border);
+}
+
+.terminal-streak-day--done {
+  background: var(--terminal-accent);
+}
+
+.terminal-streak-day--today {
+  background: var(--terminal-today);
+}
+
+svg {
+  color: inherit;
+}
+
+.dashboard-section svg,
+.landing-page svg,
+.app-footer svg,
+.producer-card svg {
+  color: var(--terminal-accent) !important;
+}
+
+@media (max-width: 1024px) {
+  .subscription-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .terminal-workflow-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .terminal-workflow-column:first-child {
+    border-right: none;
+    border-bottom: 1px solid var(--terminal-border);
+  }
+
+  .terminal-streak-bar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+.producer-card img,
+.spotlight-profile-shell img,
+.spotlight-profile-card img {
+  border-radius: 0 !important;
+}
+
+.producer-card [class*="rounded-full"],
+.spotlight-profile-shell [class*="rounded-full"],
+.spotlight-profile-card [class*="rounded-full"] {
+  border-radius: 0 !important;
+}
+
+.spotlight-role-tag,
+.spotlight-tier-tag {
+  background: var(--terminal-bg-soft) !important;
+  border: 1px solid var(--terminal-border) !important;
+  color: var(--terminal-text-soft) !important;
 }
 

@@ -1,7 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Music, Zap, Youtube, Target, TrendingUp, Shield } from "lucide-react";
-import DarkModeToggle from "@/components/DarkModeToggle";
 import "@/pages/PolicyPages.css";
 
 const About = () => {
@@ -19,7 +18,6 @@ const About = () => {
             <ArrowLeft className="w-3 h-3 sm:w-4 sm:h-4" />
             Back
           </Button>
-          <DarkModeToggle inline />
         </div>
 
         <div className="policy-card p-4 sm:p-6 md:p-8 lg:p-12">
