@@ -2402,6 +2402,53 @@ h1, h2, h3, h4, h5, h6, button, input, textarea, select, [role="tab"], .card-tit
   border-color: #1a1a1a !important;
 }
 
+.workflow-results-shell {
+  border-top: 1px solid var(--terminal-border);
+  border-bottom: 1px solid var(--terminal-border);
+  background: var(--terminal-bg);
+}
+
+.workflow-results-shell__header {
+  padding: 14px 0 12px;
+  border-bottom: 1px solid var(--terminal-border);
+}
+
+.workflow-results-shell__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.workflow-results-shell__column {
+  min-width: 0;
+}
+
+.workflow-results-shell__column:first-child {
+  border-right: 1px solid var(--terminal-border);
+}
+
+.workflow-results-shell .workflow-output-card {
+  border-left: 0 !important;
+  border-bottom: 0 !important;
+  border-top: 0 !important;
+}
+
+.workflow-results-shell .workflow-inline-output,
+.workflow-results-shell .workflow-output-card {
+  margin-top: 0;
+  border: 0 !important;
+  background: var(--terminal-bg) !important;
+}
+
+.workflow-results-shell .workflow-inline-output-header {
+  padding: 12px 14px;
+  border-top: 0;
+}
+
+.workflow-results-shell .workflow-inline-output-body {
+  max-height: 520px;
+  overflow: auto;
+}
+
 input,
 textarea,
 select,
@@ -2633,6 +2680,15 @@ svg {
   }
 
   .terminal-workflow-column:first-child {
+    border-right: none;
+    border-bottom: 1px solid var(--terminal-border);
+  }
+
+  .workflow-results-shell__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .workflow-results-shell__column:first-child {
     border-right: none;
     border-bottom: 1px solid var(--terminal-border);
   }

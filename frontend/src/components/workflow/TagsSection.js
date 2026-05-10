@@ -8,6 +8,7 @@ import { ChevronDown, ChevronUp, Copy, Plus, Sparkles, Trash2 } from "lucide-rea
 
 const TagsSection = ({
   mode = "full",
+  showInlineOutput = true,
   tagHistory,
   selectedTagHistoryIds,
   joiningTagsLoading,
@@ -45,7 +46,7 @@ const TagsSection = ({
       data-testid="generated-tags-section"
     >
       <div className="workflow-inline-output-header">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0">
+        <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between gap-3">
           <div className="min-w-0">
             <h3 className="text-sm sm:text-base font-semibold" style={{ color: "var(--text-primary)" }}>
               Generated Tags {hasGeneratedTags ? `(${generatedTags.length})` : ""}
@@ -56,26 +57,26 @@ const TagsSection = ({
               </p>
             )}
           </div>
-          <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto xl:justify-end">
             <Button
               type="button"
               size="sm"
               variant="ghost"
               onClick={() => setResultsCollapsed((prev) => !prev)}
-              className="gap-1 text-xs sm:text-sm"
+              className="gap-1 text-xs sm:text-sm whitespace-nowrap shrink-0"
               aria-expanded={!resultsCollapsed}
             >
               {resultsCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
               {resultsCollapsed ? "Expand" : "Collapse"}
             </Button>
             {hasGeneratedTags ? (
-              <div className="flex gap-2 flex-1 sm:flex-none">
+              <div className="flex flex-wrap gap-2 flex-1 xl:flex-none min-w-0">
                 <Button
                   type="button"
                   size="sm"
                   variant="outline"
                   onClick={handleGenerateTags}
-                  className="gap-1 sm:gap-2 text-xs sm:text-sm flex-1 sm:flex-none py-2"
+                  className="gap-1 sm:gap-2 text-xs sm:text-sm flex-1 xl:flex-none py-2 whitespace-nowrap"
                   disabled={loadingTags}
                   data-testid="refine-tags-btn"
                 >
@@ -87,7 +88,7 @@ const TagsSection = ({
                   size="sm"
                   variant="outline"
                   onClick={copyTags}
-                  className="gap-1 sm:gap-2 text-xs sm:text-sm flex-1 sm:flex-none py-2"
+                  className="gap-1 sm:gap-2 text-xs sm:text-sm flex-1 xl:flex-none py-2 whitespace-nowrap"
                   data-testid="copy-tags-btn"
                 >
                   <Copy className="h-3 w-3 sm:h-4 sm:w-4" />
@@ -381,7 +382,7 @@ const TagsSection = ({
             {loadingTags ? "Generating Tags..." : "Generate 60-80 Tags"}
           </Button>
 
-          {renderResultsPanel({ inline: true })}
+          {showInlineOutput ? renderResultsPanel({ inline: true }) : null}
         </form>
       </CardContent>
     </Card>

@@ -55,10 +55,27 @@ const PublishWorkflow = ({
 
         <div className="terminal-workflow-grid">
           <div className="terminal-workflow-column">
-            <TagsSection {...tagsSectionProps} mode="editor" />
+            <TagsSection {...tagsSectionProps} mode="editor" showInlineOutput={false} />
           </div>
           <div className="terminal-workflow-column">
-            <DescriptionsSection {...descriptionsSectionProps} mode="editor" />
+            <DescriptionsSection {...descriptionsSectionProps} mode="editor" showInlineOutput={false} />
+          </div>
+        </div>
+
+        <div className="workflow-results-shell">
+          <div className="workflow-results-shell__header">
+            <p className="workflow-section-kicker">Review Outputs</p>
+            <p className="workflow-section-copy">
+              Expand generated tags or saved descriptions only when you need them, without changing the editor layout above.
+            </p>
+          </div>
+          <div className="workflow-results-shell__grid">
+            <div className="workflow-results-shell__column">
+              <TagsSection {...tagsSectionProps} mode="results" />
+            </div>
+            <div className="workflow-results-shell__column">
+              <DescriptionsSection {...descriptionsSectionProps} mode="results" />
+            </div>
           </div>
         </div>
 

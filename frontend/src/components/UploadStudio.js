@@ -82,12 +82,6 @@ const UploadStudio = ({
   const [thumbnailCheckResult, setThumbnailCheckResult] = useState(null);
   const [checkingThumbnail, setCheckingThumbnail] = useState(false);
   const [thumbnailProgress, setThumbnailProgress] = useState(0);
-  const [generatedImages, setGeneratedImages] = useState([]);
-  const [generatedImageQuery, setGeneratedImageQuery] = useState("");
-  const [generatedImageSearchQuery, setGeneratedImageSearchQuery] = useState("");
-  const [generatedImageSeenUrls, setGeneratedImageSeenUrls] = useState([]);
-  const [generatedImageHasMore, setGeneratedImageHasMore] = useState(false);
-  const [generatingImages, setGeneratingImages] = useState(false);
   const [showTools, setShowTools] = useState(false);
 
   // Visual Settings
@@ -775,95 +769,6 @@ const UploadStudio = ({
     }
   };
 
-  const handleGenerateImage = async ({ query = "", findMore = false } = {}) => {
-    const manualQuery = String(query || "").trim();
-    const fallbackQuery = generatedImageSearchQuery || generatedImageQuery || "";
-    const safeTitle = manualQuery || fallbackQuery || (uploadTitle || "").trim();
-    const tags = tagHistory.find(t => t.id === selectedTagsId)?.tags || [];
-    const safeTags = tags.filter(Boolean).map((t) => String(t).trim()).filter(Boolean);
-
-    if (!safeTitle && !safeTags.length) {
-      toast.error("Add a search phrase, title, or tags first.");
-      return;
-    }
-
-    setGeneratingImages(true);
-    try {
-      const excludedUrls = findMore ? generatedImageSeenUrls : [];
-      const response = await axios.post(`${API}/beat/generate-image`, {
-        title: safeTitle,
-        tags: safeTags,
-        k: 6,
-        excluded_urls: excludedUrls,
-      });
-      const queuedJobId = response?.data?.job?.id;
-      const resultPayload = queuedJobId ? await pollBackgroundJobUntilDone(queuedJobId, { intervalMs: 2500, maxAttempts: 120 }) : response.data;
-      const results = resultPayload?.results || [];
-      const hasMore = Boolean(resultPayload?.has_more);
-      const nextSeenUrls = results
-        .map((item) => String(item?.image_url || "").trim())
-        .filter(Boolean);
-      setGeneratedImages(results);
-      setGeneratedImageQuery(resultPayload?.query_used || "");
-      setGeneratedImageSeenUrls((prev) => (findMore ? [...prev, ...nextSeenUrls] : nextSeenUrls));
-      setGeneratedImageHasMore(findMore ? hasMore : results.length > 0);
-      if (manualQuery) {
-        setGeneratedImageSearchQuery(manualQuery);
-      }
-      if (!results.length) {
-        if (findMore) {
-          setGeneratedImageHasMore(false);
-          toast.error("No more image results found for this search.");
-        } else {
-          setGeneratedImageHasMore(false);
-          toast.error("No image results found. Try a different artist/title.");
-        }
-      } else {
-        toast.success(findMore ? "Loaded more image options." : "Image options generated. Click one to apply.");
-      }
-    } catch (error) {
-      const detail = error?.response?.data?.detail;
-      toast.error(typeof detail === "string" ? detail : (detail?.message || "Failed to generate image options"));
-    } finally {
-      setGeneratingImages(false);
-    }
-  };
-
-  const handleUseGeneratedImage = async (imageOption) => {
-    if (!imageOption?.image_url) {
-      toast.error("Invalid generated image");
-      return;
-    }
-    setUploadingImage(true);
-    try {
-      const imported = await axios.post(`${API}/upload/image-from-url`, {
-        image_url: imageOption.image_url,
-        original_filename: `${(imageOption.artist || "generated").replace(/[^a-z0-9-]+/gi, "-").toLowerCase()}-reference.jpg`,
-      });
-      setImageFile(null);
-      setImageFileId(imported.data.file_id);
-      setSelectedImageLabel(
-        imageOption.artist || imageOption.source || "Selected web image"
-      );
-      setImagePreviewUrl(imageOption.image_url);
-      setBeatMetaPromptShown(false);
-      const img = new Image();
-      img.onload = () => {
-        const ratio = img.width / img.height;
-        setImageMeta({ width: img.width, height: img.height, ratio });
-      };
-      img.src = imageOption.image_url;
-      fitImageToFrame();
-      setCenterLockEnabled(false);
-      toast.success("Generated image applied.");
-    } catch (error) {
-      const detail = error?.response?.data?.detail;
-      toast.error(typeof detail === "string" ? detail : "Failed to apply generated image");
-    } finally {
-      setUploadingImage(false);
-    }
-  };
-
   const handleYouTubeUpload = async () => {
     if (!uploadTitle || !selectedDescriptionId || !audioFileId || !imageFileId) {
       toast.error("Please fill title, description, and ensure files are uploaded.");
@@ -1096,14 +1001,6 @@ const UploadStudio = ({
           canAnalyzeBeat={Boolean(subscriptionStatus?.is_subscribed)}
           checkingThumbnail={checkingThumbnail}
           handleThumbnailCheck={handleThumbnailCheck}
-          generatingImages={generatingImages}
-          handleGenerateImage={handleGenerateImage}
-          generatedImages={generatedImages}
-          generatedImageQuery={generatedImageQuery}
-          generatedImageSearchQuery={generatedImageSearchQuery}
-          generatedImageHasMore={generatedImageHasMore}
-          setGeneratedImageSearchQuery={setGeneratedImageSearchQuery}
-          onUseGeneratedImage={handleUseGeneratedImage}
           beatAnalysis={beatAnalysis}
           thumbnailCheckResult={thumbnailCheckResult}
           onUpgrade={onUpgrade}
@@ -1188,14 +1085,6 @@ const UploadStudio = ({
         isImageDragActive={isImageDragActive}
         setIsImageDragActive={setIsImageDragActive}
         setStudioOpen={setStudioOpen}
-        generatedImages={generatedImages}
-        generatedImageQuery={generatedImageQuery}
-        generatedImageSearchQuery={generatedImageSearchQuery}
-        generatedImageHasMore={generatedImageHasMore}
-        setGeneratedImageSearchQuery={setGeneratedImageSearchQuery}
-        generatingImages={generatingImages}
-        handleGenerateImage={handleGenerateImage}
-        handleUseGeneratedImage={handleUseGeneratedImage}
         currentUploadJob={currentUploadJob}
       />
     );

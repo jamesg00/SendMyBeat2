@@ -9,6 +9,7 @@ import { ChevronDown, ChevronUp, Copy, Edit, Save, Trash2 } from "lucide-react";
 
 const DescriptionsSection = ({
   mode = "full",
+  showInlineOutput = true,
   descriptions,
   newDescription,
   visibleDescriptionTemplates,
@@ -34,25 +35,25 @@ const DescriptionsSection = ({
   const renderSavedPanel = ({ inline = false } = {}) => (
     <div className={`workflow-output-card ${hasSavedDescriptions ? "" : "workflow-output-card--empty"} ${inline ? "workflow-inline-output" : ""}`}>
       <div className="workflow-inline-output-header">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
           <div>
             <h3 className="text-sm sm:text-base font-semibold">Saved Descriptions</h3>
             <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
               Reusable versions live here once you save them.
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto xl:justify-end">
             <Button
               size="sm"
               variant="ghost"
               onClick={() => setSavedCollapsed((prev) => !prev)}
-              className="gap-1 text-xs sm:text-sm"
+              className="gap-1 text-xs sm:text-sm whitespace-nowrap shrink-0"
               aria-expanded={!savedCollapsed}
             >
               {savedCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
               {savedCollapsed ? "Expand" : "Collapse"}
             </Button>
-            <span className="description-inline-stat">{hasSavedDescriptions ? `${descriptions.length} saved` : "Waiting for first save"}</span>
+            <span className="description-inline-stat whitespace-nowrap">{hasSavedDescriptions ? `${descriptions.length} saved` : "Waiting for first save"}</span>
           </div>
         </div>
       </div>
@@ -290,7 +291,7 @@ const DescriptionsSection = ({
           Save to My Templates
         </Button>
 
-        {renderSavedPanel({ inline: true })}
+        {showInlineOutput ? renderSavedPanel({ inline: true }) : null}
       </CardContent>
     </Card>
   );
