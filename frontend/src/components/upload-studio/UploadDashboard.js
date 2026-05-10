@@ -113,10 +113,10 @@ const UploadDashboard = ({
             <CardHeader className="pb-3">
                <CardTitle className="flex items-center gap-2 text-base font-semibold">
                   <Sparkles className="h-4 w-4 text-emerald-400" />
-                  AI Artwork Finder
+                  Web Image Search
                </CardTitle>
                <CardDescription>
-                  Search for a cover image and apply it if you do not have artwork yet.
+                  Search the web for images and apply one if you do not have artwork yet.
                </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">

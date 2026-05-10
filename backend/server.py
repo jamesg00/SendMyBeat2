@@ -1142,6 +1142,64 @@ def _dedupe_generated_image_results(results: list[dict], k: int, excluded_urls: 
     return deduped
 
 
+def _build_direct_image_search_query(title: str, tags: list[str]) -> tuple[str, list[str]]:
+    raw_title = re.sub(r"\s+", " ", (title or "").strip())
+    if raw_title:
+        return raw_title, _extract_artist_queries(raw_title, tags)
+
+    cleaned_tags = [
+        re.sub(r"\s+", " ", str(tag or "").strip())
+        for tag in (tags or [])
+        if str(tag or "").strip()
+    ]
+    if cleaned_tags:
+        fallback_query = " ".join(cleaned_tags[:4]).strip()
+        if fallback_query:
+            return fallback_query, _extract_artist_queries(fallback_query, cleaned_tags)
+
+    raise HTTPException(status_code=400, detail="Could not infer a search query from title/tags.")
+
+
+def _direct_image_query_tokens(query: str) -> list[str]:
+    tokens: list[str] = []
+    for token in _tag_exact_key(query).split():
+        if len(token) <= 2:
+            continue
+        if token in _TAG_NOISE_WORDS or token in _ARTWORK_SHOPPING_TERMS:
+            continue
+        tokens.append(token)
+    return tokens[:6]
+
+
+def _build_serpapi_image_query(query: str, artists: list[str]) -> str:
+    normalized_query = re.sub(r"\s+", " ", (query or "").strip())
+    normalized_artists = {
+        re.sub(r"\s+", " ", str(artist or "").strip()).lower()
+        for artist in (artists or [])
+        if str(artist or "").strip()
+    }
+    if normalized_query.lower() in normalized_artists:
+        return f"{normalized_query} rapper photo aesthetic"
+    return f"{normalized_query} beat cover art dark"
+
+
+def _web_result_matches_query(item: dict, base_query: str) -> bool:
+    tokens = _direct_image_query_tokens(base_query)
+    if not tokens:
+        return True
+
+    searchable_text = " ".join([
+        str(item.get("artist") or ""),
+        str(item.get("credit_name") or ""),
+        str(item.get("credit_url") or ""),
+        str(item.get("image_url") or ""),
+    ]).lower()
+
+    matched = sum(1 for token in tokens if re.search(rf"(?<![a-z0-9]){re.escape(token)}(?![a-z0-9])", searchable_text))
+    required_matches = 2 if len(tokens) >= 2 else 1
+    return matched >= required_matches
+
+
 _ARTWORK_SHOPPING_TERMS = {
     "bag",
     "bags",
@@ -1238,64 +1296,58 @@ def _image_search_mode(query: str, artists: list[str]) -> str:
 
 
 def _search_bing_image_results(query_variants: list[str], artists: list[str], k: int) -> list[dict]:
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
-        )
-    }
+    serpapi_key = (os.environ.get("SERPAPI_KEY") or "").strip()
+    if not serpapi_key:
+        logging.warning("SERPAPI_KEY is missing; web image search has no structured provider configured.")
+        return []
+
     results: list[dict] = []
 
     for qv in query_variants[:4]:
         if len(results) >= k:
             break
         try:
+            effective_query = _build_serpapi_image_query(qv, artists)
             response = requests.get(
-                "https://www.bing.com/images/search",
+                "https://serpapi.com/search",
                 params={
-                    "q": qv,
-                    "form": "HDRSC3",
-                    "first": "1",
-                    "adlt": "strict",
+                    "engine": "google_images",
+                    "q": effective_query,
+                    "safe": "active",
+                    "image_type": "photo",
+                    "imgsz": "large",
+                    "num": min(max(k, 6), 10),
+                    "no_cache": "true",
+                    "api_key": serpapi_key,
                 },
-                headers=headers,
-                timeout=15,
+                timeout=20,
             )
             if response.status_code >= 400:
                 continue
 
-            html_body = response.text or ""
-            matches = re.findall(
-                r'murl&quot;:&quot;(.*?)&quot;.*?turl&quot;:&quot;(.*?)&quot;',
-                html_body,
-                flags=re.IGNORECASE | re.DOTALL,
-            )
-            if not matches:
-                matches = re.findall(
-                    r'"murl":"(.*?)".*?"turl":"(.*?)"',
-                    html_body,
-                    flags=re.IGNORECASE | re.DOTALL,
-                )
-
-            for image_url, thumb_url in matches:
-                image_url = html.unescape(image_url).replace("\\/", "/").strip()
-                thumb_url = html.unescape(thumb_url).replace("\\/", "/").strip()
+            payload = response.json() if response.content else {}
+            for item in payload.get("images_results", []) or []:
+                image_url = str(item.get("original") or item.get("link") or "").strip()
+                thumb_url = str(item.get("thumbnail") or "").strip()
+                page_url = str(item.get("source") or item.get("serpapi_link") or "").strip()
+                title = str(item.get("title") or item.get("snippet") or "").strip()
+                source_name = str(item.get("source_name") or item.get("displayed_link") or "").strip()
                 if not image_url.startswith(("http://", "https://")):
                     continue
                 results.append({
-                    "id": f"bing-{uuid.uuid4().hex[:12]}",
+                    "id": f"serpapi-{uuid.uuid4().hex[:12]}",
                     "image_url": image_url,
                     "thumbnail_url": thumb_url or image_url,
-                    "artist": artists[0] if artists else None,
-                    "query_used": qv,
-                    "source": "bing-images",
-                    "credit_name": "Web image",
-                    "credit_url": f"https://www.bing.com/images/search?q={urlencode({'': qv})[1:]}",
+                    "artist": title or (artists[0] if artists else None),
+                    "query_used": effective_query,
+                    "source": "serpapi-google-images",
+                    "credit_name": source_name or title or "Web image",
+                    "credit_url": page_url or f"https://serpapi.com/search?engine=google_images&q={urlencode({'': effective_query})[1:]}",
                 })
                 if len(results) >= k:
                     break
         except Exception as exc:
-            logging.warning(f"Bing image search failed for '{qv}': {str(exc)}")
+            logging.warning(f"SerpAPI Google Images search failed for '{qv}': {str(exc)}")
 
     return results
 
@@ -1486,12 +1538,19 @@ def _filter_generated_image_results(results: list[dict]) -> list[dict]:
             continue
         if source == "deezer":
             continue
+        if any(
+            re.search(rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])", searchable_text)
+            for term in _ARTWORK_SHOPPING_TERMS.union({"shirt", "tee", "hoodie", "merch", "poster", "gift", "mug", "knife"})
+        ):
+            continue
         if search_mode == "artist" and source == "itunes" and base_query and artist_name and base_query != artist_name:
             continue
         if search_mode == "artist" and any(
             re.search(rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])", searchable_text)
             for term in _ARTWORK_SHOPPING_TERMS
         ):
+            continue
+        if search_mode == "web" and base_query and not _web_result_matches_query(item, base_query):
             continue
         filtered.append(item)
     return filtered
@@ -1512,7 +1571,9 @@ def _rank_generated_image_result(item: dict) -> tuple:
     cover_query = any(term in query_used for term in ["cover art", "album cover", "album artwork", "type beat cover art"])
 
     source_rank = {
+        "youtube-thumbnails": 0,
         "itunes": 0,
+        "serpapi-google-images": 1,
         "pexels": 1,
         "pixabay": 2,
         "bing-images": 3,
@@ -4574,6 +4635,63 @@ def _dedupe_text_items(values: list[str], limit: int = 10) -> list[str]:
     return results
 
 
+def _search_youtube_artist_visuals(artist_query: str, artists: list[str], k: int) -> list[dict]:
+    if not artist_query:
+        return []
+
+    youtube_api_key = os.environ.get("YOUTUBE_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+    if not youtube_api_key:
+        return []
+
+    try:
+        youtube = build("youtube", "v3", developerKey=youtube_api_key)
+        search_response = youtube.search().list(
+            q=f'"{artist_query}" official music',
+            part="snippet",
+            type="video",
+            videoCategoryId="10",
+            order="relevance",
+            maxResults=max(6, min(k * 2, 12)),
+        ).execute()
+
+        results: list[dict] = []
+        for item in search_response.get("items", []) or []:
+            snippet = item.get("snippet") or {}
+            title = str(snippet.get("title") or "")
+            channel_title = str(snippet.get("channelTitle") or "")
+            if not (_text_mentions_artist(title, artist_query) or _text_mentions_artist(channel_title, artist_query)):
+                continue
+
+            thumbnails = snippet.get("thumbnails") or {}
+            thumb = (
+                thumbnails.get("high")
+                or thumbnails.get("medium")
+                or thumbnails.get("default")
+                or {}
+            )
+            image_url = str(thumb.get("url") or "").strip()
+            if not image_url.startswith(("http://", "https://")):
+                continue
+
+            video_id = ((item.get("id") or {}).get("videoId") or "").strip()
+            results.append({
+                "id": f"youtube-thumb-{video_id or uuid.uuid4().hex[:12]}",
+                "image_url": image_url,
+                "thumbnail_url": image_url,
+                "artist": artists[0] if artists else artist_query,
+                "query_used": f'{artist_query} official music',
+                "source": "youtube-thumbnails",
+                "credit_name": channel_title or artist_query,
+                "credit_url": f"https://www.youtube.com/watch?v={video_id}" if video_id else None,
+            })
+            if len(results) >= k:
+                break
+        return results
+    except Exception as exc:
+        logging.warning(f"YouTube artist visual search failed for '{artist_query}': {str(exc)}")
+        return []
+
+
 def _fetch_artist_context_from_youtube_api(youtube: Any, artist_name: str) -> dict[str, Any]:
     artist_query = (artist_name or "").strip()
     empty_context = {
@@ -7182,7 +7300,7 @@ async def generate_image_suggestions(
     request: ImageGenerateRequest,
     current_user: dict = Depends(get_current_user),
 ):
-    """Generate artist-aware reference images based on title + selected tags."""
+    """Run a direct web image search using the user's exact query/title."""
     title = (request.title or "").strip()
     tags = request.tags or []
     k = max(1, min(int(request.k or 6), 12))
@@ -7223,30 +7341,11 @@ async def generate_image_suggestions(
         )
         return {"success": True, "queued": True, "message": "Image search queued.", "job": _sanitize_upload_job_doc(job_doc)}
     try:
-        artists, query_variants, query = _build_image_query_variants(title, tags)
-        search_mode = _image_search_mode(query, artists)
-        results: list[dict] = []
+        query, artists = _build_direct_image_search_query(title, tags)
         needed_results = min(max((len(excluded_urls) + k) * 3, 18), 96)
-        if search_mode == "artist":
-            artist_queries = [
-                query,
-                f"{query} portrait",
-                f"{query} press photo",
-                f"{query} photoshoot",
-                f"{query} editorial",
-            ]
-            results.extend(_search_bing_image_results(artist_queries, artists, needed_results))
-        else:
-            project_queries = [
-                f"{query} album cover",
-                f"{query} cover art",
-                f"{query} album artwork",
-                query,
-            ]
-            results.extend(_search_catalog_artist_images(project_queries, artists, min(max((len(excluded_urls) + k) * 2, 12), 72)))
-            results.extend(_search_bing_image_results(project_queries, artists, needed_results))
+        results = _search_bing_image_results([query], artists, needed_results)
         base_query = query.strip().lower()
-        results = [{**item, "base_query": base_query, "search_mode": search_mode} for item in results]
+        results = [{**item, "base_query": base_query, "search_mode": "web"} for item in results]
         results = _filter_generated_image_results(results)
         results = sorted(results, key=_rank_generated_image_result)
         deduped_results = _dedupe_generated_image_results(results, k, excluded_urls)

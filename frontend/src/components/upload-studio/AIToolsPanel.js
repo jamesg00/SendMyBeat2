@@ -44,9 +44,9 @@ const AIToolsPanel = ({
        {showTools && (
           <CardContent className="space-y-4">
              <div className="space-y-2 rounded-md border border-border bg-secondary/20 p-3">
-                <div className="text-sm font-semibold">Artwork Search</div>
+                <div className="text-sm font-semibold">Web Image Search</div>
                 <div className="text-xs text-muted-foreground">
-                   Search artist visuals, cover moods, or artwork styles and apply one to this upload.
+                   Search the web for images and apply one to this upload.
                 </div>
                 <div className="flex flex-col gap-2 sm:flex-row">
                    <Input

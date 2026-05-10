@@ -17,7 +17,7 @@ os.environ["OPENAI_API_KEY"] = "mock_openai_key"
 os.environ["GROK_API_KEY"] = "mock_grok_key"
 
 with patch("motor.motor_asyncio.AsyncIOMotorClient"), patch("stripe.api_key"):
-    from backend.server import _build_image_query_variants, _filter_generated_image_results
+    from backend.server import _build_image_query_variants, _filter_generated_image_results, _web_result_matches_query, _build_serpapi_image_query
 
 
 def test_artist_image_queries_include_music_context_and_negative_terms():
@@ -53,3 +53,32 @@ def test_artist_image_filter_drops_fashion_results():
 
     assert len(kept) == 1
     assert "portrait" in kept[0]["image_url"]
+
+
+def test_web_result_match_requires_real_query_relevance():
+    assert _web_result_matches_query(
+        {
+            "artist": "Lil Uzi Vert - Official Photo",
+            "credit_name": "Lil Uzi Vert Official Photo",
+            "credit_url": "https://example.com/lil-uzi-vert-photo",
+            "image_url": "https://img.example.com/lil-uzi-vert.jpg",
+            "query_used": "lil uzi vert",
+        },
+        "lil uzi vert",
+    )
+
+    assert not _web_result_matches_query(
+        {
+            "artist": "Grand Mummy Shirt",
+            "credit_name": "I'm The Grand Mummy shirt",
+            "credit_url": "https://shop.example.com/grand-mummy-shirt",
+            "image_url": "https://shop.example.com/shirt.jpg",
+            "query_used": "lil uzi vert",
+        },
+        "lil uzi vert",
+    )
+
+
+def test_serpapi_query_builder_adds_music_context():
+    assert _build_serpapi_image_query("lil uzi vert", ["Lil Uzi Vert"]) == "lil uzi vert rapper photo aesthetic"
+    assert _build_serpapi_image_query("dark trap cover", ["Lil Uzi Vert"]) == "dark trap cover beat cover art dark"
