@@ -2235,9 +2235,13 @@ async def _build_youtube_upload_job_payload(
             },
         )
 
+    resolved_description_id = str(
+        (description_doc.get("id") if isinstance(description_doc, dict) else description_id) or ""
+    ).strip()
+
     return {
         "title": safe_title,
-        "description_id": str(description_doc.get("id") or description_id or "").strip(),
+        "description_id": resolved_description_id,
         "description": description_content,
         "tags_id": safe_tags_id,
         "tags": clean_tags,

@@ -92,6 +92,54 @@ class TestYouTubeUpload(unittest.IsolatedAsyncioTestCase):
         mock_credit.assert_called_once_with(self.user_id)
         mock_create_job.assert_called_once()
 
+    async def test_upload_to_youtube_queues_job_with_description_override(self):
+        queued_job = {
+            "id": "job_override",
+            "type": "youtube_upload",
+            "user_id": self.user_id,
+            "status": "queued",
+            "progress": 0,
+            "message": "Queued YouTube upload job.",
+            "result": None,
+            "error": None,
+            "created_at": "2026-05-01T12:00:00+00:00",
+            "updated_at": "2026-05-01T12:00:00+00:00",
+        }
+
+        with patch("backend.server.get_user_subscription_status", new_callable=AsyncMock) as mock_status, \
+             patch("backend.server.check_and_use_upload_credit", new_callable=AsyncMock) as mock_credit, \
+             patch("backend.server._create_youtube_upload_job", new_callable=AsyncMock) as mock_create_job:
+            mock_status.return_value = self.free_status
+            mock_credit.return_value = True
+            mock_create_job.return_value = queued_job
+
+            result = await server.upload_to_youtube(
+                title="Queued Upload",
+                description_id="",
+                tags_id="tags_1",
+                privacy_status="private",
+                audio_file_id="audio_1",
+                image_file_id="image_1",
+                description_override="Manual override description",
+                aspect_ratio="16:9",
+                image_scale=1.0,
+                image_scale_x=None,
+                image_scale_y=None,
+                image_pos_x=0.0,
+                image_pos_y=0.0,
+                image_rotation=0.0,
+                background_color="black",
+                remove_watermark=False,
+                current_user=self.current_user,
+            )
+
+        self.assertTrue(result["success"])
+        self.assertTrue(result["queued"])
+        self.assertEqual(result["job"]["id"], "job_override")
+        queued_payload = mock_create_job.await_args.kwargs["payload"]
+        self.assertEqual(queued_payload["description"], "Manual override description")
+        self.assertEqual(queued_payload["description_id"], "")
+
     async def test_upload_to_youtube_no_credits(self):
         with patch("backend.server.get_user_subscription_status", new_callable=AsyncMock) as mock_status, \
              patch("backend.server.check_and_use_upload_credit", new_callable=AsyncMock) as mock_credit:
@@ -121,6 +169,40 @@ class TestYouTubeUpload(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(cm.exception.status_code, 402)
         self.assertIn("Daily upload limit reached", str(cm.exception.detail))
+
+    async def test_upload_to_youtube_rate_limit_bubbles_cleanly(self):
+        with patch("backend.server._enforce_action_rate_limit") as mock_rate_limit:
+            mock_rate_limit.side_effect = HTTPException(
+                status_code=429,
+                detail="Too many YouTube upload requests. Please wait a bit before starting another one.",
+            )
+
+            with self.assertRaises(HTTPException) as cm:
+                await server.upload_to_youtube(
+                    title="Rate Limited",
+                    description_id="desc_1",
+                    tags_id=None,
+                    privacy_status="public",
+                    audio_file_id="audio_1",
+                    image_file_id="image_1",
+                    description_override=None,
+                    aspect_ratio="16:9",
+                    image_scale=1.0,
+                    image_scale_x=None,
+                    image_scale_y=None,
+                    image_pos_x=0.0,
+                    image_pos_y=0.0,
+                    image_rotation=0.0,
+                    background_color="black",
+                    remove_watermark=False,
+                    current_user=self.current_user,
+                )
+
+        self.assertEqual(cm.exception.status_code, 429)
+        self.assertEqual(
+            cm.exception.detail,
+            "Too many YouTube upload requests. Please wait a bit before starting another one.",
+        )
 
     async def test_upload_to_youtube_requires_paid_watermark_removal(self):
         with patch("backend.server.get_user_subscription_status", new_callable=AsyncMock) as mock_status:
