@@ -374,6 +374,7 @@ _spotlight_refresh_task: asyncio.Task | None = None
 UPLOAD_JOB_POLL_INTERVAL_SECONDS = int(os.environ.get("UPLOAD_JOB_POLL_INTERVAL_SECONDS", "2"))
 UPLOAD_JOB_STALE_AFTER_SECONDS = int(os.environ.get("UPLOAD_JOB_STALE_AFTER_SECONDS", "1800"))
 UPLOAD_JOB_WORKER_ID = f"upload-worker-{uuid.uuid4().hex[:10]}"
+YOUTUBE_RENDER_TIMEOUT_SECONDS = int(os.environ.get("YOUTUBE_RENDER_TIMEOUT_SECONDS", "240"))
 SPOTLIGHT_REFRESH_INTERVAL_SECONDS = int(os.environ.get("SPOTLIGHT_REFRESH_INTERVAL_SECONDS", "1800"))
 METADATA_CACHE_TTL_SECONDS = int(os.environ.get("METADATA_CACHE_TTL_SECONDS", "86400"))
 IMAGE_SEARCH_CACHE_TTL_SECONDS = int(os.environ.get("IMAGE_SEARCH_CACHE_TTL_SECONDS", "21600"))
@@ -2074,7 +2075,7 @@ async def _render_youtube_video(
 
     async with media_storage.local_path_for_processing(image_upload) as image_path:
         async with media_storage.local_path_for_processing(audio_upload) as audio_path:
-            command = [ffmpeg_bin, "-y"]
+            command = [ffmpeg_bin, "-nostdin", "-y", "-loglevel", "error"]
             if visual_kind == "video":
                 command.extend(["-stream_loop", "-1", "-i", str(image_path)])
             else:
@@ -2114,19 +2115,44 @@ async def _render_youtube_video(
                 visual_kind,
                 str(output_path),
             )
-
-            completed = await asyncio.to_thread(
-                subprocess.run,
-                command,
-                capture_output=True,
-                text=True,
-            )
+            try:
+                completed = await asyncio.to_thread(
+                    subprocess.run,
+                    command,
+                    capture_output=True,
+                    text=True,
+                    timeout=YOUTUBE_RENDER_TIMEOUT_SECONDS,
+                )
+            except subprocess.TimeoutExpired as exc:
+                try:
+                    output_path.unlink(missing_ok=True)
+                except Exception:
+                    pass
+                stderr_preview = (exc.stderr or exc.stdout or "").strip()
+                logging.error(
+                    "FFmpeg render timed out after %ss for audio=%s image=%s stderr=%s",
+                    YOUTUBE_RENDER_TIMEOUT_SECONDS,
+                    audio_upload.get("id"),
+                    image_upload.get("id"),
+                    stderr_preview[:800],
+                )
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Video creation timed out after {YOUTUBE_RENDER_TIMEOUT_SECONDS} seconds.",
+                )
 
     if completed.returncode != 0:
         try:
             output_path.unlink(missing_ok=True)
         except Exception:
             pass
+        logging.error(
+            "FFmpeg render failed for audio=%s image=%s returncode=%s stderr=%s",
+            audio_upload.get("id"),
+            image_upload.get("id"),
+            completed.returncode,
+            ((completed.stderr or completed.stdout or "FFmpeg failed").strip())[:1200],
+        )
         raise HTTPException(
             status_code=500,
             detail=f"Video creation failed: {(completed.stderr or completed.stdout or 'FFmpeg failed').strip()}",
@@ -7075,6 +7101,44 @@ async def clear_admin_ops_jobs(request: AdminClearJobsRequest, current_user: dic
             "statuses": target_statuses,
             "user_id": safe_user_id or None,
         },
+    }
+
+
+@api_router.post("/admin/ops/clear-job/{job_id}")
+async def clear_admin_ops_job(job_id: str, current_user: dict = Depends(get_current_user)):
+    if not _is_admin_user(current_user):
+        raise HTTPException(status_code=403, detail="Admin access only")
+
+    safe_job_id = str(job_id or "").strip()
+    if not safe_job_id:
+        raise HTTPException(status_code=400, detail="Job id is required.")
+
+    existing_job = await db.upload_jobs.find_one({"id": safe_job_id}, {"_id": 0, "id": 1, "status": 1, "type": 1, "user_id": 1})
+    if not existing_job:
+        raise HTTPException(status_code=404, detail="Job not found.")
+
+    now = _safe_iso_now()
+    result = await db.upload_jobs.update_one(
+        {"id": safe_job_id},
+        {
+            "$set": {
+                "status": "failed",
+                "progress": 100,
+                "message": "Job cleared by admin.",
+                "error": "Cleared by admin.",
+                "failed_at": now,
+                "updated_at": now,
+                "worker_id": UPLOAD_JOB_WORKER_ID,
+            }
+        },
+    )
+    return {
+        "success": True,
+        "cleared": bool(getattr(result, "modified_count", 0)),
+        "job_id": safe_job_id,
+        "previous_status": existing_job.get("status"),
+        "job_type": existing_job.get("type"),
+        "user_id": existing_job.get("user_id"),
     }
 
 

@@ -116,6 +116,23 @@ export default function AdminCosts() {
     }
   };
 
+  const handleClearSingleJob = async (jobId) => {
+    const confirmed = window.confirm(
+      `Clear job ${jobId}? This will mark it as failed so you can retry.`
+    );
+    if (!confirmed) return;
+    setClearingJobs(true);
+    try {
+      await axios.post(`${API}/admin/ops/clear-job/${jobId}`);
+      await fetchData();
+      setError(null);
+    } catch (err) {
+      setError(extractErrorMessage(err, "Failed to clear the selected job."));
+    } finally {
+      setClearingJobs(false);
+    }
+  };
+
   if (loading && !costs) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-slate-50">
@@ -271,6 +288,7 @@ export default function AdminCosts() {
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Progress</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Updated</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Action</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-slate-200">
@@ -280,6 +298,16 @@ export default function AdminCosts() {
                     <td className="px-4 py-3 text-sm text-slate-600">{job.status}</td>
                     <td className="px-4 py-3 text-sm text-slate-600 text-right">{job.progress}%</td>
                     <td className="px-4 py-3 text-sm text-slate-600">{job.updated_at || "-"}</td>
+                    <td className="px-4 py-3 text-right">
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        disabled={clearingJobs}
+                        onClick={() => handleClearSingleJob(job.id)}
+                      >
+                        Clear
+                      </Button>
+                    </td>
                   </tr>
                 ))}
               </tbody>

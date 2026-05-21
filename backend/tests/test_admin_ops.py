@@ -52,6 +52,30 @@ class TestAdminOps(unittest.IsolatedAsyncioTestCase):
                 await server.clear_admin_ops_jobs(request, current_user=self.non_admin_user)
         self.assertEqual(cm.exception.status_code, 403)
 
+    async def test_clear_admin_ops_job_by_id(self):
+        update_result = MagicMock()
+        update_result.modified_count = 1
+        self.mock_db.upload_jobs.find_one = AsyncMock(
+            return_value={
+                "id": "job_123",
+                "status": "processing",
+                "type": "youtube_upload",
+                "user_id": "user_123",
+            }
+        )
+        self.mock_db.upload_jobs.update_one = AsyncMock(return_value=update_result)
+
+        with patch("backend.server._is_admin_user", return_value=True):
+            result = await server.clear_admin_ops_job("job_123", current_user=self.admin_user)
+
+        self.assertTrue(result["success"])
+        self.assertTrue(result["cleared"])
+        self.assertEqual(result["job_id"], "job_123")
+        self.assertEqual(result["previous_status"], "processing")
+        update_args = self.mock_db.upload_jobs.update_one.await_args
+        self.assertEqual(update_args.args[0], {"id": "job_123"})
+        self.assertEqual(update_args.args[1]["$set"]["status"], "failed")
+
 
 if __name__ == "__main__":
     unittest.main()
