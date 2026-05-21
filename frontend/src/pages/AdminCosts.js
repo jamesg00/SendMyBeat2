@@ -11,6 +11,7 @@ export default function AdminCosts() {
   const [controls, setControls] = useState(null);
   const [loading, setLoading] = useState(true);
   const [savingControls, setSavingControls] = useState(false);
+  const [clearingJobs, setClearingJobs] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -92,6 +93,26 @@ export default function AdminCosts() {
       setError(extractErrorMessage(err, "Failed to update heavy-job controls."));
     } finally {
       setSavingControls(false);
+    }
+  };
+
+  const handleClearActiveUploadJobs = async () => {
+    const confirmed = window.confirm(
+      "Clear all active YouTube upload jobs? Use this only if an upload is stuck."
+    );
+    if (!confirmed) return;
+    setClearingJobs(true);
+    try {
+      await axios.post(`${API}/admin/ops/clear-jobs`, {
+        job_type: "youtube_upload",
+        statuses: ["queued", "processing"],
+      });
+      await fetchData();
+      setError(null);
+    } catch (err) {
+      setError(extractErrorMessage(err, "Failed to clear active upload jobs."));
+    } finally {
+      setClearingJobs(false);
     }
   };
 
@@ -210,6 +231,9 @@ export default function AdminCosts() {
               </Button>
               <Button onClick={() => handleGlobalHeavyJobs(!healthControls?.global_disable_new_heavy_jobs)} disabled={savingControls} variant="outline">
                 {healthControls?.global_disable_new_heavy_jobs ? "Allow New Heavy Jobs" : "Pause New Heavy Jobs"}
+              </Button>
+              <Button onClick={handleClearActiveUploadJobs} disabled={clearingJobs} variant="destructive">
+                {clearingJobs ? "Clearing Upload Jobs..." : "Clear Active Upload Jobs"}
               </Button>
             </div>
 

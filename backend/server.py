@@ -997,6 +997,12 @@ class OpsControlsUpdateRequest(BaseModel):
     overload_message: Optional[str] = None
 
 
+class AdminClearJobsRequest(BaseModel):
+    job_type: Optional[str] = "youtube_upload"
+    statuses: Optional[List[str]] = None
+    user_id: Optional[str] = None
+
+
 THEME_ALLOWED_VARIABLES = {
     "--bg-primary",
     "--bg-secondary",
@@ -2101,6 +2107,14 @@ async def _render_youtube_video(
                 ]
             )
 
+            logging.info(
+                "Starting FFmpeg render for youtube_upload audio=%s image=%s visual_kind=%s output=%s",
+                audio_upload.get("id"),
+                image_upload.get("id"),
+                visual_kind,
+                str(output_path),
+            )
+
             completed = await asyncio.to_thread(
                 subprocess.run,
                 command,
@@ -2117,6 +2131,13 @@ async def _render_youtube_video(
             status_code=500,
             detail=f"Video creation failed: {(completed.stderr or completed.stdout or 'FFmpeg failed').strip()}",
         )
+
+    logging.info(
+        "FFmpeg render finished for youtube_upload audio=%s image=%s output=%s",
+        audio_upload.get("id"),
+        image_upload.get("id"),
+        str(output_path),
+    )
 
     return output_path
 
@@ -2260,6 +2281,21 @@ async def _create_youtube_upload_job(*, current_user: dict, payload: dict[str, A
         payload=payload,
         message="Queued YouTube upload job.",
     )
+
+
+async def _find_active_youtube_upload_job(*, current_user: dict) -> Optional[dict]:
+    try:
+        return await db.upload_jobs.find_one(
+            {
+                "user_id": current_user["id"],
+                "type": "youtube_upload",
+                "status": {"$in": ["queued", "processing"]},
+            },
+            {"_id": 0},
+            sort=[("created_at", -1)],
+        )
+    except (AttributeError, TypeError):
+        return None
 
 
 async def _execute_youtube_upload_job(job: dict) -> dict:
@@ -6793,6 +6829,14 @@ async def upload_to_youtube(
             window_seconds=900,
             detail_message="Too many YouTube upload requests. Please wait a bit before starting another one.",
         )
+        active_job = await _find_active_youtube_upload_job(current_user=current_user)
+        if active_job:
+            return {
+                "success": True,
+                "queued": True,
+                "message": "A YouTube upload is already running. Waiting for the existing job to finish.",
+                "job": _sanitize_upload_job_doc(active_job),
+            }
         logging.info(f"Queueing YouTube upload for user {current_user['id']}")
         payload = await _build_youtube_upload_job_payload(
             current_user=current_user,
@@ -6986,6 +7030,52 @@ async def update_admin_ops_controls(request: OpsControlsUpdateRequest, current_u
         raise HTTPException(status_code=403, detail="Admin access only")
     controls = await _set_ops_controls(request)
     return {"success": True, "controls": controls}
+
+
+@api_router.post("/admin/ops/clear-jobs")
+async def clear_admin_ops_jobs(request: AdminClearJobsRequest, current_user: dict = Depends(get_current_user)):
+    if not _is_admin_user(current_user):
+        raise HTTPException(status_code=403, detail="Admin access only")
+
+    allowed_statuses = {"queued", "processing", "failed", "succeeded"}
+    target_statuses = [status for status in (request.statuses or ["queued", "processing"]) if status in allowed_statuses]
+    if not target_statuses:
+        raise HTTPException(status_code=400, detail="At least one valid job status is required.")
+
+    filter_doc: dict[str, Any] = {
+        "status": {"$in": target_statuses},
+    }
+    safe_job_type = str(request.job_type or "").strip()
+    if safe_job_type:
+        filter_doc["type"] = safe_job_type
+    safe_user_id = str(request.user_id or "").strip()
+    if safe_user_id:
+        filter_doc["user_id"] = safe_user_id
+
+    now = _safe_iso_now()
+    result = await db.upload_jobs.update_many(
+        filter_doc,
+        {
+            "$set": {
+                "status": "failed",
+                "progress": 100,
+                "message": "Job cleared by admin.",
+                "error": "Cleared by admin.",
+                "failed_at": now,
+                "updated_at": now,
+                "worker_id": UPLOAD_JOB_WORKER_ID,
+            }
+        },
+    )
+    return {
+        "success": True,
+        "cleared_count": int(getattr(result, "modified_count", 0) or 0),
+        "filter": {
+            "job_type": safe_job_type or None,
+            "statuses": target_statuses,
+            "user_id": safe_user_id or None,
+        },
+    }
 
 
 # Include the router in the main app
