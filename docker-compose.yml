@@ -2,11 +2,11 @@ services:
   mongo:
     image: mongo:latest
     container_name: mongo_db
-    ports:
-      - "27017:27017"
     volumes:
       - mongo_data:/data/db
     restart: always
+    env_file:
+      - ./backend/.env
     environment:
       - MONGO_INITDB_DATABASE=production
 
@@ -19,10 +19,6 @@ services:
       - "8000:8000"
     volumes:
       - ./backend/uploads:/app/uploads
-    environment:
-      - MONGO_URL=mongodb://mongo:27017
-      - DB_NAME=production
-      # Other env vars will be loaded from .env file or passed here
     env_file:
       - ./backend/.env
     restart: always

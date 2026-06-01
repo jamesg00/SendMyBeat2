@@ -14,6 +14,17 @@ export default function AdminCosts() {
   const [clearingJobs, setClearingJobs] = useState(false);
   const [error, setError] = useState(null);
 
+  const formatAge = (isoValue) => {
+    if (!isoValue) return "-";
+    const parsed = new Date(isoValue);
+    if (Number.isNaN(parsed.getTime())) return "-";
+    const diffSeconds = Math.max(0, Math.floor((Date.now() - parsed.getTime()) / 1000));
+    if (diffSeconds < 60) return `${diffSeconds}s ago`;
+    const minutes = Math.floor(diffSeconds / 60);
+    const seconds = diffSeconds % 60;
+    return `${minutes}m ${seconds.toString().padStart(2, "0")}s ago`;
+  };
+
   useEffect(() => {
     fetchData();
   }, []);
@@ -286,7 +297,9 @@ export default function AdminCosts() {
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Type</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Stage</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Progress</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Heartbeat</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Updated</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Action</th>
                 </tr>
@@ -296,7 +309,9 @@ export default function AdminCosts() {
                   <tr key={job.id}>
                     <td className="px-4 py-3 text-sm text-slate-900">{job.type}</td>
                     <td className="px-4 py-3 text-sm text-slate-600">{job.status}</td>
+                    <td className="px-4 py-3 text-sm text-slate-600">{job.stage || "-"}</td>
                     <td className="px-4 py-3 text-sm text-slate-600 text-right">{job.progress}%</td>
+                    <td className="px-4 py-3 text-sm text-slate-600">{formatAge(job.last_heartbeat_at)}</td>
                     <td className="px-4 py-3 text-sm text-slate-600">{job.updated_at || "-"}</td>
                     <td className="px-4 py-3 text-right">
                       <Button

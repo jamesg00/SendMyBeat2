@@ -112,11 +112,13 @@ MAX_AUDIO_UPLOAD_BYTES = 200 * 1024 * 1024
 MAX_IMAGE_UPLOAD_BYTES = 12 * 1024 * 1024
 AUTH_RATE_LIMIT_WINDOW_SECONDS = 300
 AUTH_RATE_LIMIT_ATTEMPTS = 10
+HEARTBEAT_INTERVAL_SECONDS = int(os.environ.get("JOB_HEARTBEAT_INTERVAL_SECONDS", "15"))
 YOUTUBE_TOKEN_ENCRYPTION_KEY = (
     os.environ.get("YOUTUBE_TOKEN_ENCRYPTION_KEY")
     or os.environ.get("APP_ENCRYPTION_KEY")
     or ""
 ).strip()
+STRIPE_WEBHOOK_SECRET = (os.environ.get("STRIPE_WEBHOOK_SECRET") or "").strip()
 
 # Google OAuth Configuration
 GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', 'your_google_client_id_here')
@@ -138,12 +140,11 @@ def build_cors_origins() -> list[str]:
         "http://localhost:5173",
         "http://127.0.0.1:5173",
     ]
-    if not raw or raw == "*":
+    if not raw:
         return defaults
+    if raw == "*":
+        return ["*"]
     parsed = [origin.strip() for origin in raw.split(",") if origin.strip()]
-    for origin in defaults:
-        if origin not in parsed:
-            parsed.append(origin)
     return parsed
 
 
@@ -227,7 +228,18 @@ async def _check_rate_limit_persistent(bucket_key: str, limit: int, window_secon
 
 
 def _is_production_like() -> bool:
-    return not any(origin.startswith("http://localhost") or origin.startswith("http://127.0.0.1") for origin in CORS_ORIGINS)
+    environment = (os.environ.get("ENVIRONMENT") or os.environ.get("APP_ENV") or "").strip().lower()
+    if environment in {"prod", "production", "staging"}:
+        return True
+    if environment in {"dev", "development", "local", "test"}:
+        return False
+
+    frontend_host = (FRONTEND_URL or "").strip().lower()
+    backend_host = (BACKEND_URL or "").strip().lower()
+    local_hosts = ("localhost", "127.0.0.1")
+    if any(host in frontend_host for host in local_hosts) or any(host in backend_host for host in local_hosts):
+        return False
+    return True
 
 
 def _validate_security_configuration() -> None:
@@ -247,7 +259,9 @@ def _validate_security_configuration() -> None:
         if len(value or "") < 16 or normalized in placeholders:
             raise RuntimeError(f"Insecure {key} configured. Set a strong random secret before running this backend.")
     if _is_production_like() and not YOUTUBE_TOKEN_ENCRYPTION_KEY:
-        logging.warning("YOUTUBE_TOKEN_ENCRYPTION_KEY / APP_ENCRYPTION_KEY is not set. YouTube tokens cannot be encrypted at rest.")
+        raise RuntimeError("APP_ENCRYPTION_KEY (or YOUTUBE_TOKEN_ENCRYPTION_KEY) is required in production-like environments.")
+    if _is_production_like() and "*" in CORS_ORIGINS:
+        raise RuntimeError("CORS_ORIGINS=* is not allowed when allow_credentials=True. Configure explicit frontend origins.")
 
 
 def _validate_public_url(target_url: str) -> str:
@@ -370,11 +384,21 @@ MAX_NET_REVENUE_USD = float(os.environ.get("MAX_NET_REVENUE_USD", "10.95"))
 _llm_client = None
 _llm_config = None
 _upload_job_worker_task: asyncio.Task | None = None
+_job_watchdog_task: asyncio.Task | None = None
 _spotlight_refresh_task: asyncio.Task | None = None
 UPLOAD_JOB_POLL_INTERVAL_SECONDS = int(os.environ.get("UPLOAD_JOB_POLL_INTERVAL_SECONDS", "2"))
 UPLOAD_JOB_STALE_AFTER_SECONDS = int(os.environ.get("UPLOAD_JOB_STALE_AFTER_SECONDS", "1800"))
+JOB_WATCHDOG_INTERVAL_SECONDS = int(os.environ.get("JOB_WATCHDOG_INTERVAL_SECONDS", "60"))
+JOB_STAGE_TIMEOUT_SECONDS = int(os.environ.get("JOB_STAGE_TIMEOUT_SECONDS", "300"))
+JOB_FFMPEG_STAGE_TIMEOUT_SECONDS = int(os.environ.get("JOB_FFMPEG_STAGE_TIMEOUT_SECONDS", "300"))
+JOB_YOUTUBE_STAGE_TIMEOUT_SECONDS = int(os.environ.get("JOB_YOUTUBE_STAGE_TIMEOUT_SECONDS", "900"))
 UPLOAD_JOB_WORKER_ID = f"upload-worker-{uuid.uuid4().hex[:10]}"
 YOUTUBE_RENDER_TIMEOUT_SECONDS = int(os.environ.get("YOUTUBE_RENDER_TIMEOUT_SECONDS", "240"))
+YOUTUBE_RENDER_PRESET = str(os.environ.get("YOUTUBE_RENDER_PRESET", "veryfast")).strip() or "veryfast"
+YOUTUBE_RENDER_CRF = str(os.environ.get("YOUTUBE_RENDER_CRF", "28")).strip() or "28"
+YOUTUBE_RENDER_MAX_HEIGHT = int(os.environ.get("YOUTUBE_RENDER_MAX_HEIGHT", "0") or "0")
+YOUTUBE_MAX_AUDIO_DURATION_SECONDS = int(os.environ.get("YOUTUBE_MAX_AUDIO_DURATION_SECONDS", str(15 * 60)))
+PRIORITIZE_YOUTUBE_UPLOAD_JOBS = str(os.environ.get("PRIORITIZE_YOUTUBE_UPLOAD_JOBS", "true")).strip().lower() not in {"0", "false", "no"}
 SPOTLIGHT_REFRESH_INTERVAL_SECONDS = int(os.environ.get("SPOTLIGHT_REFRESH_INTERVAL_SECONDS", "1800"))
 METADATA_CACHE_TTL_SECONDS = int(os.environ.get("METADATA_CACHE_TTL_SECONDS", "86400"))
 IMAGE_SEARCH_CACHE_TTL_SECONDS = int(os.environ.get("IMAGE_SEARCH_CACHE_TTL_SECONDS", "21600"))
@@ -614,6 +638,71 @@ def _visual_kind_from_upload(upload_doc: dict | None) -> str:
         return explicit
     path_suffix = media_storage.get_suffix(upload_doc)
     return "video" if path_suffix in {".webm", ".mp4", ".mov", ".m4v"} else "image"
+
+
+def _sniff_audio_format(sample: bytes) -> str | None:
+    blob = bytes(sample or b"")
+    if not blob:
+        return None
+    if blob.startswith(b"ID3") or blob[:2] == b"\xff\xfb":
+        return ".mp3"
+    if blob.startswith(b"RIFF") and blob[8:12] == b"WAVE":
+        return ".wav"
+    if blob.startswith(b"fLaC"):
+        return ".flac"
+    if blob.startswith(b"OggS"):
+        return ".ogg"
+    if len(blob) >= 12 and blob[4:8] == b"ftyp":
+        major_brand = blob[8:12]
+        if major_brand in {b"M4A ", b"isom", b"mp42", b"mp41", b"M4B "}:
+            return ".m4a"
+    return None
+
+
+def _sniff_visual_format(sample: bytes) -> str | None:
+    blob = bytes(sample or b"")
+    if not blob:
+        return None
+    if blob.startswith(b"\xff\xd8\xff"):
+        return ".jpg"
+    if blob.startswith(b"\x89PNG\r\n\x1a\n"):
+        return ".png"
+    if blob[:4] == b"RIFF" and blob[8:12] == b"WEBP":
+        return ".webp"
+    if blob[:4] == b"\x1a\x45\xdf\xa3":
+        return ".webm"
+    if len(blob) >= 12 and blob[4:8] == b"ftyp":
+        major_brand = blob[8:12]
+        if major_brand in {b"qt  "}:
+            return ".mov"
+        if major_brand in {b"isom", b"iso2", b"mp41", b"mp42", b"avc1", b"M4V "}:
+            return ".mp4"
+    return None
+
+
+def _assert_content_type_matches(file: UploadFile, *, expected_prefixes: tuple[str, ...]) -> None:
+    content_type = str(file.content_type or "").strip().lower()
+    if not content_type or content_type == "application/octet-stream":
+        return
+    if any(content_type.startswith(prefix) for prefix in expected_prefixes):
+        return
+    raise HTTPException(status_code=400, detail=f"Invalid content type '{content_type}' for this upload.")
+
+
+def _assert_extension_matches_signature(*, file_ext: str, detected_ext: str, allowed_extensions: list[str], detail_message: str) -> None:
+    ext = (file_ext or "").lower()
+    if ext not in allowed_extensions:
+        raise HTTPException(status_code=400, detail=detail_message)
+
+    compatible_extensions = {
+        ".jpg": {".jpg", ".jpeg"},
+        ".jpeg": {".jpg", ".jpeg"},
+        ".mp4": {".mp4", ".m4v"},
+        ".m4v": {".mp4", ".m4v"},
+    }
+    allowed_matches = compatible_extensions.get(detected_ext, {detected_ext})
+    if ext not in allowed_matches:
+        raise HTTPException(status_code=400, detail=f"File extension does not match uploaded file contents ({detected_ext}).")
 
 
 async def llm_chat(
@@ -1492,6 +1581,33 @@ async def check_and_use_upload_credit(user_id: str) -> bool:
     
     return True
 
+async def ensure_has_upload_credit(user_id: str) -> None:
+    status = await get_user_subscription_status(user_id)
+    if status.get("upload_credits_remaining", 0) > 0:
+        return
+    raise HTTPException(
+        status_code=402,
+        detail={
+            "message": "Daily upload limit reached. Upgrade your plan for more uploads.",
+            "resets_at": status.get("resets_at"),
+        },
+    )
+
+async def consume_upload_credit(user_id: str) -> None:
+    status = await get_user_subscription_status(user_id)
+    if status["plan"] == "pro":
+        return
+    if status["plan"] in {"plus", "max", "pro"}:
+        await db.users.update_one(
+            {"id": user_id},
+            {"$inc": {"plus_monthly_upload_used": 1}}
+        )
+        return
+    await db.users.update_one(
+        {"id": user_id},
+        {"$inc": {"daily_upload_count": 1}}
+    )
+
 async def ensure_has_credit(user_id: str, feature_name: str = "generations") -> None:
     """
     Check if user has credits. If not, raise HTTPException(402).
@@ -1547,6 +1663,9 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         username = payload.get("username")
         if user_id is None or username is None:
             raise HTTPException(status_code=401, detail="Invalid token")
+        existing_user = await db.users.find_one({"id": user_id}, {"_id": 0, "id": 1, "username": 1})
+        if not existing_user:
+            raise HTTPException(status_code=401, detail="User no longer exists.")
         return {"id": user_id, "username": username}
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
@@ -1963,6 +2082,65 @@ async def _update_upload_job(
     )
 
 
+class JobCancelledError(Exception):
+    pass
+
+
+async def _get_background_job(job_id: str) -> dict | None:
+    return await background_job_service.get_job(job_id)
+
+
+async def _touch_upload_job_heartbeat(
+    job_id: str,
+    *,
+    stage: str | None = None,
+    message: str | None = None,
+    progress: int | None = None,
+) -> None:
+    await background_job_service.touch_heartbeat(
+        job_id,
+        stage=stage,
+        message=message,
+        progress=progress,
+    )
+
+
+async def _assert_job_not_cancel_requested(job_id: str, *, stage: str) -> None:
+    job_doc = await _get_background_job(job_id)
+    if job_doc and job_doc.get("cancel_requested"):
+        raise JobCancelledError(f"Job was cancelled during stage '{stage}'.")
+
+
+async def _job_heartbeat_loop(job_id: str, *, stage: str, message: str, progress: int) -> None:
+    while True:
+        await _touch_upload_job_heartbeat(job_id, stage=stage, message=message, progress=progress)
+        await asyncio.sleep(HEARTBEAT_INTERVAL_SECONDS)
+
+
+async def _job_watchdog_loop() -> None:
+    stage_timeouts = {
+        "ffmpeg_render": JOB_FFMPEG_STAGE_TIMEOUT_SECONDS,
+        "youtube_upload": JOB_YOUTUBE_STAGE_TIMEOUT_SECONDS,
+    }
+    while True:
+        try:
+            result = await background_job_service.run_watchdog_pass(
+                default_timeout_seconds=JOB_STAGE_TIMEOUT_SECONDS,
+                stage_timeouts=stage_timeouts,
+            )
+            if result.get("requeued") or result.get("failed"):
+                logger.warning(
+                    "Job watchdog acted on stale jobs: requeued=%s failed=%s",
+                    result.get("requeued", 0),
+                    result.get("failed", 0),
+                )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.error("Background job watchdog error: %s", str(exc))
+        await asyncio.sleep(JOB_WATCHDOG_INTERVAL_SECONDS)
+
+
 async def _claim_next_background_job() -> dict | None:
     return await background_job_service.claim_next_job()
 
@@ -1979,6 +2157,10 @@ async def _background_job_worker_loop() -> None:
     await background_job_service.worker_loop()
 
 
+async def _background_job_watchdog_loop() -> None:
+    await _job_watchdog_loop()
+
+
 async def _create_background_job(
     *,
     current_user: dict,
@@ -1990,6 +2172,7 @@ async def _create_background_job(
         current_user=current_user,
         job_type=job_type,
         payload=payload,
+        priority=0 if PRIORITIZE_YOUTUBE_UPLOAD_JOBS and job_type == "youtube_upload" else 1,
         message=message,
     )
 
@@ -1999,6 +2182,13 @@ def _resolve_ffmpeg_binary() -> str:
     if not ffmpeg_bin:
         raise HTTPException(status_code=500, detail="FFmpeg is not installed on the server.")
     return ffmpeg_bin
+
+
+def _resolve_ffprobe_binary() -> str:
+    ffprobe_bin = shutil.which("ffprobe")
+    if not ffprobe_bin:
+        raise HTTPException(status_code=500, detail="ffprobe is not installed on the server.")
+    return ffprobe_bin
 
 
 def _escape_ffmpeg_text(value: str) -> str:
@@ -2034,6 +2224,10 @@ def _build_youtube_watermark_filter(*, target_w: int, target_h: int, background_
 def _build_render_filter(payload: dict[str, Any]) -> str:
     target_w = int(payload["target_w"])
     target_h = int(payload["target_h"])
+    if YOUTUBE_RENDER_MAX_HEIGHT > 0 and target_h > YOUTUBE_RENDER_MAX_HEIGHT:
+        scale_ratio = YOUTUBE_RENDER_MAX_HEIGHT / float(target_h)
+        target_h = YOUTUBE_RENDER_MAX_HEIGHT
+        target_w = max(2, int(round(target_w * scale_ratio / 2.0) * 2))
     scale_x = float(payload["image_scale_x"])
     scale_y = float(payload["image_scale_y"])
     pos_x = float(payload["image_pos_x"])
@@ -2044,12 +2238,18 @@ def _build_render_filter(payload: dict[str, Any]) -> str:
 
     overlay_x = f"(W-w)/2+({pos_x:.4f}*W*0.25)"
     overlay_y = f"(H-h)/2+({pos_y:.4f}*H*0.25)"
-    filter_chain = (
-        f"color=c={background_color}:s={target_w}x{target_h}:r=30[bg];"
-        f"[0:v]scale=iw*{scale_x:.4f}:ih*{scale_y:.4f},"
-        f"rotate={rotation_radians:.8f}:c=none:ow=rotw(iw):oh=roth(ih)[art];"
-        f"[bg][art]overlay=x='{overlay_x}':y='{overlay_y}':shortest=1[composite]"
-    )
+    base_chain = f"color=c={background_color}:s={target_w}x{target_h}:r=30[bg];[0:v]scale=iw*{scale_x:.4f}:ih*{scale_y:.4f}"
+    if abs(rotation_degrees) < 0.01:
+        filter_chain = (
+            f"{base_chain}[art];"
+            f"[bg][art]overlay=x='{overlay_x}':y='{overlay_y}':shortest=1[composite]"
+        )
+    else:
+        filter_chain = (
+            f"{base_chain},"
+            f"rotate={rotation_radians:.8f}:c=none:ow=rotw(iw):oh=roth(ih)[art];"
+            f"[bg][art]overlay=x='{overlay_x}':y='{overlay_y}':shortest=1[composite]"
+        )
     if not payload.get("remove_watermark"):
         watermark_filter = _build_youtube_watermark_filter(
             target_w=target_w,
@@ -2060,6 +2260,39 @@ def _build_render_filter(payload: dict[str, Any]) -> str:
     else:
         filter_chain += ";[composite]null[vout]"
     return filter_chain
+
+
+def _probe_audio_duration_seconds(audio_path: Path) -> float:
+    ffprobe_bin = _resolve_ffprobe_binary()
+    command = [
+        ffprobe_bin,
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
+        str(audio_path),
+    ]
+    try:
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=400, detail="Audio probe timed out before rendering.")
+    if completed.returncode != 0:
+        raise HTTPException(status_code=400, detail="Audio file could not be read for rendering.")
+    try:
+        duration_seconds = float((completed.stdout or "").strip())
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Audio duration could not be determined.")
+    if duration_seconds <= 0:
+        raise HTTPException(status_code=400, detail="Audio file appears to be empty or invalid.")
+    return duration_seconds
 
 
 async def _render_youtube_video(
@@ -2075,6 +2308,12 @@ async def _render_youtube_video(
 
     async with media_storage.local_path_for_processing(image_upload) as image_path:
         async with media_storage.local_path_for_processing(audio_upload) as audio_path:
+            if not image_path.exists() or not audio_path.exists():
+                raise HTTPException(status_code=400, detail="Referenced upload files are missing on disk.")
+            audio_duration_seconds = await asyncio.to_thread(_probe_audio_duration_seconds, audio_path)
+            if audio_duration_seconds > YOUTUBE_MAX_AUDIO_DURATION_SECONDS:
+                max_minutes = round(YOUTUBE_MAX_AUDIO_DURATION_SECONDS / 60, 1)
+                raise HTTPException(status_code=400, detail=f"Audio is too long to render. Max supported duration is {max_minutes} minutes.")
             command = [ffmpeg_bin, "-nostdin", "-y", "-loglevel", "error"]
             if visual_kind == "video":
                 command.extend(["-stream_loop", "-1", "-i", str(image_path)])
@@ -2093,12 +2332,18 @@ async def _render_youtube_video(
                     "1:a",
                     "-c:v",
                     "libx264",
+                    "-preset",
+                    YOUTUBE_RENDER_PRESET,
+                    "-crf",
+                    YOUTUBE_RENDER_CRF,
                     "-pix_fmt",
                     "yuv420p",
                     "-c:a",
                     "aac",
                     "-b:a",
                     "192k",
+                    "-threads",
+                    "0",
                     "-r",
                     "30",
                     "-movflags",
@@ -2108,11 +2353,15 @@ async def _render_youtube_video(
                 ]
             )
 
+            if visual_kind != "video":
+                command.extend(["-tune", "stillimage"])
+
             logging.info(
-                "Starting FFmpeg render for youtube_upload audio=%s image=%s visual_kind=%s output=%s",
+                "Starting FFmpeg render for youtube_upload audio=%s image=%s visual_kind=%s preset=%s output=%s",
                 audio_upload.get("id"),
                 image_upload.get("id"),
                 visual_kind,
+                YOUTUBE_RENDER_PRESET,
                 str(output_path),
             )
             try:
@@ -2271,16 +2520,7 @@ async def _build_youtube_upload_job_payload(
         background_color=background_color,
     )
 
-    has_credit = await check_and_use_upload_credit(current_user["id"])
-    if not has_credit:
-        status = await get_user_subscription_status(current_user["id"])
-        raise HTTPException(
-            status_code=402,
-            detail={
-                "message": "Daily upload limit reached. Upgrade your plan for more uploads.",
-                "resets_at": status.get("resets_at"),
-            },
-        )
+    await ensure_has_upload_credit(current_user["id"])
 
     resolved_description_id = str(
         (description_doc.get("id") if isinstance(description_doc, dict) else description_id) or ""
@@ -2352,18 +2592,52 @@ async def _execute_youtube_upload_job(job: dict) -> dict:
     if not image_upload:
         raise HTTPException(status_code=404, detail="Image upload not found.")
 
-    await _update_upload_job(job_id, progress=20, message="Refreshing YouTube connection...")
+    await _assert_job_not_cancel_requested(job_id, stage="validate")
+    await _update_upload_job(
+        job_id,
+        progress=20,
+        message="Refreshing YouTube connection...",
+        extra_updates={"stage": "oauth_refresh", "last_heartbeat_at": _safe_iso_now()},
+    )
     credentials = await refresh_youtube_token(user_id)
 
-    await _update_upload_job(job_id, progress=40, message="Rendering video...")
-    rendered_video_path = await _render_youtube_video(
-        audio_upload=audio_upload,
-        image_upload=image_upload,
-        payload=payload,
+    await _assert_job_not_cancel_requested(job_id, stage="oauth_refresh")
+    await ensure_has_upload_credit(user_id)
+    await _update_upload_job(
+        job_id,
+        progress=40,
+        message="Rendering video...",
+        extra_updates={"stage": "ffmpeg_render", "last_heartbeat_at": _safe_iso_now()},
     )
+    heartbeat_task = asyncio.create_task(
+        _job_heartbeat_loop(
+            job_id,
+            stage="ffmpeg_render",
+            message="Rendering video...",
+            progress=40,
+        )
+    )
+    try:
+        rendered_video_path = await _render_youtube_video(
+            audio_upload=audio_upload,
+            image_upload=image_upload,
+            payload=payload,
+        )
+    finally:
+        heartbeat_task.cancel()
+        try:
+            await heartbeat_task
+        except asyncio.CancelledError:
+            pass
 
     try:
-        await _update_upload_job(job_id, progress=70, message="Uploading to YouTube...")
+        await _assert_job_not_cancel_requested(job_id, stage="ffmpeg_render")
+        await _update_upload_job(
+            job_id,
+            progress=70,
+            message="Uploading to YouTube...",
+            extra_updates={"stage": "youtube_upload", "last_heartbeat_at": _safe_iso_now()},
+        )
         youtube = build("youtube", "v3", credentials=credentials)
         upload_body = {
             "snippet": {
@@ -2384,17 +2658,39 @@ async def _execute_youtube_upload_job(job: dict) -> dict:
         )
 
         response = None
-        while response is None:
-            status, response = await asyncio.to_thread(request.next_chunk)
-            if status is not None:
-                progress = 70 + int(float(status.progress()) * 25)
-                await _update_upload_job(job_id, progress=min(95, progress), message="Uploading to YouTube...")
+        upload_heartbeat_task = asyncio.create_task(
+            _job_heartbeat_loop(
+                job_id,
+                stage="youtube_upload",
+                message="Uploading to YouTube...",
+                progress=70,
+            )
+        )
+        try:
+            while response is None:
+                await _assert_job_not_cancel_requested(job_id, stage="youtube_upload")
+                status, response = await asyncio.to_thread(request.next_chunk)
+                if status is not None:
+                    progress = 70 + int(float(status.progress()) * 25)
+                    await _touch_upload_job_heartbeat(
+                        job_id,
+                        stage="youtube_upload",
+                        message="Uploading to YouTube...",
+                        progress=min(95, progress),
+                    )
+        finally:
+            upload_heartbeat_task.cancel()
+            try:
+                await upload_heartbeat_task
+            except asyncio.CancelledError:
+                pass
 
         video_id = str((response or {}).get("id") or "").strip()
         if not video_id:
             raise HTTPException(status_code=500, detail="YouTube did not return a video ID.")
 
         video_url = f"https://www.youtube.com/watch?v={video_id}"
+        await consume_upload_credit(user_id)
         return {
             "success": True,
             "video_id": video_id,
@@ -2419,18 +2715,53 @@ async def _process_youtube_upload_job(job: dict) -> None:
             message="YouTube upload complete.",
             result=result,
             error=None,
-            extra_updates={"completed_at": _safe_iso_now(), "worker_id": UPLOAD_JOB_WORKER_ID},
+            extra_updates={
+                "completed_at": _safe_iso_now(),
+                "worker_id": UPLOAD_JOB_WORKER_ID,
+                "stage": "cleanup",
+                "last_heartbeat_at": _safe_iso_now(),
+                "error_code": None,
+                "failed_stage": None,
+            },
+        )
+    except JobCancelledError as exc:
+        await _update_upload_job(
+            job_id,
+            status="cancelled",
+            progress=100,
+            message="YouTube upload cancelled.",
+            error=str(exc),
+            extra_updates={
+                "failed_at": _safe_iso_now(),
+                "worker_id": UPLOAD_JOB_WORKER_ID,
+                "error_code": "ADMIN_CANCELLED",
+                "failed_stage": str((await _get_background_job(job_id) or {}).get("stage") or "unknown"),
+                "last_heartbeat_at": _safe_iso_now(),
+            },
         )
     except Exception as exc:
         error_message = str(exc)
         logging.error(f"YouTube upload job {job_id} failed: {error_message}")
+        failed_stage = str((await _get_background_job(job_id) or {}).get("stage") or "unknown")
+        error_code = None
+        if "timed out" in error_message.lower():
+            error_code = "FFMPEG_TIMEOUT"
+            failed_stage = "ffmpeg_render"
+        elif "youtube" in error_message.lower():
+            error_code = "YOUTUBE_UPLOAD"
         await _update_upload_job(
             job_id,
             status="failed",
             progress=100,
             message="YouTube upload failed.",
             error=error_message,
-            extra_updates={"failed_at": _safe_iso_now(), "worker_id": UPLOAD_JOB_WORKER_ID},
+            extra_updates={
+                "failed_at": _safe_iso_now(),
+                "worker_id": UPLOAD_JOB_WORKER_ID,
+                "error_code": error_code,
+                "failed_stage": failed_stage,
+                "last_heartbeat_at": _safe_iso_now(),
+            },
         )
 
 
@@ -3991,12 +4322,14 @@ async def create_checkout_session(request: CheckoutSessionRequest, current_user:
 @api_router.post("/subscription/webhook")
 async def stripe_webhook(request: Request):
     """Handle Stripe webhooks"""
+    if _is_production_like() and not STRIPE_WEBHOOK_SECRET:
+        raise HTTPException(status_code=503, detail="Stripe webhook secret is not configured.")
     payload = await request.body()
     sig_header = request.headers.get('stripe-signature')
     
     try:
         event = stripe.Webhook.construct_event(
-            payload, sig_header, os.environ.get('STRIPE_WEBHOOK_SECRET', '')
+            payload, sig_header, STRIPE_WEBHOOK_SECRET
         )
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid payload")
@@ -5859,9 +6192,18 @@ async def upload_audio(file: UploadFile = File(...), current_user: dict = Depend
         # Validate file type - audio only
         allowed_extensions = ['.mp3', '.wav', '.m4a', '.flac', '.ogg']
         file_ext = Path(file.filename).suffix.lower()
-        
-        if file_ext not in allowed_extensions:
-            raise HTTPException(status_code=400, detail="Invalid audio file format. Use MP3, WAV, M4A, FLAC, or OGG")
+        _assert_content_type_matches(file, expected_prefixes=("audio/",))
+        sample = await file.read(8192)
+        await file.seek(0)
+        detected_ext = _sniff_audio_format(sample)
+        if not detected_ext:
+            raise HTTPException(status_code=400, detail="Uploaded audio contents are invalid or unsupported.")
+        _assert_extension_matches_signature(
+            file_ext=file_ext,
+            detected_ext=detected_ext,
+            allowed_extensions=allowed_extensions,
+            detail_message="Invalid audio file format. Use MP3, WAV, M4A, FLAC, or OGG",
+        )
         
         file_id = str(uuid.uuid4())
         storage_meta = await media_storage.save_upload_file(
@@ -5904,15 +6246,22 @@ async def upload_image(file: UploadFile = File(...), current_user: dict = Depend
         # Validate file type
         allowed_extensions = ['.jpg', '.jpeg', '.png', '.webp', '.webm', '.mp4', '.mov', '.m4v']
         file_ext = Path(file.filename).suffix.lower()
-        
-        if file_ext not in allowed_extensions:
-            raise HTTPException(status_code=400, detail="Invalid visual format. Allowed: JPG, PNG, WEBP, WEBM, MP4, MOV")
-        
+        _assert_content_type_matches(file, expected_prefixes=("image/", "video/"))
+
         image_bytes = await file.read()
         if not image_bytes:
             raise HTTPException(status_code=400, detail="Empty image file.")
         if len(image_bytes) > MAX_IMAGE_UPLOAD_BYTES:
             raise HTTPException(status_code=400, detail="Image is too large. Max size is 12MB.")
+        detected_ext = _sniff_visual_format(image_bytes[:8192])
+        if not detected_ext:
+            raise HTTPException(status_code=400, detail="Uploaded visual contents are invalid or unsupported.")
+        _assert_extension_matches_signature(
+            file_ext=file_ext,
+            detected_ext=detected_ext,
+            allowed_extensions=allowed_extensions,
+            detail_message="Invalid visual format. Allowed: JPG, PNG, WEBP, WEBM, MP4, MOV",
+        )
 
         stored = _store_uploaded_image_bytes(
             current_user_id=current_user["id"],
@@ -7087,7 +7436,11 @@ async def clear_admin_ops_jobs(request: AdminClearJobsRequest, current_user: dic
                 "progress": 100,
                 "message": "Job cleared by admin.",
                 "error": "Cleared by admin.",
+                "cancel_requested": True,
+                "error_code": "ADMIN_CANCELLED",
+                "failed_stage": "admin_clear",
                 "failed_at": now,
+                "last_heartbeat_at": now,
                 "updated_at": now,
                 "worker_id": UPLOAD_JOB_WORKER_ID,
             }
@@ -7126,7 +7479,11 @@ async def clear_admin_ops_job(job_id: str, current_user: dict = Depends(get_curr
                 "progress": 100,
                 "message": "Job cleared by admin.",
                 "error": "Cleared by admin.",
+                "cancel_requested": True,
+                "error_code": "ADMIN_CANCELLED",
+                "failed_stage": "admin_clear",
                 "failed_at": now,
+                "last_heartbeat_at": now,
                 "updated_at": now,
                 "worker_id": UPLOAD_JOB_WORKER_ID,
             }
@@ -7137,8 +7494,10 @@ async def clear_admin_ops_job(job_id: str, current_user: dict = Depends(get_curr
         "cleared": bool(getattr(result, "modified_count", 0)),
         "job_id": safe_job_id,
         "previous_status": existing_job.get("status"),
+        "was_processing": existing_job.get("status") == "processing",
         "job_type": existing_job.get("type"),
         "user_id": existing_job.get("user_id"),
+        "warning": "If the job was already processing, any FFmpeg subprocess will stop on the next cancellation checkpoint.",
     }
 
 
@@ -7194,22 +7553,28 @@ spotlight_service = SpotlightService(
 
 @app.on_event("startup")
 async def startup_background_tasks():
-    global _upload_job_worker_task, _spotlight_refresh_task
+    global _upload_job_worker_task, _job_watchdog_task, _spotlight_refresh_task
     _validate_security_configuration()
     await _requeue_stale_background_jobs()
     if _upload_job_worker_task is None:
         _upload_job_worker_task = asyncio.create_task(_background_job_worker_loop())
         logger.info("Background job worker started")
+    if _job_watchdog_task is None:
+        _job_watchdog_task = asyncio.create_task(_background_job_watchdog_loop())
+        logger.info("Background job watchdog started")
     if _spotlight_refresh_task is None:
         _spotlight_refresh_task = asyncio.create_task(_spotlight_refresh_loop())
         logger.info("Spotlight refresh loop started")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
-    global _upload_job_worker_task, _spotlight_refresh_task
+    global _upload_job_worker_task, _job_watchdog_task, _spotlight_refresh_task
     if _upload_job_worker_task:
         _upload_job_worker_task.cancel()
         _upload_job_worker_task = None
+    if _job_watchdog_task:
+        _job_watchdog_task.cancel()
+        _job_watchdog_task = None
     if _spotlight_refresh_task:
         _spotlight_refresh_task.cancel()
         _spotlight_refresh_task = None

@@ -22,6 +22,7 @@ class TestAdminOps(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.mock_db = MagicMock()
         server.db = self.mock_db
+        server.background_job_service.db = self.mock_db
         self.admin_user = {"id": "admin_1", "username": "admin", "is_admin": True}
         self.non_admin_user = {"id": "user_1", "username": "user", "is_admin": False}
 
@@ -44,6 +45,7 @@ class TestAdminOps(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(call_args.args[0]["status"]["$in"], ["queued", "processing"])
         self.assertEqual(call_args.args[1]["$set"]["status"], "failed")
         self.assertEqual(call_args.args[1]["$set"]["message"], "Job cleared by admin.")
+        self.assertTrue(call_args.args[1]["$set"]["cancel_requested"])
 
     async def test_clear_admin_ops_jobs_requires_admin(self):
         request = server.AdminClearJobsRequest()
@@ -72,9 +74,11 @@ class TestAdminOps(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result["cleared"])
         self.assertEqual(result["job_id"], "job_123")
         self.assertEqual(result["previous_status"], "processing")
+        self.assertTrue(result["was_processing"])
         update_args = self.mock_db.upload_jobs.update_one.await_args
         self.assertEqual(update_args.args[0], {"id": "job_123"})
         self.assertEqual(update_args.args[1]["$set"]["status"], "failed")
+        self.assertTrue(update_args.args[1]["$set"]["cancel_requested"])
 
 
 if __name__ == "__main__":

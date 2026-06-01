@@ -24,11 +24,12 @@ This guide will help you deploy your entire application (Frontend + Backend + Da
 
 1. Click on your new instance name.
 2. Go to the **Networking** tab.
-3. Under "IPv4 Firewall", add two new rules:
-   - Application: **Custom**, Protocol: **TCP**, Port: **8000** (Backend API)
-   - Application: **Custom**, Protocol: **TCP**, Port: **3000** (Frontend App)
-   - (Keep SSH port 22 open)
-4. Click **Create static IP** (optional but recommended) and attach it to your instance so the IP doesn't change.
+3. Under "IPv4 Firewall", keep SSH port `22` open.
+4. Recommended production setup:
+   - expose only `80` and `443` to the public internet through a reverse proxy such as **Caddy**
+   - do **not** expose MongoDB (`27017`) publicly
+   - do **not** expose raw backend (`8000`) or frontend (`3000`) publicly unless you are in a controlled debugging scenario
+5. Click **Create static IP** (optional but recommended) and attach it to your instance so the IP doesn't change.
 
 ## Step 3: Connect & Install Docker
 
@@ -78,10 +79,13 @@ You need to set up the configuration files.
 3. Fill in your keys (use the ones you saved!):
    - `GROK_API_KEY`: Paste your xAI API key here.
    - `LLM_PROVIDER`: Ensure it is set to `grok`.
-   - `MONGO_URL`: **Set this to `mongodb://mongo:27017`** (this is CRITICAL for the free DB to work).
+   - `MONGO_INITDB_ROOT_USERNAME`: Set a dedicated Mongo root username.
+   - `MONGO_INITDB_ROOT_PASSWORD`: Set a strong Mongo password.
+   - `MONGO_URL`: Set this to the authenticated internal Docker hostname form, for example `mongodb://sendmybeat_root:YOUR_PASSWORD@mongo:27017/production?authSource=admin`.
    - `BACKEND_URL`: Set to `https://api.sendmybeat.com` (or your backend domain).
    - `FRONTEND_URL`: Set to `https://sendmybeat.com` (or your frontend domain).
-   - `CORS_ORIGINS`: Set to `*` (or your frontend domain).
+   - `CORS_ORIGINS`: Set this to your explicit frontend origins, for example `https://www.sendmybeat.com,https://sendmybeat.com`.
+   - `APP_ENCRYPTION_KEY`: Required in production for encrypting stored YouTube tokens.
    - Save and exit (Ctrl+X, Y, Enter).
 
 ### Frontend Configuration
@@ -115,12 +119,12 @@ docker compose up -d --build
 
 ## Step 7: Access Your Site
 
-- **Frontend:** `http://YOUR_STATIC_IP:3000` (or `https://sendmybeat.com` if configured)
-- **Backend API:** `http://YOUR_STATIC_IP:8000` (or `https://api.sendmybeat.com` if configured)
+- **Frontend:** `https://sendmybeat.com` through Caddy or your reverse proxy
+- **Backend API:** `https://api.sendmybeat.com` through Caddy or your reverse proxy
 - **Admin Cost Tracker:** Go to `/admin/costs` on your site (login required).
 
-## HTTPS Setup (Optional but Recommended)
-If you want the secure lock icon (`https://`), you can use **Caddy** to automatically handle SSL certificates.
+## HTTPS Setup (Recommended)
+Use **Caddy** or another reverse proxy to terminate TLS and forward traffic internally to the Docker services.
 
 1. Create a `Caddyfile` in your project root:
    ```bash
@@ -140,6 +144,8 @@ If you want the secure lock icon (`https://`), you can use **Caddy** to automati
    ```bash
    docker run -d --name caddy --network app_default -p 80:80 -p 443:443 -v $PWD/Caddyfile:/etc/caddy/Caddyfile -v caddy_data:/data caddy:alpine
    ```
+
+Never expose `27017`, `8000`, or `3000` directly on the internet in front of production traffic if TLS and request filtering are available through a reverse proxy.
 
 ## Troubleshooting & Maintenance
 

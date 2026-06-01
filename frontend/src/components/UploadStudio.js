@@ -150,6 +150,39 @@ const UploadStudio = ({
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
+  const formatUploadElapsed = (job) => {
+    const createdAt = job?.created_at ? new Date(job.created_at) : null;
+    if (!createdAt || Number.isNaN(createdAt.getTime())) return null;
+    const elapsedSeconds = Math.max(0, Math.floor((Date.now() - createdAt.getTime()) / 1000));
+    if (elapsedSeconds < 60) return `${elapsedSeconds}s`;
+    const minutes = Math.floor(elapsedSeconds / 60);
+    const seconds = elapsedSeconds % 60;
+    return `${minutes}m ${seconds.toString().padStart(2, "0")}s`;
+  };
+
+  const formatUploadStage = (job) => {
+    const stage = String(job?.stage || "").trim();
+    const labels = {
+      queued: "Queued for worker pickup",
+      validate: "Validating upload payload",
+      oauth_refresh: "Refreshing YouTube connection",
+      ffmpeg_render: "Rendering video with FFmpeg",
+      youtube_upload: "Uploading to YouTube",
+      cleanup: "Cleaning up render files",
+      admin_clear: "Cancelled by admin",
+    };
+    return labels[stage] || "";
+  };
+
+  const activeUploadJob = currentUploadJob && ["queued", "processing"].includes(currentUploadJob.status)
+    ? currentUploadJob
+    : null;
+  const uploadJobProgress = Math.max(0, Math.min(100, Number(activeUploadJob?.progress || 0)));
+  const uploadJobStage = activeUploadJob
+    ? [formatUploadStage(activeUploadJob), activeUploadJob?.message].filter(Boolean).join(" — ")
+    : "Rendering and uploading in the background.";
+  const uploadJobElapsed = activeUploadJob ? formatUploadElapsed(activeUploadJob) : null;
+
   const buildUploadDescriptionWithMetadata = () => {
     return upsertBeatMetaInDescription(uploadDescriptionText, uploadBeatBpm, uploadBeatKey);
   };
@@ -808,7 +841,6 @@ const UploadStudio = ({
       } else {
         toast.success(response.data.message || "Upload process started!");
       }
-      setStudioOpen(false);
     } catch (error) {
       if (axios.isCancel(error)) return;
       if (error.response?.status === 402) {
@@ -865,19 +897,16 @@ const UploadStudio = ({
       if (nextJob?.id) {
         setCurrentUploadJob(nextJob);
         toast.success(response?.data?.message || "Upload queued.");
-        setStudioOpen(false);
         return;
       }
 
       if (response?.data?.video_url) {
         toast.success("Video uploaded successfully!");
         window.open(response.data.video_url, "_blank");
-        setStudioOpen(false);
         return;
       }
 
       toast.success(response?.data?.message || "Upload process started!");
-      setStudioOpen(false);
       setUploadingToYouTube(false);
     } catch (error) {
       setUploadingToYouTube(false);
@@ -944,7 +973,7 @@ const UploadStudio = ({
           toast.error("Lost connection to the upload job. Refresh and check your recent uploads.");
         }
       }
-    }, 3000);
+    }, 2000);
 
     return () => window.clearInterval(interval);
   }, [API, currentUploadJob]);
@@ -978,6 +1007,44 @@ const UploadStudio = ({
   // --- Controls Markup ---
   const controlsMarkup = (
     <div className="space-y-6 pb-20 lg:pb-6">
+        {activeUploadJob && (
+          <div className="border border-[var(--border-color)] bg-[var(--bg-secondary)] px-4 py-4 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                  Upload Job Progress
+                </p>
+                <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                  {uploadJobStage}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm font-semibold text-[var(--accent-primary)]">{uploadJobProgress}%</p>
+                {uploadJobElapsed && (
+                  <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                    Running {uploadJobElapsed}
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="h-2 w-full overflow-hidden bg-[var(--bg-tertiary)]">
+              <div
+                className="h-full bg-[var(--accent-primary)] transition-all duration-300"
+                style={{ width: `${uploadJobProgress}%` }}
+              />
+            </div>
+            <div className="flex flex-wrap gap-2 text-[11px]" style={{ color: "var(--text-secondary)" }}>
+              <span>Queued</span>
+              <span>></span>
+              <span>Token Refresh</span>
+              <span>></span>
+              <span>Render</span>
+              <span>></span>
+              <span>Upload</span>
+            </div>
+          </div>
+        )}
+
         <MetadataEditor
           uploadTitle={uploadTitle}
           setUploadTitle={setUploadTitle}
@@ -1086,6 +1153,9 @@ const UploadStudio = ({
         setIsImageDragActive={setIsImageDragActive}
         setStudioOpen={setStudioOpen}
         currentUploadJob={currentUploadJob}
+        uploadJobProgress={uploadJobProgress}
+        uploadJobElapsed={uploadJobElapsed}
+        uploadJobStage={uploadJobStage}
       />
     );
   }

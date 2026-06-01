@@ -28,6 +28,9 @@ const UploadDashboard = ({
   setIsImageDragActive,
   setStudioOpen,
   currentUploadJob,
+  uploadJobProgress,
+  uploadJobElapsed,
+  uploadJobStage,
 }) => {
   return (
     <Card className="dashboard-card min-h-[400px] relative overflow-hidden terminal-panel-card">
@@ -115,14 +118,40 @@ const UploadDashboard = ({
         </div>
 
         {currentUploadJob && ["queued", "processing"].includes(currentUploadJob.status) && (
-          <div className="terminal-job-status px-4 py-3 text-sm">
-            <p className="font-medium text-[var(--accent-primary)]">
-              YouTube upload {currentUploadJob.status === "queued" ? "queued" : "processing"}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {currentUploadJob.message || "Rendering and uploading in the background."}
-              {typeof currentUploadJob.progress === "number" ? ` (${currentUploadJob.progress}%)` : ""}
-            </p>
+          <div className="terminal-job-status px-4 py-4 text-sm space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="font-medium text-[var(--accent-primary)]">
+                  YouTube upload {currentUploadJob.status === "queued" ? "queued" : "processing"}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {uploadJobStage || currentUploadJob.message || "Rendering and uploading in the background."}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm font-semibold text-[var(--accent-primary)]">
+                  {typeof uploadJobProgress === "number" ? `${uploadJobProgress}%` : `${currentUploadJob.progress || 0}%`}
+                </p>
+                {uploadJobElapsed && (
+                  <p className="text-xs text-muted-foreground">Running {uploadJobElapsed}</p>
+                )}
+              </div>
+            </div>
+            <div className="h-2 w-full overflow-hidden bg-[var(--bg-tertiary)]">
+              <div
+                className="h-full bg-[var(--accent-primary)] transition-all duration-300"
+                style={{ width: `${typeof uploadJobProgress === "number" ? uploadJobProgress : (currentUploadJob.progress || 0)}%` }}
+              />
+            </div>
+            <div className="flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+              <span>Queued</span>
+              <span>&gt;</span>
+              <span>Token Refresh</span>
+              <span>&gt;</span>
+              <span>Render</span>
+              <span>&gt;</span>
+              <span>Upload</span>
+            </div>
           </div>
         )}
 
