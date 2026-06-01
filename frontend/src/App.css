@@ -686,6 +686,15 @@ html:not(.dark) .dashboard-tab-trigger--separated::before {
 
 .description-saved-card {
   min-height: 180px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.description-saved-content {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.45;
 }
 
 @media (max-width: 767px) {
@@ -2609,6 +2618,49 @@ select:focus {
 .landing-example-caret {
   color: var(--terminal-accent) !important;
   background: none !important;
+}
+
+.landing-auth-overlay {
+  background: rgba(0, 0, 0, 0.78) !important;
+  backdrop-filter: blur(8px);
+}
+
+.landing-auth-dialog {
+  background: #050805 !important;
+  border-color: rgba(0, 255, 65, 0.42) !important;
+}
+
+.landing-auth-input,
+.landing-auth-dialog input {
+  background: #ffffff !important;
+  color: #07120a !important;
+  border: 1px solid rgba(0, 255, 65, 0.55) !important;
+  caret-color: #007a20 !important;
+  opacity: 1 !important;
+  -webkit-text-fill-color: #07120a !important;
+}
+
+.landing-auth-input::placeholder,
+.landing-auth-dialog input::placeholder {
+  color: #53605a !important;
+  -webkit-text-fill-color: #53605a !important;
+}
+
+.landing-auth-input:focus,
+.landing-auth-dialog input:focus {
+  background: #ffffff !important;
+  color: #07120a !important;
+  border-color: var(--terminal-accent) !important;
+  box-shadow: 0 0 0 2px rgba(0, 255, 65, 0.18) !important;
+  -webkit-text-fill-color: #07120a !important;
+}
+
+.landing-auth-dialog input:-webkit-autofill,
+.landing-auth-dialog input:-webkit-autofill:hover,
+.landing-auth-dialog input:-webkit-autofill:focus {
+  box-shadow: 0 0 0 1000px #ffffff inset !important;
+  -webkit-text-fill-color: #07120a !important;
+  caret-color: #007a20 !important;
 }
 
 .terminal-streak-bar {

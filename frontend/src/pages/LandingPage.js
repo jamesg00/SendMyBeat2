@@ -240,15 +240,15 @@ const LandingPage = ({ setIsAuthenticated }) => {
               </div>
 
               <h1 className="mb-6 max-w-4xl text-5xl font-bold leading-[0.95] tracking-tight md:text-7xl">
-                Grow your beat channel with AI tags, titles, and instant{" "}
+                Upload beats to YouTube and generate the tags in{" "}
                 <span className="gradient-text">
-                  YouTube uploads.
+                  one workflow.
                 </span>
               </h1>
 
               <p className="landing-muted mb-8 max-w-2xl text-lg leading-relaxed md:text-xl">
-                SendMyBeat helps producers turn one beat idea into upload-ready metadata and a published video
-                without bouncing between tag tools, notes apps, and editors.
+                SendMyBeat turns your beat, artwork, tags, and description into a YouTube-ready upload without
+                bouncing between tag tools, notes apps, and video editors.
               </p>
 
               <div className="mb-8 flex flex-col gap-3 sm:flex-row">
@@ -433,9 +433,9 @@ const LandingPage = ({ setIsAuthenticated }) => {
       <section className="py-16 md:py-20">
         <div className="container mx-auto px-6">
           <div className="mb-12 text-center">
-            <h2 className="mb-4 text-3xl font-bold md:text-5xl">Focus the homepage on the core workflow.</h2>
+            <h2 className="mb-4 text-3xl font-bold md:text-5xl">Everything you need before you publish.</h2>
             <p className="landing-muted-2 mx-auto max-w-2xl text-lg">
-              These are the product pillars worth leading with: metadata, uploads, and growth feedback.
+              Generate metadata, build the upload video, and keep YouTube publishing in the same place.
             </p>
           </div>
 
@@ -459,10 +459,10 @@ const LandingPage = ({ setIsAuthenticated }) => {
               <div className="landing-icon-box-red mb-5 flex h-12 w-12 items-center justify-center rounded-2xl">
                 <Youtube className="h-6 w-6 fill-current" />
               </div>
-              <h3 className="mb-3 text-3xl font-bold">Upload without leaving the workflow</h3>
+              <h3 className="mb-3 text-3xl font-bold">Upload to YouTube from the same workspace</h3>
               <p className="landing-muted-2 max-w-2xl text-lg leading-relaxed">
-                Build the video from your beat and artwork, keep your tags and description attached, and send it to
-                YouTube from the same app instead of rebuilding everything manually.
+                Add your beat and artwork, keep the generated tags and description attached, then publish the finished
+                video to YouTube without rebuilding the upload by hand.
               </p>
             </div>
 
@@ -470,10 +470,10 @@ const LandingPage = ({ setIsAuthenticated }) => {
               <div className="landing-icon-box-gold mb-5 flex h-12 w-12 items-center justify-center rounded-2xl">
                 <LineChart className="h-6 w-6" />
               </div>
-              <h3 className="mb-3 text-2xl font-bold">Growth tools stay secondary</h3>
+              <h3 className="mb-3 text-2xl font-bold">Use growth tools after the upload is ready</h3>
               <p className="landing-muted-2">
-                Spotlight, community, and aesthetic customization can support the product, but they should not compete
-                with the core promise on first load.
+                Producer Spotlight, analytics, and customization are there when you need them, but the main workflow
+                stays focused on tags, descriptions, artwork, and YouTube publishing.
               </p>
             </div>
           </div>

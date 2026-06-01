@@ -31,6 +31,7 @@ import re
 import subprocess
 import html
 import hashlib
+import time
 from urllib.parse import urlencode, urlparse, urljoin
 from itsdangerous import URLSafeSerializer, BadSignature
 import socket
@@ -395,8 +396,9 @@ JOB_YOUTUBE_STAGE_TIMEOUT_SECONDS = int(os.environ.get("JOB_YOUTUBE_STAGE_TIMEOU
 UPLOAD_JOB_WORKER_ID = f"upload-worker-{uuid.uuid4().hex[:10]}"
 YOUTUBE_RENDER_TIMEOUT_SECONDS = int(os.environ.get("YOUTUBE_RENDER_TIMEOUT_SECONDS", "240"))
 YOUTUBE_RENDER_PRESET = str(os.environ.get("YOUTUBE_RENDER_PRESET", "veryfast")).strip() or "veryfast"
-YOUTUBE_RENDER_CRF = str(os.environ.get("YOUTUBE_RENDER_CRF", "28")).strip() or "28"
-YOUTUBE_RENDER_MAX_HEIGHT = int(os.environ.get("YOUTUBE_RENDER_MAX_HEIGHT", "0") or "0")
+YOUTUBE_RENDER_CRF = str(os.environ.get("YOUTUBE_RENDER_CRF", "26")).strip() or "26"
+YOUTUBE_RENDER_MAX_HEIGHT = int(os.environ.get("YOUTUBE_RENDER_MAX_HEIGHT", "720") or "720")
+YOUTUBE_RENDER_FPS = str(os.environ.get("YOUTUBE_RENDER_FPS", "30")).strip() or "30"
 YOUTUBE_MAX_AUDIO_DURATION_SECONDS = int(os.environ.get("YOUTUBE_MAX_AUDIO_DURATION_SECONDS", str(15 * 60)))
 PRIORITIZE_YOUTUBE_UPLOAD_JOBS = str(os.environ.get("PRIORITIZE_YOUTUBE_UPLOAD_JOBS", "true")).strip().lower() not in {"0", "false", "no"}
 SPOTLIGHT_REFRESH_INTERVAL_SECONDS = int(os.environ.get("SPOTLIGHT_REFRESH_INTERVAL_SECONDS", "1800"))
@@ -1093,6 +1095,12 @@ class AdminClearJobsRequest(BaseModel):
     user_id: Optional[str] = None
 
 
+class AdminUsersQuery(BaseModel):
+    search: Optional[str] = None
+    page: int = 1
+    page_size: int = 25
+
+
 THEME_ALLOWED_VARIABLES = {
     "--bg-primary",
     "--bg-secondary",
@@ -1663,7 +1671,10 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         username = payload.get("username")
         if user_id is None or username is None:
             raise HTTPException(status_code=401, detail="Invalid token")
-        existing_user = await db.users.find_one({"id": user_id}, {"_id": 0, "id": 1, "username": 1})
+        existing_user = await db.users.find_one(
+            {"id": user_id, "deleted": {"$ne": True}},
+            {"_id": 0, "id": 1, "username": 1},
+        )
         if not existing_user:
             raise HTTPException(status_code=401, detail="User no longer exists.")
         return {"id": user_id, "username": username}
@@ -2221,13 +2232,27 @@ def _build_youtube_watermark_filter(*, target_w: int, target_h: int, background_
     )
 
 
-def _build_render_filter(payload: dict[str, Any]) -> str:
+def _probe_image_dimensions(image_path: Path) -> tuple[int | None, int | None]:
+    try:
+        with Image.open(image_path) as image:
+            image = ImageOps.exif_transpose(image)
+            return int(image.width), int(image.height)
+    except Exception:
+        return None, None
+
+
+def _resolve_youtube_render_dimensions(payload: dict[str, Any]) -> tuple[int, int]:
     target_w = int(payload["target_w"])
     target_h = int(payload["target_h"])
     if YOUTUBE_RENDER_MAX_HEIGHT > 0 and target_h > YOUTUBE_RENDER_MAX_HEIGHT:
         scale_ratio = YOUTUBE_RENDER_MAX_HEIGHT / float(target_h)
         target_h = YOUTUBE_RENDER_MAX_HEIGHT
         target_w = max(2, int(round(target_w * scale_ratio / 2.0) * 2))
+    return target_w, target_h
+
+
+def _build_render_filter(payload: dict[str, Any]) -> str:
+    target_w, target_h = _resolve_youtube_render_dimensions(payload)
     scale_x = float(payload["image_scale_x"])
     scale_y = float(payload["image_scale_y"])
     pos_x = float(payload["image_pos_x"])
@@ -2235,21 +2260,47 @@ def _build_render_filter(payload: dict[str, Any]) -> str:
     rotation_degrees = float(payload["image_rotation"])
     background_color = str(payload["background_color"])
     rotation_radians = rotation_degrees * 3.141592653589793 / 180.0
+    source_w = payload.get("source_image_w")
+    source_h = payload.get("source_image_h")
+    source_ratio = (float(source_w) / float(source_h)) if source_w and source_h else None
+    target_ratio = target_w / float(target_h)
+    aspect_matches_frame = bool(source_ratio and abs(source_ratio - target_ratio) <= 0.015)
 
-    overlay_x = f"(W-w)/2+({pos_x:.4f}*W*0.25)"
-    overlay_y = f"(H-h)/2+({pos_y:.4f}*H*0.25)"
-    base_chain = f"color=c={background_color}:s={target_w}x{target_h}:r=30[bg];[0:v]scale=iw*{scale_x:.4f}:ih*{scale_y:.4f}"
+    # Browser preview uses object-contain first, then user transform.
+    # The renderer must do the same: fit the artwork into the frame before applying scale/position.
+    foreground_chain = (
+        f"scale={target_w}:{target_h}:force_original_aspect_ratio=decrease,"
+        f"scale=iw*{scale_x:.4f}:ih*{scale_y:.4f},setsar=1"
+    )
     if abs(rotation_degrees) < 0.01:
+        artwork_chain = f"{foreground_chain}[art]"
+    else:
+        artwork_chain = (
+            f"{foreground_chain},"
+            f"rotate={rotation_radians:.8f}:c=none:ow=rotw(iw):oh=roth(ih)[art]"
+        )
+
+    overlay_x = f"(W-w)/2+({pos_x:.4f}*w*0.5)"
+    overlay_y = f"(H-h)/2+({pos_y:.4f}*h*0.5)"
+
+    if aspect_matches_frame:
+        # True 16:9 art should fill a 16:9 video without black padding.
         filter_chain = (
-            f"{base_chain}[art];"
+            f"color=c={background_color}:s={target_w}x{target_h}:r={YOUTUBE_RENDER_FPS}[bg];"
+            f"[0:v]{artwork_chain};"
             f"[bg][art]overlay=x='{overlay_x}':y='{overlay_y}':shortest=1[composite]"
         )
     else:
+        # Non-16:9 art gets a cover-fit blurred background and a contain-fit foreground.
         filter_chain = (
-            f"{base_chain},"
-            f"rotate={rotation_radians:.8f}:c=none:ow=rotw(iw):oh=roth(ih)[art];"
+            f"[0:v]split=2[bgsrc][fgsrc];"
+            f"[bgsrc]scale={target_w}:{target_h}:force_original_aspect_ratio=increase,"
+            f"crop={target_w}:{target_h},gblur=sigma=24,eq=brightness=-0.08:saturation=1.12,"
+            f"setsar=1[bg];"
+            f"[fgsrc]{artwork_chain};"
             f"[bg][art]overlay=x='{overlay_x}':y='{overlay_y}':shortest=1[composite]"
         )
+
     if not payload.get("remove_watermark"):
         watermark_filter = _build_youtube_watermark_filter(
             target_w=target_w,
@@ -2304,7 +2355,6 @@ async def _render_youtube_video(
     ffmpeg_bin = _resolve_ffmpeg_binary()
     output_path = media_storage.create_temp_path(".mp4")
     visual_kind = _visual_kind_from_upload(image_upload)
-    filter_complex = _build_render_filter(payload)
 
     async with media_storage.local_path_for_processing(image_upload) as image_path:
         async with media_storage.local_path_for_processing(audio_upload) as audio_path:
@@ -2314,11 +2364,19 @@ async def _render_youtube_video(
             if audio_duration_seconds > YOUTUBE_MAX_AUDIO_DURATION_SECONDS:
                 max_minutes = round(YOUTUBE_MAX_AUDIO_DURATION_SECONDS / 60, 1)
                 raise HTTPException(status_code=400, detail=f"Audio is too long to render. Max supported duration is {max_minutes} minutes.")
+            source_image_w, source_image_h = await asyncio.to_thread(_probe_image_dimensions, image_path)
+            target_w, target_h = _resolve_youtube_render_dimensions(payload)
+            render_payload = {
+                **payload,
+                "source_image_w": source_image_w,
+                "source_image_h": source_image_h,
+            }
+            filter_complex = _build_render_filter(render_payload)
             command = [ffmpeg_bin, "-nostdin", "-y", "-loglevel", "error"]
             if visual_kind == "video":
                 command.extend(["-stream_loop", "-1", "-i", str(image_path)])
             else:
-                command.extend(["-loop", "1", "-framerate", "30", "-i", str(image_path)])
+                command.extend(["-loop", "1", "-framerate", YOUTUBE_RENDER_FPS, "-i", str(image_path)])
 
             command.extend(
                 [
@@ -2345,25 +2403,33 @@ async def _render_youtube_video(
                     "-threads",
                     "0",
                     "-r",
-                    "30",
+                    YOUTUBE_RENDER_FPS,
                     "-movflags",
                     "+faststart",
                     "-shortest",
-                    str(output_path),
                 ]
             )
 
             if visual_kind != "video":
                 command.extend(["-tune", "stillimage"])
+            command.append(str(output_path))
 
             logging.info(
-                "Starting FFmpeg render for youtube_upload audio=%s image=%s visual_kind=%s preset=%s output=%s",
+                "Starting FFmpeg render for youtube_upload audio=%s image=%s visual_kind=%s source_image=%sx%s audio_duration=%.2fs output=%sx%s fps=%s preset=%s crf=%s output=%s",
                 audio_upload.get("id"),
                 image_upload.get("id"),
                 visual_kind,
+                source_image_w or "unknown",
+                source_image_h or "unknown",
+                audio_duration_seconds,
+                target_w,
+                target_h,
+                YOUTUBE_RENDER_FPS,
                 YOUTUBE_RENDER_PRESET,
+                YOUTUBE_RENDER_CRF,
                 str(output_path),
             )
+            render_started_at = time.perf_counter()
             try:
                 completed = await asyncio.to_thread(
                     subprocess.run,
@@ -2389,6 +2455,7 @@ async def _render_youtube_video(
                     status_code=500,
                     detail=f"Video creation timed out after {YOUTUBE_RENDER_TIMEOUT_SECONDS} seconds.",
                 )
+            render_duration_seconds = time.perf_counter() - render_started_at
 
     if completed.returncode != 0:
         try:
@@ -2407,11 +2474,32 @@ async def _render_youtube_video(
             detail=f"Video creation failed: {(completed.stderr or completed.stdout or 'FFmpeg failed').strip()}",
         )
 
+    output_size_bytes = output_path.stat().st_size if output_path.exists() else 0
+    media_debug = {
+        "source_image_width": source_image_w,
+        "source_image_height": source_image_h,
+        "source_audio_duration_seconds": round(audio_duration_seconds, 3),
+        "generated_video_path": str(output_path),
+        "generated_video_size_bytes": int(output_size_bytes),
+        "output_width": target_w,
+        "output_height": target_h,
+        "fps": YOUTUBE_RENDER_FPS,
+        "video_codec": "libx264",
+        "audio_codec": "aac",
+        "preset": YOUTUBE_RENDER_PRESET,
+        "crf": YOUTUBE_RENDER_CRF,
+        "render_duration_seconds": round(render_duration_seconds, 3),
+        "layout_mode": "fill_frame" if source_image_w and source_image_h and abs((source_image_w / source_image_h) - (target_w / target_h)) <= 0.015 else "blurred_background_contain",
+    }
+    payload["_media_debug"] = media_debug
     logging.info(
-        "FFmpeg render finished for youtube_upload audio=%s image=%s output=%s",
+        "FFmpeg render finished for youtube_upload audio=%s image=%s output=%s size=%sB duration=%.3fs layout=%s",
         audio_upload.get("id"),
         image_upload.get("id"),
         str(output_path),
+        output_size_bytes,
+        render_duration_seconds,
+        media_debug["layout_mode"],
     )
 
     return output_path
@@ -2629,6 +2717,18 @@ async def _execute_youtube_upload_job(job: dict) -> dict:
             await heartbeat_task
         except asyncio.CancelledError:
             pass
+    media_debug = payload.get("_media_debug") if isinstance(payload.get("_media_debug"), dict) else {}
+    if media_debug:
+        await _update_upload_job(
+            job_id,
+            progress=65,
+            message="Video rendered. Starting YouTube upload...",
+            extra_updates={
+                "stage": "ffmpeg_render",
+                "last_heartbeat_at": _safe_iso_now(),
+                "media_debug": media_debug,
+            },
+        )
 
     try:
         await _assert_job_not_cancel_requested(job_id, stage="ffmpeg_render")
@@ -2658,6 +2758,7 @@ async def _execute_youtube_upload_job(job: dict) -> dict:
         )
 
         response = None
+        upload_started_at = time.perf_counter()
         upload_heartbeat_task = asyncio.create_task(
             _job_heartbeat_loop(
                 job_id,
@@ -2684,6 +2785,7 @@ async def _execute_youtube_upload_job(job: dict) -> dict:
                 await upload_heartbeat_task
             except asyncio.CancelledError:
                 pass
+        youtube_upload_duration_seconds = time.perf_counter() - upload_started_at
 
         video_id = str((response or {}).get("id") or "").strip()
         if not video_id:
@@ -2691,11 +2793,34 @@ async def _execute_youtube_upload_job(job: dict) -> dict:
 
         video_url = f"https://www.youtube.com/watch?v={video_id}"
         await consume_upload_credit(user_id)
+        media_debug = {
+            **media_debug,
+            "youtube_upload_duration_seconds": round(youtube_upload_duration_seconds, 3),
+            "upload_status": "succeeded",
+        }
+        await _update_upload_job(
+            job_id,
+            progress=96,
+            message="YouTube upload finished.",
+            extra_updates={
+                "stage": "cleanup",
+                "last_heartbeat_at": _safe_iso_now(),
+                "media_debug": media_debug,
+            },
+        )
+        logging.info(
+            "YouTube upload finished for job=%s video_id=%s upload_duration=%.3fs render_debug=%s",
+            job_id,
+            video_id,
+            youtube_upload_duration_seconds,
+            json.dumps(media_debug, default=str, ensure_ascii=True),
+        )
         return {
             "success": True,
             "video_id": video_id,
             "video_url": video_url,
             "message": "Video uploaded successfully!",
+            "media_debug": media_debug,
         }
     finally:
         try:
@@ -3736,7 +3861,7 @@ async def register(user_data: UserRegister, request: Request):
 async def login(user_data: UserLogin, request: Request):
     await _check_rate_limit_persistent(f"auth:login:{_client_ip(request)}", AUTH_RATE_LIMIT_ATTEMPTS, AUTH_RATE_LIMIT_WINDOW_SECONDS)
     # Find user
-    user_doc = await db.users.find_one({"username": user_data.username})
+    user_doc = await db.users.find_one({"username": user_data.username, "deleted": {"$ne": True}})
     if not user_doc:
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
@@ -3759,7 +3884,10 @@ async def login(user_data: UserLogin, request: Request):
 
 @api_router.get("/auth/me", response_model=User)
 async def get_me(current_user: dict = Depends(get_current_user)):
-    user_doc = await db.users.find_one({"id": current_user['id']}, {"_id": 0, "password_hash": 0})
+    user_doc = await db.users.find_one(
+        {"id": current_user['id'], "deleted": {"$ne": True}},
+        {"_id": 0, "password_hash": 0},
+    )
     if not user_doc:
         raise HTTPException(status_code=404, detail="User not found")
     
@@ -6438,7 +6566,7 @@ async def _build_spotlight_profiles(profile_docs: list[dict], growth_by_user: di
 
     user_ids = [doc.get("user_id") for doc in profile_docs if doc.get("user_id")]
     user_rows = await db.users.find(
-        {"id": {"$in": user_ids}},
+        {"id": {"$in": user_ids}, "deleted": {"$ne": True}},
         {"_id": 0, "id": 1, "username": 1, "stripe_subscription_id": 1, "subscription_status": 1},
     ).to_list(len(user_ids) or 1)
     user_by_id = {row.get("id"): row for row in user_rows}
@@ -6450,8 +6578,10 @@ async def _build_spotlight_profiles(profile_docs: list[dict], growth_by_user: di
 
     profiles: list[ProducerProfile] = []
     for profile_doc in profile_docs:
-        is_google_connected = profile_doc.get("user_id") in connected_user_ids
         user_doc = user_by_id.get(profile_doc.get("user_id"), {})
+        if not user_doc:
+            continue
+        is_google_connected = profile_doc.get("user_id") in connected_user_ids
         payload = dict(profile_doc)
         payload["username"] = (payload.get("username") or user_doc.get("username") or "producer").strip()
         payload["avatar_url"] = _normalize_spotlight_avatar_url(payload.get("avatar_url"))
@@ -6538,7 +6668,9 @@ async def _spotlight_google_status(user_id: str) -> tuple[bool, bool]:
 
 
 async def _profile_with_role_tag(profile_doc: dict) -> ProducerProfile:
-    user_doc = await db.users.find_one({"id": profile_doc.get("user_id")}) or {}
+    user_doc = await db.users.find_one({"id": profile_doc.get("user_id"), "deleted": {"$ne": True}}) or {}
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="Producer profile not found.")
     username = (profile_doc.get("username") or user_doc.get("username") or "").strip()
     google_connected, spotlight_eligible = await _spotlight_google_status(profile_doc.get("user_id"))
 
@@ -6759,6 +6891,19 @@ async def _compute_producer_stats_payload(user_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+async def _spotlight_payload_only_has_active_users(payload: dict[str, Any]) -> bool:
+    user_ids: set[str] = set()
+    for section in ("featured_producers", "trending_producers", "new_producers", "all_producers"):
+        for item in payload.get(section) or []:
+            user_id = str((item or {}).get("user_id") or "").strip()
+            if user_id:
+                user_ids.add(user_id)
+    if not user_ids:
+        return True
+    active_count = await db.users.count_documents({"id": {"$in": list(user_ids)}, "deleted": {"$ne": True}})
+    return active_count == len(user_ids)
+
+
 async def _refresh_spotlight_caches_once() -> dict[str, Any]:
     return await spotlight_service.refresh_caches_once()
 
@@ -6772,7 +6917,9 @@ async def get_producer_spotlight():
     """Get featured, trending, and new producers for the spotlight page."""
     cached = await db.spotlight_cache.find_one({"key": "global"}, {"_id": 0, "payload": 1})
     if cached and isinstance(cached.get("payload"), dict):
-        return SpotlightResponse(**cached["payload"])
+        if await _spotlight_payload_only_has_active_users(cached["payload"]):
+            return SpotlightResponse(**cached["payload"])
+        await db.spotlight_cache.delete_many({})
 
     payload = await _compute_spotlight_payload()
     return SpotlightResponse(**payload)
@@ -6806,6 +6953,9 @@ async def get_my_producer_profile(current_user: dict = Depends(get_current_user)
 @api_router.get("/producers/{user_id}/stats")
 async def get_producer_stats(user_id: str):
     """Detailed spotlight card stats for modal view."""
+    user_doc = await db.users.find_one({"id": user_id, "deleted": {"$ne": True}}, {"_id": 0, "id": 1})
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="Producer profile not found.")
     cached = await db.producer_stats_cache.find_one({"user_id": user_id}, {"_id": 0, "payload": 1})
     if cached and isinstance(cached.get("payload"), dict):
         return cached["payload"]
@@ -7290,6 +7440,175 @@ async def get_health_ready():
 
 
 # ============ Admin Routes ============
+async def _clear_user_spotlight_records(user_id: str) -> dict[str, int]:
+    profile_result = await db.producer_profiles.delete_many({"user_id": user_id})
+    stats_result = await db.producer_stats_cache.delete_many({"user_id": user_id})
+    cache_result = await db.spotlight_cache.delete_many({})
+    return {
+        "producer_profiles": int(getattr(profile_result, "deleted_count", 0) or 0),
+        "producer_stats_cache": int(getattr(stats_result, "deleted_count", 0) or 0),
+        "spotlight_cache": int(getattr(cache_result, "deleted_count", 0) or 0),
+    }
+
+
+def _serialize_admin_user(user_doc: dict, youtube_by_user: dict[str, dict]) -> dict:
+    user_id = user_doc.get("id")
+    youtube_doc = youtube_by_user.get(user_id) or {}
+    email = (
+        user_doc.get("email")
+        or user_doc.get("google_email")
+        or youtube_doc.get("google_email")
+        or ""
+    )
+    auth_provider = (
+        user_doc.get("auth_provider")
+        or user_doc.get("provider")
+        or ("password" if user_doc.get("password_hash") else "unknown")
+    )
+    deleted = bool(user_doc.get("deleted"))
+    return {
+        "id": user_id,
+        "username": user_doc.get("username") or "",
+        "email": email,
+        "created_at": user_doc.get("created_at"),
+        "auth_provider": auth_provider,
+        "status": "disabled" if deleted else "active",
+        "deleted": deleted,
+        "deleted_at": user_doc.get("deleted_at"),
+        "deleted_by": user_doc.get("deleted_by"),
+    }
+
+
+@api_router.get("/admin/users")
+async def get_admin_users(
+    search: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 25,
+    current_user: dict = Depends(get_current_user),
+):
+    if not _is_admin_user(current_user):
+        raise HTTPException(status_code=403, detail="Admin access only")
+
+    safe_page = max(1, int(page or 1))
+    safe_page_size = min(100, max(1, int(page_size or 25)))
+    filter_doc: dict[str, Any] = {}
+    safe_search = str(search or "").strip()
+    if safe_search:
+        pattern = {"$regex": re.escape(safe_search), "$options": "i"}
+        youtube_matches = await db.youtube_connections.find(
+            {"google_email": pattern},
+            {"_id": 0, "user_id": 1},
+        ).to_list(100)
+        youtube_user_ids = [row.get("user_id") for row in youtube_matches if row.get("user_id")]
+        filter_doc["$or"] = [
+            {"username": pattern},
+            {"email": pattern},
+            {"id": pattern},
+        ]
+        if youtube_user_ids:
+            filter_doc["$or"].append({"id": {"$in": youtube_user_ids}})
+
+    total = await db.users.count_documents(filter_doc)
+    users = await db.users.find(
+        filter_doc,
+        {
+            "_id": 0,
+            "id": 1,
+            "username": 1,
+            "email": 1,
+            "google_email": 1,
+            "created_at": 1,
+            "auth_provider": 1,
+            "provider": 1,
+            "password_hash": 1,
+            "deleted": 1,
+            "deleted_at": 1,
+            "deleted_by": 1,
+        },
+    ).sort("created_at", -1).skip((safe_page - 1) * safe_page_size).limit(safe_page_size).to_list(safe_page_size)
+
+    user_ids = [user.get("id") for user in users if user.get("id")]
+    youtube_rows = await db.youtube_connections.find(
+        {"user_id": {"$in": user_ids}},
+        {"_id": 0, "user_id": 1, "google_email": 1},
+    ).to_list(len(user_ids) or 1)
+    youtube_by_user = {row.get("user_id"): row for row in youtube_rows if row.get("user_id")}
+
+    return {
+        "success": True,
+        "users": [_serialize_admin_user(user, youtube_by_user) for user in users],
+        "pagination": {
+            "page": safe_page,
+            "page_size": safe_page_size,
+            "total": int(total),
+            "total_pages": max(1, (int(total) + safe_page_size - 1) // safe_page_size),
+        },
+    }
+
+
+@api_router.post("/admin/users/{user_id}/disable")
+async def disable_admin_user(user_id: str, current_user: dict = Depends(get_current_user)):
+    if not _is_admin_user(current_user):
+        raise HTTPException(status_code=403, detail="Admin access only")
+
+    safe_user_id = str(user_id or "").strip()
+    if not safe_user_id:
+        raise HTTPException(status_code=400, detail="User id is required.")
+    if safe_user_id == current_user.get("id"):
+        raise HTTPException(status_code=400, detail="Admins cannot disable their own account.")
+
+    existing_user = await db.users.find_one({"id": safe_user_id}, {"_id": 0, "id": 1, "username": 1, "deleted": 1})
+    if not existing_user:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    now = _safe_iso_now()
+    result = await db.users.update_one(
+        {"id": safe_user_id},
+        {
+            "$set": {
+                "deleted": True,
+                "deleted_at": now,
+                "deleted_by": current_user.get("id"),
+                "disabled_at": now,
+                "disabled_by": current_user.get("id"),
+                "updated_at": now,
+            }
+        },
+    )
+    cleared = await _clear_user_spotlight_records(safe_user_id)
+    return {
+        "success": True,
+        "user_id": safe_user_id,
+        "disabled": bool(getattr(result, "modified_count", 0) or existing_user.get("deleted")),
+        "cleared": cleared,
+    }
+
+
+@api_router.delete("/admin/users/{user_id}")
+async def delete_admin_user(user_id: str, current_user: dict = Depends(get_current_user)):
+    if not _is_admin_user(current_user):
+        raise HTTPException(status_code=403, detail="Admin access only")
+
+    safe_user_id = str(user_id or "").strip()
+    if not safe_user_id:
+        raise HTTPException(status_code=400, detail="User id is required.")
+    if safe_user_id == current_user.get("id"):
+        raise HTTPException(status_code=400, detail="Admins cannot delete their own account.")
+
+    existing_user = await db.users.find_one({"id": safe_user_id}, {"_id": 0, "id": 1, "username": 1})
+    if not existing_user:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    result = await db.users.delete_one({"id": safe_user_id})
+    cleared = await _clear_user_spotlight_records(safe_user_id)
+    return {
+        "success": True,
+        "user_id": safe_user_id,
+        "deleted": bool(getattr(result, "deleted_count", 0)),
+        "cleared": cleared,
+    }
+
+
 @api_router.get("/admin/costs")
 async def get_admin_costs(current_user: dict = Depends(get_current_user)):
     """Get estimated backend costs for the current month"""

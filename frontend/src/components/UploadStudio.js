@@ -14,6 +14,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Drawer, DrawerContent, DrawerTrigger, DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter } from "@/components/ui/drawer";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import AudioVisualizer from "@/lib/AudioVisualizer";
+import { getMediaAspectRatio, getPreviewImageTransform } from "@/lib/mediaLayout";
 import {
   AUDIO_EXTENSIONS,
   AUDIO_MIME_TYPES,
@@ -182,6 +183,13 @@ const UploadStudio = ({
     ? [formatUploadStage(activeUploadJob), activeUploadJob?.message].filter(Boolean).join(" — ")
     : "Rendering and uploading in the background.";
   const uploadJobElapsed = activeUploadJob ? formatUploadElapsed(activeUploadJob) : null;
+  const previewTargetRatio = getMediaAspectRatio(videoAspectRatio);
+  const previewUsesBlurredBackground = Boolean(
+    imagePreviewUrl &&
+    imageMeta.width &&
+    imageMeta.height &&
+    Math.abs(imageMeta.ratio - previewTargetRatio) > 0.015
+  );
 
   const buildUploadDescriptionWithMetadata = () => {
     return upsertBeatMetaInDescription(uploadDescriptionText, uploadBeatBpm, uploadBeatKey);
@@ -261,8 +269,7 @@ const UploadStudio = ({
       const mobile = window.innerWidth < 1024;
       setIsMobile(mobile);
 
-      const ratioMap = { "16:9": 1.777, "9:16": 0.5625, "1:1": 1, "4:5": 0.8 };
-      const targetRatio = ratioMap[videoAspectRatio] || 1.777;
+      const targetRatio = getMediaAspectRatio(videoAspectRatio);
 
       const maxWidth = mobile ? window.innerWidth : (window.innerWidth / 2) - 64;
       const maxHeight = mobile ? window.innerHeight : (window.innerHeight - 150);
@@ -1225,12 +1232,32 @@ const UploadStudio = ({
                onTouchStart={handleTouchStart}
                onClick={handlePreviewClick}
             >
+               {previewUsesBlurredBackground && (
+                  <img
+                    src={imagePreviewUrl}
+                    alt=""
+                    aria-hidden="true"
+                    className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none"
+                    style={{
+                      filter: "blur(18px)",
+                      transform: "scale(1.08)",
+                      opacity: backgroundColor === "white" ? 0.55 : 0.72,
+                    }}
+                  />
+               )}
                <div
                   className="absolute left-1/2 top-1/2"
                   style={{
                      width: "100%",
                      height: "100%",
-                     transform: `translate(calc(-50% + ${imagePosX * 50}%), calc(-50% + ${imagePosY * 50}%)) scale(${imageScaleX}, ${lockImageScale ? imageScaleX : imageScaleY}) rotate(${imageRotation}deg)`,
+                     transform: getPreviewImageTransform({
+                       imagePosX,
+                       imagePosY,
+                       imageScaleX,
+                       imageScaleY,
+                       lockImageScale,
+                       imageRotation,
+                     }),
                      transformOrigin: "center center",
                      transition: dragState || pinchState ? "none" : "transform 0.1s ease-out"
                   }}

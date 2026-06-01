@@ -3,7 +3,7 @@ import axios from "axios";
 import { API } from "@/App";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, RefreshCw, DollarSign, Server, Cpu, Activity, AlertTriangle, Gauge } from "lucide-react";
+import { ArrowLeft, RefreshCw, DollarSign, Server, Cpu, Activity, AlertTriangle, Gauge, Users } from "lucide-react";
 
 export default function AdminCosts() {
   const [costs, setCosts] = useState(null);
@@ -185,6 +185,10 @@ export default function AdminCosts() {
             <p className="text-slate-500 mt-1">Launch hardening controls, queue visibility, and monthly cost estimates.</p>
           </div>
           <div className="flex items-center gap-3">
+            <Button variant="outline" onClick={() => window.location.href = '/admin/users'} className="gap-2">
+              <Users className="h-4 w-4" />
+              Users
+            </Button>
             <Button variant="outline" onClick={() => window.location.href = '/dashboard'} className="gap-2">
               <ArrowLeft className="h-4 w-4" />
               Back

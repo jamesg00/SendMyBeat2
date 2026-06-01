@@ -38,9 +38,6 @@ const DescriptionsSection = ({
         <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
           <div>
             <h3 className="text-sm sm:text-base font-semibold">Saved Descriptions</h3>
-            <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
-              Reusable versions live here once you save them.
-            </p>
           </div>
           <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto xl:justify-end">
             <Button
@@ -76,7 +73,7 @@ const DescriptionsSection = ({
                 const words = desc.content.trim() ? desc.content.trim().split(/\s+/).filter(Boolean).length : 0;
 
                 return (
-                  <div key={desc.id} className="description-entry-card description-saved-card" data-testid={`desc-item-${desc.id}`}>
+                  <div key={desc.id} className="description-entry-card description-saved-card min-w-0 overflow-hidden" data-testid={`desc-item-${desc.id}`}>
                     <div className="flex items-start justify-between gap-3 mb-2">
                       <div className="min-w-0">
                         <h3 className="font-semibold truncate" style={{ color: "var(--text-primary)" }}>{desc.title}</h3>
@@ -139,7 +136,7 @@ const DescriptionsSection = ({
                       </div>
                     </div>
                     <div
-                      className="text-sm whitespace-pre-wrap cursor-pointer"
+                      className="description-saved-content text-sm whitespace-pre-wrap cursor-pointer"
                       style={{ color: "var(--text-primary)" }}
                       onClick={() => toggleDescriptionExpand(desc.id)}
                     >
@@ -175,9 +172,6 @@ const DescriptionsSection = ({
             <Save className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 flex-shrink-0" />
             <CardTitle className="text-base sm:text-lg md:text-xl">Template Descriptions</CardTitle>
           </div>
-          <CardDescription className="text-xs sm:text-sm max-w-2xl">
-            Pick a starter, shape the draft, save only the versions worth reusing.
-          </CardDescription>
           <div className="grid grid-cols-2 gap-2">
             <div className="description-studio-chip">
               <p className="description-studio-chip-value">{visibleDescriptionTemplates.length}</p>
@@ -195,9 +189,6 @@ const DescriptionsSection = ({
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
               <Label>Quick Starts</Label>
-              <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
-                Built-in starters. They do not save until you edit and keep one.
-              </p>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-xs description-inline-meta" style={{ color: "var(--text-secondary)" }}>

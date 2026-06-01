@@ -223,8 +223,9 @@ JOB_HEARTBEAT_INTERVAL_SECONDS=15
 ```env
 YOUTUBE_RENDER_TIMEOUT_SECONDS=240
 YOUTUBE_RENDER_PRESET=veryfast
-YOUTUBE_RENDER_CRF=28
-YOUTUBE_RENDER_MAX_HEIGHT=0
+YOUTUBE_RENDER_CRF=26
+YOUTUBE_RENDER_MAX_HEIGHT=720
+YOUTUBE_RENDER_FPS=30
 YOUTUBE_MAX_AUDIO_DURATION_SECONDS=900
 PRIORITIZE_YOUTUBE_UPLOAD_JOBS=true
 ```
@@ -283,7 +284,10 @@ Admin clear-job behavior:
 - If YouTube upload jobs fail during rendering:
   - confirm FFmpeg and ffprobe exist inside the backend container
   - confirm the uploaded audio duration is below `YOUTUBE_MAX_AUDIO_DURATION_SECONDS`
-  - tune `YOUTUBE_RENDER_PRESET`, `YOUTUBE_RENDER_CRF`, and optional `YOUTUBE_RENDER_MAX_HEIGHT`
+  - default render profile is fast 720p/30 FPS: `YOUTUBE_RENDER_PRESET=veryfast`, `YOUTUBE_RENDER_CRF=26`, `YOUTUBE_RENDER_MAX_HEIGHT=720`, `YOUTUBE_RENDER_FPS=30`
+  - use `YOUTUBE_RENDER_FPS=60` only when you intentionally want smoother output and accept slower renders
+  - tune `YOUTUBE_RENDER_PRESET`, `YOUTUBE_RENDER_CRF`, and optional `YOUTUBE_RENDER_MAX_HEIGHT` if you need more quality or lower CPU time
+  - run `python tools/check_youtube_render_sample.py` to verify a true 16:9 artwork renders as 1280x720 without black borders
 - If image search quality regresses:
   - restart backend after image-search logic changes
   - remember image-search behavior is query-sensitive between artist mode and project mode

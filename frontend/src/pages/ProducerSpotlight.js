@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogClose } from "@/components/ui/dialog";
-import { Trophy, Star, TrendingUp, Music, User, Globe, Youtube, Instagram, Twitter, ArrowLeft, Crown, BadgeCheck, Shield, Flame, Eye, BarChart3 } from "lucide-react";
+import { Trophy, Star, TrendingUp, Music, User, Globe, Youtube, ArrowLeft, Crown, BadgeCheck, Shield, Flame, Eye, BarChart3 } from "lucide-react";
 import { getAuthToken } from "@/lib/auth";
 import { toast } from "sonner";
 
@@ -100,9 +100,7 @@ export default function ProducerSpotlight() {
     bio: "",
     top_beat_url: "",
     tags: "",
-    youtube: "",
-    instagram: "",
-    twitter: ""
+    youtube: ""
   });
 
   useEffect(() => {
@@ -140,9 +138,7 @@ export default function ProducerSpotlight() {
         bio: response.data.bio || "",
         top_beat_url: response.data.top_beat_url || "",
         tags: response.data.tags ? response.data.tags.join(", ") : "",
-        youtube: response.data.social_links?.youtube || "",
-        instagram: response.data.social_links?.instagram || "",
-        twitter: response.data.social_links?.twitter || ""
+        youtube: response.data.social_links?.youtube || ""
       });
     } catch (error) {
       if (error?.response?.status === 401 || error?.response?.status === 403) {
@@ -204,9 +200,7 @@ export default function ProducerSpotlight() {
         top_beat_url: editForm.top_beat_url,
         tags: editForm.tags.split(",").map(t => t.trim()).filter(Boolean),
         social_links: {
-          youtube: editForm.youtube,
-          instagram: editForm.instagram,
-          twitter: editForm.twitter
+          youtube: editForm.youtube
         }
       };
 
@@ -420,16 +414,6 @@ export default function ProducerSpotlight() {
                   {producer.social_links?.youtube && (
                     <a href={producer.social_links.youtube} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-red-600/90 text-white transition-transform hover:scale-105">
                       <Youtube className="h-3.5 w-3.5" />
-                    </a>
-                  )}
-                  {producer.social_links?.instagram && (
-                    <a href={producer.social_links.instagram} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-pink-600/90 text-white transition-transform hover:scale-105">
-                      <Instagram className="h-3.5 w-3.5" />
-                    </a>
-                  )}
-                  {producer.social_links?.twitter && (
-                    <a href={producer.social_links.twitter} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-sky-500/90 text-white transition-transform hover:scale-105">
-                      <Twitter className="h-3.5 w-3.5" />
                     </a>
                   )}
                 </div>
@@ -692,29 +676,13 @@ export default function ProducerSpotlight() {
               </div>
               <div className="grid gap-2">
                 <label className="font-semibold">Social Links</label>
-                <div className="grid md:grid-cols-3 gap-2">
+                <div className="grid gap-2">
                   <div className="flex items-center gap-2">
                     <Youtube className="h-4 w-4 text-red-500" />
                     <Input
                       placeholder="YouTube URL"
                       value={editForm.youtube}
                       onChange={e => setEditForm({...editForm, youtube: e.target.value})}
-                    />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Instagram className="h-4 w-4 text-pink-500" />
-                    <Input
-                      placeholder="Instagram URL"
-                      value={editForm.instagram}
-                      onChange={e => setEditForm({...editForm, instagram: e.target.value})}
-                    />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Twitter className="h-4 w-4 text-blue-400" />
-                    <Input
-                      placeholder="Twitter URL"
-                      value={editForm.twitter}
-                      onChange={e => setEditForm({...editForm, twitter: e.target.value})}
                     />
                   </div>
                 </div>

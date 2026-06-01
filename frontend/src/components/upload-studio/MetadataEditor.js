@@ -1,10 +1,12 @@
-import React from "react";
+import React, { useState } from "react";
 import { Youtube } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const MetadataEditor = ({
   uploadTitle,
@@ -20,6 +22,7 @@ const MetadataEditor = ({
   privacyStatus,
   setPrivacyStatus
 }) => {
+  const [tagsPreviewOpen, setTagsPreviewOpen] = useState(false);
   const formatTagHistoryLabel = (query = "") => {
     if (!query) return "Untitled";
     return query.replace(/\([^)]*\)/g, "").trim() || query;
@@ -71,36 +74,18 @@ const MetadataEditor = ({
                       ))}
                    </SelectContent>
                 </Select>
-                <div
-                  className="rounded-md border px-3 py-2 text-xs"
-                  style={{ borderColor: "var(--border-color)", backgroundColor: "var(--bg-secondary)", color: "var(--text-secondary)" }}
-                >
-                  {selectedTagList.length > 0 ? (
-                    <>
-                      <div className="mb-2 font-medium" style={{ color: "var(--text-primary)" }}>
-                        {selectedTagList.length} tags selected
-                      </div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {selectedTagList.slice(0, 10).map((tag) => (
-                          <span
-                            key={tag}
-                            className="rounded-full border px-2 py-1 leading-none"
-                            style={{ borderColor: "var(--border-color)", color: "var(--text-primary)" }}
-                          >
-                            {tag}
-                          </span>
-                        ))}
-                        {selectedTagList.length > 10 && (
-                          <span className="rounded-full border px-2 py-1 leading-none" style={{ borderColor: "var(--border-color)" }}>
-                            +{selectedTagList.length - 10} more
-                          </span>
-                        )}
-                      </div>
-                    </>
-                  ) : (
-                    <span>No saved tags selected yet.</span>
-                  )}
-                </div>
+                {selectedTagList.length > 0 ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-full justify-between text-xs"
+                    onClick={() => setTagsPreviewOpen(true)}
+                  >
+                    <span className="truncate">{formatTagHistoryLabel(selectedTagEntry?.query)}</span>
+                    <span className="shrink-0">{selectedTagList.length} tags</span>
+                  </Button>
+                ) : null}
              </div>
           </div>
           {selectedDescriptionId && (
@@ -125,6 +110,27 @@ const MetadataEditor = ({
              </Select>
           </div>
        </CardContent>
+       <Dialog open={tagsPreviewOpen} onOpenChange={setTagsPreviewOpen}>
+          <DialogContent className="max-w-lg">
+             <DialogHeader>
+                <DialogTitle>{formatTagHistoryLabel(selectedTagEntry?.query)}</DialogTitle>
+                <DialogDescription>{selectedTagList.length} selected tags</DialogDescription>
+             </DialogHeader>
+             <div className="max-h-[50vh] overflow-y-auto rounded-md border p-3" style={{ borderColor: "var(--border-color)" }}>
+                <div className="flex flex-wrap gap-1.5">
+                   {selectedTagList.map((tag) => (
+                      <span
+                        key={tag}
+                        className="rounded-full border px-2 py-1 text-xs leading-none"
+                        style={{ borderColor: "var(--border-color)", color: "var(--text-primary)" }}
+                      >
+                        {tag}
+                      </span>
+                   ))}
+                </div>
+             </div>
+          </DialogContent>
+       </Dialog>
     </Card>
   );
 };

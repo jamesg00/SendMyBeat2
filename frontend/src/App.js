@@ -5,6 +5,7 @@ import axios from "axios";
 import LandingPage from "@/pages/LandingPage";
 import Dashboard from "@/pages/Dashboard";
 import AdminCosts from "@/pages/AdminCosts";
+import AdminUsers from "@/pages/AdminUsers";
 import ProducerSpotlight from "@/pages/ProducerSpotlight";
 import YouTubeCallback from "@/pages/YouTubeCallback";
 import PrivacyPolicy from "@/pages/PrivacyPolicy";
@@ -117,6 +118,16 @@ function App() {
               element={
                 isAuthenticated && isAdmin ? (
                   <AdminCosts />
+                ) : (
+                  <Navigate to={isAuthenticated ? "/dashboard" : "/"} replace />
+                )
+              }
+            />
+            <Route
+              path="/admin/users"
+              element={
+                isAuthenticated && isAdmin ? (
+                  <AdminUsers />
                 ) : (
                   <Navigate to={isAuthenticated ? "/dashboard" : "/"} replace />
                 )

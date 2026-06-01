@@ -409,11 +409,36 @@ class TestYouTubeUpload(unittest.IsolatedAsyncioTestCase):
             "image_rotation": 0.0,
             "background_color": "black",
             "remove_watermark": False,
+            "source_image_w": 1280,
+            "source_image_h": 720,
         }
 
         filter_chain = server._build_render_filter(payload)
 
         self.assertNotIn("rotate=", filter_chain)
+        self.assertIn("force_original_aspect_ratio=decrease", filter_chain)
+        self.assertNotIn("gblur", filter_chain)
+
+    def test_build_render_filter_uses_blurred_background_for_non_16_9(self):
+        payload = {
+            "target_w": 1280,
+            "target_h": 720,
+            "image_scale_x": 1.0,
+            "image_scale_y": 1.0,
+            "image_pos_x": 0.0,
+            "image_pos_y": 0.0,
+            "image_rotation": 0.0,
+            "background_color": "black",
+            "remove_watermark": True,
+            "source_image_w": 1000,
+            "source_image_h": 1000,
+        }
+
+        filter_chain = server._build_render_filter(payload)
+
+        self.assertIn("force_original_aspect_ratio=increase", filter_chain)
+        self.assertIn("gblur=sigma=24", filter_chain)
+        self.assertIn("force_original_aspect_ratio=decrease", filter_chain)
 
 
 if __name__ == "__main__":

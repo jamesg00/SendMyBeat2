@@ -41,10 +41,7 @@ const DESCRIPTION_TEMPLATES = [
 📩 Contact:
 Email:
 
-📱 Follow Me:
-Instagram:
-TikTok:
-Twitter:
+📺 YouTube:
 
 ⚠️ Usage:
 Free for non-profit use only.
@@ -66,9 +63,7 @@ Exclusive -
 
 📧 Business Email:
 
-📱 Social Media:
-Instagram:
-TikTok:
+📺 YouTube:
 
 🎧 More Beats / Playlist:
 
@@ -90,9 +85,7 @@ TikTok:
 📩 Custom Beat Contact:
 Email:
 
-📱 Follow:
-Instagram:
-TikTok:
+📺 YouTube:
 
 🏷️ Search Tags:
 #[artistname]typebeat
@@ -115,9 +108,7 @@ TikTok:
 
 📩 Email:
 
-📱 Socials:
-Instagram:
-TikTok:
+📺 YouTube:
 
 🎵 Beat Details:
 BPM:
@@ -141,10 +132,7 @@ Playlist:
 📧 Business Contact:
 Email:
 
-📱 Follow:
-Instagram:
-TikTok:
-Spotify:
+📺 YouTube:
 
 ⚠️ Rights:
 All rights reserved unless licensed.
@@ -675,7 +663,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
     setTagDebug(null);
     setShowTagDebug(false);
     setProgressActive(true);
-    setProgressMessage("Generating optimized tags using AI + YouTube + Spotify + SoundCloud signals...");
+    setProgressMessage("Generating optimized tags using AI + YouTube signals...");
     setProgressDuration(45000); // 45 seconds for tag generation
 
     try {
@@ -696,7 +684,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
       setSelectedTagHistoryIds([resultPayload.id]);
       setTagDebug(canViewTagDebug ? resultPayload?.debug || null : null);
       upsertTagHistoryItem(resultPayload);
-      toast.success(`Generated ${resultPayload.tags.length} tags! (AI + YouTube + Spotify + SoundCloud + custom tags)`);
+      toast.success(`Generated ${resultPayload.tags.length} tags!`);
 
       // Refresh credits after a short delay to ensure backend has updated
       setTimeout(() => {
@@ -1902,22 +1890,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
           </TabsContent>
         </Tabs>
 
-        <div className="terminal-streak-bar">
-          <div className="terminal-streak-meta">
-            <span className="terminal-streak-value">12</span>
-            <span className="terminal-streak-label">DAY STREAK</span>
-          </div>
-          <div className="terminal-streak-days" aria-hidden="true">
-            <span className="terminal-streak-day terminal-streak-day--done" />
-            <span className="terminal-streak-day terminal-streak-day--done" />
-            <span className="terminal-streak-day terminal-streak-day--done" />
-            <span className="terminal-streak-day terminal-streak-day--done" />
-            <span className="terminal-streak-day terminal-streak-day--done" />
-            <span className="terminal-streak-day terminal-streak-day--today" />
-            <span className="terminal-streak-day" />
-          </div>
-          <div className="terminal-streak-copy">GROW IN 120 · STATIC WORKSPACE BAR</div>
-        </div>
       </div>
 
       {/* Upgrade Modal */}

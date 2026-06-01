@@ -17,15 +17,6 @@ const Footer = () => {
             <Link to="/privacy-policy" className="app-footer-link transition-colors">Privacy Policy</Link>
             <Link to="/terms" className="app-footer-link transition-colors">Terms</Link>
             <a
-              href="https://instagram.com/dead.at.18"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="app-footer-link transition-colors"
-              aria-label="Instagram"
-            >
-              Instagram
-            </a>
-            <a
               href="https://www.youtube.com/@deadat1897"
               target="_blank"
               rel="noopener noreferrer"
@@ -33,15 +24,6 @@ const Footer = () => {
               aria-label="YouTube"
             >
               YouTube
-            </a>
-            <a
-              href="https://soundcloud.com/deadat18"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="app-footer-link transition-colors"
-              aria-label="SoundCloud"
-            >
-              SoundCloud
             </a>
           </nav>
 

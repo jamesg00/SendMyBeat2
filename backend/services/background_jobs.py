@@ -51,6 +51,7 @@ class BackgroundJobService:
             "cancel_requested": bool(doc.get("cancel_requested") or False),
             "error_code": doc.get("error_code"),
             "failed_stage": doc.get("failed_stage"),
+            "media_debug": doc.get("media_debug"),
             "result": doc.get("result"),
             "error": doc.get("error"),
             "created_at": doc.get("created_at"),

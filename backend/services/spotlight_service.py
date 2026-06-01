@@ -47,6 +47,19 @@ class SpotlightService:
             return {key: self.serialize_for_cache(item) for key, item in value.items()}
         return value
 
+    async def _filter_active_profiles(self, profile_docs: list[dict]) -> list[dict]:
+        if not profile_docs:
+            return []
+        user_ids = [doc.get("user_id") for doc in profile_docs if doc.get("user_id")]
+        if not user_ids:
+            return []
+        active_rows = await self.db.users.find(
+            {"id": {"$in": user_ids}, "deleted": {"$ne": True}},
+            {"_id": 0, "id": 1},
+        ).to_list(len(user_ids) or 1)
+        active_user_ids = {row.get("id") for row in active_rows if row.get("id")}
+        return [doc for doc in profile_docs if doc.get("user_id") in active_user_ids]
+
     async def compute_spotlight_payload(self) -> dict[str, Any]:
         all_profiles, growth_rows = await asyncio.gather(
             self.db.producer_profiles.find({}, self.spotlight_projection).to_list(5000),
@@ -55,6 +68,15 @@ class SpotlightService:
                 {"_id": 0, "user_id": 1, "current_streak": 1, "longest_streak": 1, "total_days_completed": 1},
             ).to_list(5000),
         )
+        if not all_profiles:
+            return self.spotlight_response_cls(
+                featured_producers=[],
+                trending_producers=[],
+                new_producers=[],
+                all_producers=[],
+            ).model_dump()
+
+        all_profiles = await self._filter_active_profiles(all_profiles)
         if not all_profiles:
             return self.spotlight_response_cls(
                 featured_producers=[],
@@ -109,7 +131,12 @@ class SpotlightService:
         if not profile:
             raise ValueError("Producer profile not found.")
 
-        user_doc = await self.db.users.find_one({"id": user_id}, {"_id": 0, "username": 1, "created_at": 1})
+        user_doc = await self.db.users.find_one(
+            {"id": user_id, "deleted": {"$ne": True}},
+            {"_id": 0, "username": 1, "created_at": 1},
+        )
+        if not user_doc:
+            raise ValueError("Producer profile not found.")
         growth = await self.db.growth_streaks.find_one({"user_id": user_id}, {"_id": 0})
         youtube = await self.db.youtube_connections.find_one({"user_id": user_id}, {"_id": 0, "name": 1, "google_email": 1, "connected_at": 1})
 
@@ -182,6 +209,7 @@ class SpotlightService:
     async def refresh_caches_once(self) -> dict[str, Any]:
         now = self.safe_iso_now()
         all_profiles = await self.db.producer_profiles.find({}, self.spotlight_projection).to_list(5000)
+        all_profiles = await self._filter_active_profiles(all_profiles)
         if all_profiles:
             growth_rows = await self.db.growth_streaks.find(
                 {},

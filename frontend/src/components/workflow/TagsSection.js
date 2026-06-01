@@ -51,11 +51,6 @@ const TagsSection = ({
             <h3 className="text-sm sm:text-base font-semibold" style={{ color: "var(--text-primary)" }}>
               Generated Tags {hasGeneratedTags ? `(${generatedTags.length})` : ""}
             </h3>
-            {!hasGeneratedTags && (
-              <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
-                Run a search to load your first tag set.
-              </p>
-            )}
           </div>
           <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto xl:justify-end">
             <Button
@@ -95,9 +90,7 @@ const TagsSection = ({
                   Copy All
                 </Button>
               </div>
-            ) : (
-              <span className="tags-inline-stat">Waiting for first run</span>
-            )}
+            ) : null}
           </div>
         </div>
       </div>
@@ -239,9 +232,6 @@ const TagsSection = ({
             <Sparkles className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 flex-shrink-0" />
             <CardTitle className="text-base sm:text-lg md:text-xl">Generate YouTube Tags</CardTitle>
           </div>
-          <CardDescription className="text-xs sm:text-sm max-w-2xl">
-            Run one query, get a usable tag set, refine only if needed.
-          </CardDescription>
           <div className="grid grid-cols-2 gap-2">
             <div className="tags-studio-chip">
               <p className="tags-studio-chip-value">{tagHistory.length}</p>
@@ -276,9 +266,6 @@ const TagsSection = ({
               <div>
                 <p className="text-sm sm:text-base font-semibold" style={{ color: "var(--text-primary)" }}>
                   Recent Runs
-                </p>
-                <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                  Reopen an older tag set without leaving the flow.
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2 lg:justify-end">

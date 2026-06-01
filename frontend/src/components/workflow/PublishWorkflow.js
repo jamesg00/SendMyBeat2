@@ -48,9 +48,6 @@ const PublishWorkflow = ({
             <span className="workflow-step-pill">2. Review Outputs</span>
             <span className="workflow-step-pill">3. Connect + Upload</span>
           </div>
-          <p className="workflow-section-copy">
-            Start with tags and descriptions first, then connect YouTube and move into the upload studio.
-          </p>
         </div>
 
         <div className="terminal-workflow-grid">
@@ -65,9 +62,6 @@ const PublishWorkflow = ({
         <div className="workflow-results-shell">
           <div className="workflow-results-shell__header">
             <p className="workflow-section-kicker">Review Outputs</p>
-            <p className="workflow-section-copy">
-              Expand generated tags or saved descriptions only when you need them, without changing the editor layout above.
-            </p>
           </div>
           <div className="workflow-results-shell__grid">
             <div className="workflow-results-shell__column">
