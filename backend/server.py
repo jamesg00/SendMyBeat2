@@ -2392,6 +2392,13 @@ async def _render_youtube_video(
     ffmpeg_bin = _resolve_ffmpeg_binary()
     output_path = media_storage.create_temp_path(".mp4")
     visual_kind = _visual_kind_from_upload(image_upload)
+    image_mime_type = str(image_upload.get("content_type") or image_upload.get("mime_type") or "").lower()
+    image_suffix = str(media_storage.get_suffix(image_upload) or "").lower()
+    is_gif_visual = image_mime_type == "image/gif" or image_suffix == ".gif"
+    if is_gif_visual:
+        # Treat GIF uploads as animated visuals so FFmpeg loops the source
+        # instead of freezing the first frame like a static image.
+        visual_kind = "video"
     blurred_bg_path: Path | None = None
 
     async with media_storage.local_path_for_processing(image_upload) as image_path:
@@ -2402,6 +2409,12 @@ async def _render_youtube_video(
             if audio_duration_seconds > YOUTUBE_MAX_AUDIO_DURATION_SECONDS:
                 max_minutes = round(YOUTUBE_MAX_AUDIO_DURATION_SECONDS / 60, 1)
                 raise HTTPException(status_code=400, detail=f"Audio is too long to render. Max supported duration is {max_minutes} minutes.")
+            image_mime_type = str(image_upload.get("content_type") or image_upload.get("mime_type") or "").strip().lower()
+            image_suffix = str(media_storage.get_suffix(image_upload) or "").strip().lower()
+            is_gif_visual = image_mime_type == "image/gif" or image_suffix == ".gif"
+            if is_gif_visual:
+                # Animated GIFs need the FFmpeg looping/video path instead of single-frame image mode.
+                visual_kind = "video"
             source_image_w, source_image_h = await asyncio.to_thread(_probe_image_dimensions, image_path)
             target_w, target_h = _resolve_youtube_render_dimensions(payload)
             aspect_matches_frame = bool(
@@ -2410,8 +2423,7 @@ async def _render_youtube_video(
                 and abs((source_image_w / float(source_image_h)) - (target_w / float(target_h))) <= 0.015
             )
             if (
-                visual_kind != "video"
-                and source_image_w
+                source_image_w
                 and source_image_h
                 and not aspect_matches_frame
                 and str(payload.get("background_mode") or payload.get("background_color") or "black") == "blurred"
@@ -2422,7 +2434,22 @@ async def _render_youtube_video(
                     target_w=target_w,
                     target_h=target_h,
                 )
-            render_payload = {
+    if (
+        not blurred_bg_path
+        and is_gif_visual
+        and source_image_w
+        and source_image_h
+        and not aspect_matches_frame
+        and str(payload.get("background_mode") or payload.get("background_color") or "black") == "blurred"
+    ):
+        blurred_bg_path = await asyncio.to_thread(
+            _create_preblurred_background_image,
+            image_path,
+            target_w=target_w,
+            target_h=target_h,
+        )
+
+    render_payload = {
                 **payload,
                 "source_image_w": source_image_w,
                 "source_image_h": source_image_h,
@@ -2432,8 +2459,13 @@ async def _render_youtube_video(
             command = [ffmpeg_bin, "-nostdin", "-y", "-loglevel", "error"]
             if blurred_bg_path:
                 command.extend(["-loop", "1", "-framerate", YOUTUBE_RENDER_FPS, "-i", str(blurred_bg_path)])
-                command.extend(["-loop", "1", "-framerate", YOUTUBE_RENDER_FPS, "-i", str(image_path)])
-                audio_input_index = 2
+                if visual_kind == "video":
+                    command.extend(["-stream_loop", "-1", "-i", str(image_path)])
+                else:
+                    command.extend(["-loop", "1", "-framerate", YOUTUBE_RENDER_FPS, "-i", str(image_path)])
+        audio_input_index = 2
+        if visual_kind == "video":
+            command[-6:] = ["-stream_loop", "-1", "-i", str(image_path)]
             elif visual_kind == "video":
                 command.extend(["-stream_loop", "-1", "-i", str(image_path)])
                 audio_input_index = 1
@@ -2569,7 +2601,8 @@ async def _render_youtube_video(
             if str(payload.get("background_mode") or payload.get("background_color") or "black") == "blurred"
             else "flat_background_contain"
         ),
-        "preblurred_background": bool(blurred_bg_path),
+            "preblurred_background": bool(blurred_bg_path),
+            "visual_kind": visual_kind,
     }
     payload["_media_debug"] = media_debug
     logging.info(

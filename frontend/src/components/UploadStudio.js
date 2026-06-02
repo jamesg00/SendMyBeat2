@@ -24,6 +24,9 @@ import {
   VISUALIZER_PRESETS
 } from "@/lib/constants";
 
+const SUPPORTED_IMAGE_EXTENSIONS = [...IMAGE_EXTENSIONS, ".gif"];
+const SUPPORTED_IMAGE_MIME_TYPES = [...IMAGE_MIME_TYPES, "image/gif"];
+
 
 import UploadDashboard from "./upload-studio/UploadDashboard";
 import MetadataEditor from "./upload-studio/MetadataEditor";
@@ -499,6 +502,17 @@ const UploadStudio = ({
 
   const handleAudioUpload = async (file) => {
     if (!file) return;
+    const safeName = String(file.name || "").toLowerCase();
+    const safeMime = String(file.type || "").toLowerCase();
+    const isGif = safeMime === "image/gif" || safeName.endsWith(".gif");
+    const isKnownImage =
+      isGif ||
+      IMAGE_MIME_TYPES.includes(safeMime) ||
+      IMAGE_EXTENSIONS.some((ext) => safeName.endsWith(String(ext).toLowerCase()));
+    if (!isKnownImage) {
+      toast.error("Upload a JPG, PNG, WEBP, or GIF image.");
+      return;
+    }
     if (!youtubeConnected) {
       toast.error("Connect your YouTube account before uploading audio.");
       onConnectYouTube?.();
@@ -531,6 +545,15 @@ const UploadStudio = ({
 
   const handleImageUpload = async (file) => {
     if (!file) return;
+    const safeFileName = String(file.name || "").toLowerCase();
+    const safeMimeType = String(file.type || "").toLowerCase();
+    const isSupportedImage =
+      SUPPORTED_IMAGE_MIME_TYPES.includes(safeMimeType) ||
+      SUPPORTED_IMAGE_EXTENSIONS.some((ext) => safeFileName.endsWith(ext));
+    if (!isSupportedImage) {
+      toast.error("Unsupported artwork type. Use JPG, PNG, WEBP, or GIF.");
+      return;
+    }
     if (!youtubeConnected) {
       toast.error("Connect your YouTube account before uploading artwork.");
       onConnectYouTube?.();
