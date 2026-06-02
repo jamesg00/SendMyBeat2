@@ -2450,30 +2450,28 @@ async def _render_youtube_video(
         )
 
     render_payload = {
-                **payload,
-                "source_image_w": source_image_w,
-                "source_image_h": source_image_h,
-                "blurred_background_input": bool(blurred_bg_path),
-            }
-            filter_complex = _build_render_filter(render_payload)
-            command = [ffmpeg_bin, "-nostdin", "-y", "-loglevel", "error"]
-            if blurred_bg_path:
-                command.extend(["-loop", "1", "-framerate", YOUTUBE_RENDER_FPS, "-i", str(blurred_bg_path)])
-                if visual_kind == "video":
-                    command.extend(["-stream_loop", "-1", "-i", str(image_path)])
-                else:
-                    command.extend(["-loop", "1", "-framerate", YOUTUBE_RENDER_FPS, "-i", str(image_path)])
-        audio_input_index = 2
+        **payload,
+        "source_image_w": source_image_w,
+        "source_image_h": source_image_h,
+        "blurred_background_input": bool(blurred_bg_path),
+    }
+    filter_complex = _build_render_filter(render_payload)
+    command = [ffmpeg_bin, "-nostdin", "-y", "-loglevel", "error"]
+    if blurred_bg_path:
+        command.extend(["-loop", "1", "-framerate", YOUTUBE_RENDER_FPS, "-i", str(blurred_bg_path)])
         if visual_kind == "video":
-            command[-6:] = ["-stream_loop", "-1", "-i", str(image_path)]
-            elif visual_kind == "video":
-                command.extend(["-stream_loop", "-1", "-i", str(image_path)])
-                audio_input_index = 1
-            else:
-                command.extend(["-loop", "1", "-framerate", YOUTUBE_RENDER_FPS, "-i", str(image_path)])
-                audio_input_index = 1
+            command.extend(["-stream_loop", "-1", "-i", str(image_path)])
+        else:
+            command.extend(["-loop", "1", "-framerate", YOUTUBE_RENDER_FPS, "-i", str(image_path)])
+        audio_input_index = 2
+    elif visual_kind == "video":
+        command.extend(["-stream_loop", "-1", "-i", str(image_path)])
+        audio_input_index = 1
+    else:
+        command.extend(["-loop", "1", "-framerate", YOUTUBE_RENDER_FPS, "-i", str(image_path)])
+        audio_input_index = 1
 
-            command.extend(
+    command.extend(
                 [
                     "-i",
                     str(audio_path),
@@ -2505,11 +2503,11 @@ async def _render_youtube_video(
                 ]
             )
 
-            if visual_kind != "video":
-                command.extend(["-tune", "stillimage"])
-            command.append(str(output_path))
+    if visual_kind != "video":
+        command.extend(["-tune", "stillimage"])
+    command.append(str(output_path))
 
-            logging.info(
+    logging.info(
                 "Starting FFmpeg render for youtube_upload audio=%s image=%s visual_kind=%s source_image=%sx%s audio_duration=%.2fs output=%sx%s fps=%s preset=%s crf=%s output=%s",
                 audio_upload.get("id"),
                 image_upload.get("id"),
@@ -2524,38 +2522,38 @@ async def _render_youtube_video(
                 YOUTUBE_RENDER_CRF,
                 str(output_path),
             )
-            render_started_at = time.perf_counter()
-            try:
-                completed = await asyncio.to_thread(
-                    subprocess.run,
-                    command,
-                    capture_output=True,
-                    text=True,
-                    timeout=YOUTUBE_RENDER_TIMEOUT_SECONDS,
-                )
-            except subprocess.TimeoutExpired as exc:
-                try:
-                    output_path.unlink(missing_ok=True)
-                except Exception:
-                    pass
-                try:
-                    if blurred_bg_path:
-                        blurred_bg_path.unlink(missing_ok=True)
-                except Exception:
-                    pass
-                stderr_preview = (exc.stderr or exc.stdout or "").strip()
-                logging.error(
-                    "FFmpeg render timed out after %ss for audio=%s image=%s stderr=%s",
-                    YOUTUBE_RENDER_TIMEOUT_SECONDS,
-                    audio_upload.get("id"),
-                    image_upload.get("id"),
-                    stderr_preview[:800],
-                )
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Video creation timed out after {YOUTUBE_RENDER_TIMEOUT_SECONDS} seconds.",
-                )
-            render_duration_seconds = time.perf_counter() - render_started_at
+    render_started_at = time.perf_counter()
+    try:
+        completed = await asyncio.to_thread(
+            subprocess.run,
+            command,
+            capture_output=True,
+            text=True,
+            timeout=YOUTUBE_RENDER_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as exc:
+        try:
+            output_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+        try:
+            if blurred_bg_path:
+                blurred_bg_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+        stderr_preview = (exc.stderr or exc.stdout or "").strip()
+        logging.error(
+            "FFmpeg render timed out after %ss for audio=%s image=%s stderr=%s",
+            YOUTUBE_RENDER_TIMEOUT_SECONDS,
+            audio_upload.get("id"),
+            image_upload.get("id"),
+            stderr_preview[:800],
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Video creation timed out after {YOUTUBE_RENDER_TIMEOUT_SECONDS} seconds.",
+        )
+    render_duration_seconds = time.perf_counter() - render_started_at
 
     if completed.returncode != 0:
         try:
