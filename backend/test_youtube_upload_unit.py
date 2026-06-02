@@ -419,7 +419,7 @@ class TestYouTubeUpload(unittest.IsolatedAsyncioTestCase):
         self.assertIn("force_original_aspect_ratio=decrease", filter_chain)
         self.assertNotIn("gblur", filter_chain)
 
-    def test_build_render_filter_uses_blurred_background_for_non_16_9(self):
+    def test_build_render_filter_uses_blurred_background_when_requested_without_preblur(self):
         payload = {
             "target_w": 1280,
             "target_h": 720,
@@ -432,6 +432,7 @@ class TestYouTubeUpload(unittest.IsolatedAsyncioTestCase):
             "remove_watermark": True,
             "source_image_w": 1000,
             "source_image_h": 1000,
+            "background_mode": "blurred",
         }
 
         filter_chain = server._build_render_filter(payload)
@@ -439,6 +440,51 @@ class TestYouTubeUpload(unittest.IsolatedAsyncioTestCase):
         self.assertIn("force_original_aspect_ratio=increase", filter_chain)
         self.assertIn("gblur=sigma=24", filter_chain)
         self.assertIn("force_original_aspect_ratio=decrease", filter_chain)
+
+    def test_build_render_filter_uses_flat_background_for_black_or_white_modes(self):
+        payload = {
+            "target_w": 1280,
+            "target_h": 720,
+            "image_scale_x": 1.0,
+            "image_scale_y": 1.0,
+            "image_pos_x": 0.0,
+            "image_pos_y": 0.0,
+            "image_rotation": 0.0,
+            "background_color": "black",
+            "background_mode": "black",
+            "remove_watermark": True,
+            "source_image_w": 1000,
+            "source_image_h": 1000,
+        }
+
+        filter_chain = server._build_render_filter(payload)
+
+        self.assertNotIn("gblur", filter_chain)
+        self.assertIn("color=c=black:s=1280x720", filter_chain)
+        self.assertIn("force_original_aspect_ratio=decrease", filter_chain)
+
+    def test_build_render_filter_skips_gblur_when_background_is_preblurred(self):
+        payload = {
+            "target_w": 1280,
+            "target_h": 720,
+            "image_scale_x": 1.0,
+            "image_scale_y": 1.0,
+            "image_pos_x": 0.0,
+            "image_pos_y": 0.0,
+            "image_rotation": 0.0,
+            "background_color": "black",
+            "remove_watermark": True,
+            "source_image_w": 1000,
+            "source_image_h": 1000,
+            "blurred_background_input": True,
+            "background_mode": "blurred",
+        }
+
+        filter_chain = server._build_render_filter(payload)
+
+        self.assertNotIn("gblur", filter_chain)
+        self.assertIn("[0:v]scale=1280:720,setsar=1[bg]", filter_chain)
+        self.assertIn("[1:v]scale=1280:720:force_original_aspect_ratio=decrease", filter_chain)
 
 
 if __name__ == "__main__":

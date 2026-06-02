@@ -185,6 +185,7 @@ const UploadStudio = ({
   const uploadJobElapsed = activeUploadJob ? formatUploadElapsed(activeUploadJob) : null;
   const previewTargetRatio = getMediaAspectRatio(videoAspectRatio);
   const previewUsesBlurredBackground = Boolean(
+    backgroundColor === "blurred" &&
     imagePreviewUrl &&
     imageMeta.width &&
     imageMeta.height &&

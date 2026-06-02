@@ -38,7 +38,7 @@ import socket
 import ipaddress
 from cryptography.fernet import Fernet, InvalidToken as FernetInvalidToken
 from io import BytesIO
-from PIL import Image, ImageOps
+from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 from zoneinfo import ZoneInfo
 try:
     from backend.storage import media_storage
@@ -2051,8 +2051,13 @@ def _normalize_upload_render_settings(
         raise HTTPException(status_code=400, detail="image_rotation must be between -180 and 180 degrees.")
 
     safe_background_color = (background_color or "black").strip().lower()
-    if safe_background_color not in ("black", "white"):
-        raise HTTPException(status_code=400, detail="background_color must be black or white.")
+    if safe_background_color in ("blur", "blurred", "image"):
+        safe_background_mode = "blurred"
+        safe_background_color = "black"
+    elif safe_background_color in ("black", "white"):
+        safe_background_mode = safe_background_color
+    else:
+        raise HTTPException(status_code=400, detail="background_color must be black, white, or blurred.")
 
     return {
         "aspect_ratio": safe_aspect_ratio,
@@ -2065,6 +2070,7 @@ def _normalize_upload_render_settings(
         "image_pos_y": float(image_pos_y),
         "image_rotation": float(image_rotation),
         "background_color": safe_background_color,
+        "background_mode": safe_background_mode,
     }
 
 
@@ -2241,6 +2247,30 @@ def _probe_image_dimensions(image_path: Path) -> tuple[int | None, int | None]:
         return None, None
 
 
+def _create_preblurred_background_image(image_path: Path, *, target_w: int, target_h: int) -> Path:
+    output_path = media_storage.create_temp_path(".jpg")
+    with Image.open(image_path) as image:
+        image = ImageOps.exif_transpose(image).convert("RGB")
+        image_ratio = image.width / float(image.height)
+        target_ratio = target_w / float(target_h)
+        if image_ratio > target_ratio:
+            next_h = target_h
+            next_w = max(target_w, int(round(image_ratio * target_h)))
+        else:
+            next_w = target_w
+            next_h = max(target_h, int(round(target_w / image_ratio)))
+
+        # Cover-fit the source, crop to the render frame, then blur once.
+        image = image.resize((next_w, next_h), Image.Resampling.LANCZOS)
+        left = max(0, (next_w - target_w) // 2)
+        top = max(0, (next_h - target_h) // 2)
+        image = image.crop((left, top, left + target_w, top + target_h))
+        image = image.filter(ImageFilter.GaussianBlur(radius=18))
+        image = ImageEnhance.Brightness(image).enhance(0.82)
+        image.save(output_path, "JPEG", quality=85, optimize=True)
+    return output_path
+
+
 def _resolve_youtube_render_dimensions(payload: dict[str, Any]) -> tuple[int, int]:
     target_w = int(payload["target_w"])
     target_h = int(payload["target_h"])
@@ -2259,6 +2289,7 @@ def _build_render_filter(payload: dict[str, Any]) -> str:
     pos_y = float(payload["image_pos_y"])
     rotation_degrees = float(payload["image_rotation"])
     background_color = str(payload["background_color"])
+    background_mode = str(payload.get("background_mode") or background_color or "black")
     rotation_radians = rotation_degrees * 3.141592653589793 / 180.0
     source_w = payload.get("source_image_w")
     source_h = payload.get("source_image_h")
@@ -2283,7 +2314,13 @@ def _build_render_filter(payload: dict[str, Any]) -> str:
     overlay_x = f"(W-w)/2+({pos_x:.4f}*w*0.5)"
     overlay_y = f"(H-h)/2+({pos_y:.4f}*h*0.5)"
 
-    if aspect_matches_frame:
+    if payload.get("blurred_background_input"):
+        filter_chain = (
+            f"[0:v]scale={target_w}:{target_h},setsar=1[bg];"
+            f"[1:v]{artwork_chain};"
+            f"[bg][art]overlay=x='{overlay_x}':y='{overlay_y}':shortest=1[composite]"
+        )
+    elif background_mode != "blurred" or aspect_matches_frame:
         # True 16:9 art should fill a 16:9 video without black padding.
         filter_chain = (
             f"color=c={background_color}:s={target_w}x{target_h}:r={YOUTUBE_RENDER_FPS}[bg];"
@@ -2355,6 +2392,7 @@ async def _render_youtube_video(
     ffmpeg_bin = _resolve_ffmpeg_binary()
     output_path = media_storage.create_temp_path(".mp4")
     visual_kind = _visual_kind_from_upload(image_upload)
+    blurred_bg_path: Path | None = None
 
     async with media_storage.local_path_for_processing(image_upload) as image_path:
         async with media_storage.local_path_for_processing(audio_upload) as audio_path:
@@ -2366,17 +2404,42 @@ async def _render_youtube_video(
                 raise HTTPException(status_code=400, detail=f"Audio is too long to render. Max supported duration is {max_minutes} minutes.")
             source_image_w, source_image_h = await asyncio.to_thread(_probe_image_dimensions, image_path)
             target_w, target_h = _resolve_youtube_render_dimensions(payload)
+            aspect_matches_frame = bool(
+                source_image_w
+                and source_image_h
+                and abs((source_image_w / float(source_image_h)) - (target_w / float(target_h))) <= 0.015
+            )
+            if (
+                visual_kind != "video"
+                and source_image_w
+                and source_image_h
+                and not aspect_matches_frame
+                and str(payload.get("background_mode") or payload.get("background_color") or "black") == "blurred"
+            ):
+                blurred_bg_path = await asyncio.to_thread(
+                    _create_preblurred_background_image,
+                    image_path,
+                    target_w=target_w,
+                    target_h=target_h,
+                )
             render_payload = {
                 **payload,
                 "source_image_w": source_image_w,
                 "source_image_h": source_image_h,
+                "blurred_background_input": bool(blurred_bg_path),
             }
             filter_complex = _build_render_filter(render_payload)
             command = [ffmpeg_bin, "-nostdin", "-y", "-loglevel", "error"]
-            if visual_kind == "video":
+            if blurred_bg_path:
+                command.extend(["-loop", "1", "-framerate", YOUTUBE_RENDER_FPS, "-i", str(blurred_bg_path)])
+                command.extend(["-loop", "1", "-framerate", YOUTUBE_RENDER_FPS, "-i", str(image_path)])
+                audio_input_index = 2
+            elif visual_kind == "video":
                 command.extend(["-stream_loop", "-1", "-i", str(image_path)])
+                audio_input_index = 1
             else:
                 command.extend(["-loop", "1", "-framerate", YOUTUBE_RENDER_FPS, "-i", str(image_path)])
+                audio_input_index = 1
 
             command.extend(
                 [
@@ -2387,7 +2450,7 @@ async def _render_youtube_video(
                     "-map",
                     "[vout]",
                     "-map",
-                    "1:a",
+                    f"{audio_input_index}:a",
                     "-c:v",
                     "libx264",
                     "-preset",
@@ -2443,6 +2506,11 @@ async def _render_youtube_video(
                     output_path.unlink(missing_ok=True)
                 except Exception:
                     pass
+                try:
+                    if blurred_bg_path:
+                        blurred_bg_path.unlink(missing_ok=True)
+                except Exception:
+                    pass
                 stderr_preview = (exc.stderr or exc.stdout or "").strip()
                 logging.error(
                     "FFmpeg render timed out after %ss for audio=%s image=%s stderr=%s",
@@ -2460,6 +2528,11 @@ async def _render_youtube_video(
     if completed.returncode != 0:
         try:
             output_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+        try:
+            if blurred_bg_path:
+                blurred_bg_path.unlink(missing_ok=True)
         except Exception:
             pass
         logging.error(
@@ -2489,7 +2562,14 @@ async def _render_youtube_video(
         "preset": YOUTUBE_RENDER_PRESET,
         "crf": YOUTUBE_RENDER_CRF,
         "render_duration_seconds": round(render_duration_seconds, 3),
-        "layout_mode": "fill_frame" if source_image_w and source_image_h and abs((source_image_w / source_image_h) - (target_w / target_h)) <= 0.015 else "blurred_background_contain",
+        "layout_mode": (
+            "fill_frame"
+            if source_image_w and source_image_h and abs((source_image_w / source_image_h) - (target_w / target_h)) <= 0.015
+            else "blurred_background_contain"
+            if str(payload.get("background_mode") or payload.get("background_color") or "black") == "blurred"
+            else "flat_background_contain"
+        ),
+        "preblurred_background": bool(blurred_bg_path),
     }
     payload["_media_debug"] = media_debug
     logging.info(
@@ -2501,6 +2581,11 @@ async def _render_youtube_video(
         render_duration_seconds,
         media_debug["layout_mode"],
     )
+    try:
+        if blurred_bg_path:
+            blurred_bg_path.unlink(missing_ok=True)
+    except Exception:
+        pass
 
     return output_path
 
