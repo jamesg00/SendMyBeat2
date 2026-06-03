@@ -432,7 +432,7 @@ class TestYouTubeUpload(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(server._visual_kind_from_upload(upload_doc), "video")
 
-    def test_build_render_filter_uses_blurred_background_when_requested_without_preblur(self):
+    def test_build_render_filter_avoids_gblur_when_blurred_without_preblur(self):
         payload = {
             "target_w": 1280,
             "target_h": 720,
@@ -450,8 +450,8 @@ class TestYouTubeUpload(unittest.IsolatedAsyncioTestCase):
 
         filter_chain = server._build_render_filter(payload)
 
-        self.assertIn("force_original_aspect_ratio=increase", filter_chain)
-        self.assertIn("gblur=sigma=24", filter_chain)
+        self.assertNotIn("gblur", filter_chain)
+        self.assertIn("color=c=black:s=1280x720", filter_chain)
         self.assertIn("force_original_aspect_ratio=decrease", filter_chain)
 
     def test_build_render_filter_uses_flat_background_for_black_or_white_modes(self):
@@ -475,6 +475,31 @@ class TestYouTubeUpload(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("gblur", filter_chain)
         self.assertIn("color=c=black:s=1280x720", filter_chain)
         self.assertIn("force_original_aspect_ratio=decrease", filter_chain)
+
+    def test_normalize_render_fps_allowed_values(self):
+        self.assertEqual(server._normalize_render_fps(2), 2)
+        self.assertEqual(server._normalize_render_fps(30), 30)
+        self.assertEqual(server._normalize_render_fps(60), 60)
+        with self.assertRaises(HTTPException):
+            server._normalize_render_fps(24)
+
+    def test_build_render_filter_uses_payload_render_fps(self):
+        payload = {
+            "target_w": 1280,
+            "target_h": 720,
+            "image_scale_x": 1.0,
+            "image_scale_y": 1.0,
+            "image_pos_x": 0.0,
+            "image_pos_y": 0.0,
+            "image_rotation": 0.0,
+            "background_color": "black",
+            "remove_watermark": True,
+            "source_image_w": 1280,
+            "source_image_h": 720,
+            "render_fps": 2,
+        }
+        filter_chain = server._build_render_filter(payload)
+        self.assertIn(":r=2[bg]", filter_chain)
 
     def test_build_render_filter_skips_gblur_when_background_is_preblurred(self):
         payload = {

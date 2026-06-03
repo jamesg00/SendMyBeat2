@@ -20,8 +20,9 @@ import {
   AUDIO_MIME_TYPES,
   IMAGE_EXTENSIONS,
   IMAGE_MIME_TYPES,
+  DEFAULT_VIDEO_RENDER_FPS,
   DEFAULT_VISUALIZER_SETTINGS,
-  VISUALIZER_PRESETS
+  VISUALIZER_PRESETS,
 } from "@/lib/constants";
 
 const SUPPORTED_IMAGE_EXTENSIONS = [...IMAGE_EXTENSIONS, ".gif"];
@@ -90,6 +91,7 @@ const UploadStudio = ({
 
   // Visual Settings
   const [videoAspectRatio, setVideoAspectRatio] = useState("16:9");
+  const [videoRenderFps, setVideoRenderFps] = useState(DEFAULT_VIDEO_RENDER_FPS);
   const [backgroundColor, setBackgroundColor] = useState("black");
   const [removeWatermark, setRemoveWatermark] = useState(false);
 
@@ -187,6 +189,10 @@ const UploadStudio = ({
     : "Rendering and uploading in the background.";
   const uploadJobElapsed = activeUploadJob ? formatUploadElapsed(activeUploadJob) : null;
   const previewTargetRatio = getMediaAspectRatio(videoAspectRatio);
+  const isAnimatedVisual = Boolean(
+    imageFile?.type === "image/gif" ||
+    (imageFile?.name || "").toLowerCase().endsWith(".gif")
+  );
   const previewUsesBlurredBackground = Boolean(
     backgroundColor === "blurred" &&
     imagePreviewUrl &&
@@ -858,6 +864,7 @@ const UploadStudio = ({
     formData.append('image_pos_y', String(imagePosY));
     formData.append('image_rotation', String(imageRotation));
     formData.append('background_color', backgroundColor);
+    formData.append('render_fps', String(videoRenderFps || DEFAULT_VIDEO_RENDER_FPS));
 
     try {
       const response = await axios.post(`${API}/youtube/upload`, formData, {
@@ -916,6 +923,7 @@ const UploadStudio = ({
     formData.append('image_pos_y', String(imagePosY));
     formData.append('image_rotation', String(imageRotation));
     formData.append('background_color', backgroundColor);
+    formData.append('render_fps', String(videoRenderFps || DEFAULT_VIDEO_RENDER_FPS));
 
     try {
       const response = await axios.post(`${API}/youtube/upload`, formData, {
@@ -981,10 +989,10 @@ const UploadStudio = ({
             window.open(nextJob.result.video_url, "_blank");
           }
           setCurrentUploadJob(null);
-        } else if (nextJob.status === "failed") {
+        } else if (nextJob.status === "failed" || nextJob.status === "cancelled") {
           window.clearInterval(interval);
           setUploadingToYouTube(false);
-          toast.error(nextJob.error || "YouTube upload failed.");
+          toast.error(nextJob.error || (nextJob.status === "cancelled" ? "YouTube upload was cancelled." : "YouTube upload failed."));
           setCurrentUploadJob(null);
         }
       } catch (error) {
@@ -1134,10 +1142,14 @@ const UploadStudio = ({
         <LayoutSettings
           videoAspectRatio={videoAspectRatio}
           setVideoAspectRatio={setVideoAspectRatio}
+          videoRenderFps={videoRenderFps}
+          setVideoRenderFps={setVideoRenderFps}
           backgroundColor={backgroundColor}
           setBackgroundColor={setBackgroundColor}
           removeWatermark={removeWatermark}
           setRemoveWatermark={setRemoveWatermark}
+          visualizerEnabled={visualizerEnabled}
+          isAnimatedVisual={isAnimatedVisual}
           subscriptionStatus={subscriptionStatus}
           onUpgrade={onUpgrade}
         />

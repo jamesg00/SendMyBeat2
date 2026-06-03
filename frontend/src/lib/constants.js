@@ -3,6 +3,27 @@ export const AUDIO_MIME_TYPES = ["audio/mpeg", "audio/wav", "audio/x-wav", "audi
 export const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif", ".heic", ".heif"];
 export const IMAGE_MIME_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif", "image/avif", "image/heic", "image/heif"];
 
+/** YouTube render frame rate presets (must match backend YOUTUBE_RENDER_FPS_ALLOWED). */
+export const VIDEO_RENDER_FPS_OPTIONS = [
+  {
+    value: "2",
+    label: "2 fps — Fastest",
+    description: "Best for static cover art. Uploads finish much faster (TunesToTube-style).",
+  },
+  {
+    value: "30",
+    label: "30 fps — Medium",
+    description: "Smoother motion for GIFs, overlays, or when you want a standard video feel.",
+  },
+  {
+    value: "60",
+    label: "60 fps — High quality",
+    description: "Slowest encode; use for smooth animation or future visualizer exports.",
+  },
+];
+
+export const DEFAULT_VIDEO_RENDER_FPS = "2";
+
 export const DEFAULT_VISUALIZER_SETTINGS = {
   bars: 128,
   intensity: 1,

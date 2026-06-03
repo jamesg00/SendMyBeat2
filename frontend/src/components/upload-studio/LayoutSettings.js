@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DEFAULT_VIDEO_RENDER_FPS, VIDEO_RENDER_FPS_OPTIONS } from "@/lib/constants";
 
 const LayoutSettings = ({
   videoAspectRatio,
@@ -9,6 +10,10 @@ const LayoutSettings = ({
   setBackgroundColor,
   removeWatermark,
   setRemoveWatermark,
+  videoRenderFps,
+  setVideoRenderFps,
+  visualizerEnabled = false,
+  isAnimatedVisual = false,
   subscriptionStatus,
   onUpgrade,
 }) => {
@@ -16,6 +21,9 @@ const LayoutSettings = ({
   const isBlackBg = backgroundColor === "black";
   const isWhiteBg = backgroundColor === "white";
   const isBlurredBg = backgroundColor === "blurred";
+  const selectedFpsOption =
+    VIDEO_RENDER_FPS_OPTIONS.find((option) => option.value === String(videoRenderFps)) ||
+    VIDEO_RENDER_FPS_OPTIONS[0];
 
   const handleWatermarkToggle = () => {
     if (!isPaid && !removeWatermark) {
@@ -40,6 +48,35 @@ const LayoutSettings = ({
             <SelectItem value="4:5">4:5 Portrait</SelectItem>
           </SelectContent>
         </Select>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Render frame rate</Label>
+        <Select value={String(videoRenderFps || DEFAULT_VIDEO_RENDER_FPS)} onValueChange={setVideoRenderFps}>
+          <SelectTrigger>
+            <SelectValue placeholder="Choose FPS" />
+          </SelectTrigger>
+          <SelectContent>
+            {VIDEO_RENDER_FPS_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          {selectedFpsOption.description}
+        </p>
+        {isAnimatedVisual && String(videoRenderFps) === "2" ? (
+          <p className="text-xs text-amber-600 dark:text-amber-400">
+            GIF or animated artwork at 2 fps will look choppy. Try 30 fps for smoother motion.
+          </p>
+        ) : null}
+        {visualizerEnabled && String(videoRenderFps) === "2" ? (
+          <p className="text-xs text-amber-600 dark:text-amber-400">
+            The live visualizer preview is separate from the uploaded video. For motion-heavy exports, use 30 or 60 fps.
+          </p>
+        ) : null}
       </div>
 
       <div className="space-y-2">

@@ -38,20 +38,61 @@ class TestBackgroundJobs(unittest.IsolatedAsyncioTestCase):
             now_factory=lambda: "2026-06-01T00:10:00+00:00",
         )
 
-    async def test_touch_heartbeat_updates_last_heartbeat(self):
+    async def test_touch_heartbeat_does_not_reset_stage_started_at(self):
         self.mock_db.upload_jobs.update_one = AsyncMock()
 
         await self.service.touch_heartbeat(
             "job_123",
-            stage="ffmpeg_render",
             message="Rendering video...",
             progress=40,
         )
 
         update_args = self.mock_db.upload_jobs.update_one.await_args
         self.assertEqual(update_args.args[0], {"id": "job_123"})
-        self.assertEqual(update_args.args[1]["$set"]["stage"], "ffmpeg_render")
-        self.assertEqual(update_args.args[1]["$set"]["last_heartbeat_at"], "2026-06-01T00:10:00+00:00")
+        payload = update_args.args[1]["$set"]
+        self.assertEqual(payload["last_heartbeat_at"], "2026-06-01T00:10:00+00:00")
+        self.assertNotIn("stage_started_at", payload)
+        self.assertNotIn("stage", payload)
+
+    async def test_update_job_sets_stage_started_at_when_stage_changes(self):
+        self.mock_db.upload_jobs.update_one = AsyncMock()
+
+        await self.service.update_job(
+            "job_123",
+            progress=40,
+            message="Rendering video...",
+            extra_updates={"stage": "ffmpeg_render", "last_heartbeat_at": "2026-06-01T00:10:00+00:00"},
+        )
+
+        payload = self.mock_db.upload_jobs.update_one.await_args.args[1]["$set"]
+        self.assertEqual(payload["stage"], "ffmpeg_render")
+        self.assertEqual(payload["stage_started_at"], "2026-06-01T00:10:00+00:00")
+
+    async def test_watchdog_fails_job_when_stage_exceeds_timeout_despite_fresh_heartbeat(self):
+        stale_job = {
+            "id": "job_stale",
+            "type": "youtube_upload",
+            "status": "processing",
+            "stage": "ffmpeg_render",
+            "attempts": 1,
+            "max_attempts": 2,
+            "updated_at": "2026-06-01T00:10:00+00:00",
+            "stage_started_at": "2026-06-01T00:00:00+00:00",
+            "last_heartbeat_at": "2026-06-01T00:09:59+00:00",
+        }
+        self.mock_db.upload_jobs.find.return_value = _FakeCursor([stale_job])
+        self.mock_db.upload_jobs.update_one = AsyncMock(return_value=SimpleNamespace(modified_count=1))
+
+        result = await self.service.run_watchdog_pass(
+            default_timeout_seconds=300,
+            stage_timeouts={"ffmpeg_render": 300},
+            worker_dead_seconds=1800,
+        )
+
+        self.assertEqual(result["failed"], 1)
+        update_args = self.mock_db.upload_jobs.update_one.await_args
+        self.assertEqual(update_args.args[1]["$set"]["status"], "failed")
+        self.assertEqual(update_args.args[1]["$set"]["error_code"], "JOB_TIMEOUT")
 
     async def test_watchdog_requeues_stale_processing_job(self):
         stale_job = {
@@ -61,6 +102,7 @@ class TestBackgroundJobs(unittest.IsolatedAsyncioTestCase):
             "attempts": 0,
             "max_attempts": 2,
             "updated_at": "2026-06-01T00:00:00+00:00",
+            "stage_started_at": "2026-06-01T00:00:00+00:00",
             "last_heartbeat_at": "2026-06-01T00:00:00+00:00",
         }
         self.mock_db.upload_jobs.find.return_value = _FakeCursor([stale_job])
@@ -77,6 +119,23 @@ class TestBackgroundJobs(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(update_args.args[1]["$set"]["status"], "queued")
         self.assertEqual(update_args.args[1]["$set"]["message"], "Requeued after timeout.")
         self.assertEqual(update_args.args[1]["$inc"]["attempts"], 1)
+
+    async def test_process_job_marks_processing_job_failed_when_handler_returns_without_terminal_status(self):
+        async def noop_handler(_job):
+            return None
+
+        self.service.set_handlers({"youtube_upload": noop_handler})
+        self.mock_db.upload_jobs.find_one = AsyncMock(
+            return_value={"id": "job_1", "status": "processing", "stage": "ffmpeg_render", "progress": 40}
+        )
+        self.mock_db.upload_jobs.update_one = AsyncMock(return_value=SimpleNamespace(modified_count=1))
+
+        await self.service.process_job({"id": "job_1", "type": "youtube_upload", "stage": "ffmpeg_render"})
+
+        update_args = self.mock_db.upload_jobs.update_one.await_args
+        self.assertEqual(update_args.args[0], {"id": "job_1", "status": "processing"})
+        self.assertEqual(update_args.args[1]["$set"]["status"], "failed")
+        self.assertEqual(update_args.args[1]["$set"]["error_code"], "WORKER_EXITED")
 
 
 if __name__ == "__main__":

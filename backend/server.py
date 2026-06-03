@@ -393,12 +393,14 @@ JOB_WATCHDOG_INTERVAL_SECONDS = int(os.environ.get("JOB_WATCHDOG_INTERVAL_SECOND
 JOB_STAGE_TIMEOUT_SECONDS = int(os.environ.get("JOB_STAGE_TIMEOUT_SECONDS", "300"))
 JOB_FFMPEG_STAGE_TIMEOUT_SECONDS = int(os.environ.get("JOB_FFMPEG_STAGE_TIMEOUT_SECONDS", "300"))
 JOB_YOUTUBE_STAGE_TIMEOUT_SECONDS = int(os.environ.get("JOB_YOUTUBE_STAGE_TIMEOUT_SECONDS", "900"))
+YOUTUBE_CHUNK_TIMEOUT_SECONDS = int(os.environ.get("YOUTUBE_CHUNK_TIMEOUT_SECONDS", "120"))
 UPLOAD_JOB_WORKER_ID = f"upload-worker-{uuid.uuid4().hex[:10]}"
 YOUTUBE_RENDER_TIMEOUT_SECONDS = int(os.environ.get("YOUTUBE_RENDER_TIMEOUT_SECONDS", "240"))
 YOUTUBE_RENDER_PRESET = str(os.environ.get("YOUTUBE_RENDER_PRESET", "veryfast")).strip() or "veryfast"
 YOUTUBE_RENDER_CRF = str(os.environ.get("YOUTUBE_RENDER_CRF", "26")).strip() or "26"
 YOUTUBE_RENDER_MAX_HEIGHT = int(os.environ.get("YOUTUBE_RENDER_MAX_HEIGHT", "720") or "720")
-YOUTUBE_RENDER_FPS = str(os.environ.get("YOUTUBE_RENDER_FPS", "30")).strip() or "30"
+YOUTUBE_RENDER_FPS_DEFAULT = int(os.environ.get("YOUTUBE_RENDER_FPS", "2") or "2")
+YOUTUBE_RENDER_FPS_ALLOWED = frozenset({2, 30, 60})
 YOUTUBE_MAX_AUDIO_DURATION_SECONDS = int(os.environ.get("YOUTUBE_MAX_AUDIO_DURATION_SECONDS", str(15 * 60)))
 PRIORITIZE_YOUTUBE_UPLOAD_JOBS = str(os.environ.get("PRIORITIZE_YOUTUBE_UPLOAD_JOBS", "true")).strip().lower() not in {"0", "false", "no"}
 SPOTLIGHT_REFRESH_INTERVAL_SECONDS = int(os.environ.get("SPOTLIGHT_REFRESH_INTERVAL_SECONDS", "1800"))
@@ -2022,6 +2024,21 @@ def _clean_youtube_tags(raw_tags: list[str] | None) -> list[str]:
     return tags
 
 
+def _normalize_render_fps(render_fps: Any) -> int:
+    try:
+        value = int(render_fps)
+    except (TypeError, ValueError):
+        value = YOUTUBE_RENDER_FPS_DEFAULT
+    if value not in YOUTUBE_RENDER_FPS_ALLOWED:
+        allowed = ", ".join(str(item) for item in sorted(YOUTUBE_RENDER_FPS_ALLOWED))
+        raise HTTPException(status_code=400, detail=f"render_fps must be one of: {allowed}.")
+    return value
+
+
+def _resolve_payload_render_fps(payload: dict[str, Any]) -> int:
+    return _normalize_render_fps(payload.get("render_fps", YOUTUBE_RENDER_FPS_DEFAULT))
+
+
 def _normalize_upload_render_settings(
     aspect_ratio: str,
     image_scale: float,
@@ -2031,6 +2048,7 @@ def _normalize_upload_render_settings(
     image_pos_y: float,
     image_rotation: float,
     background_color: str,
+    render_fps: Any = None,
 ) -> dict[str, Any]:
     safe_aspect_ratio = (aspect_ratio or "16:9").strip()
     aspect_map = {
@@ -2076,6 +2094,7 @@ def _normalize_upload_render_settings(
         "image_rotation": float(image_rotation),
         "background_color": safe_background_color,
         "background_mode": safe_background_mode,
+        "render_fps": _normalize_render_fps(render_fps),
     }
 
 
@@ -2115,13 +2134,11 @@ async def _get_background_job(job_id: str) -> dict | None:
 async def _touch_upload_job_heartbeat(
     job_id: str,
     *,
-    stage: str | None = None,
     message: str | None = None,
     progress: int | None = None,
 ) -> None:
     await background_job_service.touch_heartbeat(
         job_id,
-        stage=stage,
         message=message,
         progress=progress,
     )
@@ -2133,9 +2150,9 @@ async def _assert_job_not_cancel_requested(job_id: str, *, stage: str) -> None:
         raise JobCancelledError(f"Job was cancelled during stage '{stage}'.")
 
 
-async def _job_heartbeat_loop(job_id: str, *, stage: str, message: str, progress: int) -> None:
+async def _job_heartbeat_loop(job_id: str, *, message: str, progress: int) -> None:
     while True:
-        await _touch_upload_job_heartbeat(job_id, stage=stage, message=message, progress=progress)
+        await _touch_upload_job_heartbeat(job_id, message=message, progress=progress)
         await asyncio.sleep(HEARTBEAT_INTERVAL_SECONDS)
 
 
@@ -2149,6 +2166,7 @@ async def _job_watchdog_loop() -> None:
             result = await background_job_service.run_watchdog_pass(
                 default_timeout_seconds=JOB_STAGE_TIMEOUT_SECONDS,
                 stage_timeouts=stage_timeouts,
+                worker_dead_seconds=UPLOAD_JOB_STALE_AFTER_SECONDS,
             )
             if result.get("requeued") or result.get("failed"):
                 logger.warning(
@@ -2288,6 +2306,7 @@ def _resolve_youtube_render_dimensions(payload: dict[str, Any]) -> tuple[int, in
 
 def _build_render_filter(payload: dict[str, Any]) -> str:
     target_w, target_h = _resolve_youtube_render_dimensions(payload)
+    render_fps = _resolve_payload_render_fps(payload)
     scale_x = float(payload["image_scale_x"])
     scale_y = float(payload["image_scale_y"])
     pos_x = float(payload["image_pos_x"])
@@ -2328,18 +2347,15 @@ def _build_render_filter(payload: dict[str, Any]) -> str:
     elif background_mode != "blurred" or aspect_matches_frame:
         # True 16:9 art should fill a 16:9 video without black padding.
         filter_chain = (
-            f"color=c={background_color}:s={target_w}x{target_h}:r={YOUTUBE_RENDER_FPS}[bg];"
+            f"color=c={background_color}:s={target_w}x{target_h}:r={render_fps}[bg];"
             f"[0:v]{artwork_chain};"
             f"[bg][art]overlay=x='{overlay_x}':y='{overlay_y}':shortest=1[composite]"
         )
     else:
-        # Non-16:9 art gets a cover-fit blurred background and a contain-fit foreground.
+        # Pre-blur should have run in Python; never use per-frame gblur (can stall for minutes).
         filter_chain = (
-            f"[0:v]split=2[bgsrc][fgsrc];"
-            f"[bgsrc]scale={target_w}:{target_h}:force_original_aspect_ratio=increase,"
-            f"crop={target_w}:{target_h},gblur=sigma=24,eq=brightness=-0.08:saturation=1.12,"
-            f"setsar=1[bg];"
-            f"[fgsrc]{artwork_chain};"
+            f"color=c={background_color}:s={target_w}x{target_h}:r={render_fps}[bg];"
+            f"[0:v]{artwork_chain};"
             f"[bg][art]overlay=x='{overlay_x}':y='{overlay_y}':shortest=1[composite]"
         )
 
@@ -2443,20 +2459,22 @@ async def _render_youtube_video(
                     "blurred_background_input": bool(blurred_bg_path),
                 }
                 filter_complex = _build_render_filter(render_payload)
+                render_fps = _resolve_payload_render_fps(render_payload)
+                render_fps_value = str(render_fps)
 
                 command = [ffmpeg_bin, "-nostdin", "-y", "-loglevel", "error"]
                 if blurred_bg_path:
-                    command.extend(["-f", "image2", "-loop", "1", "-framerate", YOUTUBE_RENDER_FPS, "-i", str(blurred_bg_path)])
+                    command.extend(["-f", "image2", "-loop", "1", "-framerate", render_fps_value, "-i", str(blurred_bg_path)])
                     if visual_kind == "video":
                         command.extend(["-stream_loop", "-1", "-i", str(image_path)])
                     else:
-                        command.extend(["-f", "image2", "-loop", "1", "-framerate", YOUTUBE_RENDER_FPS, "-i", str(image_path)])
+                        command.extend(["-f", "image2", "-loop", "1", "-framerate", render_fps_value, "-i", str(image_path)])
                     audio_input_index = 2
                 elif visual_kind == "video":
                     command.extend(["-stream_loop", "-1", "-i", str(image_path)])
                     audio_input_index = 1
                 else:
-                    command.extend(["-f", "image2", "-loop", "1", "-framerate", YOUTUBE_RENDER_FPS, "-i", str(image_path)])
+                    command.extend(["-f", "image2", "-loop", "1", "-framerate", render_fps_value, "-i", str(image_path)])
                     audio_input_index = 1
 
                 command.extend(
@@ -2484,7 +2502,7 @@ async def _render_youtube_video(
                         "-threads",
                         "0",
                         "-r",
-                        YOUTUBE_RENDER_FPS,
+                        render_fps_value,
                         "-movflags",
                         "+faststart",
                         "-t",
@@ -2506,7 +2524,7 @@ async def _render_youtube_video(
                     audio_duration_seconds,
                     target_w,
                     target_h,
-                    YOUTUBE_RENDER_FPS,
+                    render_fps,
                     YOUTUBE_RENDER_PRESET,
                     YOUTUBE_RENDER_CRF,
                     audio_duration_seconds,
@@ -2567,7 +2585,8 @@ async def _render_youtube_video(
                     "generated_video_size_bytes": int(output_size_bytes),
                     "output_width": target_w,
                     "output_height": target_h,
-                    "fps": YOUTUBE_RENDER_FPS,
+                    "fps": render_fps,
+                    "render_fps": render_fps,
                     "video_codec": "libx264",
                     "audio_codec": "aac",
                     "preset": YOUTUBE_RENDER_PRESET,
@@ -2622,6 +2641,7 @@ async def _build_youtube_upload_job_payload(
     image_rotation: float,
     background_color: str,
     remove_watermark: bool,
+    render_fps: int = YOUTUBE_RENDER_FPS_DEFAULT,
 ) -> dict[str, Any]:
     safe_title = str(title or "").strip()
     if not safe_title:
@@ -2704,6 +2724,7 @@ async def _build_youtube_upload_job_payload(
         image_pos_y=image_pos_y,
         image_rotation=image_rotation,
         background_color=background_color,
+        render_fps=render_fps,
     )
 
     await ensure_has_upload_credit(current_user["id"])
@@ -2748,6 +2769,36 @@ async def _find_active_youtube_upload_job(*, current_user: dict) -> Optional[dic
         )
     except (AttributeError, TypeError):
         return None
+
+
+def _format_job_error_message(exc: BaseException) -> str:
+    if isinstance(exc, HTTPException):
+        detail = exc.detail
+        if isinstance(detail, dict):
+            message = detail.get("message") or detail.get("detail")
+            if message:
+                return str(message)
+            return json.dumps(detail, default=str, ensure_ascii=True)
+        return str(detail)
+    return str(exc) or exc.__class__.__name__
+
+
+async def _youtube_resumable_upload(request, *, on_chunk_status=None) -> dict:
+    """Run YouTube resumable upload with per-chunk and overall timeouts."""
+    response = None
+    upload_started_at = time.perf_counter()
+    while response is None:
+        if (time.perf_counter() - upload_started_at) > JOB_YOUTUBE_STAGE_TIMEOUT_SECONDS:
+            raise TimeoutError(
+                f"YouTube upload exceeded {JOB_YOUTUBE_STAGE_TIMEOUT_SECONDS} seconds."
+            )
+        status, response = await asyncio.wait_for(
+            asyncio.to_thread(request.next_chunk),
+            timeout=YOUTUBE_CHUNK_TIMEOUT_SECONDS,
+        )
+        if status is not None and on_chunk_status is not None:
+            await on_chunk_status(status)
+    return response
 
 
 async def _execute_youtube_upload_job(job: dict) -> dict:
@@ -2798,7 +2849,6 @@ async def _execute_youtube_upload_job(job: dict) -> dict:
     heartbeat_task = asyncio.create_task(
         _job_heartbeat_loop(
             job_id,
-            stage="ffmpeg_render",
             message="Rendering video...",
             progress=40,
         )
@@ -2815,18 +2865,23 @@ async def _execute_youtube_upload_job(job: dict) -> dict:
             await heartbeat_task
         except asyncio.CancelledError:
             pass
+
     media_debug = payload.get("_media_debug") if isinstance(payload.get("_media_debug"), dict) else {}
-    if media_debug:
-        await _update_upload_job(
-            job_id,
-            progress=65,
-            message="Video rendered. Starting YouTube upload...",
-            extra_updates={
-                "stage": "ffmpeg_render",
-                "last_heartbeat_at": _safe_iso_now(),
-                "media_debug": media_debug,
-            },
-        )
+    logging.info(
+        "FFmpeg render complete for job=%s; starting YouTube upload (media_debug=%s)",
+        job_id,
+        json.dumps(media_debug, default=str, ensure_ascii=True) if media_debug else "{}",
+    )
+    await _update_upload_job(
+        job_id,
+        progress=65,
+        message="Video rendered. Starting YouTube upload...",
+        extra_updates={
+            "stage": "ffmpeg_render",
+            "last_heartbeat_at": _safe_iso_now(),
+            **({"media_debug": media_debug} if media_debug else {}),
+        },
+    )
 
     try:
         await _assert_job_not_cancel_requested(job_id, stage="ffmpeg_render")
@@ -2836,6 +2891,7 @@ async def _execute_youtube_upload_job(job: dict) -> dict:
             message="Uploading to YouTube...",
             extra_updates={"stage": "youtube_upload", "last_heartbeat_at": _safe_iso_now()},
         )
+        logging.info("YouTube API upload started for job=%s title=%r", job_id, title)
         youtube = build("youtube", "v3", credentials=credentials)
         upload_body = {
             "snippet": {
@@ -2855,28 +2911,29 @@ async def _execute_youtube_upload_job(job: dict) -> dict:
             media_body=media_upload,
         )
 
-        response = None
         upload_started_at = time.perf_counter()
         upload_heartbeat_task = asyncio.create_task(
             _job_heartbeat_loop(
                 job_id,
-                stage="youtube_upload",
                 message="Uploading to YouTube...",
                 progress=70,
             )
         )
+        async def _report_youtube_chunk_progress(status) -> None:
+            await _assert_job_not_cancel_requested(job_id, stage="youtube_upload")
+            chunk_progress = 70 + int(float(status.progress()) * 25)
+            await _update_upload_job(
+                job_id,
+                progress=min(95, chunk_progress),
+                message="Uploading to YouTube...",
+                extra_updates={"last_heartbeat_at": _safe_iso_now()},
+            )
+
         try:
-            while response is None:
-                await _assert_job_not_cancel_requested(job_id, stage="youtube_upload")
-                status, response = await asyncio.to_thread(request.next_chunk)
-                if status is not None:
-                    progress = 70 + int(float(status.progress()) * 25)
-                    await _touch_upload_job_heartbeat(
-                        job_id,
-                        stage="youtube_upload",
-                        message="Uploading to YouTube...",
-                        progress=min(95, progress),
-                    )
+            response = await _youtube_resumable_upload(
+                request,
+                on_chunk_status=_report_youtube_chunk_progress,
+            )
         finally:
             upload_heartbeat_task.cancel()
             try:
@@ -2963,14 +3020,22 @@ async def _process_youtube_upload_job(job: dict) -> None:
             },
         )
     except Exception as exc:
-        error_message = str(exc)
-        logging.error(f"YouTube upload job {job_id} failed: {error_message}")
+        error_message = _format_job_error_message(exc)
+        logging.exception("YouTube upload job %s failed: %s", job_id, error_message)
         failed_stage = str((await _get_background_job(job_id) or {}).get("stage") or "unknown")
-        error_code = None
-        if "timed out" in error_message.lower():
-            error_code = "FFMPEG_TIMEOUT"
+        error_code = "YOUTUBE_UPLOAD_FAILED"
+        lowered = error_message.lower()
+        if isinstance(exc, TimeoutError) or "timed out" in lowered:
+            if failed_stage == "youtube_upload" or "youtube upload exceeded" in lowered:
+                error_code = "YOUTUBE_UPLOAD_TIMEOUT"
+                failed_stage = "youtube_upload"
+            else:
+                error_code = "FFMPEG_TIMEOUT"
+                failed_stage = "ffmpeg_render"
+        elif "ffmpeg" in lowered or failed_stage == "ffmpeg_render":
+            error_code = "FFMPEG_RENDER_FAILED"
             failed_stage = "ffmpeg_render"
-        elif "youtube" in error_message.lower():
+        elif "youtube" in lowered or failed_stage == "youtube_upload":
             error_code = "YOUTUBE_UPLOAD"
         await _update_upload_job(
             job_id,
@@ -7441,6 +7506,7 @@ async def upload_to_youtube(
     image_rotation: float = Form(0.0),
     background_color: str = Form("black"),
     remove_watermark: bool = Form(False),
+    render_fps: int = Form(YOUTUBE_RENDER_FPS_DEFAULT),
     current_user: dict = Depends(get_current_user)
 ):
     """Create a persisted YouTube upload job and return immediately."""
@@ -7479,6 +7545,7 @@ async def upload_to_youtube(
             image_rotation=image_rotation,
             background_color=background_color,
             remove_watermark=remove_watermark,
+            render_fps=render_fps,
         )
         job_doc = await _create_youtube_upload_job(current_user=current_user, payload=payload)
         return {
