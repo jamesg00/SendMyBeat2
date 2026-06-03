@@ -2446,17 +2446,17 @@ async def _render_youtube_video(
 
                 command = [ffmpeg_bin, "-nostdin", "-y", "-loglevel", "error"]
                 if blurred_bg_path:
-                    command.extend(["-loop", "1", "-framerate", YOUTUBE_RENDER_FPS, "-i", str(blurred_bg_path)])
+                    command.extend(["-f", "image2", "-loop", "1", "-framerate", YOUTUBE_RENDER_FPS, "-i", str(blurred_bg_path)])
                     if visual_kind == "video":
                         command.extend(["-stream_loop", "-1", "-i", str(image_path)])
                     else:
-                        command.extend(["-loop", "1", "-framerate", YOUTUBE_RENDER_FPS, "-i", str(image_path)])
+                        command.extend(["-f", "image2", "-loop", "1", "-framerate", YOUTUBE_RENDER_FPS, "-i", str(image_path)])
                     audio_input_index = 2
                 elif visual_kind == "video":
                     command.extend(["-stream_loop", "-1", "-i", str(image_path)])
                     audio_input_index = 1
                 else:
-                    command.extend(["-loop", "1", "-framerate", YOUTUBE_RENDER_FPS, "-i", str(image_path)])
+                    command.extend(["-f", "image2", "-loop", "1", "-framerate", YOUTUBE_RENDER_FPS, "-i", str(image_path)])
                     audio_input_index = 1
 
                 command.extend(
