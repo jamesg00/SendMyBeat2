@@ -635,10 +635,13 @@ def _store_uploaded_image_bytes(
 def _visual_kind_from_upload(upload_doc: dict | None) -> str:
     if not upload_doc:
         return "image"
+    content_type = str(upload_doc.get("content_type") or upload_doc.get("mime_type") or "").strip().lower()
     explicit = str(upload_doc.get("media_kind") or "").strip().lower()
+    path_suffix = media_storage.get_suffix(upload_doc)
+    if content_type == "image/gif" or path_suffix == ".gif":
+        return "video"
     if explicit in {"image", "video"}:
         return explicit
-    path_suffix = media_storage.get_suffix(upload_doc)
     return "video" if path_suffix in {".webm", ".mp4", ".mov", ".m4v"} else "image"
 
 
@@ -671,6 +674,8 @@ def _sniff_visual_format(sample: bytes) -> str | None:
         return ".png"
     if blob[:4] == b"RIFF" and blob[8:12] == b"WEBP":
         return ".webp"
+    if blob.startswith(b"GIF87a") or blob.startswith(b"GIF89a"):
+        return ".gif"
     if blob[:4] == b"\x1a\x45\xdf\xa3":
         return ".webm"
     if len(blob) >= 12 and blob[4:8] == b"ftyp":
@@ -2392,233 +2397,207 @@ async def _render_youtube_video(
     ffmpeg_bin = _resolve_ffmpeg_binary()
     output_path = media_storage.create_temp_path(".mp4")
     visual_kind = _visual_kind_from_upload(image_upload)
-    image_mime_type = str(image_upload.get("content_type") or image_upload.get("mime_type") or "").lower()
-    image_suffix = str(media_storage.get_suffix(image_upload) or "").lower()
+    image_mime_type = str(image_upload.get("content_type") or image_upload.get("mime_type") or "").strip().lower()
+    image_suffix = str(media_storage.get_suffix(image_upload) or "").strip().lower()
     is_gif_visual = image_mime_type == "image/gif" or image_suffix == ".gif"
     if is_gif_visual:
-        # Treat GIF uploads as animated visuals so FFmpeg loops the source
-        # instead of freezing the first frame like a static image.
+        # Animated GIFs use the video input path so FFmpeg loops them for the full beat.
         visual_kind = "video"
     blurred_bg_path: Path | None = None
 
-    async with media_storage.local_path_for_processing(image_upload) as image_path:
-        async with media_storage.local_path_for_processing(audio_upload) as audio_path:
-            if not image_path.exists() or not audio_path.exists():
-                raise HTTPException(status_code=400, detail="Referenced upload files are missing on disk.")
-            audio_duration_seconds = await asyncio.to_thread(_probe_audio_duration_seconds, audio_path)
-            if audio_duration_seconds > YOUTUBE_MAX_AUDIO_DURATION_SECONDS:
-                max_minutes = round(YOUTUBE_MAX_AUDIO_DURATION_SECONDS / 60, 1)
-                raise HTTPException(status_code=400, detail=f"Audio is too long to render. Max supported duration is {max_minutes} minutes.")
-            image_mime_type = str(image_upload.get("content_type") or image_upload.get("mime_type") or "").strip().lower()
-            image_suffix = str(media_storage.get_suffix(image_upload) or "").strip().lower()
-            is_gif_visual = image_mime_type == "image/gif" or image_suffix == ".gif"
-            if is_gif_visual:
-                # Animated GIFs need the FFmpeg looping/video path instead of single-frame image mode.
-                visual_kind = "video"
-            source_image_w, source_image_h = await asyncio.to_thread(_probe_image_dimensions, image_path)
-            target_w, target_h = _resolve_youtube_render_dimensions(payload)
-            aspect_matches_frame = bool(
-                source_image_w
-                and source_image_h
-                and abs((source_image_w / float(source_image_h)) - (target_w / float(target_h))) <= 0.015
-            )
-            if (
-                source_image_w
-                and source_image_h
-                and not aspect_matches_frame
-                and str(payload.get("background_mode") or payload.get("background_color") or "black") == "blurred"
-            ):
-                blurred_bg_path = await asyncio.to_thread(
-                    _create_preblurred_background_image,
-                    image_path,
-                    target_w=target_w,
-                    target_h=target_h,
+    try:
+        async with media_storage.local_path_for_processing(image_upload) as image_path:
+            async with media_storage.local_path_for_processing(audio_upload) as audio_path:
+                if not image_path.exists() or not audio_path.exists():
+                    raise HTTPException(status_code=400, detail="Referenced upload files are missing on disk.")
+
+                audio_duration_seconds = await asyncio.to_thread(_probe_audio_duration_seconds, audio_path)
+                if audio_duration_seconds > YOUTUBE_MAX_AUDIO_DURATION_SECONDS:
+                    max_minutes = round(YOUTUBE_MAX_AUDIO_DURATION_SECONDS / 60, 1)
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Audio is too long to render. Max supported duration is {max_minutes} minutes.",
+                    )
+
+                source_image_w, source_image_h = await asyncio.to_thread(_probe_image_dimensions, image_path)
+                target_w, target_h = _resolve_youtube_render_dimensions(payload)
+                aspect_matches_frame = bool(
+                    source_image_w
+                    and source_image_h
+                    and abs((source_image_w / float(source_image_h)) - (target_w / float(target_h))) <= 0.015
                 )
-    if (
-        not blurred_bg_path
-        and is_gif_visual
-        and source_image_w
-        and source_image_h
-        and not aspect_matches_frame
-        and str(payload.get("background_mode") or payload.get("background_color") or "black") == "blurred"
-    ):
-        blurred_bg_path = await asyncio.to_thread(
-            _create_preblurred_background_image,
-            image_path,
-            target_w=target_w,
-            target_h=target_h,
-        )
+                background_mode = str(payload.get("background_mode") or payload.get("background_color") or "black")
 
-    render_payload = {
-        **payload,
-        "source_image_w": source_image_w,
-        "source_image_h": source_image_h,
-        "blurred_background_input": bool(blurred_bg_path),
-    }
-    filter_complex = _build_render_filter(render_payload)
-    command = [ffmpeg_bin, "-nostdin", "-y", "-loglevel", "error"]
-    if blurred_bg_path:
-        command.extend(["-loop", "1", "-framerate", YOUTUBE_RENDER_FPS, "-i", str(blurred_bg_path)])
-        if visual_kind == "video":
-            command.extend(["-stream_loop", "-1", "-i", str(image_path)])
-        else:
-            command.extend(["-loop", "1", "-framerate", YOUTUBE_RENDER_FPS, "-i", str(image_path)])
-        audio_input_index = 2
-    elif visual_kind == "video":
-        command.extend(["-stream_loop", "-1", "-i", str(image_path)])
-        audio_input_index = 1
-    else:
-        command.extend(["-loop", "1", "-framerate", YOUTUBE_RENDER_FPS, "-i", str(image_path)])
-        audio_input_index = 1
+                if source_image_w and source_image_h and not aspect_matches_frame and background_mode == "blurred":
+                    blurred_bg_path = await asyncio.to_thread(
+                        _create_preblurred_background_image,
+                        image_path,
+                        target_w=target_w,
+                        target_h=target_h,
+                    )
 
-    command.extend(
-                [
-                    "-i",
-                    str(audio_path),
-                    "-filter_complex",
-                    filter_complex,
-                    "-map",
-                    "[vout]",
-                    "-map",
-                    f"{audio_input_index}:a",
-                    "-c:v",
-                    "libx264",
-                    "-preset",
-                    YOUTUBE_RENDER_PRESET,
-                    "-crf",
-                    YOUTUBE_RENDER_CRF,
-                    "-pix_fmt",
-                    "yuv420p",
-                    "-c:a",
-                    "aac",
-                    "-b:a",
-                    "192k",
-                    "-threads",
-                    "0",
-                    "-r",
+                render_payload = {
+                    **payload,
+                    "source_image_w": source_image_w,
+                    "source_image_h": source_image_h,
+                    "blurred_background_input": bool(blurred_bg_path),
+                }
+                filter_complex = _build_render_filter(render_payload)
+
+                command = [ffmpeg_bin, "-nostdin", "-y", "-loglevel", "error"]
+                if blurred_bg_path:
+                    command.extend(["-loop", "1", "-framerate", YOUTUBE_RENDER_FPS, "-i", str(blurred_bg_path)])
+                    if visual_kind == "video":
+                        command.extend(["-stream_loop", "-1", "-i", str(image_path)])
+                    else:
+                        command.extend(["-loop", "1", "-framerate", YOUTUBE_RENDER_FPS, "-i", str(image_path)])
+                    audio_input_index = 2
+                elif visual_kind == "video":
+                    command.extend(["-stream_loop", "-1", "-i", str(image_path)])
+                    audio_input_index = 1
+                else:
+                    command.extend(["-loop", "1", "-framerate", YOUTUBE_RENDER_FPS, "-i", str(image_path)])
+                    audio_input_index = 1
+
+                command.extend(
+                    [
+                        "-i",
+                        str(audio_path),
+                        "-filter_complex",
+                        filter_complex,
+                        "-map",
+                        "[vout]",
+                        "-map",
+                        f"{audio_input_index}:a",
+                        "-c:v",
+                        "libx264",
+                        "-preset",
+                        YOUTUBE_RENDER_PRESET,
+                        "-crf",
+                        YOUTUBE_RENDER_CRF,
+                        "-pix_fmt",
+                        "yuv420p",
+                        "-c:a",
+                        "aac",
+                        "-b:a",
+                        "192k",
+                        "-threads",
+                        "0",
+                        "-r",
+                        YOUTUBE_RENDER_FPS,
+                        "-movflags",
+                        "+faststart",
+                        "-shortest",
+                    ]
+                )
+                if visual_kind != "video":
+                    command.extend(["-tune", "stillimage"])
+                command.append(str(output_path))
+
+                logging.info(
+                    "Starting FFmpeg render for youtube_upload audio=%s image=%s visual_kind=%s source_image=%sx%s audio_duration=%.2fs output=%sx%s fps=%s preset=%s crf=%s output=%s",
+                    audio_upload.get("id"),
+                    image_upload.get("id"),
+                    visual_kind,
+                    source_image_w or "unknown",
+                    source_image_h or "unknown",
+                    audio_duration_seconds,
+                    target_w,
+                    target_h,
                     YOUTUBE_RENDER_FPS,
-                    "-movflags",
-                    "+faststart",
-                    "-shortest",
-                ]
-            )
+                    YOUTUBE_RENDER_PRESET,
+                    YOUTUBE_RENDER_CRF,
+                    str(output_path),
+                )
 
-    if visual_kind != "video":
-        command.extend(["-tune", "stillimage"])
-    command.append(str(output_path))
+                render_started_at = time.perf_counter()
+                try:
+                    completed = await asyncio.to_thread(
+                        subprocess.run,
+                        command,
+                        capture_output=True,
+                        text=True,
+                        timeout=YOUTUBE_RENDER_TIMEOUT_SECONDS,
+                    )
+                except subprocess.TimeoutExpired as exc:
+                    try:
+                        output_path.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+                    stderr_preview = (exc.stderr or exc.stdout or "").strip()
+                    logging.error(
+                        "FFmpeg render timed out after %ss for audio=%s image=%s stderr=%s",
+                        YOUTUBE_RENDER_TIMEOUT_SECONDS,
+                        audio_upload.get("id"),
+                        image_upload.get("id"),
+                        stderr_preview[:800],
+                    )
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Video creation timed out after {YOUTUBE_RENDER_TIMEOUT_SECONDS} seconds.",
+                    )
+                render_duration_seconds = time.perf_counter() - render_started_at
 
-    logging.info(
-                "Starting FFmpeg render for youtube_upload audio=%s image=%s visual_kind=%s source_image=%sx%s audio_duration=%.2fs output=%sx%s fps=%s preset=%s crf=%s output=%s",
-                audio_upload.get("id"),
-                image_upload.get("id"),
-                visual_kind,
-                source_image_w or "unknown",
-                source_image_h or "unknown",
-                audio_duration_seconds,
-                target_w,
-                target_h,
-                YOUTUBE_RENDER_FPS,
-                YOUTUBE_RENDER_PRESET,
-                YOUTUBE_RENDER_CRF,
-                str(output_path),
-            )
-    render_started_at = time.perf_counter()
-    try:
-        completed = await asyncio.to_thread(
-            subprocess.run,
-            command,
-            capture_output=True,
-            text=True,
-            timeout=YOUTUBE_RENDER_TIMEOUT_SECONDS,
-        )
-    except subprocess.TimeoutExpired as exc:
-        try:
-            output_path.unlink(missing_ok=True)
-        except Exception:
-            pass
+                if completed.returncode != 0:
+                    try:
+                        output_path.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+                    logging.error(
+                        "FFmpeg render failed for audio=%s image=%s returncode=%s stderr=%s",
+                        audio_upload.get("id"),
+                        image_upload.get("id"),
+                        completed.returncode,
+                        ((completed.stderr or completed.stdout or "FFmpeg failed").strip())[:1200],
+                    )
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Video creation failed: {(completed.stderr or completed.stdout or 'FFmpeg failed').strip()}",
+                    )
+
+                output_size_bytes = output_path.stat().st_size if output_path.exists() else 0
+                media_debug = {
+                    "source_image_width": source_image_w,
+                    "source_image_height": source_image_h,
+                    "source_audio_duration_seconds": round(audio_duration_seconds, 3),
+                    "generated_video_path": str(output_path),
+                    "generated_video_size_bytes": int(output_size_bytes),
+                    "output_width": target_w,
+                    "output_height": target_h,
+                    "fps": YOUTUBE_RENDER_FPS,
+                    "video_codec": "libx264",
+                    "audio_codec": "aac",
+                    "preset": YOUTUBE_RENDER_PRESET,
+                    "crf": YOUTUBE_RENDER_CRF,
+                    "render_duration_seconds": round(render_duration_seconds, 3),
+                    "layout_mode": (
+                        "fill_frame"
+                        if aspect_matches_frame
+                        else "blurred_background_contain"
+                        if background_mode == "blurred"
+                        else "flat_background_contain"
+                    ),
+                    "preblurred_background": bool(blurred_bg_path),
+                    "visual_kind": visual_kind,
+                    "is_gif_visual": is_gif_visual,
+                }
+                payload["_media_debug"] = media_debug
+                logging.info(
+                    "FFmpeg render finished for youtube_upload audio=%s image=%s output=%s size=%sB duration=%.3fs layout=%s",
+                    audio_upload.get("id"),
+                    image_upload.get("id"),
+                    str(output_path),
+                    output_size_bytes,
+                    render_duration_seconds,
+                    media_debug["layout_mode"],
+                )
+                return output_path
+    finally:
         try:
             if blurred_bg_path:
                 blurred_bg_path.unlink(missing_ok=True)
         except Exception:
             pass
-        stderr_preview = (exc.stderr or exc.stdout or "").strip()
-        logging.error(
-            "FFmpeg render timed out after %ss for audio=%s image=%s stderr=%s",
-            YOUTUBE_RENDER_TIMEOUT_SECONDS,
-            audio_upload.get("id"),
-            image_upload.get("id"),
-            stderr_preview[:800],
-        )
-        raise HTTPException(
-            status_code=500,
-            detail=f"Video creation timed out after {YOUTUBE_RENDER_TIMEOUT_SECONDS} seconds.",
-        )
-    render_duration_seconds = time.perf_counter() - render_started_at
-
-    if completed.returncode != 0:
-        try:
-            output_path.unlink(missing_ok=True)
-        except Exception:
-            pass
-        try:
-            if blurred_bg_path:
-                blurred_bg_path.unlink(missing_ok=True)
-        except Exception:
-            pass
-        logging.error(
-            "FFmpeg render failed for audio=%s image=%s returncode=%s stderr=%s",
-            audio_upload.get("id"),
-            image_upload.get("id"),
-            completed.returncode,
-            ((completed.stderr or completed.stdout or "FFmpeg failed").strip())[:1200],
-        )
-        raise HTTPException(
-            status_code=500,
-            detail=f"Video creation failed: {(completed.stderr or completed.stdout or 'FFmpeg failed').strip()}",
-        )
-
-    output_size_bytes = output_path.stat().st_size if output_path.exists() else 0
-    media_debug = {
-        "source_image_width": source_image_w,
-        "source_image_height": source_image_h,
-        "source_audio_duration_seconds": round(audio_duration_seconds, 3),
-        "generated_video_path": str(output_path),
-        "generated_video_size_bytes": int(output_size_bytes),
-        "output_width": target_w,
-        "output_height": target_h,
-        "fps": YOUTUBE_RENDER_FPS,
-        "video_codec": "libx264",
-        "audio_codec": "aac",
-        "preset": YOUTUBE_RENDER_PRESET,
-        "crf": YOUTUBE_RENDER_CRF,
-        "render_duration_seconds": round(render_duration_seconds, 3),
-        "layout_mode": (
-            "fill_frame"
-            if source_image_w and source_image_h and abs((source_image_w / source_image_h) - (target_w / target_h)) <= 0.015
-            else "blurred_background_contain"
-            if str(payload.get("background_mode") or payload.get("background_color") or "black") == "blurred"
-            else "flat_background_contain"
-        ),
-            "preblurred_background": bool(blurred_bg_path),
-            "visual_kind": visual_kind,
-    }
-    payload["_media_debug"] = media_debug
-    logging.info(
-        "FFmpeg render finished for youtube_upload audio=%s image=%s output=%s size=%sB duration=%.3fs layout=%s",
-        audio_upload.get("id"),
-        image_upload.get("id"),
-        str(output_path),
-        output_size_bytes,
-        render_duration_seconds,
-        media_debug["layout_mode"],
-    )
-    try:
-        if blurred_bg_path:
-            blurred_bg_path.unlink(missing_ok=True)
-    except Exception:
-        pass
-
-    return output_path
 
 
 async def _build_youtube_upload_job_payload(
@@ -6482,13 +6461,13 @@ async def upload_audio(file: UploadFile = File(...), current_user: dict = Depend
 
 @api_router.post("/upload/image")
 async def upload_image(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
-    """Upload image or short visual file (JPG, PNG, WEBP, WEBM, MP4, MOV)."""
+    """Upload image or short visual file (JPG, PNG, WEBP, GIF, WEBM, MP4, MOV)."""
     try:
         if not file or not file.filename:
             raise HTTPException(status_code=400, detail="No image file provided.")
 
         # Validate file type
-        allowed_extensions = ['.jpg', '.jpeg', '.png', '.webp', '.webm', '.mp4', '.mov', '.m4v']
+        allowed_extensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.webm', '.mp4', '.mov', '.m4v']
         file_ext = Path(file.filename).suffix.lower()
         _assert_content_type_matches(file, expected_prefixes=("image/", "video/"))
 
@@ -6504,7 +6483,7 @@ async def upload_image(file: UploadFile = File(...), current_user: dict = Depend
             file_ext=file_ext,
             detected_ext=detected_ext,
             allowed_extensions=allowed_extensions,
-            detail_message="Invalid visual format. Allowed: JPG, PNG, WEBP, WEBM, MP4, MOV",
+            detail_message="Invalid visual format. Allowed: JPG, PNG, WEBP, GIF, WEBM, MP4, MOV",
         )
 
         stored = _store_uploaded_image_bytes(

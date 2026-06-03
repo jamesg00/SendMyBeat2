@@ -419,6 +419,19 @@ class TestYouTubeUpload(unittest.IsolatedAsyncioTestCase):
         self.assertIn("force_original_aspect_ratio=decrease", filter_chain)
         self.assertNotIn("gblur", filter_chain)
 
+    def test_sniff_visual_format_accepts_gif(self):
+        self.assertEqual(server._sniff_visual_format(b"GIF87a" + b"\x00" * 16), ".gif")
+        self.assertEqual(server._sniff_visual_format(b"GIF89a" + b"\x00" * 16), ".gif")
+
+    def test_visual_kind_treats_gif_as_looping_video(self):
+        upload_doc = {
+            "media_kind": "image",
+            "content_type": "image/gif",
+            "file_path": "uploads/test-animation.gif",
+        }
+
+        self.assertEqual(server._visual_kind_from_upload(upload_doc), "video")
+
     def test_build_render_filter_uses_blurred_background_when_requested_without_preblur(self):
         payload = {
             "target_w": 1280,

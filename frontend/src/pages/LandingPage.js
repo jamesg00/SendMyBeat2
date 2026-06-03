@@ -242,7 +242,7 @@ const LandingPage = ({ setIsAuthenticated }) => {
               <h1 className="mb-6 max-w-4xl text-5xl font-bold leading-[0.95] tracking-tight md:text-7xl">
                 Upload beats to YouTube and generate the tags in{" "}
                 <span className="gradient-text">
-                  one workflow.
+                  one app.
                 </span>
               </h1>
 
