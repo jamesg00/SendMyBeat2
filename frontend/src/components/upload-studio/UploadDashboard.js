@@ -39,7 +39,7 @@ const UploadDashboard = ({
           <Youtube className="h-5 w-5 text-[var(--accent-primary)]" />
           New Upload
         </CardTitle>
-        <CardDescription>Connect YouTube, then upload audio and image to enter the studio.</CardDescription>
+        <CardDescription>Connect YouTube, then upload audio and artwork. GIF artwork loops in the rendered video.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         {youtubeConnected && (
@@ -78,7 +78,7 @@ const UploadDashboard = ({
               </div>
               <div>
                 <p className="font-medium">Upload Audio</p>
-                <p className="text-xs text-slate-500">MP3, WAV, FLAC</p>
+                <p className="text-xs text-slate-500">MP3, WAV, M4A, FLAC, OGG</p>
               </div>
               {uploadingAudio && <div className="text-xs text-[var(--accent-primary)]">Uploading... {uploadProgress}%</div>}
               {audioFile && <div className="text-xs text-[var(--accent-primary)] font-medium break-all">{audioFile.name}</div>}
@@ -105,7 +105,7 @@ const UploadDashboard = ({
               </div>
               <div>
                 <p className="font-medium">Upload Artwork</p>
-                <p className="text-xs text-slate-500">JPG, PNG, WEBP</p>
+                <p className="text-xs text-slate-500">JPG, PNG, WEBP, GIF</p>
               </div>
               {uploadingImage && <div className="text-xs text-[var(--accent-primary)]">Uploading...</div>}
               {hasImageReady && (

@@ -504,13 +504,11 @@ const UploadStudio = ({
     if (!file) return;
     const safeName = String(file.name || "").toLowerCase();
     const safeMime = String(file.type || "").toLowerCase();
-    const isGif = safeMime === "image/gif" || safeName.endsWith(".gif");
-    const isKnownImage =
-      isGif ||
-      IMAGE_MIME_TYPES.includes(safeMime) ||
-      IMAGE_EXTENSIONS.some((ext) => safeName.endsWith(String(ext).toLowerCase()));
-    if (!isKnownImage) {
-      toast.error("Upload a JPG, PNG, WEBP, or GIF image.");
+    const isKnownAudio =
+      AUDIO_MIME_TYPES.includes(safeMime) ||
+      AUDIO_EXTENSIONS.some((ext) => safeName.endsWith(String(ext).toLowerCase()));
+    if (!isKnownAudio) {
+      toast.error("Upload an MP3, WAV, M4A, FLAC, or OGG audio file.");
       return;
     }
     if (!youtubeConnected) {
