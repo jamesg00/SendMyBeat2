@@ -432,6 +432,18 @@ class TestYouTubeUpload(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(server._visual_kind_from_upload(upload_doc), "video")
 
+    def test_store_uploaded_image_bytes_preserves_gif_extension(self):
+        stored = server._store_uploaded_image_bytes(
+            current_user_id="user_1",
+            image_bytes=b"GIF89a" + b"\x00" * 64,
+            file_ext=".gif",
+            detected_ext=".gif",
+            content_type="image/gif",
+            original_filename="loop.gif",
+        )
+        self.assertTrue(stored["upload_doc"]["storage_key"].endswith(".gif"))
+        self.assertEqual(stored["upload_doc"]["media_kind"], "video")
+
     def test_build_render_filter_avoids_gblur_when_blurred_without_preblur(self):
         payload = {
             "target_w": 1280,

@@ -583,7 +583,16 @@ const UploadStudio = ({
       img.src = url;
       fitImageToFrame();
       setCenterLockEnabled(false);
-      toast.success("Image ready!");
+      const uploadedIsGif =
+        response?.data?.media_kind === "video" ||
+        safeMimeType === "image/gif" ||
+        safeFileName.endsWith(".gif");
+      if (uploadedIsGif) {
+        setVideoRenderFps("30");
+        toast.success("GIF ready — using 30 fps for smoother animation (switch to 2 fps only for static images).");
+      } else {
+        toast.success("Image ready!");
+      }
     } catch (error) {
       const detail = error?.response?.data?.detail;
       toast.error(typeof detail === "string" ? detail : "Failed to upload image");

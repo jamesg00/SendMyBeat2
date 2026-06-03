@@ -402,6 +402,11 @@ YOUTUBE_RENDER_MAX_HEIGHT = int(os.environ.get("YOUTUBE_RENDER_MAX_HEIGHT", "720
 YOUTUBE_RENDER_FPS_DEFAULT = int(os.environ.get("YOUTUBE_RENDER_FPS", "2") or "2")
 YOUTUBE_RENDER_FPS_ALLOWED = frozenset({2, 30, 60})
 YOUTUBE_MAX_AUDIO_DURATION_SECONDS = int(os.environ.get("YOUTUBE_MAX_AUDIO_DURATION_SECONDS", str(15 * 60)))
+GIF_TRANSCODE_MAX_FPS = int(os.environ.get("GIF_TRANSCODE_MAX_FPS", "15"))
+GIF_TRANSCODE_TIMEOUT_SECONDS = int(os.environ.get("GIF_TRANSCODE_TIMEOUT_SECONDS", "120"))
+GIF_TRANSCODE_MAX_HEIGHT = int(os.environ.get("GIF_TRANSCODE_MAX_HEIGHT", "720") or "720")
+VISUAL_UPLOAD_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".gif", ".webm", ".mp4", ".mov", ".m4v"]
+VIDEO_VISUAL_EXTENSIONS = {".gif", ".webm", ".mp4", ".mov", ".m4v"}
 PRIORITIZE_YOUTUBE_UPLOAD_JOBS = str(os.environ.get("PRIORITIZE_YOUTUBE_UPLOAD_JOBS", "true")).strip().lower() not in {"0", "false", "no"}
 SPOTLIGHT_REFRESH_INTERVAL_SECONDS = int(os.environ.get("SPOTLIGHT_REFRESH_INTERVAL_SECONDS", "1800"))
 METADATA_CACHE_TTL_SECONDS = int(os.environ.get("METADATA_CACHE_TTL_SECONDS", "86400"))
@@ -605,19 +610,32 @@ def _extract_artist_queries(title: str, tags: list[str]) -> list[str]:
     return deduped[:3]
 
 
+def _normalize_visual_file_ext(file_ext: str | None, detected_ext: str | None = None) -> str:
+    ext = (detected_ext or file_ext or "").lower()
+    if ext == ".jpeg":
+        ext = ".jpg"
+    if ext not in VISUAL_UPLOAD_EXTENSIONS:
+        ext = ".jpg"
+    return ext
+
+
+def _media_kind_for_visual_ext(ext: str) -> str:
+    return "video" if ext in VIDEO_VISUAL_EXTENSIONS else "image"
+
+
 def _store_uploaded_image_bytes(
     *,
     current_user_id: str,
     image_bytes: bytes,
     file_ext: str,
     original_filename: str,
+    detected_ext: str | None = None,
+    content_type: str | None = None,
 ) -> dict:
     file_id = str(uuid.uuid4())
-    ext = (file_ext or "").lower()
-    if ext not in [".jpg", ".jpeg", ".png", ".webp", ".webm", ".mp4", ".mov", ".m4v"]:
-        ext = ".jpg"
+    ext = _normalize_visual_file_ext(file_ext, detected_ext)
     storage_meta = media_storage.save_bytes(data=image_bytes, file_id=file_id, file_ext=ext)
-    media_kind = "video" if ext in {".webm", ".mp4", ".mov", ".m4v"} else "image"
+    media_kind = _media_kind_for_visual_ext(ext)
     upload_doc = {
         "id": file_id,
         "user_id": current_user_id,
@@ -625,26 +643,201 @@ def _store_uploaded_image_bytes(
         "stored_filename": storage_meta["stored_filename"],
         "file_type": "image",
         "media_kind": media_kind,
+        "content_type": (content_type or "").strip().lower() or None,
         "file_path": storage_meta["file_path"],
         "storage_backend": storage_meta["storage_backend"],
         "storage_key": storage_meta["storage_key"],
         "file_size": storage_meta["file_size"],
-        "uploaded_at": datetime.now(timezone.utc).isoformat()
+        "uploaded_at": datetime.now(timezone.utc).isoformat(),
     }
     return {"file_id": file_id, "filename": original_filename, "upload_doc": upload_doc}
 
 
-def _visual_kind_from_upload(upload_doc: dict | None) -> str:
+def _file_sha256_hex(path: Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        while True:
+            chunk = handle.read(1024 * 1024)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _sniff_visual_format_path(path: Path) -> str | None:
+    try:
+        with open(path, "rb") as handle:
+            return _sniff_visual_format(handle.read(8192))
+    except OSError:
+        return None
+
+
+def _is_gif_visual_upload(upload_doc: dict | None, path: Path | None = None) -> bool:
+    if not upload_doc:
+        return False
+    content_type = str(upload_doc.get("content_type") or upload_doc.get("mime_type") or "").strip().lower()
+    if content_type == "image/gif":
+        return True
+    if media_storage.get_suffix(upload_doc) == ".gif":
+        return True
+    if path is not None and _sniff_visual_format_path(path) == ".gif":
+        return True
+    return False
+
+
+def _visual_kind_from_upload(upload_doc: dict | None, path: Path | None = None) -> str:
     if not upload_doc:
         return "image"
+    if _is_gif_visual_upload(upload_doc, path):
+        return "video"
     content_type = str(upload_doc.get("content_type") or upload_doc.get("mime_type") or "").strip().lower()
     explicit = str(upload_doc.get("media_kind") or "").strip().lower()
     path_suffix = media_storage.get_suffix(upload_doc)
-    if content_type == "image/gif" or path_suffix == ".gif":
-        return "video"
+    if path is not None:
+        sniffed = _sniff_visual_format_path(path)
+        if sniffed == ".gif":
+            return "video"
+        if sniffed in {".webm", ".mp4", ".mov", ".m4v"}:
+            return "video"
     if explicit in {"image", "video"}:
         return explicit
-    return "video" if path_suffix in {".webm", ".mp4", ".mov", ".m4v"} else "image"
+    return "video" if path_suffix in VIDEO_VISUAL_EXTENSIONS else "image"
+
+
+def _derived_gif_mp4_storage_key(upload_id: str) -> str:
+    return f"{upload_id}.derived.mp4"
+
+
+def _transcode_gif_to_h264_mp4(
+    *,
+    source_path: Path,
+    output_path: Path,
+    max_height: int,
+    fps: int,
+) -> None:
+    ffmpeg_bin = _resolve_ffmpeg_binary()
+    vf = (
+        f"scale='min({max_height},iw)':'min({max_height},ih)':"
+        "force_original_aspect_ratio=decrease,"
+        f"fps={fps},format=yuv420p"
+    )
+    command = [
+        ffmpeg_bin,
+        "-nostdin",
+        "-y",
+        "-loglevel",
+        "error",
+        "-ignore_loop",
+        "0",
+        "-i",
+        str(source_path),
+        "-vf",
+        vf,
+        "-an",
+        "-c:v",
+        "libx264",
+        "-preset",
+        YOUTUBE_RENDER_PRESET,
+        "-crf",
+        YOUTUBE_RENDER_CRF,
+        "-movflags",
+        "+faststart",
+        str(output_path),
+    ]
+    completed = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        timeout=GIF_TRANSCODE_TIMEOUT_SECONDS,
+    )
+    if completed.returncode != 0:
+        raise HTTPException(
+            status_code=500,
+            detail=f"GIF conversion failed: {(completed.stderr or completed.stdout or 'FFmpeg failed').strip()[:500]}",
+        )
+    if not output_path.exists() or output_path.stat().st_size <= 0:
+        raise HTTPException(status_code=500, detail="GIF conversion produced an empty video.")
+
+
+async def _get_or_create_gif_mp4_cache(image_upload: dict, image_path: Path) -> Path:
+    """Transcode animated GIF to a loopable H.264 MP4 once; cache path in Mongo + disk."""
+    upload_id = str(image_upload.get("id") or "").strip()
+    if not upload_id:
+        raise HTTPException(status_code=400, detail="Missing image upload id.")
+
+    source_sha256 = await asyncio.to_thread(_file_sha256_hex, image_path)
+    doc = await db.uploads.find_one({"id": upload_id}, {"_id": 0, "derived_video": 1})
+    derived = (doc or {}).get("derived_video") if isinstance((doc or {}).get("derived_video"), dict) else {}
+    storage_key = str(derived.get("storage_key") or _derived_gif_mp4_storage_key(upload_id))
+    if derived.get("source_sha256") == source_sha256 and hasattr(media_storage, "root_dir"):
+        cached_path = media_storage.root_dir / storage_key
+        if cached_path.exists() and cached_path.stat().st_size > 0:
+            return cached_path
+
+    if not hasattr(media_storage, "root_dir"):
+        raise HTTPException(status_code=500, detail="GIF cache requires local media storage.")
+    cache_path = media_storage.root_dir / storage_key
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = media_storage.create_temp_path(".mp4")
+    try:
+        await asyncio.to_thread(
+            _transcode_gif_to_h264_mp4,
+            source_path=image_path,
+            output_path=temp_path,
+            max_height=GIF_TRANSCODE_MAX_HEIGHT,
+            fps=GIF_TRANSCODE_MAX_FPS,
+        )
+        shutil.move(str(temp_path), str(cache_path))
+    except Exception:
+        try:
+            temp_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+        raise
+    finally:
+        try:
+            if temp_path.exists():
+                temp_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+    await db.uploads.update_one(
+        {"id": upload_id},
+        {
+            "$set": {
+                "derived_video": {
+                    "storage_key": storage_key,
+                    "source_sha256": source_sha256,
+                    "fps": GIF_TRANSCODE_MAX_FPS,
+                    "max_height": GIF_TRANSCODE_MAX_HEIGHT,
+                    "codec": "libx264",
+                    "created_at": _safe_iso_now(),
+                },
+                "media_kind": "video",
+            }
+        },
+    )
+    logging.info(
+        "GIF cache created for upload=%s path=%s size=%sB",
+        upload_id,
+        str(cache_path),
+        cache_path.stat().st_size if cache_path.exists() else 0,
+    )
+    return cache_path
+
+
+def _append_ffmpeg_visual_input(
+    command: list[str],
+    *,
+    visual_path: Path,
+    visual_kind: str,
+    render_fps: str,
+    loop_video: bool,
+) -> None:
+    if loop_video or visual_kind == "video":
+        command.extend(["-stream_loop", "-1", "-i", str(visual_path)])
+        return
+    command.extend(["-f", "image2", "-loop", "1", "-framerate", render_fps, "-i", str(visual_path)])
 
 
 def _sniff_audio_format(sample: bytes) -> str | None:
@@ -2412,13 +2605,6 @@ async def _render_youtube_video(
 ) -> Path:
     ffmpeg_bin = _resolve_ffmpeg_binary()
     output_path = media_storage.create_temp_path(".mp4")
-    visual_kind = _visual_kind_from_upload(image_upload)
-    image_mime_type = str(image_upload.get("content_type") or image_upload.get("mime_type") or "").strip().lower()
-    image_suffix = str(media_storage.get_suffix(image_upload) or "").strip().lower()
-    is_gif_visual = image_mime_type == "image/gif" or image_suffix == ".gif"
-    if is_gif_visual:
-        # Animated GIFs use the video input path so FFmpeg loops them for the full beat.
-        visual_kind = "video"
     blurred_bg_path: Path | None = None
 
     try:
@@ -2426,6 +2612,15 @@ async def _render_youtube_video(
             async with media_storage.local_path_for_processing(audio_upload) as audio_path:
                 if not image_path.exists() or not audio_path.exists():
                     raise HTTPException(status_code=400, detail="Referenced upload files are missing on disk.")
+
+                is_gif_visual = _is_gif_visual_upload(image_upload, image_path)
+                visual_kind = _visual_kind_from_upload(image_upload, image_path)
+                visual_source_path = image_path
+                loop_video = visual_kind == "video"
+                if is_gif_visual:
+                    visual_source_path = await _get_or_create_gif_mp4_cache(image_upload, image_path)
+                    visual_kind = "video"
+                    loop_video = True
 
                 audio_duration_seconds = await asyncio.to_thread(_probe_audio_duration_seconds, audio_path)
                 if audio_duration_seconds > YOUTUBE_MAX_AUDIO_DURATION_SECONDS:
@@ -2435,7 +2630,10 @@ async def _render_youtube_video(
                         detail=f"Audio is too long to render. Max supported duration is {max_minutes} minutes.",
                     )
 
-                source_image_w, source_image_h = await asyncio.to_thread(_probe_image_dimensions, image_path)
+                source_image_w, source_image_h = await asyncio.to_thread(
+                    _probe_image_dimensions,
+                    visual_source_path if is_gif_visual else image_path,
+                )
                 target_w, target_h = _resolve_youtube_render_dimensions(payload)
                 aspect_matches_frame = bool(
                     source_image_w
@@ -2444,7 +2642,13 @@ async def _render_youtube_video(
                 )
                 background_mode = str(payload.get("background_mode") or payload.get("background_color") or "black")
 
-                if source_image_w and source_image_h and not aspect_matches_frame and background_mode == "blurred":
+                if (
+                    not is_gif_visual
+                    and source_image_w
+                    and source_image_h
+                    and not aspect_matches_frame
+                    and background_mode == "blurred"
+                ):
                     blurred_bg_path = await asyncio.to_thread(
                         _create_preblurred_background_image,
                         image_path,
@@ -2465,16 +2669,22 @@ async def _render_youtube_video(
                 command = [ffmpeg_bin, "-nostdin", "-y", "-loglevel", "error"]
                 if blurred_bg_path:
                     command.extend(["-f", "image2", "-loop", "1", "-framerate", render_fps_value, "-i", str(blurred_bg_path)])
-                    if visual_kind == "video":
-                        command.extend(["-stream_loop", "-1", "-i", str(image_path)])
-                    else:
-                        command.extend(["-f", "image2", "-loop", "1", "-framerate", render_fps_value, "-i", str(image_path)])
+                    _append_ffmpeg_visual_input(
+                        command,
+                        visual_path=visual_source_path,
+                        visual_kind=visual_kind,
+                        render_fps=render_fps_value,
+                        loop_video=loop_video,
+                    )
                     audio_input_index = 2
-                elif visual_kind == "video":
-                    command.extend(["-stream_loop", "-1", "-i", str(image_path)])
-                    audio_input_index = 1
                 else:
-                    command.extend(["-f", "image2", "-loop", "1", "-framerate", render_fps_value, "-i", str(image_path)])
+                    _append_ffmpeg_visual_input(
+                        command,
+                        visual_path=visual_source_path,
+                        visual_kind=visual_kind,
+                        render_fps=render_fps_value,
+                        loop_video=loop_video,
+                    )
                     audio_input_index = 1
 
                 command.extend(
@@ -2515,10 +2725,12 @@ async def _render_youtube_video(
                 command.append(str(output_path))
 
                 logging.info(
-                    "Starting FFmpeg render for youtube_upload audio=%s image=%s visual_kind=%s source_image=%sx%s audio_duration=%.2fs output=%sx%s fps=%s preset=%s crf=%s render_limit=%.3fs output=%s",
+                    "Starting FFmpeg render for youtube_upload audio=%s image=%s visual_kind=%s is_gif=%s visual_source=%s source_image=%sx%s audio_duration=%.2fs output=%sx%s fps=%s preset=%s crf=%s render_limit=%.3fs output=%s",
                     audio_upload.get("id"),
                     image_upload.get("id"),
                     visual_kind,
+                    is_gif_visual,
+                    str(visual_source_path),
                     source_image_w or "unknown",
                     source_image_h or "unknown",
                     audio_duration_seconds,
@@ -2602,6 +2814,8 @@ async def _render_youtube_video(
                     "preblurred_background": bool(blurred_bg_path),
                     "visual_kind": visual_kind,
                     "is_gif_visual": is_gif_visual,
+                    "gif_cached_mp4": is_gif_visual,
+                    "visual_source_path": str(visual_source_path),
                 }
                 payload["_media_debug"] = media_debug
                 logging.info(
@@ -6558,12 +6772,20 @@ async def upload_image(file: UploadFile = File(...), current_user: dict = Depend
             current_user_id=current_user["id"],
             image_bytes=image_bytes,
             file_ext=file_ext,
+            detected_ext=detected_ext,
+            content_type=str(file.content_type or "").strip().lower() or None,
             original_filename=file.filename,
         )
         upload_doc = stored["upload_doc"]
         await db.uploads.insert_one(upload_doc)
 
-        return {"file_id": stored["file_id"], "filename": stored["filename"]}
+        return {
+            "file_id": stored["file_id"],
+            "filename": stored["filename"],
+            "media_kind": upload_doc.get("media_kind"),
+            "content_type": upload_doc.get("content_type"),
+            "storage_key": upload_doc.get("storage_key"),
+        }
     except HTTPException:
         raise
     except Exception as e:
