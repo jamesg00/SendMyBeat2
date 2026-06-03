@@ -495,6 +495,15 @@ class TestYouTubeUpload(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(HTTPException):
             server._normalize_render_fps(24)
 
+    def test_resolve_gif_mux_fps_caps_high_user_fps(self):
+        self.assertEqual(server._resolve_gif_mux_fps(2), 2)
+        self.assertEqual(server._resolve_gif_mux_fps(30), min(30, server.GIF_TRANSCODE_MAX_FPS))
+        self.assertEqual(server._resolve_gif_mux_fps(60), min(60, server.GIF_TRANSCODE_MAX_FPS))
+
+    def test_gif_cache_signature_includes_cache_version(self):
+        sig = server._gif_cache_signature(source_sha256="abc", cache_fps=15, max_height=720)
+        self.assertTrue(sig.startswith(f"v{server.GIF_CACHE_VERSION}:"))
+
     def test_build_render_filter_uses_payload_render_fps(self):
         payload = {
             "target_w": 1280,

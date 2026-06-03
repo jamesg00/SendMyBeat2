@@ -172,6 +172,7 @@ const UploadStudio = ({
       queued: "Queued for worker pickup",
       validate: "Validating upload payload",
       oauth_refresh: "Refreshing YouTube connection",
+      gif_transcode: "Converting GIF animation",
       ffmpeg_render: "Rendering video with FFmpeg",
       youtube_upload: "Uploading to YouTube",
       cleanup: "Cleaning up render files",
@@ -589,7 +590,7 @@ const UploadStudio = ({
         safeFileName.endsWith(".gif");
       if (uploadedIsGif) {
         setVideoRenderFps("30");
-        toast.success("GIF ready — using 30 fps for smoother animation (switch to 2 fps only for static images).");
+        toast.success("GIF ready — animation is optimized up to 15 fps for faster processing (use 2 fps for quickest uploads).");
       } else {
         toast.success("Image ready!");
       }

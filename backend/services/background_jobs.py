@@ -347,6 +347,13 @@ class BackgroundJobService:
                 },
             )
             return
+        self.logger.info(
+            "Processing job id=%s type=%s stage=%s progress=%s",
+            job_id,
+            job_type,
+            job.get("stage"),
+            job.get("progress"),
+        )
         try:
             await handler(job)
         except Exception as exc:
@@ -388,6 +395,12 @@ class BackgroundJobService:
                 if not job:
                     await asyncio.sleep(self.poll_interval_seconds)
                     continue
+                self.logger.info(
+                    "Worker claimed job id=%s type=%s user_id=%s",
+                    job.get("id"),
+                    job.get("type"),
+                    job.get("user_id"),
+                )
                 await self.process_job(job)
             except asyncio.CancelledError:
                 raise

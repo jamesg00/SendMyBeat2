@@ -114,6 +114,12 @@ MAX_IMAGE_UPLOAD_BYTES = 12 * 1024 * 1024
 AUTH_RATE_LIMIT_WINDOW_SECONDS = 300
 AUTH_RATE_LIMIT_ATTEMPTS = 10
 HEARTBEAT_INTERVAL_SECONDS = int(os.environ.get("JOB_HEARTBEAT_INTERVAL_SECONDS", "15"))
+JOB_WORKER_HEARTBEAT_DEAD_SECONDS = int(
+    os.environ.get(
+        "JOB_WORKER_HEARTBEAT_DEAD_SECONDS",
+        str(max(HEARTBEAT_INTERVAL_SECONDS * 6, 90)),
+    )
+)
 YOUTUBE_TOKEN_ENCRYPTION_KEY = (
     os.environ.get("YOUTUBE_TOKEN_ENCRYPTION_KEY")
     or os.environ.get("APP_ENCRYPTION_KEY")
@@ -392,6 +398,7 @@ UPLOAD_JOB_STALE_AFTER_SECONDS = int(os.environ.get("UPLOAD_JOB_STALE_AFTER_SECO
 JOB_WATCHDOG_INTERVAL_SECONDS = int(os.environ.get("JOB_WATCHDOG_INTERVAL_SECONDS", "60"))
 JOB_STAGE_TIMEOUT_SECONDS = int(os.environ.get("JOB_STAGE_TIMEOUT_SECONDS", "300"))
 JOB_FFMPEG_STAGE_TIMEOUT_SECONDS = int(os.environ.get("JOB_FFMPEG_STAGE_TIMEOUT_SECONDS", "300"))
+JOB_GIF_TRANSCODE_STAGE_TIMEOUT_SECONDS = int(os.environ.get("JOB_GIF_TRANSCODE_STAGE_TIMEOUT_SECONDS", "360"))
 JOB_YOUTUBE_STAGE_TIMEOUT_SECONDS = int(os.environ.get("JOB_YOUTUBE_STAGE_TIMEOUT_SECONDS", "900"))
 YOUTUBE_CHUNK_TIMEOUT_SECONDS = int(os.environ.get("YOUTUBE_CHUNK_TIMEOUT_SECONDS", "120"))
 UPLOAD_JOB_WORKER_ID = f"upload-worker-{uuid.uuid4().hex[:10]}"
@@ -403,8 +410,13 @@ YOUTUBE_RENDER_FPS_DEFAULT = int(os.environ.get("YOUTUBE_RENDER_FPS", "2") or "2
 YOUTUBE_RENDER_FPS_ALLOWED = frozenset({2, 30, 60})
 YOUTUBE_MAX_AUDIO_DURATION_SECONDS = int(os.environ.get("YOUTUBE_MAX_AUDIO_DURATION_SECONDS", str(15 * 60)))
 GIF_TRANSCODE_MAX_FPS = int(os.environ.get("GIF_TRANSCODE_MAX_FPS", "15"))
-GIF_TRANSCODE_TIMEOUT_SECONDS = int(os.environ.get("GIF_TRANSCODE_TIMEOUT_SECONDS", "120"))
+GIF_TRANSCODE_TIMEOUT_SECONDS = int(os.environ.get("GIF_TRANSCODE_TIMEOUT_SECONDS", "300"))
 GIF_TRANSCODE_MAX_HEIGHT = int(os.environ.get("GIF_TRANSCODE_MAX_HEIGHT", "720") or "720")
+GIF_TRANSCODE_PRESET = str(os.environ.get("GIF_TRANSCODE_PRESET", "ultrafast")).strip() or "ultrafast"
+GIF_TRANSCODE_CRF = str(os.environ.get("GIF_TRANSCODE_CRF", "28")).strip() or "28"
+GIF_TRANSCODE_HEAVY_FRAME_THRESHOLD = int(os.environ.get("GIF_TRANSCODE_HEAVY_FRAME_THRESHOLD", "450"))
+GIF_TRANSCODE_HEAVY_BYTES_THRESHOLD = int(os.environ.get("GIF_TRANSCODE_HEAVY_BYTES_THRESHOLD", str(8 * 1024 * 1024)))
+GIF_CACHE_VERSION = 2
 VISUAL_UPLOAD_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".gif", ".webm", ".mp4", ".mov", ".m4v"]
 VIDEO_VISUAL_EXTENSIONS = {".gif", ".webm", ".mp4", ".mov", ".m4v"}
 PRIORITIZE_YOUTUBE_UPLOAD_JOBS = str(os.environ.get("PRIORITIZE_YOUTUBE_UPLOAD_JOBS", "true")).strip().lower() not in {"0", "false", "no"}
@@ -708,6 +720,90 @@ def _derived_gif_mp4_storage_key(upload_id: str) -> str:
     return f"{upload_id}.derived.mp4"
 
 
+def _resolve_gif_mux_fps(user_render_fps: int) -> int:
+    """GIF final mux fps — capped so we never encode 30/60fps for full beat length."""
+    return max(2, min(int(user_render_fps), GIF_TRANSCODE_MAX_FPS))
+
+
+def _gif_cache_signature(*, source_sha256: str, cache_fps: int, max_height: int) -> str:
+    return f"v{GIF_CACHE_VERSION}:{source_sha256}:{cache_fps}:{max_height}"
+
+
+def _probe_gif_metadata(path: Path) -> dict[str, Any]:
+    ffprobe_bin = _resolve_ffprobe_binary()
+    command = [
+        ffprobe_bin,
+        "-v",
+        "error",
+        "-select_streams",
+        "v:0",
+        "-show_entries",
+        "stream=width,height,nb_frames,duration,r_frame_rate",
+        "-of",
+        "json",
+        str(path),
+    ]
+    try:
+        completed = subprocess.run(command, capture_output=True, text=True, timeout=15, check=False)
+    except subprocess.TimeoutExpired:
+        return {}
+    if completed.returncode != 0:
+        return {}
+    try:
+        payload = json.loads(completed.stdout or "{}")
+    except json.JSONDecodeError:
+        return {}
+    streams = payload.get("streams") or []
+    if not streams:
+        return {}
+    stream = streams[0] if isinstance(streams, list) else {}
+    nb_frames_raw = stream.get("nb_frames")
+    try:
+        nb_frames = int(nb_frames_raw) if nb_frames_raw not in (None, "", "N/A") else 0
+    except (TypeError, ValueError):
+        nb_frames = 0
+    try:
+        duration = float(stream.get("duration") or 0)
+    except (TypeError, ValueError):
+        duration = 0.0
+    try:
+        width = int(stream.get("width") or 0)
+        height = int(stream.get("height") or 0)
+    except (TypeError, ValueError):
+        width = 0
+        height = 0
+    return {
+        "width": width,
+        "height": height,
+        "nb_frames": nb_frames,
+        "duration": duration,
+    }
+
+
+def _resolve_gif_transcode_settings(
+    *,
+    source_path: Path,
+    user_render_fps: int,
+) -> dict[str, int]:
+    cache_fps = _resolve_gif_mux_fps(user_render_fps)
+    max_height = GIF_TRANSCODE_MAX_HEIGHT
+    try:
+        file_size = source_path.stat().st_size
+    except OSError:
+        file_size = 0
+    meta = _probe_gif_metadata(source_path)
+    nb_frames = int(meta.get("nb_frames") or 0)
+    heavy = (
+        file_size >= GIF_TRANSCODE_HEAVY_BYTES_THRESHOLD
+        or nb_frames >= GIF_TRANSCODE_HEAVY_FRAME_THRESHOLD
+        or max(int(meta.get("width") or 0), int(meta.get("height") or 0)) > 960
+    )
+    if heavy:
+        max_height = min(max_height, 480)
+        cache_fps = min(cache_fps, 10)
+    return {"cache_fps": cache_fps, "max_height": max_height, "nb_frames": nb_frames, "file_size": file_size}
+
+
 def _transcode_gif_to_h264_mp4(
     *,
     source_path: Path,
@@ -716,9 +812,11 @@ def _transcode_gif_to_h264_mp4(
     fps: int,
 ) -> None:
     ffmpeg_bin = _resolve_ffmpeg_binary()
+    # Single playthrough of the GIF animation (ignore_loop 1). ignore_loop 0 honors Netscape
+    # loop=0 (infinite) and can make FFmpeg decode until timeout on heavy GIFs.
     vf = (
         f"scale='min({max_height},iw)':'min({max_height},ih)':"
-        "force_original_aspect_ratio=decrease,"
+        "force_original_aspect_ratio=decrease:flags=fast_bilinear,"
         f"fps={fps},format=yuv420p"
     )
     command = [
@@ -727,8 +825,10 @@ def _transcode_gif_to_h264_mp4(
         "-y",
         "-loglevel",
         "error",
-        "-ignore_loop",
+        "-threads",
         "0",
+        "-ignore_loop",
+        "1",
         "-i",
         str(source_path),
         "-vf",
@@ -737,19 +837,43 @@ def _transcode_gif_to_h264_mp4(
         "-c:v",
         "libx264",
         "-preset",
-        YOUTUBE_RENDER_PRESET,
+        GIF_TRANSCODE_PRESET,
         "-crf",
-        YOUTUBE_RENDER_CRF,
+        GIF_TRANSCODE_CRF,
         "-movflags",
         "+faststart",
         str(output_path),
     ]
-    completed = subprocess.run(
-        command,
-        capture_output=True,
-        text=True,
-        timeout=GIF_TRANSCODE_TIMEOUT_SECONDS,
+    logging.info(
+        "GIF transcode starting source=%s output=%s max_height=%s fps=%s timeout=%ss",
+        str(source_path),
+        str(output_path),
+        max_height,
+        fps,
+        GIF_TRANSCODE_TIMEOUT_SECONDS,
     )
+    try:
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=GIF_TRANSCODE_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as exc:
+        stderr_preview = (exc.stderr or exc.stdout or "").strip()
+        logging.error(
+            "GIF transcode timed out after %ss source=%s stderr=%s",
+            GIF_TRANSCODE_TIMEOUT_SECONDS,
+            str(source_path),
+            stderr_preview[:800],
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                f"GIF conversion timed out after {GIF_TRANSCODE_TIMEOUT_SECONDS} seconds. "
+                "Try a smaller GIF, use 2 fps for a static-style upload, or shorten the animation."
+            ),
+        )
     if completed.returncode != 0:
         raise HTTPException(
             status_code=500,
@@ -759,20 +883,38 @@ def _transcode_gif_to_h264_mp4(
         raise HTTPException(status_code=500, detail="GIF conversion produced an empty video.")
 
 
-async def _get_or_create_gif_mp4_cache(image_upload: dict, image_path: Path) -> Path:
+async def _get_or_create_gif_mp4_cache(
+    image_upload: dict,
+    image_path: Path,
+    *,
+    user_render_fps: int,
+) -> tuple[Path, int]:
     """Transcode animated GIF to a loopable H.264 MP4 once; cache path in Mongo + disk."""
     upload_id = str(image_upload.get("id") or "").strip()
     if not upload_id:
         raise HTTPException(status_code=400, detail="Missing image upload id.")
 
+    transcode_settings = await asyncio.to_thread(
+        _resolve_gif_transcode_settings,
+        source_path=image_path,
+        user_render_fps=user_render_fps,
+    )
+    cache_fps = int(transcode_settings["cache_fps"])
+    max_height = int(transcode_settings["max_height"])
+
     source_sha256 = await asyncio.to_thread(_file_sha256_hex, image_path)
+    signature = _gif_cache_signature(
+        source_sha256=source_sha256,
+        cache_fps=cache_fps,
+        max_height=max_height,
+    )
     doc = await db.uploads.find_one({"id": upload_id}, {"_id": 0, "derived_video": 1})
     derived = (doc or {}).get("derived_video") if isinstance((doc or {}).get("derived_video"), dict) else {}
     storage_key = str(derived.get("storage_key") or _derived_gif_mp4_storage_key(upload_id))
-    if derived.get("source_sha256") == source_sha256 and hasattr(media_storage, "root_dir"):
+    if derived.get("cache_signature") == signature and hasattr(media_storage, "root_dir"):
         cached_path = media_storage.root_dir / storage_key
         if cached_path.exists() and cached_path.stat().st_size > 0:
-            return cached_path
+            return cached_path, cache_fps
 
     if not hasattr(media_storage, "root_dir"):
         raise HTTPException(status_code=500, detail="GIF cache requires local media storage.")
@@ -784,8 +926,8 @@ async def _get_or_create_gif_mp4_cache(image_upload: dict, image_path: Path) -> 
             _transcode_gif_to_h264_mp4,
             source_path=image_path,
             output_path=temp_path,
-            max_height=GIF_TRANSCODE_MAX_HEIGHT,
-            fps=GIF_TRANSCODE_MAX_FPS,
+            max_height=max_height,
+            fps=cache_fps,
         )
         shutil.move(str(temp_path), str(cache_path))
     except Exception:
@@ -808,9 +950,15 @@ async def _get_or_create_gif_mp4_cache(image_upload: dict, image_path: Path) -> 
                 "derived_video": {
                     "storage_key": storage_key,
                     "source_sha256": source_sha256,
-                    "fps": GIF_TRANSCODE_MAX_FPS,
-                    "max_height": GIF_TRANSCODE_MAX_HEIGHT,
+                    "cache_signature": signature,
+                    "cache_version": GIF_CACHE_VERSION,
+                    "fps": cache_fps,
+                    "user_render_fps": int(user_render_fps),
+                    "max_height": max_height,
+                    "nb_frames": transcode_settings.get("nb_frames"),
+                    "file_size": transcode_settings.get("file_size"),
                     "codec": "libx264",
+                    "preset": GIF_TRANSCODE_PRESET,
                     "created_at": _safe_iso_now(),
                 },
                 "media_kind": "video",
@@ -818,12 +966,14 @@ async def _get_or_create_gif_mp4_cache(image_upload: dict, image_path: Path) -> 
         },
     )
     logging.info(
-        "GIF cache created for upload=%s path=%s size=%sB",
+        "GIF cache created for upload=%s path=%s size=%sB fps=%s max_height=%s",
         upload_id,
         str(cache_path),
         cache_path.stat().st_size if cache_path.exists() else 0,
+        cache_fps,
+        max_height,
     )
-    return cache_path
+    return cache_path, cache_fps
 
 
 def _append_ffmpeg_visual_input(
@@ -2343,14 +2493,31 @@ async def _assert_job_not_cancel_requested(job_id: str, *, stage: str) -> None:
         raise JobCancelledError(f"Job was cancelled during stage '{stage}'.")
 
 
-async def _job_heartbeat_loop(job_id: str, *, message: str, progress: int) -> None:
+async def _job_heartbeat_loop(job_id: str) -> None:
+    """Refresh last_heartbeat_at without clobbering stage-specific progress/message."""
     while True:
-        await _touch_upload_job_heartbeat(job_id, message=message, progress=progress)
+        job_doc = await _get_background_job(job_id)
+        if not job_doc or job_doc.get("status") != "processing":
+            break
+        stage = str(job_doc.get("stage") or "").strip()
+        await _touch_upload_job_heartbeat(
+            job_id,
+            message=str(job_doc.get("message") or "Processing..."),
+            progress=int(job_doc.get("progress") or 0),
+        )
+        logger.info(
+            "Job heartbeat job=%s stage=%s progress=%s message=%r",
+            job_id,
+            stage or "unknown",
+            int(job_doc.get("progress") or 0),
+            str(job_doc.get("message") or "")[:120],
+        )
         await asyncio.sleep(HEARTBEAT_INTERVAL_SECONDS)
 
 
 async def _job_watchdog_loop() -> None:
     stage_timeouts = {
+        "gif_transcode": JOB_GIF_TRANSCODE_STAGE_TIMEOUT_SECONDS,
         "ffmpeg_render": JOB_FFMPEG_STAGE_TIMEOUT_SECONDS,
         "youtube_upload": JOB_YOUTUBE_STAGE_TIMEOUT_SECONDS,
     }
@@ -2359,7 +2526,7 @@ async def _job_watchdog_loop() -> None:
             result = await background_job_service.run_watchdog_pass(
                 default_timeout_seconds=JOB_STAGE_TIMEOUT_SECONDS,
                 stage_timeouts=stage_timeouts,
-                worker_dead_seconds=UPLOAD_JOB_STALE_AFTER_SECONDS,
+                worker_dead_seconds=JOB_WORKER_HEARTBEAT_DEAD_SECONDS,
             )
             if result.get("requeued") or result.get("failed"):
                 logger.warning(
@@ -2602,6 +2769,7 @@ async def _render_youtube_video(
     audio_upload: dict,
     image_upload: dict,
     payload: dict[str, Any],
+    job_id: str | None = None,
 ) -> Path:
     ffmpeg_bin = _resolve_ffmpeg_binary()
     output_path = media_storage.create_temp_path(".mp4")
@@ -2613,12 +2781,38 @@ async def _render_youtube_video(
                 if not image_path.exists() or not audio_path.exists():
                     raise HTTPException(status_code=400, detail="Referenced upload files are missing on disk.")
 
+                user_render_fps = _resolve_payload_render_fps(payload)
                 is_gif_visual = _is_gif_visual_upload(image_upload, image_path)
                 visual_kind = _visual_kind_from_upload(image_upload, image_path)
                 visual_source_path = image_path
                 loop_video = visual_kind == "video"
+                gif_mux_fps: int | None = None
                 if is_gif_visual:
-                    visual_source_path = await _get_or_create_gif_mp4_cache(image_upload, image_path)
+                    if job_id:
+                        await _update_upload_job(
+                            job_id,
+                            progress=42,
+                            message="Converting GIF animation...",
+                            extra_updates={
+                                "stage": "gif_transcode",
+                                "last_heartbeat_at": _safe_iso_now(),
+                            },
+                        )
+                    visual_source_path, gif_mux_fps = await _get_or_create_gif_mp4_cache(
+                        image_upload,
+                        image_path,
+                        user_render_fps=user_render_fps,
+                    )
+                    if job_id:
+                        await _update_upload_job(
+                            job_id,
+                            progress=45,
+                            message="GIF converted. Rendering video...",
+                            extra_updates={
+                                "stage": "ffmpeg_render",
+                                "last_heartbeat_at": _safe_iso_now(),
+                            },
+                        )
                     visual_kind = "video"
                     loop_video = True
 
@@ -2662,8 +2856,11 @@ async def _render_youtube_video(
                     "source_image_h": source_image_h,
                     "blurred_background_input": bool(blurred_bg_path),
                 }
+                if is_gif_visual and gif_mux_fps is not None:
+                    # GIF path: mux at cached animation fps (<=15), not 30/60 for entire beat.
+                    render_payload["render_fps"] = gif_mux_fps
                 filter_complex = _build_render_filter(render_payload)
-                render_fps = _resolve_payload_render_fps(render_payload)
+                render_fps = int(render_payload.get("render_fps") or user_render_fps)
                 render_fps_value = str(render_fps)
 
                 command = [ffmpeg_bin, "-nostdin", "-y", "-loglevel", "error"]
@@ -2816,6 +3013,8 @@ async def _render_youtube_video(
                     "is_gif_visual": is_gif_visual,
                     "gif_cached_mp4": is_gif_visual,
                     "visual_source_path": str(visual_source_path),
+                    "user_render_fps": user_render_fps,
+                    **({"gif_mux_fps": gif_mux_fps} if is_gif_visual and gif_mux_fps is not None else {}),
                 }
                 payload["_media_debug"] = media_debug
                 logging.info(
@@ -3016,9 +3215,15 @@ async def _youtube_resumable_upload(request, *, on_chunk_status=None) -> dict:
 
 
 async def _execute_youtube_upload_job(job: dict) -> dict:
+    job_id = str(job.get("id") or "")
     user_id = str(job.get("user_id") or "")
     payload = job.get("payload") or {}
-    job_id = str(job.get("id") or "")
+    logger.info(
+        "YouTube upload job executing id=%s user_id=%s render_fps=%s",
+        job_id,
+        user_id,
+        payload.get("render_fps"),
+    )
 
     title = str(payload.get("title") or "").strip()
     if not title:
@@ -3060,18 +3265,13 @@ async def _execute_youtube_upload_job(job: dict) -> dict:
         message="Rendering video...",
         extra_updates={"stage": "ffmpeg_render", "last_heartbeat_at": _safe_iso_now()},
     )
-    heartbeat_task = asyncio.create_task(
-        _job_heartbeat_loop(
-            job_id,
-            message="Rendering video...",
-            progress=40,
-        )
-    )
+    heartbeat_task = asyncio.create_task(_job_heartbeat_loop(job_id))
     try:
         rendered_video_path = await _render_youtube_video(
             audio_upload=audio_upload,
             image_upload=image_upload,
             payload=payload,
+            job_id=job_id,
         )
     finally:
         heartbeat_task.cancel()
@@ -3091,7 +3291,6 @@ async def _execute_youtube_upload_job(job: dict) -> dict:
         progress=65,
         message="Video rendered. Starting YouTube upload...",
         extra_updates={
-            "stage": "ffmpeg_render",
             "last_heartbeat_at": _safe_iso_now(),
             **({"media_debug": media_debug} if media_debug else {}),
         },
@@ -3126,13 +3325,7 @@ async def _execute_youtube_upload_job(job: dict) -> dict:
         )
 
         upload_started_at = time.perf_counter()
-        upload_heartbeat_task = asyncio.create_task(
-            _job_heartbeat_loop(
-                job_id,
-                message="Uploading to YouTube...",
-                progress=70,
-            )
-        )
+        upload_heartbeat_task = asyncio.create_task(_job_heartbeat_loop(job_id))
         async def _report_youtube_chunk_progress(status) -> None:
             await _assert_job_not_cancel_requested(job_id, stage="youtube_upload")
             chunk_progress = 70 + int(float(status.progress()) * 25)
@@ -7770,6 +7963,7 @@ async def upload_to_youtube(
             render_fps=render_fps,
         )
         job_doc = await _create_youtube_upload_job(current_user=current_user, payload=payload)
+        logger.info("YouTube upload job queued id=%s user_id=%s", job_doc.get("id"), current_user["id"])
         return {
             "success": True,
             "queued": True,

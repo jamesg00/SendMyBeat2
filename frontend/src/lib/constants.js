@@ -13,7 +13,7 @@ export const VIDEO_RENDER_FPS_OPTIONS = [
   {
     value: "30",
     label: "30 fps — Medium",
-    description: "Smoother motion for GIFs, overlays, or when you want a standard video feel.",
+    description: "For GIFs, animation is cached up to 15 fps (faster upload); static images use full 30 fps.",
   },
   {
     value: "60",
