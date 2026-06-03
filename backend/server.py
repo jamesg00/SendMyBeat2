@@ -2487,6 +2487,8 @@ async def _render_youtube_video(
                         YOUTUBE_RENDER_FPS,
                         "-movflags",
                         "+faststart",
+                        "-t",
+                        f"{audio_duration_seconds:.3f}",
                         "-shortest",
                     ]
                 )
@@ -2495,7 +2497,7 @@ async def _render_youtube_video(
                 command.append(str(output_path))
 
                 logging.info(
-                    "Starting FFmpeg render for youtube_upload audio=%s image=%s visual_kind=%s source_image=%sx%s audio_duration=%.2fs output=%sx%s fps=%s preset=%s crf=%s output=%s",
+                    "Starting FFmpeg render for youtube_upload audio=%s image=%s visual_kind=%s source_image=%sx%s audio_duration=%.2fs output=%sx%s fps=%s preset=%s crf=%s render_limit=%.3fs output=%s",
                     audio_upload.get("id"),
                     image_upload.get("id"),
                     visual_kind,
@@ -2507,6 +2509,7 @@ async def _render_youtube_video(
                     YOUTUBE_RENDER_FPS,
                     YOUTUBE_RENDER_PRESET,
                     YOUTUBE_RENDER_CRF,
+                    audio_duration_seconds,
                     str(output_path),
                 )
 
