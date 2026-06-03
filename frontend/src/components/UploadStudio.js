@@ -173,7 +173,8 @@ const UploadStudio = ({
       validate: "Validating upload payload",
       oauth_refresh: "Refreshing YouTube connection",
       gif_transcode: "Converting GIF animation",
-      ffmpeg_render: "Rendering video with FFmpeg",
+      ffmpeg_render: "Encoding video",
+      encoding: "Encoding video",
       youtube_upload: "Uploading to YouTube",
       cleanup: "Cleaning up render files",
       admin_clear: "Cancelled by admin",
@@ -185,10 +186,18 @@ const UploadStudio = ({
     ? currentUploadJob
     : null;
   const uploadJobProgress = Math.max(0, Math.min(100, Number(activeUploadJob?.progress || 0)));
+  const uploadJobEncodeProgress = Math.max(
+    0,
+    Math.min(100, Number(activeUploadJob?.encode_progress ?? NaN))
+  );
+  const hasEncodeProgress = Number.isFinite(uploadJobEncodeProgress);
   const uploadJobStage = activeUploadJob
     ? [formatUploadStage(activeUploadJob), activeUploadJob?.message].filter(Boolean).join(" — ")
     : "Rendering and uploading in the background.";
   const uploadJobElapsed = activeUploadJob ? formatUploadElapsed(activeUploadJob) : null;
+  const uploadJobStageKey = String(activeUploadJob?.stage || "").trim();
+  const isEncodingStage = uploadJobStageKey === "ffmpeg_render" || uploadJobStageKey === "gif_transcode";
+  const isYouTubeUploadStage = uploadJobStageKey === "youtube_upload";
   const previewTargetRatio = getMediaAspectRatio(videoAspectRatio);
   const isAnimatedVisual = Boolean(
     imageFile?.type === "image/gif" ||
@@ -1067,6 +1076,11 @@ const UploadStudio = ({
               </div>
               <div className="text-right">
                 <p className="text-sm font-semibold text-[var(--accent-primary)]">{uploadJobProgress}%</p>
+                {hasEncodeProgress && isEncodingStage ? (
+                  <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                    Encode {uploadJobEncodeProgress}%
+                  </p>
+                ) : null}
                 {uploadJobElapsed && (
                   <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
                     Running {uploadJobElapsed}
@@ -1080,14 +1094,36 @@ const UploadStudio = ({
                 style={{ width: `${uploadJobProgress}%` }}
               />
             </div>
+            {hasEncodeProgress && isEncodingStage ? (
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-[11px]" style={{ color: "var(--text-secondary)" }}>
+                  <span>Encoding progress</span>
+                  <span>{uploadJobEncodeProgress}%</span>
+                </div>
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--bg-tertiary)]">
+                  <div
+                    className="h-full rounded-full bg-[var(--accent-primary)]/80 transition-all duration-300"
+                    style={{ width: `${uploadJobEncodeProgress}%` }}
+                  />
+                </div>
+              </div>
+            ) : null}
             <div className="flex flex-wrap gap-2 text-[11px]" style={{ color: "var(--text-secondary)" }}>
-              <span>Queued</span>
+              <span className={uploadJobStageKey === "queued" ? "text-[var(--accent-primary)] font-medium" : ""}>
+                Queued
+              </span>
               <span>></span>
-              <span>Token Refresh</span>
+              <span className={uploadJobStageKey === "oauth_refresh" ? "text-[var(--accent-primary)] font-medium" : ""}>
+                Token Refresh
+              </span>
               <span>></span>
-              <span>Render</span>
+              <span className={isEncodingStage ? "text-[var(--accent-primary)] font-medium" : ""}>
+                Encode
+              </span>
               <span>></span>
-              <span>Upload</span>
+              <span className={isYouTubeUploadStage ? "text-[var(--accent-primary)] font-medium" : ""}>
+                Upload
+              </span>
             </div>
           </div>
         )}

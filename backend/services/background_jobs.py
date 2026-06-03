@@ -35,6 +35,16 @@ class BackgroundJobService:
     def set_handlers(self, handlers: dict[str, JobHandler]) -> None:
         self.handlers = handlers
 
+    @staticmethod
+    def _optional_int_field(doc: dict, key: str) -> int | None:
+        value = doc.get(key)
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
     def sanitize_job_doc(self, doc: dict | None) -> dict | None:
         if not doc:
             return None
@@ -46,6 +56,7 @@ class BackgroundJobService:
             "progress": int(doc.get("progress") or 0),
             "message": doc.get("message") or "",
             "stage": doc.get("stage"),
+            "encode_progress": self._optional_int_field(doc, "encode_progress"),
             "stage_started_at": doc.get("stage_started_at"),
             "last_heartbeat_at": doc.get("last_heartbeat_at"),
             "attempts": int(doc.get("attempts") or 0),
@@ -212,6 +223,12 @@ class BackgroundJobService:
         for job in processing_jobs:
             stage = str(job.get("stage") or "").strip() or "unknown"
             timeout_seconds = int(stage_timeouts.get(stage) or default_timeout_seconds)
+            per_job_timeout = job.get("render_timeout_seconds")
+            if stage == "ffmpeg_render" and per_job_timeout is not None:
+                try:
+                    timeout_seconds = max(timeout_seconds, int(per_job_timeout) + 60)
+                except (TypeError, ValueError):
+                    pass
             stage_started = (
                 self._parse_iso_timestamp(job.get("stage_started_at"))
                 or self._parse_iso_timestamp(job.get("started_at"))
@@ -230,6 +247,11 @@ class BackgroundJobService:
                 and (now_dt - last_heartbeat).total_seconds() > worker_dead_seconds
             )
             if stage_elapsed <= timeout_seconds and not heartbeat_stale:
+                continue
+
+            job_worker_id = str(job.get("worker_id") or "").strip()
+            if job_worker_id and job_worker_id == self.worker_id and not heartbeat_stale:
+                # Same in-process worker is still running (fresh heartbeats); do not requeue mid-encode.
                 continue
 
             attempts = int(job.get("attempts") or 0)
@@ -401,6 +423,30 @@ class BackgroundJobService:
                     job.get("type"),
                     job.get("user_id"),
                 )
+                try:
+                    from pathlib import Path
+                    import json
+                    import time as _time
+
+                    payload = {
+                        "sessionId": "d4a8d0",
+                        "hypothesisId": "H5",
+                        "location": "background_jobs.py:worker_loop",
+                        "message": "worker claimed job",
+                        "data": {
+                            "job_id": job.get("id"),
+                            "type": job.get("type"),
+                            "status": job.get("status"),
+                            "progress": job.get("progress"),
+                        },
+                        "timestamp": int(_time.time() * 1000),
+                        "runId": "worker-media",
+                    }
+                    log_path = Path(__file__).resolve().parent.parent.parent / "debug-d4a8d0.log"
+                    with log_path.open("a", encoding="utf-8") as debug_file:
+                        debug_file.write(json.dumps(payload, default=str) + "\n")
+                except Exception:
+                    pass
                 await self.process_job(job)
             except asyncio.CancelledError:
                 raise

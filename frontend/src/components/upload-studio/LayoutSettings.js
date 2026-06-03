@@ -77,6 +77,11 @@ const LayoutSettings = ({
             The live visualizer preview is separate from the uploaded video. For motion-heavy exports, use 30 or 60 fps.
           </p>
         ) : null}
+        {!isAnimatedVisual && ["30", "60"].includes(String(videoRenderFps)) ? (
+          <p className="text-xs text-amber-600 dark:text-amber-400">
+            Static cover art is encoded at 2 fps for speed (looks the same on YouTube). Use 30/60 fps for GIFs or video loops.
+          </p>
+        ) : null}
       </div>
 
       <div className="space-y-2">

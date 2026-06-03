@@ -492,8 +492,17 @@ class TestYouTubeUpload(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(server._normalize_render_fps(2), 2)
         self.assertEqual(server._normalize_render_fps(30), 30)
         self.assertEqual(server._normalize_render_fps(60), 60)
+        self.assertEqual(server._normalize_render_fps("30"), 30)
+        self.assertEqual(server._normalize_render_fps(24), 30)
+        self.assertEqual(server._normalize_render_fps(15), 30)
+        self.assertEqual(server._normalize_render_fps(None), server.YOUTUBE_RENDER_FPS_DEFAULT)
         with self.assertRaises(HTTPException):
-            server._normalize_render_fps(24)
+            server._normalize_render_fps(99)
+
+    def test_coerce_render_fps_default_rejects_invalid_env_values(self):
+        self.assertEqual(server._coerce_render_fps_default(2), 2)
+        self.assertEqual(server._coerce_render_fps_default("24"), 30)
+        self.assertEqual(server._coerce_render_fps_default("invalid"), 2)
 
     def test_resolve_gif_mux_fps_caps_high_user_fps(self):
         self.assertEqual(server._resolve_gif_mux_fps(2), 2)
@@ -503,6 +512,101 @@ class TestYouTubeUpload(unittest.IsolatedAsyncioTestCase):
     def test_gif_cache_signature_includes_cache_version(self):
         sig = server._gif_cache_signature(source_sha256="abc", cache_fps=15, max_height=720)
         self.assertTrue(sig.startswith(f"v{server.GIF_CACHE_VERSION}:"))
+
+    def test_youtube_render_timeout_has_sensible_floor(self):
+        short = server._youtube_render_timeout_seconds(30, 2)
+        long_track = server._youtube_render_timeout_seconds(180, 15)
+        self.assertGreaterEqual(short, 120)
+        self.assertGreaterEqual(long_track, short)
+
+    def test_resolve_ffmpeg_mux_fps_uses_internal_mux_fps(self):
+        self.assertEqual(
+            server._resolve_ffmpeg_mux_fps({"render_fps": 60, "mux_fps": 2}),
+            2,
+        )
+
+    def test_apply_render_mux_fps_caps_static_still_at_two(self):
+        payload = {"render_fps": 60}
+        capped = server._apply_render_mux_fps(
+            payload,
+            user_render_fps=60,
+            static_still=True,
+            is_gif_visual=False,
+            gif_mux_fps=None,
+        )
+        self.assertTrue(capped)
+        self.assertEqual(payload["mux_fps"], server.STATIC_STILL_ENCODE_FPS)
+        self.assertEqual(server._resolve_ffmpeg_mux_fps(payload), 2)
+
+    def test_apply_render_mux_fps_leaves_explicit_two_fps_static_unchanged(self):
+        payload = {"render_fps": 2}
+        capped = server._apply_render_mux_fps(
+            payload,
+            user_render_fps=2,
+            static_still=True,
+            is_gif_visual=False,
+            gif_mux_fps=None,
+        )
+        self.assertFalse(capped)
+        self.assertNotIn("mux_fps", payload)
+        self.assertEqual(server._resolve_ffmpeg_mux_fps(payload), 2)
+
+    def test_apply_render_mux_fps_sets_gif_mux_fps(self):
+        payload = {"render_fps": 60}
+        capped = server._apply_render_mux_fps(
+            payload,
+            user_render_fps=60,
+            static_still=False,
+            is_gif_visual=True,
+            gif_mux_fps=15,
+        )
+        self.assertFalse(capped)
+        self.assertEqual(payload["mux_fps"], 15)
+
+    def test_run_ffmpeg_command_with_progress_parses_out_time(self):
+        with patch("server.subprocess.Popen") as popen_mock:
+            proc = mock.MagicMock()
+            proc.stdout.readline.side_effect = [
+                "out_time_us=2500000\n",
+                "progress=continue\n",
+                "out_time_us=5000000\n",
+                "progress=end\n",
+                "",
+            ]
+            proc.poll.side_effect = [None, None, None, 0]
+            proc.wait.return_value = 0
+            proc.stderr.read.return_value = ""
+            popen_mock.return_value = proc
+            ratios: list[float] = []
+
+            completed = server._run_ffmpeg_command_with_progress(
+                ["ffmpeg", "-y", "-i", "in.mp4", "out.mp4"],
+                duration_seconds=10.0,
+                on_progress=ratios.append,
+                timeout=30,
+            )
+            self.assertEqual(completed.returncode, 0)
+            self.assertTrue(any(r >= 0.2 for r in ratios))
+            self.assertTrue(any(r >= 0.99 for r in ratios))
+
+    def test_build_render_filter_accepts_internal_mux_fps_for_gif(self):
+        payload = {
+            "target_w": 1280,
+            "target_h": 720,
+            "image_scale_x": 1.0,
+            "image_scale_y": 1.0,
+            "image_pos_x": 0.0,
+            "image_pos_y": 0.0,
+            "image_rotation": 0.0,
+            "background_color": "black",
+            "remove_watermark": True,
+            "source_image_w": 1280,
+            "source_image_h": 720,
+            "render_fps": 30,
+            "mux_fps": 15,
+        }
+        filter_chain = server._build_render_filter(payload)
+        self.assertIn(":r=15[bg]", filter_chain)
 
     def test_build_render_filter_uses_payload_render_fps(self):
         payload = {

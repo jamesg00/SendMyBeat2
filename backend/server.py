@@ -29,6 +29,8 @@ import stripe
 import requests
 import re
 import subprocess
+import threading
+from collections.abc import Callable
 import html
 import hashlib
 import time
@@ -397,17 +399,39 @@ UPLOAD_JOB_POLL_INTERVAL_SECONDS = int(os.environ.get("UPLOAD_JOB_POLL_INTERVAL_
 UPLOAD_JOB_STALE_AFTER_SECONDS = int(os.environ.get("UPLOAD_JOB_STALE_AFTER_SECONDS", "1800"))
 JOB_WATCHDOG_INTERVAL_SECONDS = int(os.environ.get("JOB_WATCHDOG_INTERVAL_SECONDS", "60"))
 JOB_STAGE_TIMEOUT_SECONDS = int(os.environ.get("JOB_STAGE_TIMEOUT_SECONDS", "300"))
-JOB_FFMPEG_STAGE_TIMEOUT_SECONDS = int(os.environ.get("JOB_FFMPEG_STAGE_TIMEOUT_SECONDS", "300"))
+JOB_FFMPEG_STAGE_TIMEOUT_SECONDS = int(os.environ.get("JOB_FFMPEG_STAGE_TIMEOUT_SECONDS", "720"))
 JOB_GIF_TRANSCODE_STAGE_TIMEOUT_SECONDS = int(os.environ.get("JOB_GIF_TRANSCODE_STAGE_TIMEOUT_SECONDS", "360"))
 JOB_YOUTUBE_STAGE_TIMEOUT_SECONDS = int(os.environ.get("JOB_YOUTUBE_STAGE_TIMEOUT_SECONDS", "900"))
 YOUTUBE_CHUNK_TIMEOUT_SECONDS = int(os.environ.get("YOUTUBE_CHUNK_TIMEOUT_SECONDS", "120"))
 UPLOAD_JOB_WORKER_ID = f"upload-worker-{uuid.uuid4().hex[:10]}"
-YOUTUBE_RENDER_TIMEOUT_SECONDS = int(os.environ.get("YOUTUBE_RENDER_TIMEOUT_SECONDS", "240"))
+YOUTUBE_RENDER_TIMEOUT_SECONDS = int(os.environ.get("YOUTUBE_RENDER_TIMEOUT_SECONDS", "600"))
+YOUTUBE_RENDER_TIMEOUT_MAX_SECONDS = int(os.environ.get("YOUTUBE_RENDER_TIMEOUT_MAX_SECONDS", "900"))
+STATIC_STILL_ENCODE_FPS = 2
 YOUTUBE_RENDER_PRESET = str(os.environ.get("YOUTUBE_RENDER_PRESET", "veryfast")).strip() or "veryfast"
 YOUTUBE_RENDER_CRF = str(os.environ.get("YOUTUBE_RENDER_CRF", "26")).strip() or "26"
 YOUTUBE_RENDER_MAX_HEIGHT = int(os.environ.get("YOUTUBE_RENDER_MAX_HEIGHT", "720") or "720")
-YOUTUBE_RENDER_FPS_DEFAULT = int(os.environ.get("YOUTUBE_RENDER_FPS", "2") or "2")
 YOUTUBE_RENDER_FPS_ALLOWED = frozenset({2, 30, 60})
+# Legacy env/docs used 24 or 15; map to nearest allowed preset.
+YOUTUBE_RENDER_FPS_LEGACY_ALIASES: dict[int, int] = {24: 30, 15: 30}
+
+
+def _coerce_render_fps_default(raw: Any) -> int:
+    try:
+        value = int(float(str(raw).strip()))
+    except (TypeError, ValueError):
+        value = 2
+    value = YOUTUBE_RENDER_FPS_LEGACY_ALIASES.get(value, value)
+    if value in YOUTUBE_RENDER_FPS_ALLOWED:
+        return value
+    logging.warning(
+        "YOUTUBE_RENDER_FPS=%r is not in %s; using 2.",
+        raw,
+        sorted(YOUTUBE_RENDER_FPS_ALLOWED),
+    )
+    return 2
+
+
+YOUTUBE_RENDER_FPS_DEFAULT = _coerce_render_fps_default(os.environ.get("YOUTUBE_RENDER_FPS", "2"))
 YOUTUBE_MAX_AUDIO_DURATION_SECONDS = int(os.environ.get("YOUTUBE_MAX_AUDIO_DURATION_SECONDS", str(15 * 60)))
 GIF_TRANSCODE_MAX_FPS = int(os.environ.get("GIF_TRANSCODE_MAX_FPS", "15"))
 GIF_TRANSCODE_TIMEOUT_SECONDS = int(os.environ.get("GIF_TRANSCODE_TIMEOUT_SECONDS", "300"))
@@ -417,6 +441,13 @@ GIF_TRANSCODE_CRF = str(os.environ.get("GIF_TRANSCODE_CRF", "28")).strip() or "2
 GIF_TRANSCODE_HEAVY_FRAME_THRESHOLD = int(os.environ.get("GIF_TRANSCODE_HEAVY_FRAME_THRESHOLD", "450"))
 GIF_TRANSCODE_HEAVY_BYTES_THRESHOLD = int(os.environ.get("GIF_TRANSCODE_HEAVY_BYTES_THRESHOLD", str(8 * 1024 * 1024)))
 GIF_CACHE_VERSION = 2
+YOUTUBE_ENCODE_PROGRESS_INTERVAL_SECONDS = float(
+    os.environ.get("YOUTUBE_ENCODE_PROGRESS_INTERVAL_SECONDS", "2")
+)
+JOB_PROGRESS_ENCODE_MIN = 41
+JOB_PROGRESS_ENCODE_MAX = 64
+JOB_PROGRESS_GIF_MIN = 42
+JOB_PROGRESS_GIF_MAX = 44
 VISUAL_UPLOAD_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".gif", ".webm", ".mp4", ".mov", ".m4v"]
 VIDEO_VISUAL_EXTENSIONS = {".gif", ".webm", ".mp4", ".mov", ".m4v"}
 PRIORITIZE_YOUTUBE_UPLOAD_JOBS = str(os.environ.get("PRIORITIZE_YOUTUBE_UPLOAD_JOBS", "true")).strip().lower() not in {"0", "false", "no"}
@@ -804,12 +835,151 @@ def _resolve_gif_transcode_settings(
     return {"cache_fps": cache_fps, "max_height": max_height, "nb_frames": nb_frames, "file_size": file_size}
 
 
+def _insert_ffmpeg_progress_flags(command: list[str]) -> list[str]:
+    full_cmd = list(command)
+    try:
+        insert_at = full_cmd.index("-y") + 1
+    except ValueError:
+        insert_at = min(2, len(full_cmd))
+    full_cmd[insert_at:insert_at] = ["-progress", "pipe:1", "-nostats"]
+    return full_cmd
+
+
+def _run_ffmpeg_command_with_progress(
+    command: list[str],
+    *,
+    duration_seconds: float,
+    on_progress: Callable[[float], None] | None = None,
+    timeout: int,
+) -> subprocess.CompletedProcess:
+    safe_duration = max(0.5, float(duration_seconds or 0.5))
+    full_cmd = _insert_ffmpeg_progress_flags(command)
+    proc = subprocess.Popen(
+        full_cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        bufsize=1,
+    )
+    stderr_chunks: list[str] = []
+
+    def _drain_stderr() -> None:
+        if proc.stderr is not None:
+            stderr_chunks.append(proc.stderr.read())
+
+    stderr_thread = threading.Thread(target=_drain_stderr, daemon=True)
+    stderr_thread.start()
+    deadline = time.perf_counter() + timeout
+    stdout_parts: list[str] = []
+    out_time_us = 0
+
+    try:
+        if proc.stdout is not None:
+            while True:
+                if time.perf_counter() > deadline:
+                    proc.kill()
+                    proc.wait(timeout=5)
+                    raise subprocess.TimeoutExpired(full_cmd, timeout)
+                line = proc.stdout.readline()
+                if not line:
+                    if proc.poll() is not None:
+                        break
+                    continue
+                stdout_parts.append(line)
+                stripped = line.strip()
+                if stripped.startswith("out_time_us="):
+                    try:
+                        out_time_us = int(stripped.split("=", 1)[1])
+                    except ValueError:
+                        out_time_us = 0
+                    if on_progress:
+                        ratio = min(1.0, (out_time_us / 1_000_000.0) / safe_duration)
+                        on_progress(ratio)
+                elif stripped == "progress=end" and on_progress:
+                    on_progress(1.0)
+        return_code = proc.wait(timeout=max(1, int(deadline - time.perf_counter())))
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait(timeout=5)
+        raise
+    finally:
+        stderr_thread.join(timeout=5)
+
+    if return_code == 0 and on_progress:
+        on_progress(1.0)
+
+    stderr = "".join(stderr_chunks)
+    return subprocess.CompletedProcess(full_cmd, return_code, "".join(stdout_parts), stderr)
+
+
+def _throttled_encode_progress_callback(
+    on_progress: Callable[[float], None] | None,
+    *,
+    min_interval_seconds: float = YOUTUBE_ENCODE_PROGRESS_INTERVAL_SECONDS,
+) -> Callable[[float], None] | None:
+    if on_progress is None:
+        return None
+    state = {"last_at": 0.0}
+
+    def _wrapped(ratio: float) -> None:
+        now = time.perf_counter()
+        clamped = max(0.0, min(1.0, float(ratio)))
+        if clamped < 0.99 and (now - state["last_at"]) < min_interval_seconds:
+            return
+        state["last_at"] = now
+        on_progress(clamped)
+
+    return _wrapped
+
+
+def _make_job_encode_progress_callback(
+    job_id: str,
+    loop: asyncio.AbstractEventLoop,
+    *,
+    progress_min: int,
+    progress_max: int,
+    message_prefix: str,
+) -> Callable[[float], None]:
+    def _report(ratio: float) -> None:
+        clamped = max(0.0, min(1.0, float(ratio)))
+        encode_pct = int(clamped * 100)
+        job_progress = progress_min + int(clamped * max(0, progress_max - progress_min))
+        _agent_debug_log(
+            "H2",
+            "server.py:_make_job_encode_progress_callback",
+            "encode progress tick",
+            {
+                "job_id": job_id,
+                "ratio": round(clamped, 3),
+                "job_progress": job_progress,
+                "encode_pct": encode_pct,
+            },
+        )
+        _schedule_upload_job_update(
+            loop,
+            _update_upload_job(
+                job_id,
+                progress=job_progress,
+                message=f"{message_prefix} {encode_pct}%",
+                extra_updates={
+                    "encode_progress": encode_pct,
+                    "last_heartbeat_at": _safe_iso_now(),
+                },
+            ),
+            context=f"encode_progress job={job_id}",
+        )
+
+    return _throttled_encode_progress_callback(_report)
+
+
 def _transcode_gif_to_h264_mp4(
     *,
     source_path: Path,
     output_path: Path,
     max_height: int,
     fps: int,
+    duration_seconds: float | None = None,
+    on_progress: Callable[[float], None] | None = None,
 ) -> None:
     ffmpeg_bin = _resolve_ffmpeg_binary()
     # Single playthrough of the GIF animation (ignore_loop 1). ignore_loop 0 honors Netscape
@@ -852,15 +1022,17 @@ def _transcode_gif_to_h264_mp4(
         fps,
         GIF_TRANSCODE_TIMEOUT_SECONDS,
     )
+    estimate_seconds = max(1.0, float(duration_seconds or 5.0))
+    progress_cb = _throttled_encode_progress_callback(on_progress)
     try:
-        completed = subprocess.run(
+        completed = _run_ffmpeg_command_with_progress(
             command,
-            capture_output=True,
-            text=True,
+            duration_seconds=estimate_seconds,
+            on_progress=progress_cb,
             timeout=GIF_TRANSCODE_TIMEOUT_SECONDS,
         )
     except subprocess.TimeoutExpired as exc:
-        stderr_preview = (exc.stderr or exc.stdout or "").strip()
+        stderr_preview = (getattr(exc, "stderr", None) or getattr(exc, "stdout", None) or "").strip()
         logging.error(
             "GIF transcode timed out after %ss source=%s stderr=%s",
             GIF_TRANSCODE_TIMEOUT_SECONDS,
@@ -888,6 +1060,7 @@ async def _get_or_create_gif_mp4_cache(
     image_path: Path,
     *,
     user_render_fps: int,
+    on_gif_encode_progress: Callable[[float], None] | None = None,
 ) -> tuple[Path, int]:
     """Transcode animated GIF to a loopable H.264 MP4 once; cache path in Mongo + disk."""
     upload_id = str(image_upload.get("id") or "").strip()
@@ -920,6 +1093,13 @@ async def _get_or_create_gif_mp4_cache(
         raise HTTPException(status_code=500, detail="GIF cache requires local media storage.")
     cache_path = media_storage.root_dir / storage_key
     cache_path.parent.mkdir(parents=True, exist_ok=True)
+    meta = _probe_gif_metadata(image_path)
+    gif_duration = float(meta.get("duration") or 0)
+    nb_frames = int(transcode_settings.get("nb_frames") or 0)
+    if gif_duration <= 0 and nb_frames > 0 and cache_fps > 0:
+        gif_duration = nb_frames / float(cache_fps)
+    gif_duration = max(1.0, min(gif_duration or 8.0, 120.0))
+
     temp_path = media_storage.create_temp_path(".mp4")
     try:
         await asyncio.to_thread(
@@ -928,6 +1108,8 @@ async def _get_or_create_gif_mp4_cache(
             output_path=temp_path,
             max_height=max_height,
             fps=cache_fps,
+            duration_seconds=gif_duration,
+            on_progress=on_gif_encode_progress,
         )
         shutil.move(str(temp_path), str(cache_path))
     except Exception:
@@ -2368,10 +2550,13 @@ def _clean_youtube_tags(raw_tags: list[str] | None) -> list[str]:
 
 
 def _normalize_render_fps(render_fps: Any) -> int:
+    if render_fps is None or (isinstance(render_fps, str) and not str(render_fps).strip()):
+        return YOUTUBE_RENDER_FPS_DEFAULT
     try:
-        value = int(render_fps)
+        value = int(float(str(render_fps).strip()))
     except (TypeError, ValueError):
-        value = YOUTUBE_RENDER_FPS_DEFAULT
+        return YOUTUBE_RENDER_FPS_DEFAULT
+    value = YOUTUBE_RENDER_FPS_LEGACY_ALIASES.get(value, value)
     if value not in YOUTUBE_RENDER_FPS_ALLOWED:
         allowed = ", ".join(str(item) for item in sorted(YOUTUBE_RENDER_FPS_ALLOWED))
         raise HTTPException(status_code=400, detail=f"render_fps must be one of: {allowed}.")
@@ -2380,6 +2565,66 @@ def _normalize_render_fps(render_fps: Any) -> int:
 
 def _resolve_payload_render_fps(payload: dict[str, Any]) -> int:
     return _normalize_render_fps(payload.get("render_fps", YOUTUBE_RENDER_FPS_DEFAULT))
+
+
+def _resolve_ffmpeg_mux_fps(payload: dict[str, Any]) -> int:
+    """FFmpeg output fps. GIF jobs set mux_fps (10–15); static stills always encode at 2."""
+    mux = payload.get("mux_fps")
+    if mux is not None:
+        try:
+            value = int(mux)
+        except (TypeError, ValueError):
+            value = None
+        if value is not None and 2 <= value <= 60:
+            return value
+    return _resolve_payload_render_fps(payload)
+
+
+def _apply_render_mux_fps(
+    render_payload: dict[str, Any],
+    *,
+    user_render_fps: int,
+    static_still: bool,
+    is_gif_visual: bool,
+    gif_mux_fps: int | None,
+) -> bool:
+    """Set mux_fps on render_payload when needed. Returns True if static still was capped to 2fps."""
+    if is_gif_visual and gif_mux_fps is not None:
+        render_payload["mux_fps"] = gif_mux_fps
+        return False
+    if static_still and user_render_fps > STATIC_STILL_ENCODE_FPS:
+        render_payload["mux_fps"] = STATIC_STILL_ENCODE_FPS
+        return True
+    return False
+
+
+def _youtube_render_timeout_seconds(audio_duration_seconds: float, mux_fps: int) -> int:
+    """Scale subprocess timeout with track length and mux rate (small VPS-safe estimate)."""
+    duration = max(1.0, float(audio_duration_seconds or 1.0))
+    fps = max(1, int(mux_fps or 2))
+    floor = max(120, YOUTUBE_RENDER_TIMEOUT_SECONDS)
+    ceiling = max(floor, YOUTUBE_RENDER_TIMEOUT_MAX_SECONDS)
+    estimate = int(duration * fps * 0.1) + 90
+    return max(floor, min(estimate, ceiling))
+
+
+def _log_youtube_render_timeout_configuration() -> None:
+    logger.info(
+        "YouTube render timeouts: YOUTUBE_RENDER_TIMEOUT_SECONDS=%s "
+        "YOUTUBE_RENDER_TIMEOUT_MAX_SECONDS=%s JOB_FFMPEG_STAGE_TIMEOUT_SECONDS=%s "
+        "GIF_TRANSCODE_TIMEOUT_SECONDS=%s JOB_WORKER_HEARTBEAT_DEAD_SECONDS=%s",
+        YOUTUBE_RENDER_TIMEOUT_SECONDS,
+        YOUTUBE_RENDER_TIMEOUT_MAX_SECONDS,
+        JOB_FFMPEG_STAGE_TIMEOUT_SECONDS,
+        GIF_TRANSCODE_TIMEOUT_SECONDS,
+        JOB_WORKER_HEARTBEAT_DEAD_SECONDS,
+    )
+    if YOUTUBE_RENDER_TIMEOUT_SECONDS < 600:
+        logger.warning(
+            "YOUTUBE_RENDER_TIMEOUT_SECONDS=%s is below 600; long static/GIF encodes may fail "
+            "before JOB_FFMPEG_STAGE_TIMEOUT_SECONDS. Set YOUTUBE_RENDER_TIMEOUT_SECONDS=600 in production.",
+            YOUTUBE_RENDER_TIMEOUT_SECONDS,
+        )
 
 
 def _normalize_upload_render_settings(
@@ -2500,10 +2745,22 @@ async def _job_heartbeat_loop(job_id: str) -> None:
         if not job_doc or job_doc.get("status") != "processing":
             break
         stage = str(job_doc.get("stage") or "").strip()
+        hb_progress = int(job_doc.get("progress") or 0)
         await _touch_upload_job_heartbeat(
             job_id,
             message=str(job_doc.get("message") or "Processing..."),
-            progress=int(job_doc.get("progress") or 0),
+            progress=hb_progress,
+        )
+        _agent_debug_log(
+            "H3",
+            "server.py:_job_heartbeat_loop",
+            "heartbeat mirrored job state",
+            {
+                "job_id": job_id,
+                "stage": stage or "unknown",
+                "progress": hb_progress,
+                "encode_progress": job_doc.get("encode_progress"),
+            },
         )
         logger.info(
             "Job heartbeat job=%s stage=%s progress=%s message=%r",
@@ -2666,7 +2923,7 @@ def _resolve_youtube_render_dimensions(payload: dict[str, Any]) -> tuple[int, in
 
 def _build_render_filter(payload: dict[str, Any]) -> str:
     target_w, target_h = _resolve_youtube_render_dimensions(payload)
-    render_fps = _resolve_payload_render_fps(payload)
+    render_fps = _resolve_ffmpeg_mux_fps(payload)
     scale_x = float(payload["image_scale_x"])
     scale_y = float(payload["image_scale_y"])
     pos_x = float(payload["image_pos_x"])
@@ -2775,6 +3032,25 @@ async def _render_youtube_video(
     output_path = media_storage.create_temp_path(".mp4")
     blurred_bg_path: Path | None = None
 
+    encode_progress_cb: Callable[[float], None] | None = None
+    gif_progress_cb: Callable[[float], None] | None = None
+    if job_id:
+        loop = asyncio.get_running_loop()
+        encode_progress_cb = _make_job_encode_progress_callback(
+            job_id,
+            loop,
+            progress_min=JOB_PROGRESS_ENCODE_MIN,
+            progress_max=JOB_PROGRESS_ENCODE_MAX,
+            message_prefix="Encoding video...",
+        )
+        gif_progress_cb = _make_job_encode_progress_callback(
+            job_id,
+            loop,
+            progress_min=JOB_PROGRESS_GIF_MIN,
+            progress_max=JOB_PROGRESS_GIF_MAX,
+            message_prefix="Converting GIF...",
+        )
+
     try:
         async with media_storage.local_path_for_processing(image_upload) as image_path:
             async with media_storage.local_path_for_processing(audio_upload) as audio_path:
@@ -2802,6 +3078,7 @@ async def _render_youtube_video(
                         image_upload,
                         image_path,
                         user_render_fps=user_render_fps,
+                        on_gif_encode_progress=gif_progress_cb,
                     )
                     if job_id:
                         await _update_upload_job(
@@ -2856,12 +3133,21 @@ async def _render_youtube_video(
                     "source_image_h": source_image_h,
                     "blurred_background_input": bool(blurred_bg_path),
                 }
-                if is_gif_visual and gif_mux_fps is not None:
-                    # GIF path: mux at cached animation fps (<=15), not 30/60 for entire beat.
-                    render_payload["render_fps"] = gif_mux_fps
+                static_still = visual_kind == "image" and not is_gif_visual
+                static_encode_capped = _apply_render_mux_fps(
+                    render_payload,
+                    user_render_fps=user_render_fps,
+                    static_still=static_still,
+                    is_gif_visual=is_gif_visual,
+                    gif_mux_fps=gif_mux_fps,
+                )
                 filter_complex = _build_render_filter(render_payload)
-                render_fps = int(render_payload.get("render_fps") or user_render_fps)
-                render_fps_value = str(render_fps)
+                mux_fps = _resolve_ffmpeg_mux_fps(render_payload)
+                render_fps_value = str(mux_fps)
+                render_timeout_seconds = _youtube_render_timeout_seconds(
+                    audio_duration_seconds,
+                    mux_fps,
+                )
 
                 command = [ffmpeg_bin, "-nostdin", "-y", "-loglevel", "error"]
                 if blurred_bg_path:
@@ -2921,52 +3207,100 @@ async def _render_youtube_video(
                     command.extend(["-tune", "stillimage"])
                 command.append(str(output_path))
 
+                if job_id:
+                    encode_message = "Encoding video... 0%"
+                    if static_encode_capped:
+                        encode_message = (
+                            f"Encoding still cover at {mux_fps} fps "
+                            f"(UI {user_render_fps} fps — same look, faster)… 0%"
+                        )
+                    await _update_upload_job(
+                        job_id,
+                        progress=JOB_PROGRESS_ENCODE_MIN,
+                        message=encode_message,
+                        extra_updates={
+                            "encode_progress": 0,
+                            "render_timeout_seconds": render_timeout_seconds,
+                            "encode_mux_fps": mux_fps,
+                            "user_render_fps": user_render_fps,
+                            "static_encode_capped": static_encode_capped,
+                            "last_heartbeat_at": _safe_iso_now(),
+                        },
+                    )
+
                 logging.info(
-                    "Starting FFmpeg render for youtube_upload audio=%s image=%s visual_kind=%s is_gif=%s visual_source=%s source_image=%sx%s audio_duration=%.2fs output=%sx%s fps=%s preset=%s crf=%s render_limit=%.3fs output=%s",
+                    "Starting FFmpeg render for youtube_upload audio=%s image=%s visual_kind=%s is_gif=%s "
+                    "static_capped=%s user_fps=%s mux_fps=%s audio_duration=%.2fs output=%sx%s "
+                    "timeout=%ss preset=%s output=%s",
                     audio_upload.get("id"),
                     image_upload.get("id"),
                     visual_kind,
                     is_gif_visual,
-                    str(visual_source_path),
-                    source_image_w or "unknown",
-                    source_image_h or "unknown",
+                    static_encode_capped,
+                    user_render_fps,
+                    mux_fps,
                     audio_duration_seconds,
                     target_w,
                     target_h,
-                    render_fps,
+                    render_timeout_seconds,
                     YOUTUBE_RENDER_PRESET,
-                    YOUTUBE_RENDER_CRF,
-                    audio_duration_seconds,
                     str(output_path),
                 )
 
+                _agent_debug_log(
+                    "H4",
+                    "server.py:_render_youtube_video",
+                    "ffmpeg encode starting",
+                    {
+                        "job_id": job_id,
+                        "mux_fps": mux_fps,
+                        "static_encode_capped": static_encode_capped,
+                        "audio_duration_seconds": round(audio_duration_seconds, 2),
+                        "render_timeout_seconds": render_timeout_seconds,
+                    },
+                )
                 render_started_at = time.perf_counter()
                 try:
                     completed = await asyncio.to_thread(
-                        subprocess.run,
+                        _run_ffmpeg_command_with_progress,
                         command,
-                        capture_output=True,
-                        text=True,
-                        timeout=YOUTUBE_RENDER_TIMEOUT_SECONDS,
+                        duration_seconds=audio_duration_seconds,
+                        on_progress=encode_progress_cb,
+                        timeout=render_timeout_seconds,
                     )
                 except subprocess.TimeoutExpired as exc:
                     try:
                         output_path.unlink(missing_ok=True)
                     except Exception:
                         pass
-                    stderr_preview = (exc.stderr or exc.stdout or "").strip()
+                    stderr_preview = (
+                        getattr(exc, "stderr", None) or getattr(exc, "stdout", None) or ""
+                    ).strip()
                     logging.error(
                         "FFmpeg render timed out after %ss for audio=%s image=%s stderr=%s",
-                        YOUTUBE_RENDER_TIMEOUT_SECONDS,
+                        render_timeout_seconds,
                         audio_upload.get("id"),
                         image_upload.get("id"),
                         stderr_preview[:800],
                     )
                     raise HTTPException(
                         status_code=500,
-                        detail=f"Video creation timed out after {YOUTUBE_RENDER_TIMEOUT_SECONDS} seconds.",
+                        detail=(
+                            f"Video creation timed out after {render_timeout_seconds} seconds. "
+                            "Try 2 fps for static cover art, a shorter beat, or a smaller GIF."
+                        ),
                     )
                 render_duration_seconds = time.perf_counter() - render_started_at
+                _agent_debug_log(
+                    "H4",
+                    "server.py:_render_youtube_video",
+                    "ffmpeg encode finished",
+                    {
+                        "job_id": job_id,
+                        "returncode": completed.returncode,
+                        "render_duration_seconds": round(render_duration_seconds, 2),
+                    },
+                )
 
                 if completed.returncode != 0:
                     try:
@@ -2994,8 +3328,9 @@ async def _render_youtube_video(
                     "generated_video_size_bytes": int(output_size_bytes),
                     "output_width": target_w,
                     "output_height": target_h,
-                    "fps": render_fps,
-                    "render_fps": render_fps,
+                    "fps": mux_fps,
+                    "render_fps": user_render_fps,
+                    "mux_fps": mux_fps,
                     "video_codec": "libx264",
                     "audio_codec": "aac",
                     "preset": YOUTUBE_RENDER_PRESET,
@@ -3014,6 +3349,9 @@ async def _render_youtube_video(
                     "gif_cached_mp4": is_gif_visual,
                     "visual_source_path": str(visual_source_path),
                     "user_render_fps": user_render_fps,
+                    "encode_mux_fps": mux_fps,
+                    "static_encode_capped": static_encode_capped,
+                    "render_timeout_seconds": render_timeout_seconds,
                     **({"gif_mux_fps": gif_mux_fps} if is_gif_visual and gif_mux_fps is not None else {}),
                 }
                 payload["_media_debug"] = media_debug
@@ -3261,9 +3599,19 @@ async def _execute_youtube_upload_job(job: dict) -> dict:
     await ensure_has_upload_credit(user_id)
     await _update_upload_job(
         job_id,
-        progress=40,
-        message="Rendering video...",
-        extra_updates={"stage": "ffmpeg_render", "last_heartbeat_at": _safe_iso_now()},
+        progress=JOB_PROGRESS_ENCODE_MIN,
+        message="Preparing video encode...",
+        extra_updates={
+            "stage": "ffmpeg_render",
+            "encode_progress": 0,
+            "last_heartbeat_at": _safe_iso_now(),
+        },
+    )
+    _agent_debug_log(
+        "H1",
+        "server.py:_execute_youtube_upload_job",
+        "entered ffmpeg_render stage",
+        {"job_id": job_id, "progress": JOB_PROGRESS_ENCODE_MIN, "render_fps": payload.get("render_fps")},
     )
     heartbeat_task = asyncio.create_task(_job_heartbeat_loop(job_id))
     try:
@@ -3291,6 +3639,7 @@ async def _execute_youtube_upload_job(job: dict) -> dict:
         progress=65,
         message="Video rendered. Starting YouTube upload...",
         extra_updates={
+            "encode_progress": 100,
             "last_heartbeat_at": _safe_iso_now(),
             **({"media_debug": media_debug} if media_debug else {}),
         },
@@ -7921,11 +8270,12 @@ async def upload_to_youtube(
     image_rotation: float = Form(0.0),
     background_color: str = Form("black"),
     remove_watermark: bool = Form(False),
-    render_fps: int = Form(YOUTUBE_RENDER_FPS_DEFAULT),
+    render_fps: str = Form(str(YOUTUBE_RENDER_FPS_DEFAULT)),
     current_user: dict = Depends(get_current_user)
 ):
     """Create a persisted YouTube upload job and return immediately."""
     try:
+        safe_render_fps = _normalize_render_fps(render_fps)
         await _guard_heavy_feature(current_user=current_user, feature_key="youtube_upload", job_type="youtube_upload")
         _enforce_action_rate_limit(
             f"youtube_upload:{current_user['id']}",
@@ -7960,10 +8310,15 @@ async def upload_to_youtube(
             image_rotation=image_rotation,
             background_color=background_color,
             remove_watermark=remove_watermark,
-            render_fps=render_fps,
+            render_fps=safe_render_fps,
         )
         job_doc = await _create_youtube_upload_job(current_user=current_user, payload=payload)
-        logger.info("YouTube upload job queued id=%s user_id=%s", job_doc.get("id"), current_user["id"])
+        logger.info(
+            "YouTube upload job queued id=%s user_id=%s render_fps=%s",
+            job_doc.get("id"),
+            current_user["id"],
+            safe_render_fps,
+        )
         return {
             "success": True,
             "queued": True,
@@ -8418,6 +8773,56 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+_AGENT_DEBUG_LOG_PATH = Path(__file__).resolve().parent.parent / "debug-d4a8d0.log"
+
+
+def _agent_debug_log(
+    hypothesis_id: str,
+    location: str,
+    message: str,
+    data: dict[str, Any] | None = None,
+    *,
+    run_id: str = "worker-media",
+) -> None:
+    # #region agent log
+    try:
+        payload = {
+            "sessionId": "d4a8d0",
+            "hypothesisId": hypothesis_id,
+            "location": location,
+            "message": message,
+            "data": data or {},
+            "timestamp": int(time.time() * 1000),
+            "runId": run_id,
+        }
+        with _AGENT_DEBUG_LOG_PATH.open("a", encoding="utf-8") as debug_file:
+            debug_file.write(json.dumps(payload, default=str) + "\n")
+    except Exception:
+        pass
+    # #endregion
+
+
+def _schedule_upload_job_update(
+    loop: asyncio.AbstractEventLoop,
+    coro: Any,
+    *,
+    context: str,
+) -> None:
+    future = asyncio.run_coroutine_threadsafe(coro, loop)
+
+    def _on_done(done_future: asyncio.Future) -> None:
+        try:
+            done_future.result()
+        except Exception as exc:
+            logger.error("Upload job update failed (%s): %s", context, exc)
+            _agent_debug_log(
+                "H2",
+                "server.py:_schedule_upload_job_update",
+                "async job update from ffmpeg thread failed",
+                {"context": context, "error": str(exc)},
+            )
+
+    future.add_done_callback(_on_done)
 background_job_service = BackgroundJobService(
     db=db,
     logger=logger,
@@ -8455,6 +8860,7 @@ spotlight_service = SpotlightService(
 async def startup_background_tasks():
     global _upload_job_worker_task, _job_watchdog_task, _spotlight_refresh_task
     _validate_security_configuration()
+    _log_youtube_render_timeout_configuration()
     await _requeue_stale_background_jobs()
     if _upload_job_worker_task is None:
         _upload_job_worker_task = asyncio.create_task(_background_job_worker_loop())
