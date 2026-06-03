@@ -54,7 +54,7 @@ const About = () => {
                     <div>
                       <h3 className="policy-title mb-1.5 text-sm font-semibold sm:mb-2 sm:text-base md:text-lg">AI Tag Generation</h3>
                       <p className="text-xs sm:text-sm">
-                        Generate up to 500 advanced, search-optimized tags based on your search queries. Our AI analyzes trends and suggests tags that increase discoverability, similar to tools like vidIQ.
+                        Generate high-intent, YouTube search–optimized tags from your queries. We score each tag using YouTube result volume and top-video view proxies so your upload pack favors real search demand—not low-volume song-only long-tail.
                       </p>
                     </div>
                   </div>

@@ -46,6 +46,7 @@ try:
     from backend.storage import media_storage
     from backend.services.background_jobs import BackgroundJobService
     from backend.services.spotlight_service import SpotlightService
+    from backend.services import tag_metrics as tag_metrics_service  # noqa: F401
     from backend.models_spotlight import (
         ProducerProfile,
         ProducerProfileUpdate,
@@ -57,6 +58,7 @@ except ImportError:
     from storage import media_storage
     from services.background_jobs import BackgroundJobService
     from services.spotlight_service import SpotlightService
+    from services import tag_metrics as tag_metrics_service
     from models_spotlight import (
         ProducerProfile,
         ProducerProfileUpdate,
@@ -5840,6 +5842,7 @@ def _score_tag_candidate(
         "soundcloud": 5,
         "soundcloud_tracks": 5,
         "custom": 4,
+        "artist_nest": 7,
         "llm": 2,
     }.get(source, 1)
 
@@ -6210,7 +6213,7 @@ Most trusted video/title signals:
 What appears for "{artist_name} type beat":
 {type_beat_results}
 
-Optional candidate inspirations from YouTube/Spotify/SoundCloud/custom inputs:
+Pre-qualified high-intent candidates (YouTube search demand scored; use these as your primary pool):
 {candidate_tags_text}
 
 STRICT RULES:
@@ -6396,6 +6399,7 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
             "spotify": "missing",
             "soundcloud": "missing",
         }
+        youtube = None
         try:
             # Get user's YouTube credentials if available for search
             user = await db.users.find_one({"id": current_user['id']})
@@ -6467,8 +6471,15 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
         if llm_provider not in (None, "openai", "grok"):
             raise HTTPException(status_code=400, detail="Invalid llm_provider. Use 'openai' or 'grok'.")
 
-        # Generate a refined final list only (no blind appending afterwards)
-        target_count = 64
+        beat_tokens = {
+            token
+            for token in _tag_exact_key(request.query).split()
+            if token and token not in _TAG_NOISE_WORDS
+        }
+        min_publish_score = tag_metrics_service.TAG_MIN_PUBLISH_SCORE
+        max_publish_tags = tag_metrics_service.TAG_MAX_PUBLISH_COUNT
+
+        target_count = min(64, max_publish_tags)
         custom_input_tags = [tag.strip() for tag in (request.custom_tags or []) if tag and tag.strip()]
         candidate_pool: list[str] = []
         candidate_source_map: dict[str, str] = {}
@@ -6485,14 +6496,55 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
                 if key and key not in candidate_source_map:
                     candidate_source_map[key] = source_name
 
-        unique_candidate_pool = _append_unique_tags([], candidate_pool, max_tags=80)
-        source_priority_pool = []
-        for candidate in unique_candidate_pool:
-            source = candidate_source_map.get(_tag_exact_key(candidate), "")
-            if source in {"youtube", "spotify", "soundcloud"}:
-                source_priority_pool.append(candidate)
+        serp_titles = list(artist_context.get("type_beat_search_results") or []) + list(
+            artist_context.get("top_video_titles") or []
+        )
+        for nest_tag in tag_metrics_service.build_artist_nest_candidates(artist_name, serp_titles):
+            candidate_pool.append(nest_tag)
+            key = _tag_exact_key(nest_tag)
+            if key and key not in candidate_source_map:
+                candidate_source_map[key] = "artist_nest"
 
-        candidate_tags_text = ", ".join(unique_candidate_pool[:80]) if unique_candidate_pool else "None"
+        unique_candidate_pool = _append_unique_tags([], candidate_pool, max_tags=120)
+        tags_with_sources = [
+            (tag, candidate_source_map.get(_tag_exact_key(tag), "candidate"))
+            for tag in unique_candidate_pool
+        ]
+
+        pre_scored_all, tag_metrics_stats = await tag_metrics_service.score_tags_with_youtube_proxy(
+            youtube=youtube,
+            db=db,
+            tags_with_sources=tags_with_sources,
+            query=request.query,
+            artist_name=artist_name,
+            beat_tokens=beat_tokens,
+            relevance_scorer=_score_tag_candidate,
+            kept_counts=kept_tag_counts,
+            removed_counts=removed_tag_counts,
+            source_map=candidate_source_map,
+            min_score=min_publish_score,
+        )
+        qualified_tags, qualified_scored, effective_min_score = tag_metrics_service.filter_scored_tags_by_threshold(
+            pre_scored_all,
+            min_score=min_publish_score,
+        )
+        tag_metrics_stats["dropped_low_score"] = max(0, len(pre_scored_all) - len(qualified_scored))
+        tag_metrics_stats["effective_min_score"] = effective_min_score
+        tag_metrics_stats["qualified_candidates"] = len(qualified_scored)
+        source_status["tag_metrics"] = tag_metrics_stats
+
+        scored_by_key = {
+            tag_metrics_service.normalize_tag_key(entry.get("tag", "")): entry
+            for entry in pre_scored_all
+            if entry.get("tag")
+        }
+
+        qualified_for_prompt = qualified_tags[:60] if qualified_tags else [
+            str(entry.get("tag") or "")
+            for entry in pre_scored_all[:30]
+            if entry.get("tag")
+        ]
+        candidate_tags_text = ", ".join(qualified_for_prompt) if qualified_for_prompt else "None"
         prompt = _build_tag_generation_prompt(
             request_query=request.query,
             artist_name=artist_name,
@@ -6500,14 +6552,16 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
             candidate_tags_text=candidate_tags_text,
             artist_context=artist_context,
         )
-        
+
         response = await llm_chat(
-            system_message="You are an expert YouTube SEO specialist for beat producers. Produce a refined, high-intent final tag list only. Return strict JSON.",
+            system_message=(
+                "You are an expert YouTube SEO specialist for beat producers. "
+                "Only refine from the pre-qualified high-intent candidate pool. Return strict JSON."
+            ),
             user_message=prompt,
             provider=llm_provider,
         )
-        
-        # Parse AI-generated tags (JSON first, then fallback to comma split)
+
         tags_text = response.strip()
         if "```json" in tags_text:
             start = tags_text.find("```json") + 7
@@ -6518,11 +6572,11 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
             end = tags_text.find("```", start)
             tags_text = tags_text[start:end].strip()
 
-        parsed_tags = []
+        parsed_tags: list[str] = []
         try:
             parsed = json.loads(tags_text)
             if isinstance(parsed, dict) and isinstance(parsed.get("tags"), list):
-                parsed_tags = parsed["tags"]
+                parsed_tags = [tag for tag in parsed["tags"] if isinstance(tag, str)]
         except Exception:
             parsed_tags = [tag.strip() for tag in tags_text.split(",") if tag.strip()]
 
@@ -6569,6 +6623,18 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
                     dropped_debug.append({"tag": clean, "reason": "duplicate_semantic"})
                 return
 
+            score_entry = scored_by_key.get(exact_key)
+            composite_score = int((score_entry or {}).get("score") or 0)
+            if composite_score < effective_min_score:
+                if len(dropped_debug) < 80:
+                    dropped_debug.append(
+                        {
+                            "tag": clean,
+                            "reason": f"below_publish_score_{composite_score}",
+                        }
+                    )
+                return
+
             seen_exact.add(exact_key)
             if semantic_key:
                 seen_semantic.add(semantic_key)
@@ -6578,95 +6644,109 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
                     "tag": clean,
                     "source": source,
                     "reason": accepted_reason,
+                    "composite_score": composite_score,
                 }
             )
 
-        for tag in [t for t in parsed_tags if isinstance(t, str)]:
+        llm_clean: list[str] = []
+        for tag in parsed_tags:
+            clean = _clean_tag_text(tag)
+            if clean and not _is_low_intent_tag(clean):
+                llm_clean.append(clean)
+
+        remaining_lookups = max(
+            0,
+            tag_metrics_service.TAG_METRICS_MAX_LOOKUPS - int(tag_metrics_stats.get("api_calls") or 0),
+        )
+        if llm_clean and youtube is not None and remaining_lookups > 0:
+            llm_scored, llm_metrics_stats = await tag_metrics_service.score_tags_with_youtube_proxy(
+                youtube=youtube,
+                db=db,
+                tags_with_sources=[(tag, "llm") for tag in llm_clean],
+                query=request.query,
+                artist_name=artist_name,
+                beat_tokens=beat_tokens,
+                relevance_scorer=_score_tag_candidate,
+                kept_counts=kept_tag_counts,
+                removed_counts=removed_tag_counts,
+                source_map=candidate_source_map,
+                min_score=effective_min_score,
+                max_lookups=remaining_lookups,
+            )
+            tag_metrics_stats["api_calls"] = int(tag_metrics_stats.get("api_calls") or 0) + int(
+                llm_metrics_stats.get("api_calls") or 0
+            )
+            tag_metrics_stats["cache_hits"] = int(tag_metrics_stats.get("cache_hits") or 0) + int(
+                llm_metrics_stats.get("cache_hits") or 0
+            )
+            for entry in llm_scored:
+                key = tag_metrics_service.normalize_tag_key(entry.get("tag", ""))
+                if key:
+                    scored_by_key[key] = entry
+        elif llm_clean:
+            for tag in llm_clean:
+                key = _tag_exact_key(tag)
+                if key in scored_by_key:
+                    continue
+                relevance_entry = _score_tag_candidate(
+                    tag=tag,
+                    query=request.query,
+                    artist_name=artist_name,
+                    beat_tokens=beat_tokens,
+                    source="llm",
+                    kept_count=kept_tag_counts.get(key, 0),
+                    removed_count=removed_tag_counts.get(key, 0),
+                )
+                composite = tag_metrics_service.compute_composite_tag_score(
+                    metrics={
+                        "median_views": 0,
+                        "total_results": 0,
+                    },
+                    relevance_score=float(relevance_entry.get("score") or 0) * 0.65,
+                    relevance_reason="YouTube metrics unavailable; relevance-only estimate.",
+                )
+                scored_by_key[key] = tag_metrics_service.build_scored_tag_entry(
+                    tag=tag,
+                    source="llm",
+                    metrics={"median_views": 0, "total_results": 0},
+                    composite=composite,
+                    relevance_entry=relevance_entry,
+                )
+
+        for tag in llm_clean:
             exact_key = _tag_exact_key(tag)
             matched_source = candidate_source_map.get(exact_key, "llm")
             accepted_reason = "llm_matched_source" if matched_source != "llm" else "llm_high_intent"
-            try_push_tag(tag, matched_source, accepted_reason, max_tags=80)
+            try_push_tag(tag, matched_source, accepted_reason, max_tags=max_publish_tags)
 
         llm_selected_count = len(final_tags)
 
-        # Force YouTube-backed song/project terms near the top before broader top-up.
-        youtube_priority_pool = [
-            tag for tag in source_priority_pool
-            if candidate_source_map.get(_tag_exact_key(tag), "").startswith("youtube")
-        ]
-        external_priority_pool = [
-            tag for tag in source_priority_pool
-            if not candidate_source_map.get(_tag_exact_key(tag), "").startswith("youtube")
-        ]
-
-        for seed_tag in youtube_priority_pool:
-            try_push_tag(seed_tag, candidate_source_map.get(_tag_exact_key(seed_tag), "youtube"), "youtube_seed_priority", max_tags=80)
-            if len([t for t in selected_tags_debug if t.get("reason") == "youtube_seed_priority"]) >= 16:
-                break
-
-        for seed_tag in external_priority_pool:
-            try_push_tag(seed_tag, candidate_source_map.get(_tag_exact_key(seed_tag), "source"), "song_seed_priority", max_tags=80)
-            if len([t for t in selected_tags_debug if t.get("reason") in {"youtube_seed_priority", "song_seed_priority"}]) >= 28:
-                break
-
-        # If model under-returns, top up carefully from candidate pool
-        if len(final_tags) < 50:
-            for candidate in unique_candidate_pool:
-                source = candidate_source_map.get(_tag_exact_key(candidate), "candidate")
-                try_push_tag(candidate, source, "candidate_top_up", max_tags=64)
-                if len(final_tags) >= 64:
+        if len(final_tags) < tag_metrics_service.TAG_MIN_PACK_SIZE:
+            for tag in qualified_tags:
+                source = candidate_source_map.get(_tag_exact_key(tag), "qualified_seed")
+                try_push_tag(tag, source, "qualified_seed_fallback", max_tags=max_publish_tags)
+                if len(final_tags) >= tag_metrics_service.TAG_MIN_PACK_SIZE:
                     break
-
-        selected_source_lookup = {
-            _tag_exact_key(entry.get("tag", "")): entry.get("source", "llm")
-            for entry in selected_tags_debug
-            if _tag_exact_key(entry.get("tag", ""))
-        }
-        youtube_exact_keys = {_tag_exact_key(tag) for tag in youtube_type_beat_tags if _tag_exact_key(tag)}
-        spotify_exact_keys = {_tag_exact_key(tag) for tag in spotify_type_beat_tags if _tag_exact_key(tag)}
-        soundcloud_exact_keys = {_tag_exact_key(tag) for tag in soundcloud_type_beat_tags if _tag_exact_key(tag)}
-        artist_exact = _tag_exact_key(artist_name)
 
         def rank_final_tag(tag: str) -> tuple:
             exact = _tag_exact_key(tag)
-            source = selected_source_lookup.get(exact) or candidate_source_map.get(exact) or "llm"
-            source_rank = {
-                "youtube": 0,
-                "youtube_titles": 0,
-                "youtube_tracks": 0,
-                "spotify": 1,
-                "spotify_tracks": 1,
-                "soundcloud": 2,
-                "soundcloud_tracks": 2,
-                "llm": 3,
-                "custom": 4,
-            }.get(source, 5)
-            exact_pool_rank = (
-                0 if exact in youtube_exact_keys
-                else 1 if exact in spotify_exact_keys
-                else 2 if exact in soundcloud_exact_keys
-                else 3
-            )
-            words = exact.split()
-            has_artist = 0 if artist_exact and artist_exact in exact else 1
-            has_type_beat = 0 if "type beat" in exact else 1
-            long_tail_rank = 0 if len(words) >= 4 else 1
-            return (exact_pool_rank, source_rank, has_artist, has_type_beat, long_tail_rank, -len(words), exact)
+            entry = scored_by_key.get(exact)
+            return (-int((entry or {}).get("score") or 0), exact)
 
         final_tags = sorted(final_tags, key=rank_final_tag)
-
-        # Hard safety limit
-        final_tags = final_tags[:80]
-        selected_tags_debug = selected_tags_debug[:80]
+        final_tags = final_tags[:max_publish_tags]
+        selected_tags_debug = selected_tags_debug[:max_publish_tags]
 
         source_counts = {
             "youtube_seed_tags": len(youtube_type_beat_tags),
             "spotify_seed_tags": len(spotify_type_beat_tags),
             "soundcloud_seed_tags": len(soundcloud_type_beat_tags),
             "custom_input_tags": len(custom_input_tags),
-            "llm_raw_tags": len([t for t in parsed_tags if isinstance(t, str)]),
+            "qualified_candidates": len(qualified_scored),
+            "llm_raw_tags": len(parsed_tags),
             "llm_selected_tags": llm_selected_count,
             "final_tags": len(final_tags),
+            "min_publish_score": effective_min_score,
         }
 
         debug_info = {
@@ -6675,31 +6755,18 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
             "artist_context": artist_context,
             "source_status": source_status,
             "source_counts": source_counts,
-            "top_up_used": len(final_tags) > llm_selected_count,
+            "tag_metrics": tag_metrics_stats,
+            "top_up_used": False,
             "excluded_tags_applied": sorted(excluded_tag_keys),
             "selected_tags": selected_tags_debug,
             "dropped_tags": dropped_debug,
         }
 
-        beat_tokens = {
-            token
-            for token in _tag_exact_key(request.query).split()
-            if token and token not in _TAG_NOISE_WORDS
-        }
-        source_lookup = {
-            _tag_exact_key(entry.get("tag", "")): entry.get("source", "llm")
-            for entry in selected_tags_debug
-            if _tag_exact_key(entry.get("tag", ""))
-        }
-        scored_tags = _score_tag_list(
-            tags=final_tags,
-            query=request.query,
-            artist_name=artist_name,
-            beat_tokens=beat_tokens,
-            source_map=source_lookup,
-            kept_counts=kept_tag_counts,
-            removed_counts=removed_tag_counts,
-        )
+        scored_tags = [
+            scored_by_key[_tag_exact_key(tag)]
+            for tag in final_tags
+            if _tag_exact_key(tag) in scored_by_key
+        ]
         feedback_summary = {
             "prior_kept_signals": sum(kept_tag_counts.values()),
             "prior_removed_signals": sum(removed_tag_counts.values()),

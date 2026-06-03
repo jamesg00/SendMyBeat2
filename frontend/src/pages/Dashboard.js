@@ -684,7 +684,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
       setSelectedTagHistoryIds([resultPayload.id]);
       setTagDebug(canViewTagDebug ? resultPayload?.debug || null : null);
       upsertTagHistoryItem(resultPayload);
-      toast.success(`Generated ${resultPayload.tags.length} tags!`);
+      const minScore = resultPayload?.debug?.source_counts?.min_publish_score
+        ?? resultPayload?.debug?.tag_metrics?.effective_min_score
+        ?? 58;
+      toast.success(`Generated ${resultPayload.tags.length} high-intent tags (score ≥ ${minScore})`);
 
       // Refresh credits after a short delay to ensure backend has updated
       setTimeout(() => {
@@ -1409,6 +1412,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
                 setShowTagDebug,
                 tagQuery,
                 setTagQuery,
+                minPublishScore:
+                  tagDebug?.source_counts?.min_publish_score
+                  ?? tagDebug?.tag_metrics?.effective_min_score
+                  ?? 58,
               }}
               descriptionsSectionProps={{
                 descriptions,

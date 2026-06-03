@@ -32,6 +32,32 @@ with patch("motor.motor_asyncio.AsyncIOMotorClient"), \
         TagJoinRequest,
     )
 
+def _mock_scored_entry(tag: str, score: int = 72) -> dict:
+    return {
+        "tag": tag,
+        "score": score,
+        "reason": "Strong YouTube demand proxy.",
+        "breakdown": {
+            "demand": 70.0,
+            "competition": 75.0,
+            "relevance": 68.0,
+            "monthly_search_proxy": 120000,
+            "total_results": 45000,
+        },
+        "source": "llm",
+        "feedback_counts": {"kept": 0, "removed": 0},
+    }
+
+
+async def _mock_score_tags_with_youtube_proxy(**kwargs):
+    tags_with_sources = kwargs.get("tags_with_sources") or []
+    filtered = []
+    for tag, _ in tags_with_sources:
+        score = 25 if "deadquery" in tag.lower() else 72
+        filtered.append(_mock_scored_entry(tag, score=score))
+    return filtered, {"api_calls": 1, "cache_hits": 0, "candidates_scored": len(filtered)}
+
+
 @pytest.mark.asyncio
 async def test_generate_tags_success():
     """Test successful tag generation with valid inputs and sufficient credits."""
@@ -44,31 +70,76 @@ async def test_generate_tags_success():
     with patch("backend.server._fetch_youtube_track_seeds_no_api", return_value=[]), \
          patch("backend.server._fetch_spotify_track_seeds", return_value=[]), \
          patch("backend.server._fetch_soundcloud_track_seeds", return_value=[]), \
+         patch("backend.server._fetch_artist_context_from_youtube_api", return_value={
+             "artist_name": "drake",
+             "channel_found": False,
+             "top_video_titles": [],
+             "type_beat_search_results": ["drake type beat"],
+             "is_likely_underground": False,
+         }), \
+         patch("backend.server.tag_metrics_service.score_tags_with_youtube_proxy", side_effect=_mock_score_tags_with_youtube_proxy), \
          patch("backend.server.llm_chat", new_callable=AsyncMock) as mock_llm_chat, \
          patch("backend.server.consume_credit", new_callable=AsyncMock) as mock_consume_credit, \
          patch("backend.server.db") as mock_db, \
-         patch("backend.server.build") as mock_build:  # Mock Google API build
+         patch("backend.server.build") as mock_build:
 
-        # Mock DB calls
+        mock_db.users.find_one = AsyncMock(return_value={"id": "user123", "username": "testuser"})
+        mock_db.tag_generations.find.return_value = mock_cursor
+        mock_db.tag_generations.insert_one = AsyncMock()
+        mock_db.growth_streaks.find_one = AsyncMock(return_value=None)
+        mock_db.tag_keyword_cache = MagicMock()
+        mock_db.tag_keyword_cache.find_one = AsyncMock(return_value=None)
+        mock_db.tag_keyword_cache.update_one = AsyncMock()
+
+        mock_llm_chat.return_value = '{"tags": ["drake type beat", "drake x future type beat"]}'
+
+        response = await generate_tags(request_data, current_user=mock_user)
+
+        assert response.user_id == "user123"
+        assert response.query == "drake type beat"
+        assert "drake type beat" in response.tags
+        assert all(int(entry.get("score") or 0) >= 53 for entry in (response.scored_tags or []))
+
+        mock_consume_credit.assert_called_once_with("user123")
+        mock_db.tag_generations.insert_one.assert_called_once()
+        mock_llm_chat.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_generate_tags_drops_low_publish_score():
+    """LLM tags below the publish score gate should not ship."""
+    mock_user = {"id": "user123", "username": "testuser", "_execute_inline": True}
+    request_data = TagGenerationRequest(query="drake type beat")
+    mock_cursor = MagicMock()
+    mock_cursor.to_list = AsyncMock(return_value=[])
+
+    with patch("backend.server._fetch_youtube_track_seeds_no_api", return_value=[]), \
+         patch("backend.server._fetch_spotify_track_seeds", return_value=[]), \
+         patch("backend.server._fetch_soundcloud_track_seeds", return_value=[]), \
+         patch("backend.server._fetch_artist_context_from_youtube_api", return_value={
+             "artist_name": "drake",
+             "channel_found": False,
+             "top_video_titles": [],
+             "type_beat_search_results": [],
+             "is_likely_underground": False,
+         }), \
+         patch("backend.server.tag_metrics_service.score_tags_with_youtube_proxy", side_effect=_mock_score_tags_with_youtube_proxy), \
+         patch("backend.server.llm_chat", new_callable=AsyncMock) as mock_llm_chat, \
+         patch("backend.server.consume_credit", new_callable=AsyncMock), \
+         patch("backend.server.db") as mock_db, \
+         patch("backend.server.build"):
+
         mock_db.users.find_one = AsyncMock(return_value={"id": "user123", "username": "testuser"})
         mock_db.tag_generations.find.return_value = mock_cursor
         mock_db.tag_generations.insert_one = AsyncMock()
         mock_db.growth_streaks.find_one = AsyncMock(return_value=None)
 
-        # Mock LLM response to return a JSON string
-        mock_llm_chat.return_value = '{"tags": ["tag1", "tag2", "tag3"]}'
+        mock_llm_chat.return_value = '{"tags": ["deadquery type beat", "drake type beat"]}'
 
-        # Call the function
         response = await generate_tags(request_data, current_user=mock_user)
 
-        # Assertions
-        assert response.user_id == "user123"
-        assert response.query == "drake type beat"
-        assert "tag1" in response.tags
-
-        mock_consume_credit.assert_called_once_with("user123")
-        mock_db.tag_generations.insert_one.assert_called_once()
-        mock_llm_chat.assert_called_once()
+        assert "deadquery type beat" not in response.tags
+        assert "drake type beat" in response.tags
 
 
 @pytest.mark.asyncio

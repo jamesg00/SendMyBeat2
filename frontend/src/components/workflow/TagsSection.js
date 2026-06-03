@@ -6,6 +6,38 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ChevronDown, ChevronUp, Copy, Plus, Sparkles, Trash2 } from "lucide-react";
 
+const TAG_SCORE_GREEN_MIN = 60;
+const TAG_SCORE_YELLOW_MIN = 45;
+
+const getTagScoreBadgeStyle = (score) => {
+  const value = Number(score);
+  if (!Number.isFinite(value) || value <= 0) {
+    return { borderColor: "var(--border-color)", color: "var(--text-secondary)", background: "transparent" };
+  }
+  if (value >= TAG_SCORE_GREEN_MIN) {
+    return { borderColor: "#22c55e", color: "#166534", background: "rgba(34, 197, 94, 0.12)" };
+  }
+  if (value >= TAG_SCORE_YELLOW_MIN) {
+    return { borderColor: "#f59e0b", color: "#92400e", background: "rgba(245, 158, 11, 0.12)" };
+  }
+  return { borderColor: "#ef4444", color: "#991b1b", background: "rgba(239, 68, 68, 0.12)" };
+};
+
+const buildTagScoreTooltip = (entry, fallbackTag) => {
+  if (!entry) return fallbackTag;
+  const parts = [entry.reason || fallbackTag];
+  const breakdown = entry.breakdown || {};
+  if (breakdown.demand != null || breakdown.competition != null) {
+    parts.push(
+      `Demand: ${breakdown.demand ?? "—"} · Competition: ${breakdown.competition ?? "—"} · Relevance: ${breakdown.relevance ?? "—"}`
+    );
+  }
+  if (breakdown.monthly_search_proxy != null) {
+    parts.push(`YouTube median views (top 5): ${Number(breakdown.monthly_search_proxy).toLocaleString()}`);
+  }
+  return parts.filter(Boolean).join("\n");
+};
+
 const TagsSection = ({
   mode = "full",
   showInlineOutput = true,
@@ -36,6 +68,7 @@ const TagsSection = ({
   setShowTagDebug,
   tagQuery,
   setTagQuery,
+  minPublishScore = 58,
 }) => {
   const [resultsCollapsed, setResultsCollapsed] = useState(mode === "results");
   const hasGeneratedTags = generatedTags.length > 0;
@@ -51,6 +84,11 @@ const TagsSection = ({
             <h3 className="text-sm sm:text-base font-semibold" style={{ color: "var(--text-primary)" }}>
               Generated Tags {hasGeneratedTags ? `(${generatedTags.length})` : ""}
             </h3>
+            {hasGeneratedTags ? (
+              <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>
+                High-intent tags only (YouTube search score ≥ {minPublishScore}). Green ≥ 60.
+              </p>
+            ) : null}
           </div>
           <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto xl:justify-end">
             <Button
@@ -99,16 +137,19 @@ const TagsSection = ({
         <div className="workflow-inline-output-body">
           {hasGeneratedTags ? (
             <div className="tag-cloud" data-testid="tags-list">
-              {generatedTags.map((tag, index) => (
+              {generatedTags.map((tag, index) => {
+                const scoreEntry = generatedTagScores[normalizeTagKey(tag)];
+                const badgeStyle = getTagScoreBadgeStyle(scoreEntry?.score);
+                return (
                 <span
                   key={index}
                   className="tag-item group relative"
                   data-testid={`tag-${index}`}
-                  title={generatedTagScores[normalizeTagKey(tag)]?.reason || tag}
+                  title={buildTagScoreTooltip(scoreEntry, tag)}
                 >
-                  {generatedTagScores[normalizeTagKey(tag)]?.score ? (
-                    <span className="mr-2 inline-flex rounded-full border px-1.5 py-0.5 text-[10px] font-semibold" style={{ borderColor: "var(--border-color)", color: "var(--text-secondary)" }}>
-                      {generatedTagScores[normalizeTagKey(tag)]?.score}
+                  {scoreEntry?.score ? (
+                    <span className="mr-2 inline-flex rounded-full border px-1.5 py-0.5 text-[10px] font-semibold" style={badgeStyle}>
+                      {scoreEntry.score}
                     </span>
                   ) : null}
                   {tag}
@@ -124,11 +165,12 @@ const TagsSection = ({
                     x
                   </button>
                 </span>
-              ))}
+              );
+              })}
             </div>
           ) : (
             <div className="workflow-output-empty-state rounded-lg border border-dashed px-4 py-6 text-center text-sm" style={{ borderColor: "var(--border-color)", color: "var(--text-secondary)" }}>
-              Your generated tag set will appear here after the first run.
+              Your high-intent tag set will appear here after generation. If nothing passes the score gate, try a broader artist query or add custom tags.
             </div>
           )}
 
