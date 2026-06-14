@@ -2,6 +2,7 @@ import os
 import sys
 import tempfile
 import unittest
+import itertools
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -538,6 +539,19 @@ class TestYouTubeUpload(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["mux_fps"], server.STATIC_STILL_ENCODE_FPS)
         self.assertEqual(server._resolve_ffmpeg_mux_fps(payload), 2)
 
+    def test_apply_render_mux_fps_keeps_visualizer_static_at_requested_fps(self):
+        payload = {"render_fps": 60, "visualizer": {"enabled": True}}
+        capped = server._apply_render_mux_fps(
+            payload,
+            user_render_fps=60,
+            static_still=False,
+            is_gif_visual=False,
+            gif_mux_fps=None,
+        )
+        self.assertFalse(capped)
+        self.assertNotIn("mux_fps", payload)
+        self.assertEqual(server._resolve_ffmpeg_mux_fps(payload), 60)
+
     def test_apply_render_mux_fps_leaves_explicit_two_fps_static_unchanged(self):
         payload = {"render_fps": 2}
         capped = server._apply_render_mux_fps(
@@ -565,15 +579,17 @@ class TestYouTubeUpload(unittest.IsolatedAsyncioTestCase):
 
     def test_run_ffmpeg_command_with_progress_parses_out_time(self):
         with patch("server.subprocess.Popen") as popen_mock:
-            proc = mock.MagicMock()
-            proc.stdout.readline.side_effect = [
-                "out_time_us=2500000\n",
-                "progress=continue\n",
-                "out_time_us=5000000\n",
-                "progress=end\n",
-                "",
-            ]
-            proc.poll.side_effect = [None, None, None, 0]
+            proc = MagicMock()
+            proc.stdout.readline.side_effect = itertools.chain(
+                [
+                    "out_time_us=2500000\n",
+                    "progress=continue\n",
+                    "out_time_us=5000000\n",
+                    "progress=end\n",
+                ],
+                itertools.repeat(""),
+            )
+            proc.poll.side_effect = itertools.chain([None, None, None, None], itertools.repeat(0))
             proc.wait.return_value = 0
             proc.stderr.read.return_value = ""
             popen_mock.return_value = proc
@@ -625,6 +641,59 @@ class TestYouTubeUpload(unittest.IsolatedAsyncioTestCase):
         }
         filter_chain = server._build_render_filter(payload)
         self.assertIn(":r=2[bg]", filter_chain)
+
+    def test_build_render_filter_adds_audio_visualizer_at_render_fps(self):
+        payload = {
+            "target_w": 1280,
+            "target_h": 720,
+            "image_scale_x": 1.0,
+            "image_scale_y": 1.0,
+            "image_pos_x": 0.0,
+            "image_pos_y": 0.0,
+            "image_rotation": 0.0,
+            "background_color": "black",
+            "remove_watermark": True,
+            "source_image_w": 1280,
+            "source_image_h": 720,
+            "render_fps": 60,
+            "audio_input_index": 1,
+            "visualizer": {
+                "enabled": True,
+                "mode": "circle",
+                "spectrum_color": "54f28b",
+                "opacity": 0.8,
+            },
+        }
+
+        filter_chain = server._build_render_filter(payload)
+
+        self.assertIn("[1:a]aformat=channel_layouts=mono,showwaves", filter_chain)
+        self.assertIn("rate=60", filter_chain)
+        self.assertIn("colors=0x54f28b@0.800", filter_chain)
+        self.assertIn("[composite][viz]overlay=0:0", filter_chain)
+
+    def test_build_render_filter_keeps_visualizer_fps_over_gif_mux_cap(self):
+        payload = {
+            "target_w": 1280,
+            "target_h": 720,
+            "image_scale_x": 1.0,
+            "image_scale_y": 1.0,
+            "image_pos_x": 0.0,
+            "image_pos_y": 0.0,
+            "image_rotation": 0.0,
+            "background_color": "black",
+            "remove_watermark": True,
+            "source_image_w": 1280,
+            "source_image_h": 720,
+            "render_fps": 60,
+            "audio_input_index": 1,
+            "visualizer": {"enabled": True, "mode": "monstercat", "spectrum_color": "ffffff"},
+        }
+
+        filter_chain = server._build_render_filter(payload)
+
+        self.assertIn(":r=60[bg]", filter_chain)
+        self.assertIn("rate=60", filter_chain)
 
     def test_build_render_filter_skips_gblur_when_background_is_preblurred(self):
         payload = {

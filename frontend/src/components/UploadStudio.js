@@ -1006,6 +1006,8 @@ const UploadStudio = ({
     formData.append('image_rotation', String(imageRotation));
     formData.append('background_color', backgroundColor);
     formData.append('render_fps', String(videoRenderFps || DEFAULT_VIDEO_RENDER_FPS));
+    formData.append('visualizer_enabled', String(Boolean(visualizerEnabled)));
+    formData.append('visualizer_settings', JSON.stringify(visualizerSettings || {}));
 
     try {
       const response = await axios.post(`${API}/youtube/upload`, formData, {
@@ -1049,16 +1051,13 @@ const UploadStudio = ({
 
     // When the visualizer is active, record a 20-second clip of the live canvas
     // and use it as the visual input — the backend loops it over the full audio.
-    let visualImageFileId = imageFileId;
-    let useNeutralLayout = false;
-    if (visualizerEnabled && visualizerRef.current) {
+    if (visualizerEnabled && visualizerRef.current && typeof window === "undefined") {
       setVizBakeStatus("recording");
       toast.info("Recording visualizer (20s loop)...", { duration: 22000 });
       const bakedFileId = await bakeVisualizerToVideo();
       setVizBakeStatus(null);
       if (bakedFileId) {
-        visualImageFileId = bakedFileId;
-        useNeutralLayout = true;
+        void bakedFileId;
       } else {
         toast.warning("Visualizer recording failed — uploading with static cover instead.");
       }
@@ -1070,19 +1069,21 @@ const UploadStudio = ({
     formData.append('tags_id', selectedTagsId || '');
     formData.append('privacy_status', privacyStatus);
     formData.append('audio_file_id', audioFileId);
-    formData.append('image_file_id', visualImageFileId);
+    formData.append('image_file_id', imageFileId);
     formData.append('remove_watermark', removeWatermark);
     formData.append('description_override', buildUploadDescriptionWithMetadata());
     formData.append('aspect_ratio', videoAspectRatio);
     // Neutral layout when the viz clip has the image transforms already baked in
-    formData.append('image_scale', useNeutralLayout ? '1' : String(lockImageScale ? imageScaleX : (imageScaleX + imageScaleY) / 2));
-    formData.append('image_scale_x', useNeutralLayout ? '1' : String(imageScaleX));
-    formData.append('image_scale_y', useNeutralLayout ? '1' : String(imageScaleY));
-    formData.append('image_pos_x', useNeutralLayout ? '0' : String(imagePosX));
-    formData.append('image_pos_y', useNeutralLayout ? '0' : String(imagePosY));
-    formData.append('image_rotation', useNeutralLayout ? '0' : String(imageRotation));
-    formData.append('background_color', useNeutralLayout ? 'black' : backgroundColor);
+    formData.append('image_scale', String(lockImageScale ? imageScaleX : (imageScaleX + imageScaleY) / 2));
+    formData.append('image_scale_x', String(imageScaleX));
+    formData.append('image_scale_y', String(imageScaleY));
+    formData.append('image_pos_x', String(imagePosX));
+    formData.append('image_pos_y', String(imagePosY));
+    formData.append('image_rotation', String(imageRotation));
+    formData.append('background_color', backgroundColor);
     formData.append('render_fps', String(videoRenderFps || DEFAULT_VIDEO_RENDER_FPS));
+    formData.append('visualizer_enabled', String(Boolean(visualizerEnabled)));
+    formData.append('visualizer_settings', JSON.stringify(visualizerSettings || {}));
 
     try {
       const response = await axios.post(`${API}/youtube/upload`, formData, {
@@ -1349,7 +1350,7 @@ const UploadStudio = ({
               onClick={handleYouTubeUploadAsync}
               disabled={uploadingToYouTube}
            >
-              {vizBakeStatus === "recording" ? "Recording Visualizer (20s)..." : vizBakeStatus === "uploading" ? "Uploading Visualizer Clip..." : uploadingToYouTube ? "Uploading..." : "Upload Video to YouTube"}
+              {uploadingToYouTube ? "Uploading..." : "Upload Video to YouTube"}
               {!uploadingToYouTube && <Youtube className="ml-2 h-5 w-5" />}
            </Button>
         </div>

@@ -2584,6 +2584,48 @@ def _resolve_ffmpeg_mux_fps(payload: dict[str, Any]) -> int:
     return _resolve_payload_render_fps(payload)
 
 
+def _safe_visualizer_hex_color(value: Any, fallback: str = "ffffff") -> str:
+    raw = str(value or "").strip().lstrip("#")
+    return raw.lower() if re.fullmatch(r"[0-9a-fA-F]{6}", raw or "") else fallback
+
+
+def _normalize_visualizer_payload(enabled: Any, settings_raw: Any) -> dict[str, Any]:
+    enabled_bool = str(enabled).strip().lower() in {"1", "true", "yes", "on"}
+    if isinstance(enabled, bool):
+        enabled_bool = enabled
+    settings: dict[str, Any] = {}
+    if isinstance(settings_raw, dict):
+        settings = settings_raw
+    elif isinstance(settings_raw, str) and settings_raw.strip():
+        try:
+            parsed = json.loads(settings_raw)
+            if isinstance(parsed, dict):
+                settings = parsed
+        except json.JSONDecodeError:
+            settings = {}
+    mode = str(settings.get("mode") or "circle").strip().lower()
+    if mode not in {"circle", "monstercat"}:
+        mode = "circle"
+    try:
+        intensity = float(settings.get("intensity", 1.0))
+    except (TypeError, ValueError):
+        intensity = 1.0
+    intensity = max(0.25, min(2.0, intensity))
+    try:
+        background_opacity = float(settings.get("backgroundOpacity", 1.0))
+    except (TypeError, ValueError):
+        background_opacity = 1.0
+    background_opacity = max(0.1, min(1.0, background_opacity))
+    return {
+        "enabled": enabled_bool,
+        "mode": mode,
+        "spectrum_color": _safe_visualizer_hex_color(settings.get("spectrumColor")),
+        "intensity": intensity,
+        "opacity": max(0.2, min(0.95, 0.34 + (intensity * 0.28))),
+        "cover_opacity": background_opacity,
+    }
+
+
 def _apply_render_mux_fps(
     render_payload: dict[str, Any],
     *,
@@ -2980,15 +3022,32 @@ def _build_render_filter(payload: dict[str, Any]) -> str:
             f"[bg][art]overlay=x='{overlay_x}':y='{overlay_y}':shortest=1[composite]"
         )
 
+    composite_label = "composite"
+    visualizer = payload.get("visualizer") if isinstance(payload.get("visualizer"), dict) else {}
+    if visualizer.get("enabled") and payload.get("audio_input_index") is not None:
+        audio_input_index = int(payload["audio_input_index"])
+        visualizer_mode = str(visualizer.get("mode") or "circle")
+        wave_mode = "p2p" if visualizer_mode == "monstercat" else "cline"
+        color = _safe_visualizer_hex_color(visualizer.get("spectrum_color"))
+        opacity = max(0.2, min(0.95, float(visualizer.get("opacity") or 0.68)))
+        filter_chain += (
+            f";[{audio_input_index}:a]aformat=channel_layouts=mono,"
+            f"showwaves=s={target_w}x{target_h}:mode={wave_mode}:rate={render_fps}:"
+            f"colors=0x{color}@{opacity:.3f},format=rgba,"
+            f"colorkey=0x000000:0.08:0.0[viz]"
+            f";[composite][viz]overlay=0:0:format=auto[composite_viz]"
+        )
+        composite_label = "composite_viz"
+
     if not payload.get("remove_watermark"):
         watermark_filter = _build_youtube_watermark_filter(
             target_w=target_w,
             target_h=target_h,
             background_color=background_color,
         )
-        filter_chain += f";[composite]{watermark_filter}[vout]"
+        filter_chain += f";[{composite_label}]{watermark_filter}[vout]"
     else:
-        filter_chain += ";[composite]null[vout]"
+        filter_chain += f";[{composite_label}]null[vout]"
     return filter_chain
 
 
@@ -3137,15 +3196,16 @@ async def _render_youtube_video(
                     "source_image_h": source_image_h,
                     "blurred_background_input": bool(blurred_bg_path),
                 }
-                static_still = visual_kind == "image" and not is_gif_visual
+                visualizer_payload = render_payload.get("visualizer") if isinstance(render_payload.get("visualizer"), dict) else {}
+                visualizer_enabled = bool(visualizer_payload.get("enabled"))
+                static_still = visual_kind == "image" and not is_gif_visual and not visualizer_enabled
                 static_encode_capped = _apply_render_mux_fps(
                     render_payload,
                     user_render_fps=user_render_fps,
                     static_still=static_still,
-                    is_gif_visual=is_gif_visual,
-                    gif_mux_fps=gif_mux_fps,
+                    is_gif_visual=is_gif_visual and not visualizer_enabled,
+                    gif_mux_fps=gif_mux_fps if not visualizer_enabled else None,
                 )
-                filter_complex = _build_render_filter(render_payload)
                 mux_fps = _resolve_ffmpeg_mux_fps(render_payload)
                 render_fps_value = str(mux_fps)
                 render_timeout_seconds = _youtube_render_timeout_seconds(
@@ -3173,6 +3233,9 @@ async def _render_youtube_video(
                         loop_video=loop_video,
                     )
                     audio_input_index = 1
+
+                render_payload["audio_input_index"] = audio_input_index
+                filter_complex = _build_render_filter(render_payload)
 
                 command.extend(
                     [
@@ -3397,6 +3460,8 @@ async def _build_youtube_upload_job_payload(
     background_color: str,
     remove_watermark: bool,
     render_fps: int = YOUTUBE_RENDER_FPS_DEFAULT,
+    visualizer_enabled: bool = False,
+    visualizer_settings_json: str | None = None,
 ) -> dict[str, Any]:
     safe_title = str(title or "").strip()
     if not safe_title:
@@ -3481,6 +3546,7 @@ async def _build_youtube_upload_job_payload(
         background_color=background_color,
         render_fps=render_fps,
     )
+    visualizer_payload = _normalize_visualizer_payload(visualizer_enabled, visualizer_settings_json)
 
     await ensure_has_upload_credit(current_user["id"])
 
@@ -3498,6 +3564,7 @@ async def _build_youtube_upload_job_payload(
         "audio_file_id": safe_audio_file_id,
         "image_file_id": safe_image_file_id,
         "remove_watermark": bool(remove_watermark),
+        "visualizer": visualizer_payload,
         **render_settings,
     }
 
@@ -8340,6 +8407,8 @@ async def upload_to_youtube(
     background_color: str = Form("black"),
     remove_watermark: bool = Form(False),
     render_fps: str = Form(str(YOUTUBE_RENDER_FPS_DEFAULT)),
+    visualizer_enabled: bool = Form(False),
+    visualizer_settings: Optional[str] = Form(None),
     current_user: dict = Depends(get_current_user)
 ):
     """Create a persisted YouTube upload job and return immediately."""
@@ -8380,6 +8449,8 @@ async def upload_to_youtube(
             background_color=background_color,
             remove_watermark=remove_watermark,
             render_fps=safe_render_fps,
+            visualizer_enabled=visualizer_enabled,
+            visualizer_settings_json=visualizer_settings,
         )
         job_doc = await _create_youtube_upload_job(current_user=current_user, payload=payload)
         logger.info(
