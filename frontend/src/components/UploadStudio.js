@@ -868,7 +868,7 @@ const UploadStudio = ({
 
     const ASPECT_DIMS = { "16:9": [1280, 720], "1:1": [1080, 1080], "9:16": [1080, 1920], "4:5": [1080, 1350] };
     const [targetW, targetH] = ASPECT_DIMS[videoAspectRatio] || ASPECT_DIMS["16:9"];
-    const recordFps = Math.min(30, Math.max(15, Number(videoRenderFps) || 30));
+    const recordFps = Math.min(60, Math.max(15, Number(videoRenderFps) || 30));
     const RECORD_SECONDS = 20;
 
     // Load cover image into an Image element for canvas drawing
@@ -1051,13 +1051,14 @@ const UploadStudio = ({
 
     // When the visualizer is active, record a 20-second clip of the live canvas
     // and use it as the visual input — the backend loops it over the full audio.
-    if (visualizerEnabled && visualizerRef.current && typeof window === "undefined") {
+    let visualFileId = imageFileId;
+    if (visualizerEnabled && visualizerRef.current) {
       setVizBakeStatus("recording");
       toast.info("Recording visualizer (20s loop)...", { duration: 22000 });
       const bakedFileId = await bakeVisualizerToVideo();
       setVizBakeStatus(null);
       if (bakedFileId) {
-        void bakedFileId;
+        visualFileId = bakedFileId;
       } else {
         toast.warning("Visualizer recording failed — uploading with static cover instead.");
       }
@@ -1069,7 +1070,7 @@ const UploadStudio = ({
     formData.append('tags_id', selectedTagsId || '');
     formData.append('privacy_status', privacyStatus);
     formData.append('audio_file_id', audioFileId);
-    formData.append('image_file_id', imageFileId);
+    formData.append('image_file_id', visualFileId);
     formData.append('remove_watermark', removeWatermark);
     formData.append('description_override', buildUploadDescriptionWithMetadata());
     formData.append('aspect_ratio', videoAspectRatio);

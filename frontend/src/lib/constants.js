@@ -57,6 +57,13 @@ export const DEFAULT_VISUALIZER_SETTINGS = {
   midSensitivity: 1,
   highSensitivity: 1,
   monstercatSmoothing: 0.35,
+  // Spectrum Analyzer settings
+  spectrumBarThickness: 4,
+  spectrumGlow: 20,
+  spectrumOpacity: 1.0,
+  spectrumRgb: false,
+  spectrumSmoothing: 0.3,
+  spectrumMirror: true,
 };
 
 export const VISUALIZER_PRESETS = {
@@ -73,17 +80,18 @@ export const VISUALIZER_PRESETS = {
     spectrumStyle: "fill",
     spectrumBorderColor: "#ffffff",
   },
-  "ncs-aggressive": {
-    mode: "circle",
-    bars: 124,
-    intensity: 1.12,
-    particleIntensity: 0.85,
-    shakeIntensity: 0.45,
-    rotateSpeed: 0.0026,
-    radius: 0.235,
-    maxBarLength: 0.19,
-    multiColorReactive: true,
-    spectrumStyle: "fill",
+  "spectrum-analyzer": {
+    mode: "spectrum",
+    bars: 128,
+    intensity: 1.0,
+    spectrumBarThickness: 4,
+    spectrumGlow: 20,
+    spectrumOpacity: 1.0,
+    spectrumRgb: false,
+    spectrumSmoothing: 0.3,
+    spectrumMirror: true,
+    spectrumColor: "#ffffff",
+    multiColorReactive: false,
   },
   "monstercat-tight": {
     mode: "monstercat",

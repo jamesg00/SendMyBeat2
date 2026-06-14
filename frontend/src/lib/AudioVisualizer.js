@@ -29,8 +29,8 @@ const DEFAULT_OPTIONS = {
 
   // Curve / Smoothing / Gain
   curvePower: 0.6,
-  attack: 0.72,
-  release: 0.16,
+  attack: 0.55,
+  release: 0.12,
   gain: 0.75, // Reduced from 1.0 to prevent clipping/bass boost
 
   // Visual Layout (Circle Mode)
@@ -70,7 +70,15 @@ const DEFAULT_OPTIONS = {
   spectrumRecordImageUrl: "",
 
   // Mode Selection
-  mode: "circle", // "circle" or "monstercat"
+  mode: "circle", // "circle", "monstercat", or "spectrum"
+
+  // Spectrum Analyzer Mode Settings
+  spectrumBarThickness: 4,
+  spectrumGlow: 20,
+  spectrumOpacity: 1.0,
+  spectrumRgb: false,
+  spectrumSmoothing: 0.3,
+  spectrumMirror: true,
 
   // Monstercat Mode Settings
   monstercatBarWidth: 10,
@@ -101,9 +109,9 @@ const DEFAULT_OPTIONS = {
     maxAmount: 1.0,
     minAmount: 0,
     minThreshold: 0.08, // Increased from 0.03 to reduce noise
-    useDeltaSmoothing: true,
+    useDeltaSmoothing: false,
     minDeltaNeededToTrigger: 0.025,
-    deltaDecay: 0.85, // Reduced from 0.90 for faster release
+    deltaDecay: 0.85,
   },
 };
 
@@ -180,6 +188,7 @@ export default class AudioVisualizer {
     this.levelRef = 0.34;
     this.monstercatSmoothedBars = [];
     this.monstercatParticles = [];
+    this.spectrumSmoothedBars = [];
 
     this.resize = this.resize.bind(this);
     this.loop = this.loop.bind(this);
@@ -319,7 +328,7 @@ export default class AudioVisualizer {
     if (!this.analyser) {
       this.analyser = this.audioContext.createAnalyser();
       this.analyser.fftSize = this.closestFftSize(this.options.fftSize);
-      this.analyser.smoothingTimeConstant = 0.05;
+      this.analyser.smoothingTimeConstant = 0.75;
       this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
       this.buildBinMap();
     }
@@ -765,14 +774,13 @@ export default class AudioVisualizer {
         points.push({x, y});
     }
 
-    // Connect last point to first for closed loop
-    points.push(points[0]);
-    points.push(points[1]);
-
-    c.moveTo(points[0].x, points[0].y);
-    for (let i = 0; i < points.length - 1; i++) {
+    // Proper closed midpoint bezier: start at mid(last, first) so all joins are smooth
+    const pLast = points[count - 1];
+    const pFirst = points[0];
+    c.moveTo((pLast.x + pFirst.x) / 2, (pLast.y + pFirst.y) / 2);
+    for (let i = 0; i < count; i++) {
         const p0 = points[i];
-        const p1 = points[i + 1];
+        const p1 = points[(i + 1) % count];
         const midX = (p0.x + p1.x) / 2;
         const midY = (p0.y + p1.y) / 2;
         c.quadraticCurveTo(p0.x, p0.y, midX, midY);
@@ -1046,6 +1054,79 @@ export default class AudioVisualizer {
     c.shadowBlur = 0;
   }
 
+  drawSpectrumAnalyzer(bars, w, h) {
+    const c = this.ctx;
+    const count = Math.max(16, Math.min(bars.length, Math.floor(w / 3)));
+    const smoothing = Math.max(0.05, Math.min(0.95, this.options.spectrumSmoothing ?? 0.3));
+    const thickness = Math.max(1, this.options.spectrumBarThickness ?? 4);
+    const glow = Math.max(0, this.options.spectrumGlow ?? 20);
+    const opacity = Math.max(0, Math.min(1, this.options.spectrumOpacity ?? 1.0));
+    const mirror = this.options.spectrumMirror !== false;
+    const maxHeight = h * 0.7;
+
+    const displayCount = mirror ? Math.floor(count / 2) : count;
+    const totalBars = mirror ? displayCount * 2 : displayCount;
+    const gap = thickness * 0.35;
+    const slotW = w / Math.max(1, totalBars);
+    const barW = Math.max(1, slotW - gap);
+
+    for (let i = 0; i < displayCount; i++) {
+      const rawAmp = Math.max(0, bars[i]);
+      const prev = this.spectrumSmoothedBars[i] || 0;
+      const amp = prev + (rawAmp - prev) * (1 - smoothing);
+      this.spectrumSmoothedBars[i] = amp;
+
+      const barHeight = Math.max(2, Math.min(maxHeight, amp * maxHeight * 1.05));
+      const barReactive = Math.min(1.6, amp + this.beatPulse * 0.45 + this.impactPulse * 0.7);
+
+      const baseColor = this.options.multiColorReactive || this.options.spectrumRgb
+        ? this.getReactiveColor(barReactive, opacity, 1.15, true)
+        : (() => {
+            const [r, g, b] = (this.options.spectrumColor || "255,255,255").split(",").map(v => Number(v.trim()));
+            return `rgba(${r},${g},${b},${opacity})`;
+          })();
+
+      const drawBar = (xSlot) => {
+        const x = xSlot * slotW + (slotW - barW) / 2;
+        const y = h - barHeight;
+
+        if (glow > 0) {
+          c.shadowBlur = glow;
+          c.shadowColor = baseColor;
+        }
+
+        // gradient fill: brighter at top, fades toward baseline
+        const grad = c.createLinearGradient(x, y, x, h);
+        const [r2, g2, b2] = (this.options.spectrumColor || "255,255,255").split(",").map(v => Number(v.trim()));
+        if (this.options.multiColorReactive || this.options.spectrumRgb) {
+          grad.addColorStop(0, this.getReactiveColor(barReactive, opacity, 1.2, true));
+          grad.addColorStop(1, this.getReactiveColor(barReactive * 0.4, opacity * 0.3, 1.0, true));
+        } else {
+          grad.addColorStop(0, `rgba(${r2},${g2},${b2},${opacity})`);
+          grad.addColorStop(1, `rgba(${r2},${g2},${b2},${opacity * 0.18})`);
+        }
+
+        c.fillStyle = grad;
+        c.fillRect(x, y, barW, barHeight);
+
+        // bright cap line at top of bar
+        c.fillStyle = baseColor;
+        c.fillRect(x, y, barW, Math.max(2, thickness * 0.5));
+      };
+
+      if (mirror) {
+        // left half: bars go right-to-left from center
+        drawBar(displayCount - 1 - i);
+        // right half: bars go left-to-right from center
+        drawBar(displayCount + i);
+      } else {
+        drawBar(i);
+      }
+    }
+
+    c.shadowBlur = 0;
+  }
+
   drawVignette() {
     const c = this.ctx;
     const w = this.canvas.clientWidth;
@@ -1142,6 +1223,8 @@ export default class AudioVisualizer {
         this.updateMonstercatParticles(dt, w, h);
         this.drawMonstercatParticles();
         this.drawMonstercat(this.getDisplayBars(bars), w, h);
+    } else if (this.options.mode === 'spectrum') {
+        this.drawSpectrumAnalyzer(this.getDisplayBars(bars), w, h);
     }
 
     if (this.barTransition > 0) {

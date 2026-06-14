@@ -71,6 +71,12 @@ const VisualizerCanvas = ({
       midSensitivity: visualizerSettings.midSensitivity,
       highSensitivity: visualizerSettings.highSensitivity,
       monstercatSmoothing: visualizerSettings.monstercatSmoothing,
+      spectrumBarThickness: visualizerSettings.spectrumBarThickness ?? 4,
+      spectrumGlow: visualizerSettings.spectrumGlow ?? 20,
+      spectrumOpacity: visualizerSettings.spectrumOpacity ?? 1.0,
+      spectrumRgb: visualizerSettings.spectrumRgb ?? false,
+      spectrumSmoothing: visualizerSettings.spectrumSmoothing ?? 0.3,
+      spectrumMirror: visualizerSettings.spectrumMirror !== false,
     });
 
     if (!canvas || !audioEl || !visualizerEnabled) {

@@ -52,9 +52,9 @@ const VisualizerSettings = ({
                variant="outline"
                size="sm"
                className="text-xs"
-               onClick={() => applyVisualizerPreset("ncs-aggressive")}
+               onClick={() => applyVisualizerPreset("spectrum-analyzer")}
              >
-               NCS Aggressive
+               Spectrum Analyzer
              </Button>
              <Button
                type="button"
@@ -78,6 +78,7 @@ const VisualizerSettings = ({
                    <SelectContent>
                       <SelectItem value="circle">NCS Circle</SelectItem>
                       <SelectItem value="monstercat">Linear Bars</SelectItem>
+                      <SelectItem value="spectrum">Spectrum Analyzer</SelectItem>
                    </SelectContent>
                 </Select>
              </div>
@@ -256,6 +257,89 @@ const VisualizerSettings = ({
                          type="range" min="0" max="2" step="0.1"
                          value={visualizerSettings.shakeIntensity}
                          onChange={(e) => setVisualizerSettings(s => ({...s, shakeIntensity: parseFloat(e.target.value)}))}
+                         className="studio-slider studio-slider-purple"
+                      />
+                   </div>
+                </div>
+             )}
+
+             {visualizerSettings.mode === 'spectrum' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                   <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">Bar Color</Label>
+                      <div className="flex flex-wrap gap-2">
+                        <Input
+                           type="color"
+                           value={visualizerSettings.spectrumColor}
+                           onChange={(e) => setVisualizerSettings(s => ({...s, spectrumColor: e.target.value}))}
+                           className="w-10 h-10 p-1 cursor-pointer"
+                        />
+                        <Button
+                          variant={visualizerSettings.spectrumRgb ? "default" : "outline"}
+                          size="sm"
+                          className={`flex-1 text-xs ${visualizerSettings.spectrumRgb ? "bg-purple-600 hover:bg-purple-700" : ""}`}
+                          onClick={() => setVisualizerSettings(s => ({...s, spectrumRgb: !s.spectrumRgb, multiColorReactive: !s.spectrumRgb}))}
+                        >
+                          {visualizerSettings.spectrumRgb ? "RGB On" : "RGB Off"}
+                        </Button>
+                      </div>
+                   </div>
+                   <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">Mirror Mode</Label>
+                      <Button
+                        variant={visualizerSettings.spectrumMirror !== false ? "default" : "outline"}
+                        size="sm"
+                        className={`w-full ${visualizerSettings.spectrumMirror !== false ? "bg-purple-600 hover:bg-purple-700" : ""}`}
+                        onClick={() => setVisualizerSettings(s => ({...s, spectrumMirror: !s.spectrumMirror}))}
+                      >
+                        {visualizerSettings.spectrumMirror !== false ? "Mirror On" : "Mirror Off"}
+                      </Button>
+                   </div>
+                   <div className="space-y-2">
+                      <div className="flex justify-between text-xs">
+                         <Label>Bar Thickness</Label>
+                         <span className="text-muted-foreground">{visualizerSettings.spectrumBarThickness}px</span>
+                      </div>
+                      <input
+                         type="range" min="1" max="20" step="1"
+                         value={visualizerSettings.spectrumBarThickness}
+                         onChange={(e) => setVisualizerSettings(s => ({...s, spectrumBarThickness: parseInt(e.target.value)}))}
+                         className="studio-slider studio-slider-purple"
+                      />
+                   </div>
+                   <div className="space-y-2">
+                      <div className="flex justify-between text-xs">
+                         <Label>Glow</Label>
+                         <span className="text-muted-foreground">{visualizerSettings.spectrumGlow}</span>
+                      </div>
+                      <input
+                         type="range" min="0" max="60" step="1"
+                         value={visualizerSettings.spectrumGlow}
+                         onChange={(e) => setVisualizerSettings(s => ({...s, spectrumGlow: parseInt(e.target.value)}))}
+                         className="studio-slider studio-slider-purple"
+                      />
+                   </div>
+                   <div className="space-y-2">
+                      <div className="flex justify-between text-xs">
+                         <Label>Opacity</Label>
+                         <span className="text-muted-foreground">{(visualizerSettings.spectrumOpacity ?? 1).toFixed(2)}</span>
+                      </div>
+                      <input
+                         type="range" min="0.1" max="1.0" step="0.05"
+                         value={visualizerSettings.spectrumOpacity ?? 1}
+                         onChange={(e) => setVisualizerSettings(s => ({...s, spectrumOpacity: parseFloat(e.target.value)}))}
+                         className="studio-slider studio-slider-purple"
+                      />
+                   </div>
+                   <div className="space-y-2">
+                      <div className="flex justify-between text-xs">
+                         <Label>Smoothing</Label>
+                         <span className="text-muted-foreground">{(visualizerSettings.spectrumSmoothing ?? 0.3).toFixed(2)}</span>
+                      </div>
+                      <input
+                         type="range" min="0.05" max="0.9" step="0.05"
+                         value={visualizerSettings.spectrumSmoothing ?? 0.3}
+                         onChange={(e) => setVisualizerSettings(s => ({...s, spectrumSmoothing: parseFloat(e.target.value)}))}
                          className="studio-slider studio-slider-purple"
                       />
                    </div>
