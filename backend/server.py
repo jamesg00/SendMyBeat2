@@ -205,6 +205,8 @@ def _check_rate_limit(bucket_key: str, limit: int, window_seconds: int) -> None:
 
 async def _check_rate_limit_persistent(bucket_key: str, limit: int, window_seconds: int) -> None:
     _check_rate_limit(bucket_key, limit, window_seconds)
+    if not _is_production_like():
+        return
     now = datetime.now(timezone.utc)
     window_start = now - timedelta(seconds=window_seconds)
     doc = await db.security_rate_limits.find_one({"key": bucket_key}, {"_id": 0, "count": 1, "window_started_at": 1})
@@ -4981,7 +4983,7 @@ async def connect_youtube(code: str = Form(...), current_user: dict = Depends(ge
         
     except Exception as e:
         logging.error(f"YouTube connection error: {str(e)}")
-        raise HTTPException(status_code=400, detail=f"Failed to connect YouTube: {str(e)}")
+        raise HTTPException(status_code=400, detail="Failed to connect YouTube account. Please try again.")
 
 @api_router.get("/youtube/status", response_model=YouTubeConnectionStatus)
 async def get_youtube_status(current_user: dict = Depends(get_current_user)):
@@ -5034,7 +5036,7 @@ async def get_youtube_analytics(current_user: dict = Depends(get_current_user)):
         raise
     except Exception as e:
         logging.error(f"YouTube analytics queueing error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to analyze channel: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to analyze channel. Please try again.")
 
 
 
@@ -5078,7 +5080,7 @@ async def start_growth_challenge(request: Request, current_user: dict = Depends(
         
     except Exception as e:
         logging.error(f"Error starting growth challenge: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to start growth challenge. Please try again.")
 
 @api_router.post("/growth/checkin", response_model=CheckinResponse)
 async def daily_checkin(request: Request, current_user: dict = Depends(get_current_user)):
@@ -5236,7 +5238,7 @@ async def daily_checkin(request: Request, current_user: dict = Depends(get_curre
         
     except Exception as e:
         logging.error(f"Error with daily checkin: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to process daily check-in. Please try again.")
 
 @api_router.get("/growth/status", response_model=GrowthStreak)
 async def get_growth_status(current_user: dict = Depends(get_current_user)):
@@ -5264,7 +5266,7 @@ async def get_growth_status(current_user: dict = Depends(get_current_user)):
         
     except Exception as e:
         logging.error(f"Error fetching growth status: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to fetch growth status. Please try again.")
 
 @api_router.get("/growth/calendar")
 async def get_growth_calendar(request: Request, current_user: dict = Depends(get_current_user)):
@@ -5311,7 +5313,7 @@ async def get_growth_calendar(request: Request, current_user: dict = Depends(get
         
     except Exception as e:
         logging.error(f"Error fetching calendar: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to fetch growth calendar. Please try again.")
 
 
 # ============ Subscription Routes ============
@@ -5366,7 +5368,7 @@ async def create_checkout_session(request: CheckoutSessionRequest, current_user:
         
     except Exception as e:
         logging.error(f"Stripe checkout error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to create checkout: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to create checkout session. Please try again.")
 
 @api_router.post("/subscription/webhook")
 async def stripe_webhook(request: Request):
@@ -5478,7 +5480,7 @@ async def create_customer_portal_session(current_user: dict = Depends(get_curren
         
     except Exception as e:
         logging.error(f"Portal session error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to open billing portal. Please try again.")
 
 
 @api_router.post("/subscription/sync", response_model=SubscriptionStatus)
@@ -6845,7 +6847,7 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
         raise
     except Exception as e:
         logging.error(f"Error generating tags: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to generate tags: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to generate tags. Please try again.")
 
 @api_router.get("/tags/history", response_model=List[TagGenerationResponse])
 async def get_tag_history(current_user: dict = Depends(get_current_user)):
@@ -7348,7 +7350,7 @@ async def upload_audio(file: UploadFile = File(...), current_user: dict = Depend
         raise
     except Exception as e:
         logging.error(f"Audio upload error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to upload audio: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to upload audio. Please try again.")
 
 @api_router.post("/upload/image")
 async def upload_image(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
@@ -7362,7 +7364,7 @@ async def upload_image(file: UploadFile = File(...), current_user: dict = Depend
         file_ext = Path(file.filename).suffix.lower()
         _assert_content_type_matches(file, expected_prefixes=("image/", "video/"))
 
-        image_bytes = await file.read()
+        image_bytes = await file.read(MAX_IMAGE_UPLOAD_BYTES + 1)
         if not image_bytes:
             raise HTTPException(status_code=400, detail="Empty image file.")
         if len(image_bytes) > MAX_IMAGE_UPLOAD_BYTES:
@@ -7399,7 +7401,7 @@ async def upload_image(file: UploadFile = File(...), current_user: dict = Depend
         raise
     except Exception as e:
         logging.error(f"Image upload error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to upload image: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to upload image. Please try again.")
 
 
 @api_router.get("/uploads/my-files")
@@ -7500,7 +7502,7 @@ async def analyze_beat(request: BeatAnalysisRequest, current_user: dict = Depend
         raise
     except Exception as e:
         logging.error(f"Beat analysis queueing error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to queue beat analysis. Please try again.")
 
 
 # ============ Producer Spotlight Routes ============
@@ -8244,7 +8246,7 @@ async def fix_beat(request: BeatFixRequest, current_user: dict = Depends(get_cur
         raise
     except Exception as e:
         logging.error(f"Beat fix queueing error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to queue beat fix. Please try again.")
 
 
 # ============ Thumbnail Checker Route ============
@@ -8315,7 +8317,7 @@ async def check_thumbnail(
         raise
     except Exception as e:
         logging.error(f"Thumbnail check queueing error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to analyze thumbnail: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to queue thumbnail check. Please try again.")
 
 
 # ============ YouTube Upload Routes ============
@@ -8396,7 +8398,7 @@ async def upload_to_youtube(
         raise
     except Exception as e:
         logging.error(f"YouTube upload queueing error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to queue YouTube upload: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to queue YouTube upload. Please try again.")
 
 
 @api_router.get("/youtube/upload-jobs/{job_id}")

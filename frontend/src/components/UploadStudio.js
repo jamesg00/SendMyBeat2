@@ -128,6 +128,7 @@ const UploadStudio = ({
   const [uploadingToYouTube, setUploadingToYouTube] = useState(false);
   const [uploadController, setUploadController] = useState(null);
   const [currentUploadJob, setCurrentUploadJob] = useState(null);
+  const [vizBakeStatus, setVizBakeStatus] = useState(null); // null | "recording" | "uploading"
 
   const hasAudioReady = Boolean(audioFileId);
   const hasImageReady = Boolean(imageFileId);
@@ -856,6 +857,127 @@ const UploadStudio = ({
     }
   };
 
+  // Records the live visualizer canvas composited with the cover image.
+  // Returns a { file_id } from the /upload/image endpoint, or null on failure.
+  const bakeVisualizerToVideo = async () => {
+    const audioEl = audioPlayerRef.current;
+    const vizInstance = visualizerRef.current;
+    const vizCanvas = previewContainerRef.current?.querySelector("canvas");
+
+    if (!vizInstance || !audioEl || !vizCanvas || !imagePreviewUrl) return null;
+
+    const ASPECT_DIMS = { "16:9": [1280, 720], "1:1": [1080, 1080], "9:16": [1080, 1920], "4:5": [1080, 1350] };
+    const [targetW, targetH] = ASPECT_DIMS[videoAspectRatio] || ASPECT_DIMS["16:9"];
+    const recordFps = Math.min(30, Math.max(15, Number(videoRenderFps) || 30));
+    const RECORD_SECONDS = 20;
+
+    // Load cover image into an Image element for canvas drawing
+    const coverImg = new Image();
+    coverImg.crossOrigin = "anonymous";
+    try {
+      await new Promise((res, rej) => {
+        coverImg.onload = res;
+        coverImg.onerror = rej;
+        coverImg.src = imagePreviewUrl;
+        if (coverImg.complete) res();
+      });
+    } catch {
+      return null;
+    }
+
+    // Create offscreen composite canvas
+    const composite = document.createElement("canvas");
+    composite.width = targetW;
+    composite.height = targetH;
+    const ctx = composite.getContext("2d");
+
+    const bgColor = backgroundColor === "white" ? "#ffffff" : "#000000";
+
+    const drawFrame = () => {
+      ctx.fillStyle = bgColor;
+      ctx.fillRect(0, 0, targetW, targetH);
+
+      // Object-contain the cover image, then apply user transforms (mirrors FFmpeg logic)
+      const fitScale = Math.min(targetW / coverImg.naturalWidth, targetH / coverImg.naturalHeight);
+      const fitW = coverImg.naturalWidth * fitScale;
+      const fitH = coverImg.naturalHeight * fitScale;
+      const artW = fitW * imageScaleX;
+      const artH = fitH * (lockImageScale ? imageScaleX : imageScaleY);
+      const artX = (targetW - artW) / 2 + imagePosX * artW * 0.5;
+      const artY = (targetH - artH) / 2 + imagePosY * artH * 0.5;
+
+      ctx.save();
+      ctx.globalAlpha = visualizerSettings.backgroundOpacity;
+      if (Math.abs(imageRotation) > 0.01) {
+        ctx.translate(artX + artW / 2, artY + artH / 2);
+        ctx.rotate(imageRotation * Math.PI / 180);
+        ctx.translate(-(artX + artW / 2), -(artY + artH / 2));
+      }
+      ctx.drawImage(coverImg, artX, artY, artW, artH);
+      ctx.restore();
+
+      // Scale the live visualizer canvas (preview resolution) up to output resolution
+      ctx.globalAlpha = 1;
+      ctx.drawImage(vizCanvas, 0, 0, targetW, targetH);
+    };
+
+    // Start audio + visualizer for recording
+    const wasPlaying = !audioEl.paused;
+    const savedTime = audioEl.currentTime;
+    if (!wasPlaying) {
+      audioEl.currentTime = 0;
+      try {
+        await vizInstance.resumeAudioContext();
+        await audioEl.play();
+        vizInstance.start();
+      } catch {
+        return null;
+      }
+    }
+
+    const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
+      ? "video/webm;codecs=vp9"
+      : "video/webm;codecs=vp8";
+
+    const stream = composite.captureStream(recordFps);
+    const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 4_000_000 });
+    const chunks = [];
+    recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+
+    let rafId;
+    const loop = () => { drawFrame(); rafId = requestAnimationFrame(loop); };
+
+    recorder.start(200);
+    loop();
+
+    await new Promise((res) => setTimeout(res, RECORD_SECONDS * 1000));
+
+    cancelAnimationFrame(rafId);
+    recorder.stop();
+
+    // Restore audio state
+    if (!wasPlaying) {
+      audioEl.pause();
+      audioEl.currentTime = savedTime;
+      if (!visualizerEnabled) vizInstance.stop();
+    }
+
+    const blob = await new Promise((res) => { recorder.onstop = () => res(new Blob(chunks, { type: mimeType })); });
+
+    if (!blob || blob.size < 1000) return null;
+
+    // Upload the WebM as the image/visual file
+    setVizBakeStatus("uploading");
+    const fd = new FormData();
+    fd.append("file", new File([blob], "visualizer.webm", { type: mimeType }));
+    try {
+      const res = await axios.post(`${API}/upload/image`, fd);
+      return res.data?.file_id || null;
+    } catch {
+      return null;
+    }
+  };
+
   const handleYouTubeUpload = async () => {
     if (!uploadTitle || !selectedDescriptionId || !audioFileId || !imageFileId) {
       toast.error("Please fill title, description, and ensure files are uploaded.");
@@ -925,23 +1047,41 @@ const UploadStudio = ({
     setUploadController(controller);
     setUploadingToYouTube(true);
 
+    // When the visualizer is active, record a 20-second clip of the live canvas
+    // and use it as the visual input — the backend loops it over the full audio.
+    let visualImageFileId = imageFileId;
+    let useNeutralLayout = false;
+    if (visualizerEnabled && visualizerRef.current) {
+      setVizBakeStatus("recording");
+      toast.info("Recording visualizer (20s loop)...", { duration: 22000 });
+      const bakedFileId = await bakeVisualizerToVideo();
+      setVizBakeStatus(null);
+      if (bakedFileId) {
+        visualImageFileId = bakedFileId;
+        useNeutralLayout = true;
+      } else {
+        toast.warning("Visualizer recording failed — uploading with static cover instead.");
+      }
+    }
+
     const formData = new FormData();
     formData.append('title', uploadTitle);
     formData.append('description_id', selectedDescriptionId);
     formData.append('tags_id', selectedTagsId || '');
     formData.append('privacy_status', privacyStatus);
     formData.append('audio_file_id', audioFileId);
-    formData.append('image_file_id', imageFileId);
+    formData.append('image_file_id', visualImageFileId);
     formData.append('remove_watermark', removeWatermark);
     formData.append('description_override', buildUploadDescriptionWithMetadata());
     formData.append('aspect_ratio', videoAspectRatio);
-    formData.append('image_scale', String(lockImageScale ? imageScaleX : (imageScaleX + imageScaleY) / 2));
-    formData.append('image_scale_x', String(imageScaleX));
-    formData.append('image_scale_y', String(imageScaleY));
-    formData.append('image_pos_x', String(imagePosX));
-    formData.append('image_pos_y', String(imagePosY));
-    formData.append('image_rotation', String(imageRotation));
-    formData.append('background_color', backgroundColor);
+    // Neutral layout when the viz clip has the image transforms already baked in
+    formData.append('image_scale', useNeutralLayout ? '1' : String(lockImageScale ? imageScaleX : (imageScaleX + imageScaleY) / 2));
+    formData.append('image_scale_x', useNeutralLayout ? '1' : String(imageScaleX));
+    formData.append('image_scale_y', useNeutralLayout ? '1' : String(imageScaleY));
+    formData.append('image_pos_x', useNeutralLayout ? '0' : String(imagePosX));
+    formData.append('image_pos_y', useNeutralLayout ? '0' : String(imagePosY));
+    formData.append('image_rotation', useNeutralLayout ? '0' : String(imageRotation));
+    formData.append('background_color', useNeutralLayout ? 'black' : backgroundColor);
     formData.append('render_fps', String(videoRenderFps || DEFAULT_VIDEO_RENDER_FPS));
 
     try {
@@ -980,6 +1120,7 @@ const UploadStudio = ({
       }
     } finally {
       setUploadController(null);
+      setVizBakeStatus(null);
     }
   };
 
@@ -1208,7 +1349,7 @@ const UploadStudio = ({
               onClick={handleYouTubeUploadAsync}
               disabled={uploadingToYouTube}
            >
-              {uploadingToYouTube ? "Uploading..." : "Upload Video to YouTube"}
+              {vizBakeStatus === "recording" ? "Recording Visualizer (20s)..." : vizBakeStatus === "uploading" ? "Uploading Visualizer Clip..." : uploadingToYouTube ? "Uploading..." : "Upload Video to YouTube"}
               {!uploadingToYouTube && <Youtube className="ml-2 h-5 w-5" />}
            </Button>
         </div>

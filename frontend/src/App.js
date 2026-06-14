@@ -58,12 +58,17 @@ axios.interceptors.response.use(
   }
 );
 
+const DEV_BYPASS =
+  process.env.REACT_APP_DEV_BYPASS === "true" &&
+  (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
+
 function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(DEV_BYPASS);
+  const [isAdmin, setIsAdmin] = useState(DEV_BYPASS);
+  const [loading, setLoading] = useState(!DEV_BYPASS);
 
   useEffect(() => {
+    if (DEV_BYPASS) return;
     const checkAuth = async () => {
       const token = getAuthToken();
       if (token) {

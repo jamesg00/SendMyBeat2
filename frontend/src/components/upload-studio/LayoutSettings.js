@@ -72,9 +72,9 @@ const LayoutSettings = ({
             GIF or animated artwork at 2 fps will look choppy. Try 30 fps for smoother motion.
           </p>
         ) : null}
-        {visualizerEnabled && String(videoRenderFps) === "2" ? (
+        {visualizerEnabled ? (
           <p className="text-xs text-amber-600 dark:text-amber-400">
-            The live visualizer preview is separate from the uploaded video. For motion-heavy exports, use 30 or 60 fps.
+            The audio visualizer is a live preview only — it is not included in the video uploaded to YouTube. Your cover image will appear as-is.
           </p>
         ) : null}
         {!isAnimatedVisual && ["30", "60"].includes(String(videoRenderFps)) ? (
