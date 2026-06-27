@@ -413,7 +413,7 @@ YOUTUBE_RENDER_TIMEOUT_MAX_SECONDS = int(os.environ.get("YOUTUBE_RENDER_TIMEOUT_
 STATIC_STILL_ENCODE_FPS = 2
 YOUTUBE_RENDER_PRESET = str(os.environ.get("YOUTUBE_RENDER_PRESET", "veryfast")).strip() or "veryfast"
 YOUTUBE_RENDER_CRF = str(os.environ.get("YOUTUBE_RENDER_CRF", "26")).strip() or "26"
-YOUTUBE_RENDER_MAX_HEIGHT = int(os.environ.get("YOUTUBE_RENDER_MAX_HEIGHT", "720") or "720")
+YOUTUBE_RENDER_MAX_HEIGHT = int(os.environ.get("YOUTUBE_RENDER_MAX_HEIGHT", "1080") or "1080")
 YOUTUBE_RENDER_FPS_ALLOWED = frozenset({2, 30, 60})
 # Legacy env/docs used 24 or 15; map to nearest allowed preset.
 YOUTUBE_RENDER_FPS_LEGACY_ALIASES: dict[int, int] = {24: 30, 15: 30}
@@ -991,6 +991,7 @@ def _transcode_gif_to_h264_mp4(
     vf = (
         f"scale='min({max_height},iw)':'min({max_height},ih)':"
         "force_original_aspect_ratio=decrease:flags=fast_bilinear,"
+        "pad=ceil(iw/2)*2:ceil(ih/2)*2,"
         f"fps={fps},format=yuv420p"
     )
     command = [
@@ -2686,7 +2687,7 @@ def _normalize_upload_render_settings(
 ) -> dict[str, Any]:
     safe_aspect_ratio = (aspect_ratio or "16:9").strip()
     aspect_map = {
-        "16:9": (1280, 720),
+        "16:9": (1920, 1080),
         "1:1": (1080, 1080),
         "9:16": (1080, 1920),
         "4:5": (1080, 1350),

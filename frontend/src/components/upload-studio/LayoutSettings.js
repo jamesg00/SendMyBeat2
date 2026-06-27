@@ -73,11 +73,11 @@ const LayoutSettings = ({
           </p>
         ) : null}
         {visualizerEnabled ? (
-          <p className="text-xs text-amber-600 dark:text-amber-400">
-            The audio visualizer is a live preview only — it is not included in the video uploaded to YouTube. Your cover image will appear as-is.
+          <p className="text-xs text-green-600 dark:text-green-400">
+            The visualizer will be recorded and baked into your YouTube video. Use 30 or 60 fps for smooth motion.
           </p>
         ) : null}
-        {!isAnimatedVisual && ["30", "60"].includes(String(videoRenderFps)) ? (
+        {!visualizerEnabled && !isAnimatedVisual && ["30", "60"].includes(String(videoRenderFps)) ? (
           <p className="text-xs text-amber-600 dark:text-amber-400">
             Static cover art is encoded at 2 fps for speed (looks the same on YouTube). Use 30/60 fps for GIFs or video loops.
           </p>

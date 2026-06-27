@@ -857,21 +857,26 @@ const UploadStudio = ({
     }
   };
 
-  // Records the live visualizer canvas composited with the cover image.
-  // Returns a { file_id } from the /upload/image endpoint, or null on failure.
+  // Renders the visualizer + cover image at full output resolution and records a 20s WebM loop.
+  // Returns a backend file_id, or null on failure.
   const bakeVisualizerToVideo = async () => {
     const audioEl = audioPlayerRef.current;
-    const vizInstance = visualizerRef.current;
-    const vizCanvas = previewContainerRef.current?.querySelector("canvas");
+    if (!audioEl || !imagePreviewUrl) return null;
 
-    if (!vizInstance || !audioEl || !vizCanvas || !imagePreviewUrl) return null;
-
-    const ASPECT_DIMS = { "16:9": [1280, 720], "1:1": [1080, 1080], "9:16": [1080, 1920], "4:5": [1080, 1350] };
+    const ASPECT_DIMS = { "16:9": [1920, 1080], "1:1": [1080, 1080], "9:16": [1080, 1920], "4:5": [1080, 1350] };
     const [targetW, targetH] = ASPECT_DIMS[videoAspectRatio] || ASPECT_DIMS["16:9"];
-    const recordFps = Math.min(60, Math.max(15, Number(videoRenderFps) || 30));
+    const recordFps = Math.min(60, Math.max(24, Number(videoRenderFps) || 30));
     const RECORD_SECONDS = 20;
 
-    // Load cover image into an Image element for canvas drawing
+    const hexToRgb = (hex, fallback = "255, 255, 255") => {
+      const clean = (hex || "").replace("#", "");
+      if (clean.length !== 6) return fallback;
+      const v = parseInt(clean, 16);
+      if (isNaN(v)) return fallback;
+      return `${(v >> 16) & 255}, ${(v >> 8) & 255}, ${v & 255}`;
+    };
+
+    // Load cover image
     const coverImg = new Image();
     coverImg.crossOrigin = "anonymous";
     try {
@@ -881,33 +886,97 @@ const UploadStudio = ({
         coverImg.src = imagePreviewUrl;
         if (coverImg.complete) res();
       });
+    } catch { return null; }
+
+    // Create a full-res hidden canvas for the dedicated baking visualizer.
+    // It must be in the DOM so clientWidth/clientHeight return valid values.
+    const bakingCanvas = document.createElement("canvas");
+    bakingCanvas.width = targetW;
+    bakingCanvas.height = targetH;
+    bakingCanvas.style.cssText = `position:fixed;top:-${targetH + 10}px;left:-${targetW + 10}px;width:${targetW}px;height:${targetH}px;pointer-events:none;opacity:0;`;
+    document.body.appendChild(bakingCanvas);
+
+    // Build full options matching VisualizerCanvas logic
+    const s = visualizerSettings;
+    const bakingVizOptions = {
+      bars: s.bars,
+      gain: s.intensity * 0.8,
+      maxBarLength: s.maxBarLength,
+      radius: s.radius,
+      rotateSpeed: s.rotateSpeed,
+      trailsEnabled: s.trailsEnabled,
+      particleEnabled: s.particleEnabled,
+      particleIntensity: s.particleIntensity,
+      monstercatParticleEnabled: s.monstercatParticleEnabled,
+      maxSpawnRate: Math.round(120 * s.particleIntensity),
+      baseSpawnRate: Math.round(10 * Math.max(0.5, s.particleIntensity)),
+      particleSpeed: 72 * s.particleIntensity,
+      mode: s.mode,
+      shakeIntensity: (s.shakeIntensity || 0) * 0.7,
+      multiColorReactive: s.multiColorReactive,
+      spectrumStyle: s.mode === "circle" ? "fill" : s.spectrumStyle,
+      fillCenter: s.fillCenter,
+      fillCenterColor: hexToRgb(s.fillCenterColor, "255, 255, 255"),
+      centerImageSpin: s.centerImageSpin,
+      spectrumColor: hexToRgb(s.spectrumColor, "255, 255, 255"),
+      centerImageUrl: imagePreviewUrl || "",
+      particleColor: hexToRgb(s.particleColor, "140, 200, 255"),
+      spectrumBorderEnabled: s.mode === "circle" && s.fillCenter === "transparent" ? false : s.spectrumBorderEnabled,
+      spectrumBorderWidth: 5,
+      spectrumBorderColor: hexToRgb(s.spectrumBorderColor, "255, 255, 255"),
+      monstercatYOffset: s.monstercatYOffset,
+      monstercatSpacing: s.monstercatSpacing,
+      monstercatParticleSpeed: s.monstercatParticleSpeed,
+      monstercatParticleSize: s.monstercatParticleSize,
+      monstercatParticleCount: s.monstercatParticleCount,
+      monstercatGlow: s.monstercatGlow,
+      lowSensitivity: s.lowSensitivity,
+      midSensitivity: s.midSensitivity,
+      highSensitivity: s.highSensitivity,
+      monstercatSmoothing: s.monstercatSmoothing,
+      spectrumBarThickness: s.spectrumBarThickness ?? 4,
+      spectrumGlow: s.spectrumGlow ?? 20,
+      spectrumOpacity: s.spectrumOpacity ?? 1.0,
+      spectrumRgb: s.spectrumRgb ?? false,
+      spectrumSmoothing: s.spectrumSmoothing ?? 0.3,
+      spectrumMirror: s.spectrumMirror !== false,
+    };
+
+    let bakingViz = null;
+    try {
+      bakingViz = new AudioVisualizer(bakingCanvas, bakingVizOptions);
+      // Force exactly targetW×targetH — override DPR scaling so the canvas pixel
+      // buffer stays 1:1 with the composite (no Retina 2x cropping).
+      bakingCanvas.width = targetW;
+      bakingCanvas.height = targetH;
+      bakingViz.ctx.setTransform(1, 0, 0, 1, 0, 0);
+      await bakingViz.connectMediaElement(audioEl);
     } catch {
+      document.body.removeChild(bakingCanvas);
       return null;
     }
 
-    // Create offscreen composite canvas
+    // Create the composite canvas (cover image + visualizer overlay)
     const composite = document.createElement("canvas");
     composite.width = targetW;
     composite.height = targetH;
     const ctx = composite.getContext("2d");
 
     const bgColor = backgroundColor === "white" ? "#ffffff" : "#000000";
+    const fitScale = Math.min(targetW / coverImg.naturalWidth, targetH / coverImg.naturalHeight);
+    const fitW = coverImg.naturalWidth * fitScale;
+    const fitH = coverImg.naturalHeight * fitScale;
+    const artW = fitW * imageScaleX;
+    const artH = fitH * (lockImageScale ? imageScaleX : imageScaleY);
+    const artX = (targetW - artW) / 2 + imagePosX * artW * 0.5;
+    const artY = (targetH - artH) / 2 + imagePosY * artH * 0.5;
 
     const drawFrame = () => {
       ctx.fillStyle = bgColor;
       ctx.fillRect(0, 0, targetW, targetH);
 
-      // Object-contain the cover image, then apply user transforms (mirrors FFmpeg logic)
-      const fitScale = Math.min(targetW / coverImg.naturalWidth, targetH / coverImg.naturalHeight);
-      const fitW = coverImg.naturalWidth * fitScale;
-      const fitH = coverImg.naturalHeight * fitScale;
-      const artW = fitW * imageScaleX;
-      const artH = fitH * (lockImageScale ? imageScaleX : imageScaleY);
-      const artX = (targetW - artW) / 2 + imagePosX * artW * 0.5;
-      const artY = (targetH - artH) / 2 + imagePosY * artH * 0.5;
-
       ctx.save();
-      ctx.globalAlpha = visualizerSettings.backgroundOpacity;
+      ctx.globalAlpha = visualizerSettings.backgroundOpacity ?? 1;
       if (Math.abs(imageRotation) > 0.01) {
         ctx.translate(artX + artW / 2, artY + artH / 2);
         ctx.rotate(imageRotation * Math.PI / 180);
@@ -916,66 +985,82 @@ const UploadStudio = ({
       ctx.drawImage(coverImg, artX, artY, artW, artH);
       ctx.restore();
 
-      // Scale the live visualizer canvas (preview resolution) up to output resolution
+      // Draw baking visualizer — explicit size ensures correct compositing at any DPR
       ctx.globalAlpha = 1;
-      ctx.drawImage(vizCanvas, 0, 0, targetW, targetH);
+      ctx.drawImage(bakingCanvas, 0, 0, targetW, targetH);
     };
 
-    // Start audio + visualizer for recording
+    // Start/ensure audio is playing so the analyser has data
     const wasPlaying = !audioEl.paused;
     const savedTime = audioEl.currentTime;
-    if (!wasPlaying) {
-      audioEl.currentTime = 0;
-      try {
-        await vizInstance.resumeAudioContext();
+    try {
+      if (!wasPlaying) {
+        audioEl.currentTime = 0;
+        await bakingViz.resumeAudioContext();
         await audioEl.play();
-        vizInstance.start();
-      } catch {
-        return null;
+      } else {
+        await bakingViz.resumeAudioContext();
       }
+    } catch {
+      bakingViz.destroy();
+      document.body.removeChild(bakingCanvas);
+      return null;
     }
+    bakingViz.start();
+
+    // Brief warm-up so bars are visible from the first captured frame
+    await new Promise((res) => setTimeout(res, 400));
+
+    // Lock the baking canvas size so window resize events don't undo the DPR fix
+    const _noopResize = () => {
+      bakingCanvas.width = targetW;
+      bakingCanvas.height = targetH;
+      bakingViz.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    };
+    window.addEventListener("resize", _noopResize);
 
     const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
       ? "video/webm;codecs=vp9"
       : "video/webm;codecs=vp8";
 
+    // Scale bitrate with FPS — 60fps needs more bits than 30fps for same quality
+    const bitsPerSecond = recordFps >= 60 ? 20_000_000 : recordFps >= 30 ? 12_000_000 : 8_000_000;
     const stream = composite.captureStream(recordFps);
-    const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 4_000_000 });
+    const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: bitsPerSecond });
     const chunks = [];
     recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
 
     let rafId;
-    const loop = () => { drawFrame(); rafId = requestAnimationFrame(loop); };
+    const renderLoop = () => { drawFrame(); rafId = requestAnimationFrame(renderLoop); };
 
     recorder.start(200);
-    loop();
+    renderLoop();
 
     await new Promise((res) => setTimeout(res, RECORD_SECONDS * 1000));
 
     cancelAnimationFrame(rafId);
     recorder.stop();
 
-    // Restore audio state
+    // Cleanup baking resources
+    window.removeEventListener("resize", _noopResize);
+    bakingViz.destroy();
+    document.body.removeChild(bakingCanvas);
+
     if (!wasPlaying) {
       audioEl.pause();
       audioEl.currentTime = savedTime;
-      if (!visualizerEnabled) vizInstance.stop();
     }
 
     const blob = await new Promise((res) => { recorder.onstop = () => res(new Blob(chunks, { type: mimeType })); });
-
     if (!blob || blob.size < 1000) return null;
 
-    // Upload the WebM as the image/visual file
     setVizBakeStatus("uploading");
     const fd = new FormData();
     fd.append("file", new File([blob], "visualizer.webm", { type: mimeType }));
     try {
       const res = await axios.post(`${API}/upload/image`, fd);
       return res.data?.file_id || null;
-    } catch {
-      return null;
-    }
+    } catch { return null; }
   };
 
   const handleYouTubeUpload = async () => {
@@ -1052,13 +1137,15 @@ const UploadStudio = ({
     // When the visualizer is active, record a 20-second clip of the live canvas
     // and use it as the visual input — the backend loops it over the full audio.
     let visualFileId = imageFileId;
-    if (visualizerEnabled && visualizerRef.current) {
+    let vizBaked = false;
+    if (visualizerEnabled) {
       setVizBakeStatus("recording");
       toast.info("Recording visualizer (20s loop)...", { duration: 22000 });
       const bakedFileId = await bakeVisualizerToVideo();
       setVizBakeStatus(null);
       if (bakedFileId) {
         visualFileId = bakedFileId;
+        vizBaked = true;
       } else {
         toast.warning("Visualizer recording failed — uploading with static cover instead.");
       }
@@ -1074,17 +1161,30 @@ const UploadStudio = ({
     formData.append('remove_watermark', removeWatermark);
     formData.append('description_override', buildUploadDescriptionWithMetadata());
     formData.append('aspect_ratio', videoAspectRatio);
-    // Neutral layout when the viz clip has the image transforms already baked in
-    formData.append('image_scale', String(lockImageScale ? imageScaleX : (imageScaleX + imageScaleY) / 2));
-    formData.append('image_scale_x', String(imageScaleX));
-    formData.append('image_scale_y', String(imageScaleY));
-    formData.append('image_pos_x', String(imagePosX));
-    formData.append('image_pos_y', String(imagePosY));
-    formData.append('image_rotation', String(imageRotation));
+    formData.append('render_fps', String(vizBaked ? videoRenderFps || '30' : (videoRenderFps || DEFAULT_VIDEO_RENDER_FPS)));
     formData.append('background_color', backgroundColor);
-    formData.append('render_fps', String(videoRenderFps || DEFAULT_VIDEO_RENDER_FPS));
-    formData.append('visualizer_enabled', String(Boolean(visualizerEnabled)));
-    formData.append('visualizer_settings', JSON.stringify(visualizerSettings || {}));
+    if (vizBaked) {
+      // The WebM already has background + image + visualizer fully composited.
+      // Use neutral transforms so the backend passes it through as-is,
+      // and disable the backend FFmpeg visualizer so it doesn't overlay on top.
+      formData.append('image_scale', '1');
+      formData.append('image_scale_x', '1');
+      formData.append('image_scale_y', '1');
+      formData.append('image_pos_x', '0');
+      formData.append('image_pos_y', '0');
+      formData.append('image_rotation', '0');
+      formData.append('visualizer_enabled', 'false');
+      formData.append('visualizer_settings', '{}');
+    } else {
+      formData.append('image_scale', String(lockImageScale ? imageScaleX : (imageScaleX + imageScaleY) / 2));
+      formData.append('image_scale_x', String(imageScaleX));
+      formData.append('image_scale_y', String(imageScaleY));
+      formData.append('image_pos_x', String(imagePosX));
+      formData.append('image_pos_y', String(imagePosY));
+      formData.append('image_rotation', String(imageRotation));
+      formData.append('visualizer_enabled', String(Boolean(visualizerEnabled)));
+      formData.append('visualizer_settings', JSON.stringify(visualizerSettings || {}));
+    }
 
     try {
       const response = await axios.post(`${API}/youtube/upload`, formData, {
