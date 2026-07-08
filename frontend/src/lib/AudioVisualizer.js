@@ -148,6 +148,7 @@ export default class AudioVisualizer {
     this.analyser = null;
     this.sourceNode = null;
     this.connectedElement = null;
+    this.ownsAudioNodes = true;
     this.dataArray = null;
     this.frequencyBins = [];
     this.barCenterFreqs = [];
@@ -222,6 +223,20 @@ export default class AudioVisualizer {
     this.canvas = nextCanvas;
     this.ctx = nextCanvas.getContext("2d", { alpha: true });
     this.resize();
+  }
+
+  attachAudioAnalysisFrom(sourceVisualizer, audioEl = null) {
+    if (!sourceVisualizer?.audioContext || !sourceVisualizer?.analyser) {
+      return false;
+    }
+    this.audioContext = sourceVisualizer.audioContext;
+    this.analyser = sourceVisualizer.analyser;
+    this.sourceNode = sourceVisualizer.sourceNode || null;
+    this.connectedElement = audioEl || sourceVisualizer.connectedElement || null;
+    this.ownsAudioNodes = false;
+    this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+    this.buildBinMap();
+    return true;
   }
 
   lerp(current, target, speed, dt) {
@@ -334,7 +349,7 @@ export default class AudioVisualizer {
     }
 
     if (this.connectedElement !== audioEl) {
-      if (this.sourceNode) {
+      if (this.ownsAudioNodes && this.sourceNode) {
         try {
           this.sourceNode.disconnect();
         } catch (_) {
@@ -345,6 +360,7 @@ export default class AudioVisualizer {
       this.sourceNode.connect(this.analyser);
       this.analyser.connect(this.audioContext.destination);
       this.connectedElement = audioEl;
+      this.ownsAudioNodes = true;
     }
   }
 
@@ -365,6 +381,7 @@ export default class AudioVisualizer {
     mic.connect(this.analyser);
     this.sourceNode = mic;
     this.connectedElement = null;
+    this.ownsAudioNodes = true;
     this.buildBinMap();
     return stream;
   }
@@ -393,14 +410,14 @@ export default class AudioVisualizer {
   destroy() {
     this.stop();
     window.removeEventListener("resize", this.resize);
-    if (this.sourceNode) {
+    if (this.ownsAudioNodes && this.sourceNode) {
       try {
         this.sourceNode.disconnect();
       } catch (_) {
         // no-op
       }
     }
-    if (this.analyser) {
+    if (this.ownsAudioNodes && this.analyser) {
       try {
         this.analyser.disconnect();
       } catch (_) {

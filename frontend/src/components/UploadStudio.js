@@ -895,6 +895,11 @@ const UploadStudio = ({
     bakingCanvas.height = targetH;
     bakingCanvas.style.cssText = `position:fixed;top:-${targetH + 10}px;left:-${targetW + 10}px;width:${targetW}px;height:${targetH}px;pointer-events:none;opacity:0;`;
     document.body.appendChild(bakingCanvas);
+    const removeBakingCanvas = () => {
+      if (bakingCanvas.parentNode) {
+        bakingCanvas.parentNode.removeChild(bakingCanvas);
+      }
+    };
 
     // Build full options matching VisualizerCanvas logic
     const s = visualizerSettings;
@@ -919,11 +924,12 @@ const UploadStudio = ({
       fillCenterColor: hexToRgb(s.fillCenterColor, "255, 255, 255"),
       centerImageSpin: s.centerImageSpin,
       spectrumColor: hexToRgb(s.spectrumColor, "255, 255, 255"),
-      centerImageUrl: imagePreviewUrl || "",
+      centerImageUrl: centerVisualizerImageUrl || imagePreviewUrl || "",
       particleColor: hexToRgb(s.particleColor, "140, 200, 255"),
       spectrumBorderEnabled: s.mode === "circle" && s.fillCenter === "transparent" ? false : s.spectrumBorderEnabled,
       spectrumBorderWidth: 5,
       spectrumBorderColor: hexToRgb(s.spectrumBorderColor, "255, 255, 255"),
+      spectrumRecordImageUrl,
       monstercatYOffset: s.monstercatYOffset,
       monstercatSpacing: s.monstercatSpacing,
       monstercatParticleSpeed: s.monstercatParticleSpeed,
@@ -950,9 +956,13 @@ const UploadStudio = ({
       bakingCanvas.width = targetW;
       bakingCanvas.height = targetH;
       bakingViz.ctx.setTransform(1, 0, 0, 1, 0, 0);
-      await bakingViz.connectMediaElement(audioEl);
+      const reusedLiveAnalyser = bakingViz.attachAudioAnalysisFrom?.(visualizerRef.current, audioEl);
+      if (!reusedLiveAnalyser) {
+        await bakingViz.connectMediaElement(audioEl);
+      }
     } catch {
-      document.body.removeChild(bakingCanvas);
+      try { bakingViz?.destroy(); } catch {}
+      removeBakingCanvas();
       return null;
     }
 
@@ -971,9 +981,31 @@ const UploadStudio = ({
     const artX = (targetW - artW) / 2 + imagePosX * artW * 0.5;
     const artY = (targetH - artH) / 2 + imagePosY * artH * 0.5;
 
-    const drawFrame = () => {
-      ctx.fillStyle = bgColor;
+    const drawBlurredBackground = () => {
+      ctx.fillStyle = "#000000";
       ctx.fillRect(0, 0, targetW, targetH);
+
+      const coverScale = Math.max(targetW / coverImg.naturalWidth, targetH / coverImg.naturalHeight) * 1.08;
+      const bgW = coverImg.naturalWidth * coverScale;
+      const bgH = coverImg.naturalHeight * coverScale;
+      const bgX = (targetW - bgW) / 2;
+      const bgY = (targetH - bgH) / 2;
+
+      ctx.save();
+      ctx.globalAlpha = 0.72;
+      ctx.filter = "blur(18px)";
+      ctx.drawImage(coverImg, bgX, bgY, bgW, bgH);
+      ctx.restore();
+      ctx.filter = "none";
+    };
+
+    const drawFrame = () => {
+      if (backgroundColor === "blurred") {
+        drawBlurredBackground();
+      } else {
+        ctx.fillStyle = bgColor;
+        ctx.fillRect(0, 0, targetW, targetH);
+      }
 
       ctx.save();
       ctx.globalAlpha = visualizerSettings.backgroundOpacity ?? 1;
@@ -1002,8 +1034,8 @@ const UploadStudio = ({
         await bakingViz.resumeAudioContext();
       }
     } catch {
-      bakingViz.destroy();
-      document.body.removeChild(bakingCanvas);
+      try { bakingViz?.destroy(); } catch {}
+      removeBakingCanvas();
       return null;
     }
     bakingViz.start();
@@ -1023,12 +1055,17 @@ const UploadStudio = ({
       ? "video/webm;codecs=vp9"
       : "video/webm;codecs=vp8";
 
-    // Scale bitrate with FPS — 60fps needs more bits than 30fps for same quality
-    const bitsPerSecond = recordFps >= 60 ? 20_000_000 : recordFps >= 30 ? 12_000_000 : 8_000_000;
+    // Target ~40MB for a 20s clip so it fits well under the 200MB server limit.
+    // 1080p visualizers are mostly flat color + waveform — VP9 compresses them well at these rates.
+    const bitsPerSecond = recordFps >= 60 ? 16_000_000 : recordFps >= 30 ? 10_000_000 : 6_000_000;
     const stream = composite.captureStream(recordFps);
     const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: bitsPerSecond });
     const chunks = [];
     recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+    const recordingComplete = new Promise((resolve) => {
+      recorder.onstop = () => resolve(new Blob(chunks, { type: mimeType }));
+      recorder.onerror = () => resolve(null);
+    });
 
     let rafId;
     const renderLoop = () => { drawFrame(); rafId = requestAnimationFrame(renderLoop); };
@@ -1044,21 +1081,21 @@ const UploadStudio = ({
     // Cleanup baking resources
     window.removeEventListener("resize", _noopResize);
     bakingViz.destroy();
-    document.body.removeChild(bakingCanvas);
+    removeBakingCanvas();
 
     if (!wasPlaying) {
       audioEl.pause();
       audioEl.currentTime = savedTime;
     }
 
-    const blob = await new Promise((res) => { recorder.onstop = () => res(new Blob(chunks, { type: mimeType })); });
+    const blob = await recordingComplete;
     if (!blob || blob.size < 1000) return null;
 
     setVizBakeStatus("uploading");
     const fd = new FormData();
     fd.append("file", new File([blob], "visualizer.webm", { type: mimeType }));
     try {
-      const res = await axios.post(`${API}/upload/image`, fd);
+      const res = await axios.post(`${API}/upload/image`, fd, { timeout: 120_000 });
       return res.data?.file_id || null;
     } catch { return null; }
   };
@@ -1091,8 +1128,8 @@ const UploadStudio = ({
     formData.append('image_rotation', String(imageRotation));
     formData.append('background_color', backgroundColor);
     formData.append('render_fps', String(videoRenderFps || DEFAULT_VIDEO_RENDER_FPS));
-    formData.append('visualizer_enabled', String(Boolean(visualizerEnabled)));
-    formData.append('visualizer_settings', JSON.stringify(visualizerSettings || {}));
+    formData.append('visualizer_enabled', 'false');
+    formData.append('visualizer_settings', '{}');
 
     try {
       const response = await axios.post(`${API}/youtube/upload`, formData, {
@@ -1147,7 +1184,11 @@ const UploadStudio = ({
         visualFileId = bakedFileId;
         vizBaked = true;
       } else {
-        toast.warning("Visualizer recording failed — uploading with static cover instead.");
+        toast.error("Visualizer recording failed. No upload was queued because the YouTube render must match the preview visualizer.");
+        setUploadingToYouTube(false);
+        setUploadController(null);
+        setVizBakeStatus(null);
+        return;
       }
     }
 
@@ -1182,8 +1223,8 @@ const UploadStudio = ({
       formData.append('image_pos_x', String(imagePosX));
       formData.append('image_pos_y', String(imagePosY));
       formData.append('image_rotation', String(imageRotation));
-      formData.append('visualizer_enabled', String(Boolean(visualizerEnabled)));
-      formData.append('visualizer_settings', JSON.stringify(visualizerSettings || {}));
+      formData.append('visualizer_enabled', 'false');
+      formData.append('visualizer_settings', '{}');
     }
 
     try {

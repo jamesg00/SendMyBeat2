@@ -115,6 +115,7 @@ TEXTBELT_API_KEY = os.environ.get('TEXTBELT_API_KEY')
 REMINDER_SERIALIZER = URLSafeSerializer(REMINDER_SECRET)
 MAX_AUDIO_UPLOAD_BYTES = 200 * 1024 * 1024
 MAX_IMAGE_UPLOAD_BYTES = 12 * 1024 * 1024
+MAX_VIDEO_VISUAL_BYTES = 200 * 1024 * 1024  # baked visualizer WebM/MP4 loops
 AUTH_RATE_LIMIT_WINDOW_SECONDS = 300
 AUTH_RATE_LIMIT_ATTEMPTS = 10
 HEARTBEAT_INTERVAL_SECONDS = int(os.environ.get("JOB_HEARTBEAT_INTERVAL_SECONDS", "15"))
@@ -2591,6 +2592,8 @@ def _safe_visualizer_hex_color(value: Any, fallback: str = "ffffff") -> str:
 
 
 def _normalize_visualizer_payload(enabled: Any, settings_raw: Any) -> dict[str, Any]:
+    # Upload Studio visualizers are rendered in the browser and uploaded as a baked
+    # visual loop. The backend must not synthesize a different FFmpeg waveform.
     enabled_bool = str(enabled).strip().lower() in {"1", "true", "yes", "on"}
     if isinstance(enabled, bool):
         enabled_bool = enabled
@@ -2618,7 +2621,8 @@ def _normalize_visualizer_payload(enabled: Any, settings_raw: Any) -> dict[str, 
         background_opacity = 1.0
     background_opacity = max(0.1, min(1.0, background_opacity))
     return {
-        "enabled": enabled_bool,
+        "enabled": False,
+        "requested": enabled_bool,
         "mode": mode,
         "spectrum_color": _safe_visualizer_hex_color(settings.get("spectrumColor")),
         "intensity": intensity,
@@ -3023,22 +3027,9 @@ def _build_render_filter(payload: dict[str, Any]) -> str:
             f"[bg][art]overlay=x='{overlay_x}':y='{overlay_y}':shortest=1[composite]"
         )
 
+    # Do not add FFmpeg showwaves here. If a visualizer is selected, the frontend
+    # uploads the exact preview render as a video visual input.
     composite_label = "composite"
-    visualizer = payload.get("visualizer") if isinstance(payload.get("visualizer"), dict) else {}
-    if visualizer.get("enabled") and payload.get("audio_input_index") is not None:
-        audio_input_index = int(payload["audio_input_index"])
-        visualizer_mode = str(visualizer.get("mode") or "circle")
-        wave_mode = "p2p" if visualizer_mode == "monstercat" else "cline"
-        color = _safe_visualizer_hex_color(visualizer.get("spectrum_color"))
-        opacity = max(0.2, min(0.95, float(visualizer.get("opacity") or 0.68)))
-        filter_chain += (
-            f";[{audio_input_index}:a]aformat=channel_layouts=mono,"
-            f"showwaves=s={target_w}x{target_h}:mode={wave_mode}:rate={render_fps}:"
-            f"colors=0x{color}@{opacity:.3f},format=rgba,"
-            f"colorkey=0x000000:0.08:0.0[viz]"
-            f";[composite][viz]overlay=0:0:format=auto[composite_viz]"
-        )
-        composite_label = "composite_viz"
 
     if not payload.get("remove_watermark"):
         watermark_filter = _build_youtube_watermark_filter(
@@ -7429,14 +7420,17 @@ async def upload_image(file: UploadFile = File(...), current_user: dict = Depend
 
         # Validate file type
         allowed_extensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.webm', '.mp4', '.mov', '.m4v']
+        video_visual_extensions = {'.webm', '.mp4', '.mov', '.m4v'}
         file_ext = Path(file.filename).suffix.lower()
         _assert_content_type_matches(file, expected_prefixes=("image/", "video/"))
 
-        image_bytes = await file.read(MAX_IMAGE_UPLOAD_BYTES + 1)
+        effective_max = MAX_VIDEO_VISUAL_BYTES if file_ext in video_visual_extensions else MAX_IMAGE_UPLOAD_BYTES
+        image_bytes = await file.read(effective_max + 1)
         if not image_bytes:
             raise HTTPException(status_code=400, detail="Empty image file.")
-        if len(image_bytes) > MAX_IMAGE_UPLOAD_BYTES:
-            raise HTTPException(status_code=400, detail="Image is too large. Max size is 12MB.")
+        if len(image_bytes) > effective_max:
+            size_label = "200MB" if file_ext in video_visual_extensions else "12MB"
+            raise HTTPException(status_code=400, detail=f"File is too large. Max size is {size_label}.")
         detected_ext = _sniff_visual_format(image_bytes[:8192])
         if not detected_ext:
             raise HTTPException(status_code=400, detail="Uploaded visual contents are invalid or unsupported.")

@@ -642,7 +642,7 @@ class TestYouTubeUpload(unittest.IsolatedAsyncioTestCase):
         filter_chain = server._build_render_filter(payload)
         self.assertIn(":r=2[bg]", filter_chain)
 
-    def test_build_render_filter_adds_audio_visualizer_at_render_fps(self):
+    def test_build_render_filter_ignores_backend_audio_visualizer_request(self):
         payload = {
             "target_w": 1280,
             "target_h": 720,
@@ -667,12 +667,23 @@ class TestYouTubeUpload(unittest.IsolatedAsyncioTestCase):
 
         filter_chain = server._build_render_filter(payload)
 
-        self.assertIn("[1:a]aformat=channel_layouts=mono,showwaves", filter_chain)
-        self.assertIn("rate=60", filter_chain)
-        self.assertIn("colors=0x54f28b@0.800", filter_chain)
-        self.assertIn("[composite][viz]overlay=0:0", filter_chain)
+        self.assertNotIn("showwaves", filter_chain)
+        self.assertNotIn("[viz]", filter_chain)
+        self.assertIn(":r=60[bg]", filter_chain)
+        self.assertIn("[composite]null[vout]", filter_chain)
 
-    def test_build_render_filter_keeps_visualizer_fps_over_gif_mux_cap(self):
+    def test_normalize_visualizer_payload_records_request_but_disables_backend_rendering(self):
+        payload = server._normalize_visualizer_payload(
+            True,
+            {"mode": "monstercat", "spectrumColor": "#54f28b", "intensity": 1.25},
+        )
+
+        self.assertFalse(payload["enabled"])
+        self.assertTrue(payload["requested"])
+        self.assertEqual(payload["mode"], "monstercat")
+        self.assertEqual(payload["spectrum_color"], "54f28b")
+
+    def test_build_render_filter_does_not_keep_synthetic_visualizer_fps(self):
         payload = {
             "target_w": 1280,
             "target_h": 720,
@@ -693,7 +704,8 @@ class TestYouTubeUpload(unittest.IsolatedAsyncioTestCase):
         filter_chain = server._build_render_filter(payload)
 
         self.assertIn(":r=60[bg]", filter_chain)
-        self.assertIn("rate=60", filter_chain)
+        self.assertNotIn("showwaves", filter_chain)
+        self.assertNotIn("rate=60", filter_chain)
 
     def test_build_render_filter_skips_gblur_when_background_is_preblurred(self):
         payload = {
