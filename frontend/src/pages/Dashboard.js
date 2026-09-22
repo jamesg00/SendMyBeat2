@@ -11,7 +11,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import axios from "axios";
 import { API } from "@/App";
 import { toast } from "sonner";
-import { Sparkles, Save, LogOut, Copy, Trash2, Edit, Plus, Youtube, AlertCircle, Target, ChevronLeft, ChevronRight, DollarSign, Link, CircleAlert, CheckCircle2, Settings } from "lucide-react";
+import { Sparkles, Save, LogOut, Copy, Trash2, Edit, Plus, Youtube, AlertCircle, Target, ChevronLeft, ChevronRight, DollarSign, Link, CircleAlert, CheckCircle2, Settings, Music } from "lucide-react";
 import SubscriptionBanner from "@/components/SubscriptionBanner";
 import UpgradeModal from "@/components/UpgradeModal";
 import AdBanner from "@/components/AdBanner";
