@@ -1,0 +1,58 @@
+import { Tabs, TabList, TabSlot, TabTrigger, type TabTriggerSlotProps } from 'expo-router/ui';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+
+import { C } from '@/theme';
+
+// Web has no system tab bar, so draw the floating pill from the design.
+export default function WebTabLayout() {
+  return (
+    <Tabs>
+      <TabSlot style={{ height: '100%' }} />
+      <TabList asChild>
+        <View style={styles.bar}>
+          <TabTrigger name="index" href="/" asChild>
+            <TabButton>Workflow</TabButton>
+          </TabTrigger>
+          <TabTrigger name="analytics" href="/analytics" asChild>
+            <TabButton>Analytics</TabButton>
+          </TabTrigger>
+          <TabTrigger name="spotlight" href="/spotlight" asChild>
+            <TabButton>Spotlight</TabButton>
+          </TabTrigger>
+          <TabTrigger name="prefs" href="/prefs" asChild>
+            <TabButton>Prefs</TabButton>
+          </TabTrigger>
+        </View>
+      </TabList>
+    </Tabs>
+  );
+}
+
+// `ref` is typed for View, not Pressable, so it is dropped; the trigger only needs onPress.
+function TabButton({ children, isFocused, ref: _ref, ...props }: TabTriggerSlotProps) {
+  return (
+    <Pressable {...props} style={[styles.item, isFocused && { backgroundColor: C.accSoft }]}>
+      <Text style={[styles.label, { color: isFocused ? C.acc : C.t2 }]}>{children}</Text>
+    </Pressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  bar: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    bottom: 24,
+    height: 56,
+    padding: 5,
+    borderRadius: 28,
+    flexDirection: 'row',
+    gap: 2,
+    backgroundColor: 'rgba(20,35,27,0.82)',
+    borderWidth: 1,
+    borderColor: C.line,
+    backdropFilter: 'blur(24px) saturate(180%)',
+  },
+  item: { flex: 1, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
+  label: { fontSize: 12, fontWeight: '600' },
+});
