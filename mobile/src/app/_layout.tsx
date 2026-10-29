@@ -1,3 +1,5 @@
+import { Geist_400Regular, Geist_500Medium, Geist_600SemiBold, Geist_700Bold } from '@expo-google-fonts/geist';
+import { GeistMono_400Regular, GeistMono_500Medium } from '@expo-google-fonts/geist-mono';
 import { useFonts } from 'expo-font';
 import { DarkTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -13,7 +15,7 @@ SplashScreen.preventAutoHideAsync();
 
 const theme = {
   ...DarkTheme,
-  colors: { ...DarkTheme.colors, background: C.bg, card: C.card, primary: C.acc, text: C.text, border: C.line },
+  colors: { ...DarkTheme.colors, background: C.bg, card: C.card, primary: C.text, text: C.text, border: C.line },
 };
 
 export default function RootLayout() {
@@ -29,7 +31,15 @@ export default function RootLayout() {
 }
 
 function RootStack() {
-  const [fontsLoaded] = useFonts({ [F.brand]: require('@/assets/fonts/karmatic-arcade.ttf') });
+  const [fontsLoaded] = useFonts({
+    [F.brand]: require('@/assets/fonts/karmatic-arcade.ttf'),
+    Geist_400Regular,
+    Geist_500Medium,
+    Geist_600SemiBold,
+    Geist_700Bold,
+    GeistMono_400Regular,
+    GeistMono_500Medium,
+  });
   const { ready, user } = useAuth();
   const loaded = fontsLoaded && ready;
 

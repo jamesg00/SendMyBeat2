@@ -13,7 +13,7 @@ import { Button, Card, IconTile, JobProgress, ListGroup, ListRow, Pill, Segmente
 import { DESCRIPTION_TEMPLATES } from '@/data/templates';
 import { useDraft, type DraftDescription } from '@/state/draft';
 import { useStudio, type FileSlot, type Phase } from '@/state/studio';
-import { C, F, R } from '@/theme';
+import { C, F, R, font } from '@/theme';
 
 type Tool = 'details' | 'visualizer' | 'look';
 
@@ -37,7 +37,7 @@ export default function StudioScreen() {
     <View style={[s.root, { paddingTop: insets.top + 6 }]}>
       <View style={s.topBar}>
         <Pressable onPress={() => router.back()} style={s.close} accessibilityRole="button" accessibilityLabel="Close Upload Studio">
-          <Text style={{ color: C.text, fontSize: 16, fontWeight: '600' }}>✕</Text>
+          <Text style={{ color: C.text, fontSize: 16, ...font('600') }}>✕</Text>
         </Pressable>
         <Text style={s.topTitle}>Upload Studio</Text>
         <Pill label={busy ? 'Working' : studio.active ? 'Saved' : 'New'} />
@@ -177,7 +177,7 @@ function MetaPickers() {
     ...(saved.data ?? []).map((d) => ({ id: d.id, title: d.title, content: d.content, saved: true })),
   ];
   const toggle = (which: 'desc' | 'tags') => setOpen((cur) => (cur === which ? null : which));
-  const check = (on: boolean) => (on ? <Text style={{ color: C.acc, fontSize: 16 }}>✓</Text> : <View />);
+  const check = (on: boolean) => (on ? <Text style={{ color: C.acc, fontSize: 16, ...font() }}>✓</Text> : <View />);
 
   return (
     <View style={{ gap: 8 }}>
@@ -286,11 +286,11 @@ function FileRow({ label, hint, slot, icon, onPick, last }: { label: string; hin
       height={60}
       last={last}
       left={
-        <IconTile tint={slot?.status === 'error' ? 'rgba(255,107,107,0.18)' : C.accSoft}>
+        <IconTile tint={slot?.status === 'error' ? 'rgba(255,107,107,0.12)' : C.card2}>
           {slot?.status === 'uploading' ? (
             <ActivityIndicator color={C.acc} size="small" />
           ) : (
-            <Text style={{ color: slot?.status === 'error' ? C.danger : C.acc, fontSize: 15 }}>{slot?.status === 'ready' ? '✓' : icon}</Text>
+            <Text style={{ color: slot?.status === 'error' ? C.danger : C.acc, fontSize: 15, ...font() }}>{slot?.status === 'ready' ? '✓' : icon}</Text>
           )}
         </IconTile>
       }
@@ -351,7 +351,7 @@ function Playback({ uri }: { uri: string }) {
   return (
     <View style={s.player}>
       <Pressable onPress={toggle} style={s.playBtn} accessibilityRole="button" accessibilityLabel={status.playing ? 'Pause preview' : 'Play preview'}>
-        <Text style={{ color: C.onAcc, fontSize: 13, fontWeight: '700' }}>{status.playing ? '❚❚' : '▶'}</Text>
+        <Text style={{ color: C.onPrimary, fontSize: 13, ...font('700') }}>{status.playing ? '❚❚' : '▶'}</Text>
       </Pressable>
       <Slider
         style={{ flex: 1 }}
@@ -359,7 +359,7 @@ function Playback({ uri }: { uri: string }) {
         minimumValue={0}
         maximumValue={duration || 1}
         onSlidingComplete={(v) => void player.seekTo(v)}
-        minimumTrackTintColor={C.acc}
+        minimumTrackTintColor={C.text}
         maximumTrackTintColor="rgba(255,255,255,0.25)"
         thumbTintColor="#FFFFFF"
         accessibilityLabel="Preview position"
@@ -374,7 +374,7 @@ function Playback({ uri }: { uri: string }) {
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-      <Text style={{ color: C.text, fontSize: 15 }}>{label}</Text>
+      <Text style={{ color: C.text, fontSize: 15, ...font() }}>{label}</Text>
       {children}
     </View>
   );
@@ -384,7 +384,7 @@ function SliderField(props: { label: string; value: number; display: string; min
   return (
     <View style={{ width: '47%', gap: 2 }}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-        <Text style={{ color: C.t2, fontSize: 12 }}>{props.label}</Text>
+        <Text style={{ color: C.t2, fontSize: 12, ...font() }}>{props.label}</Text>
         <Text style={{ color: C.text, fontSize: 12, fontFamily: F.mono }}>{props.display}</Text>
       </View>
       <Slider
@@ -393,7 +393,7 @@ function SliderField(props: { label: string; value: number; display: string; min
         maximumValue={props.max}
         step={props.step}
         onValueChange={props.onChange}
-        minimumTrackTintColor={C.acc}
+        minimumTrackTintColor={C.text}
         maximumTrackTintColor={C.card2}
         thumbTintColor="#FFFFFF"
         accessibilityLabel={props.label}
@@ -406,7 +406,7 @@ const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg, paddingHorizontal: 16, gap: 12 },
   topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', height: 44 },
   close: { width: 36, height: 36, borderRadius: 18, backgroundColor: C.card2, alignItems: 'center', justifyContent: 'center' },
-  topTitle: { color: C.text, fontSize: 17, fontWeight: '600' },
+  topTitle: { color: C.text, fontSize: 17, ...font('600') },
   preview: {
     height: 220,
     borderRadius: R.card,
@@ -418,7 +418,7 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   frame: { maxWidth: '100%', maxHeight: '100%', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
-  empty: { color: C.t3, fontSize: 13 },
+  empty: { color: C.t3, fontSize: 13, ...font() },
   badge: { position: 'absolute', top: 10, right: 10, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: 'rgba(0,0,0,0.6)' },
   badgeText: { color: C.text, fontSize: 11, fontFamily: F.mono },
   player: {
@@ -434,12 +434,12 @@ const s = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: 'rgba(0,0,0,0.6)',
   },
-  playBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: C.acc, alignItems: 'center', justifyContent: 'center' },
+  playBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: C.primary, alignItems: 'center', justifyContent: 'center' },
   time: { color: C.text, fontSize: 11, fontFamily: F.mono, minWidth: 72, textAlign: 'right' },
-  cardTitle: { color: C.text, fontSize: 17, fontWeight: '600' },
-  muted: { color: C.t3, fontSize: 12, lineHeight: 17, flexShrink: 1 },
+  cardTitle: { color: C.text, fontSize: 17, ...font('600') },
+  muted: { color: C.t3, fontSize: 12, lineHeight: 17, flexShrink: 1, ...font() },
   status: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
-  input: { height: 44, paddingHorizontal: 14, borderRadius: R.ctl, borderWidth: 1, borderColor: C.line, backgroundColor: C.card2, color: C.text, fontSize: 15 },
+  input: { height: 44, paddingHorizontal: 14, borderRadius: R.ctl, borderWidth: 1, borderColor: C.line, backgroundColor: C.card2, color: C.text, fontSize: 15, ...font() },
   sliderGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 6 },
   summary: { textAlign: 'center', color: C.t3, fontSize: 11, fontFamily: F.mono },
 });

@@ -24,7 +24,7 @@ import {
 import { DESCRIPTION_TEMPLATES } from '@/data/templates';
 import { useDraft, type DraftDescription } from '@/state/draft';
 import { useStudio } from '@/state/studio';
-import { C, F, R } from '@/theme';
+import { C, F, R, font } from '@/theme';
 
 type Step = 'build' | 'review' | 'upload';
 
@@ -71,16 +71,15 @@ export default function WorkflowScreen() {
   return (
     <Screen
       title="Workflow"
-      header={
+      accessory={
         <View style={s.header}>
-          <View style={{ gap: 4 }}>
-            <Text style={s.brand}>SENDMYBEAT</Text>
-            <Text style={s.username}>{user?.username}</Text>
+          {sub.data ? <Pill label={planLabel(sub.data.plan)} tone="muted" /> : null}
+          <View style={s.avatar} accessibilityLabel={user?.username} accessibilityRole="image">
+            <Text style={s.avatarText}>{user?.username.charAt(0).toUpperCase()}</Text>
           </View>
-          {sub.data ? <Pill label={planLabel(sub.data.plan)} /> : null}
         </View>
       }>
-      <Card style={s.usage}>
+      <View style={s.usage}>
         {sub.data ? (
           <>
             <UsageMeter label="AI credits left" left={sub.data.daily_credits_remaining} total={sub.data.daily_credits_total} />
@@ -89,7 +88,7 @@ export default function WorkflowScreen() {
         ) : (
           <Text style={s.muted}>{sub.error ?? 'Loading your plan…'}</Text>
         )}
-      </Card>
+      </View>
 
       <StudioBanner />
 
@@ -160,7 +159,7 @@ function StudioBanner() {
   return (
     <Card style={s.banner}>
       <View style={{ flex: 1, gap: 6 }}>
-        <Text style={[s.cardTitle, { fontSize: 15 }, phase.kind === 'error' && { color: C.danger }]}>{title}</Text>
+        <Text style={[s.cardTitle, { fontSize: 15, ...font() }, phase.kind === 'error' && { color: C.danger }]}>{title}</Text>
         <Text style={s.muted} numberOfLines={1}>
           {detail}
         </Text>
@@ -175,10 +174,10 @@ function UsageMeter({ label, left, total }: { label: string; left: number; total
   return (
     <View style={{ flex: 1, gap: 8 }}>
       <View style={s.meterHead}>
-        <Text style={ui.sectionLabel}>{label.toUpperCase()}</Text>
+        <Text style={ui.sectionLabel}>{label}</Text>
         <Text style={s.meterValue}>
           {left}
-          <Text style={{ color: C.t3, fontWeight: '400' }}>/{total}</Text>
+          <Text style={{ color: C.t3, ...font() }}>/{total}</Text>
         </Text>
       </View>
       <Meter value={total > 0 ? left / total : 0} />
@@ -251,7 +250,7 @@ function BuildStep({
         {generation ? <Text style={s.muted}>You can switch tabs or close the app. Generation keeps going.</Text> : null}
         {!generation && lastGenerated && lastGenerated.id === run?.id ? (
           <View style={s.done}>
-            <Text style={{ color: C.acc, fontSize: 15 }}>✓</Text>
+            <Text style={{ color: C.acc, fontSize: 15, ...font() }}>✓</Text>
             <Text style={[s.muted, { flex: 1, color: C.t2 }]}>
               {lastGenerated.tags.length} tags ready for “{lastGenerated.query}”
             </Text>
@@ -404,7 +403,7 @@ function DescriptionEditor({
             subtitle={o.saved ? undefined : 'Template'}
             last={i === options.length - 1}
             onPress={() => setDescription(o)}
-            right={o.id === current.id ? <Text style={{ color: C.acc, fontSize: 16 }}>✓</Text> : <View />}
+            right={o.id === current.id ? <Text style={{ color: C.acc, fontSize: 16, ...font() }}>✓</Text> : <View />}
           />
         ))}
       </ListGroup>
@@ -540,7 +539,7 @@ function TagEditor({ run, onSaved }: { run: TagRun; onSaved: (r: TagRun) => void
           <Text style={ui.sectionLabel}>YOUTUBE TAG LIMIT</Text>
           <Text style={[s.meterValue, chars > TAG_CHAR_LIMIT && { color: C.warn }]}>
             {chars}
-            <Text style={{ color: C.t3, fontWeight: '400' }}>/{TAG_CHAR_LIMIT}</Text>
+            <Text style={{ color: C.t3, ...font() }}>/{TAG_CHAR_LIMIT}</Text>
           </Text>
         </View>
         <Meter value={Math.min(1, chars / TAG_CHAR_LIMIT)} color={chars > TAG_CHAR_LIMIT ? C.warn : C.acc} />
@@ -624,15 +623,15 @@ function UploadStep({ run }: { run: TagRun | null }) {
           last
           left={
             <IconTile tint={C.youtube}>
-              <Text style={{ color: '#fff', fontSize: 14 }}>▶</Text>
+              <Text style={{ color: '#fff', fontSize: 14, ...font() }}>▶</Text>
             </IconTile>
           }
         />
       </ListGroup>
 
       <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12 }}>
-        <Text style={{ color: run ? C.acc : C.t3, fontSize: 16 }}>{run ? '✓' : '–'}</Text>
-        <Text style={[s.muted, { fontSize: 14, color: C.t2, flex: 1 }]}>
+        <Text style={{ color: run ? C.acc : C.t3, fontSize: 16, ...font() }}>{run ? '✓' : '–'}</Text>
+        <Text style={[s.muted, { fontSize: 14, color: C.t2, flex: 1, ...font() }]}>
           {run ? `${run.tags.length} tags from “${run.query}” ready to attach` : 'No tags selected yet'}
         </Text>
       </Card>
@@ -643,18 +642,36 @@ function UploadStep({ run }: { run: TagRun | null }) {
 }
 
 const s = StyleSheet.create({
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  brand: { fontFamily: F.brand, fontSize: 13, letterSpacing: 3, color: C.acc },
-  username: { color: C.t2, fontSize: 13 },
-  usage: { flexDirection: 'row', gap: 16, paddingVertical: 14 },
-  banner: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, borderWidth: 1, borderColor: C.accSoft },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  avatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#1A1A1A',
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: { color: C.t2, fontSize: 13, ...font('600') },
+  usage: { flexDirection: 'row', gap: 20 },
+  banner: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14 },
   meterHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
-  meterValue: { color: C.text, fontSize: 13, fontWeight: '600' },
+  meterValue: { color: C.text, fontSize: 13, fontFamily: F.mono },
   cardHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 },
-  cardTitle: { color: C.text, fontSize: 17, fontWeight: '600', flexShrink: 1 },
-  muted: { color: C.t3, fontSize: 12, lineHeight: 17, flexShrink: 1 },
-  error: { color: C.danger, fontSize: 13 },
-  done: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: R.ctl, backgroundColor: C.accSoft },
+  cardTitle: { color: C.text, fontSize: 17, flexShrink: 1, ...font('600') },
+  muted: { color: C.t3, fontSize: 12, lineHeight: 17, flexShrink: 1, ...font() },
+  error: { color: C.danger, fontSize: 13, ...font() },
+  done: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 12,
+    borderRadius: R.ctl,
+    backgroundColor: C.card2,
+    borderWidth: 1,
+    borderColor: C.line,
+  },
   row: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   input: {
     height: 44,
@@ -662,34 +679,38 @@ const s = StyleSheet.create({
     borderRadius: R.ctl,
     borderWidth: 1,
     borderColor: C.line,
-    backgroundColor: C.card2,
+    backgroundColor: C.card,
     color: C.text,
     fontSize: 15,
+    ...font(),
   },
   textArea: { height: 220, paddingTop: 12, paddingBottom: 12, lineHeight: 21 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
+    height: 30,
     paddingLeft: 10,
     paddingRight: 8,
-    paddingVertical: 7,
-    borderRadius: 9,
-    backgroundColor: C.card2,
+    borderRadius: R.chip,
+    backgroundColor: C.card,
     borderWidth: 1,
-    borderColor: 'transparent',
+    borderColor: C.line,
   },
-  chipNew: { borderColor: C.acc, backgroundColor: C.accSoft },
-  chipText: { color: C.text, fontFamily: F.mono, fontSize: 12 },
-  chipX: { color: C.t3, fontSize: 14, marginTop: -1 },
+  chipNew: { borderColor: C.accLine, backgroundColor: '#06140E' },
+  chipText: { color: C.text, fontFamily: F.mono, fontSize: 12.5 },
+  chipX: { color: C.t3, fontSize: 14, marginTop: -1, ...font() },
   description: {
     padding: 14,
     borderRadius: R.ctl,
     overflow: 'hidden',
-    backgroundColor: C.card2,
+    backgroundColor: C.card,
+    borderWidth: 1,
+    borderColor: C.lineSoft,
     color: C.t2,
     fontSize: 14,
     lineHeight: 21,
+    ...font(),
   },
 });

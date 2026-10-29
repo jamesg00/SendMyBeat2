@@ -5,7 +5,7 @@ import { C } from '@/theme';
 // Native tab bar: Liquid Glass on iOS 26, Material on Android.
 export default function TabLayout() {
   return (
-    <NativeTabs tintColor={C.acc} backgroundColor={C.card} minimizeBehavior="onScrollDown">
+    <NativeTabs tintColor={C.text} backgroundColor={C.card} minimizeBehavior="onScrollDown">
       <NativeTabs.Trigger name="index">
         <NativeTabs.Trigger.Label>Workflow</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="sparkles" md="auto_awesome" />

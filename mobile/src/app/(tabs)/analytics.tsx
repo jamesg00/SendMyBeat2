@@ -4,7 +4,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import * as api from '@/api/endpoints';
 import type { ChannelAnalytics } from '@/api/endpoints';
 import { Button, Card, JobProgress, Screen, SectionLabel, styles as ui } from '@/components/ui';
-import { C } from '@/theme';
+import { C, font } from '@/theme';
 
 const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
 
@@ -111,16 +111,16 @@ function Insights({ title, color, items }: { title: string; color: string; items
 }
 
 const s = StyleSheet.create({
-  channel: { color: C.t2, fontSize: 15, marginTop: -8 },
+  channel: { color: C.t2, fontSize: 15, marginTop: -8, ...font() },
   stats: { flexDirection: 'row', padding: 0, gap: 0 },
   stat: { flex: 1, padding: 14, gap: 4 },
   statDivider: { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: C.line },
-  statValue: { color: C.text, fontSize: 22, fontWeight: '700' },
-  cardTitle: { color: C.text, fontSize: 17, fontWeight: '600' },
-  muted: { color: C.t3, fontSize: 13, lineHeight: 18, flexShrink: 1 },
-  error: { color: C.danger, fontSize: 13 },
+  statValue: { color: C.text, fontSize: 22, ...font('700') },
+  cardTitle: { color: C.text, fontSize: 17, ...font('600') },
+  muted: { color: C.t3, fontSize: 13, lineHeight: 18, flexShrink: 1, ...font() },
+  error: { color: C.danger, fontSize: 13, ...font() },
   chart: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, height: 60 },
   bar: { flex: 1, borderRadius: 4 },
   dot: { width: 8, height: 8, borderRadius: 4, marginTop: 6 },
-  item: { flex: 1, color: C.text, fontSize: 14, lineHeight: 20 },
+  item: { flex: 1, color: C.text, fontSize: 14, lineHeight: 20, ...font() },
 });

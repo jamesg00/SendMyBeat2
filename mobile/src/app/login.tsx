@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/api/auth';
 import { Button, Card, Segmented, styles as ui } from '@/components/ui';
-import { C, F, R } from '@/theme';
+import { C, F, R, font } from '@/theme';
 
 type Mode = 'login' | 'register';
 
@@ -91,7 +91,7 @@ export default function LoginScreen() {
         <Pressable onPress={() => setMode(mode === 'login' ? 'register' : 'login')} accessibilityRole="button">
           <Text style={s.switch}>
             {mode === 'login' ? 'New here? ' : 'Have an account? '}
-            <Text style={{ color: C.acc, fontWeight: '600' }}>{mode === 'login' ? 'Sign up free' : 'Log in'}</Text>
+            <Text style={{ color: C.acc, ...font('600') }}>{mode === 'login' ? 'Sign up free' : 'Log in'}</Text>
           </Text>
         </Pressable>
       </View>
@@ -102,7 +102,7 @@ export default function LoginScreen() {
 const s = StyleSheet.create({
   root: { flex: 1, paddingHorizontal: 16, gap: 20 },
   brand: { fontFamily: F.brand, fontSize: 14, letterSpacing: 3, color: C.acc },
-  sub: { color: C.t2, fontSize: 15, lineHeight: 21 },
+  sub: { color: C.t2, fontSize: 15, lineHeight: 21, ...font() },
   input: {
     height: 46,
     paddingHorizontal: 14,
@@ -112,7 +112,8 @@ const s = StyleSheet.create({
     backgroundColor: C.card2,
     color: C.text,
     fontSize: 16,
+    ...font(),
   },
-  error: { color: C.danger, fontSize: 14 },
-  switch: { color: C.t2, fontSize: 14, textAlign: 'center' },
+  error: { color: C.danger, fontSize: 14, ...font() },
+  switch: { color: C.t2, fontSize: 14, textAlign: 'center', ...font() },
 });
