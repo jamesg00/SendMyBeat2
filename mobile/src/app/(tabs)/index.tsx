@@ -215,74 +215,89 @@ function BuildStep({
 
   return (
     <>
-      <Card>
-        <View style={s.cardHead}>
-          <Text style={s.cardTitle}>Generate YouTube tags</Text>
-          <Text style={s.muted}>{runs.length} saved runs</Text>
-        </View>
-        {generation ? (
+      {generation ? (
+        <View style={{ gap: 8 }}>
           <JobProgress
-            title={`Tags for “${generation.query}”`}
+            title={generation.query}
             startedAt={generation.startedAt}
             expectedSec={45}
             progress={generation.progress}
             steps={TAG_STEPS}
           />
-        ) : (
-          <>
-            <Text style={ui.sectionLabel}>SEARCH QUERY</Text>
+          <Text style={s.muted}>Runs in the background. You can switch tabs or close the app.</Text>
+        </View>
+      ) : (
+        <Card>
+          <View style={s.cardHead}>
+            <Text style={s.cardTitle}>Generate tags</Text>
+            <Text style={s.mono}>60–80 tags · 1 credit</Text>
+          </View>
+          <View style={s.inputRow}>
             <TextInput
               value={query}
               onChangeText={setQuery}
-              placeholder="e.g. lil uzi, travis scott"
+              placeholder="Artist or vibe, e.g. travis scott"
               placeholderTextColor={C.t3}
-              style={s.input}
+              style={s.inputBare}
               returnKeyType="go"
               onSubmitEditing={generate}
               autoCapitalize="none"
               accessibilityLabel="Search query"
             />
-            <Text style={s.muted}>Include the artist name for &ldquo;type beat&rdquo; variations.</Text>
-            {generationError ? <Text style={s.error}>{generationError}</Text> : null}
-            <Button title="Generate 60–80 tags" onPress={generate} />
-          </>
-        )}
-        {generation ? <Text style={s.muted}>You can switch tabs or close the app. Generation keeps going.</Text> : null}
-        {!generation && lastGenerated && lastGenerated.id === run?.id ? (
-          <View style={s.done}>
-            <Text style={{ color: C.acc, fontSize: 15, ...font() }}>✓</Text>
-            <Text style={[s.muted, { flex: 1, color: C.t2 }]}>
-              {lastGenerated.tags.length} tags ready for “{lastGenerated.query}”
-            </Text>
-            <Button title="Review" size="sm" onPress={() => onOpen(lastGenerated)} />
+            <Text style={s.kbd}>return</Text>
           </View>
-        ) : null}
-      </Card>
+          {generationError ? <Text style={s.error}>{generationError}</Text> : null}
+          <Button title="Generate" onPress={generate} />
+        </Card>
+      )}
+
+      {!generation && lastGenerated && lastGenerated.id === run?.id ? (
+        <Pressable onPress={() => onOpen(lastGenerated)} style={({ pressed }) => [s.done, pressed && { opacity: 0.7 }]} accessibilityRole="button">
+          <Text style={{ color: C.acc, fontSize: 13, fontFamily: F.mono }}>✓</Text>
+          <Text style={[s.sub, { flex: 1 }]}>
+            {lastGenerated.tags.length} tags ready for <Text style={{ color: C.text }}>{lastGenerated.query}</Text>
+          </Text>
+          <Text style={[s.sub, { color: C.text }]}>Review ›</Text>
+        </Pressable>
+      ) : null}
 
       <DescriptionEditor saved={descriptions} onSaved={onDescriptionSaved} onDeleted={onDescriptionDeleted} />
 
-      <SectionLabel>Recent runs</SectionLabel>
-      {historyLoading ? (
-        <ActivityIndicator color={C.acc} />
-      ) : historyError ? (
-        <Text style={s.error}>{historyError}</Text>
-      ) : runs.length === 0 ? (
-        <Text style={s.muted}>Your generated tag sets will show up here.</Text>
-      ) : (
-        <ListGroup>
-          {runs.slice(0, 8).map((r, i, arr) => (
-            <ListRow
+      <View>
+        <Text style={[ui.sectionLabel, { paddingBottom: 8 }]}>Recent runs</Text>
+        {historyLoading ? (
+          <ActivityIndicator color={C.t2} style={{ alignSelf: 'flex-start' }} />
+        ) : historyError ? (
+          <Text style={s.error}>{historyError}</Text>
+        ) : runs.length === 0 ? (
+          <Text style={s.muted}>Your generated tag sets will show up here.</Text>
+        ) : (
+          runs.slice(0, 8).map((r, i, arr) => (
+            <Pressable
               key={r.id}
-              title={r.query}
-              value={`${r.tags.length} tags`}
-              last={i === arr.length - 1}
-              right={<Button title="Open" variant="secondary" size="sm" onPress={() => onOpen(r)} />}
-            />
-          ))}
-        </ListGroup>
-      )}
+              onPress={() => onOpen(r)}
+              accessibilityRole="button"
+              style={({ pressed }) => [s.hairRow, i === arr.length - 1 && s.hairLast, pressed && { backgroundColor: C.card }]}>
+              <Text style={s.hairTitle} numberOfLines={1}>
+                {r.query}
+              </Text>
+              <Text style={s.mono}>{r.tags.length} tags</Text>
+              <Text style={s.hairDate}>{shortDate(r.created_at)}</Text>
+            </Pressable>
+          ))
+        )}
+      </View>
     </>
   );
+}
+
+function shortDate(iso?: string) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const days = Math.floor((Date.now() - d.getTime()) / 86_400_000);
+  if (days < 1) return 'Today';
+  if (days < 2) return 'Yesterday';
+  return d.toLocaleDateString('en', { month: 'short', day: 'numeric' });
 }
 
 type Editing = { id?: string; title: string; content: string };
@@ -525,27 +540,34 @@ function TagEditor({ run, onSaved }: { run: TagRun; onSaved: (r: TagRun) => void
     setNote({ text: 'Copied ✓' });
   };
 
+  const counts = [`${tags.length} tags`, removed.length && `${removed.length} removed`, added.length && `${added.length} added`]
+    .filter(Boolean)
+    .join(' · ');
+
   return (
-    <Card>
-      <View style={s.cardHead}>
-        <Text style={s.cardTitle} numberOfLines={1}>
-          {run.query}
-        </Text>
-        <Pill label={`${tags.length} tags`} />
+    <View style={{ gap: 16 }}>
+      <View style={s.reviewHead}>
+        <View style={{ flex: 1, gap: 3 }}>
+          <Text style={s.reviewTitle} numberOfLines={1}>
+            {run.query}
+          </Text>
+          <Text style={s.sub}>{counts}</Text>
+        </View>
+        <Pressable onPress={copy} accessibilityRole="button" hitSlop={8}>
+          <Text style={s.sub}>Copy all</Text>
+        </Pressable>
       </View>
 
       <View style={{ gap: 6 }}>
+        <Meter value={Math.min(1, chars / TAG_CHAR_LIMIT)} color={chars > TAG_CHAR_LIMIT ? C.warn : C.text} />
         <View style={s.meterHead}>
-          <Text style={ui.sectionLabel}>YOUTUBE TAG LIMIT</Text>
-          <Text style={[s.meterValue, chars > TAG_CHAR_LIMIT && { color: C.warn }]}>
-            {chars}
-            <Text style={{ color: C.t3, ...font() }}>/{TAG_CHAR_LIMIT}</Text>
+          <Text style={[s.muted, chars > TAG_CHAR_LIMIT && { color: C.warn }]}>
+            {chars > TAG_CHAR_LIMIT ? 'Over the YouTube limit. Tap tags to remove some.' : 'YouTube tag limit'}
+          </Text>
+          <Text style={[s.mono, chars > TAG_CHAR_LIMIT && { color: C.warn }]}>
+            {chars} / {TAG_CHAR_LIMIT}
           </Text>
         </View>
-        <Meter value={Math.min(1, chars / TAG_CHAR_LIMIT)} color={chars > TAG_CHAR_LIMIT ? C.warn : C.acc} />
-        {chars > TAG_CHAR_LIMIT ? (
-          <Text style={[s.muted, { color: C.warn }]}>Over YouTube&apos;s limit. Tap tags to remove the weakest ones.</Text>
-        ) : null}
       </View>
 
       <View style={s.chips}>
@@ -558,54 +580,48 @@ function TagEditor({ run, onSaved }: { run: TagRun; onSaved: (r: TagRun) => void
               style={({ pressed }) => [s.chip, isNew && s.chipNew, pressed && { opacity: 0.6 }]}
               accessibilityRole="button"
               accessibilityLabel={`Remove tag ${tag}`}>
-              <Text style={[s.chipText, isNew && { color: C.acc }]}>{tag}</Text>
-              <Text style={s.chipX}>×</Text>
+              <Text style={[s.chipText, isNew && { color: C.acc }]}>{isNew ? `+ ${tag}` : tag}</Text>
+              <Text style={[s.chipX, isNew && { color: C.acc }]}>×</Text>
             </Pressable>
           );
         })}
         {tags.length > 24 ? (
-          <Pressable onPress={() => setShowAll(!showAll)} style={[s.chip, { backgroundColor: 'transparent' }]} accessibilityRole="button">
-            <Text style={[s.chipText, { color: C.t2 }]}>{showAll ? 'Show less' : `+${tags.length - 24} more`}</Text>
+          <Pressable onPress={() => setShowAll(!showAll)} style={s.chipMore} accessibilityRole="button">
+            <Text style={s.sub}>{showAll ? 'Show less' : `Show ${tags.length - 24} more`}</Text>
           </Pressable>
         ) : null}
       </View>
 
-      <View style={s.row}>
+      <View style={s.inputRow}>
         <TextInput
           value={input}
           onChangeText={setInput}
-          placeholder="Add tags, separated by commas"
+          placeholder="Add tags, comma separated"
           placeholderTextColor={C.t3}
-          style={[s.input, { flex: 1 }]}
+          style={s.inputBare}
           returnKeyType="done"
           onSubmitEditing={add}
           autoCapitalize="none"
           accessibilityLabel="Add tags"
         />
-        <Button title="Add" variant="secondary" size="md" onPress={add} />
+        <Pressable onPress={add} accessibilityRole="button" accessibilityLabel="Add tags">
+          <Text style={s.kbd}>return</Text>
+        </Pressable>
       </View>
 
-      {dirty ? (
-        <Text style={s.muted}>
-          {[removed.length && `${removed.length} removed`, added.length && `${added.length} added`].filter(Boolean).join(' · ')}
-        </Text>
-      ) : null}
       {note ? <Text style={[s.muted, { color: note.error ? C.danger : C.acc }]}>{note.text}</Text> : null}
 
       <View style={s.row}>
-        <Button title="Copy" variant="secondary" size="md" style={{ flex: 1 }} onPress={copy} />
-        {dirty ? (
-          <Button title="Undo" variant="secondary" size="md" style={{ flex: 1 }} onPress={() => setTags(run.tags)} />
-        ) : null}
+        <Button title="Undo" variant="secondary" size="md" style={{ flex: 1 }} onPress={dirty ? () => setTags(run.tags) : undefined} />
         <Button
           title={saving ? 'Saving…' : 'Save tags'}
           variant={dirty ? 'primary' : 'secondary'}
           size="md"
-          style={{ flex: 1 }}
+          style={{ flex: 2 }}
           onPress={dirty && !saving ? save : undefined}
         />
       </View>
-    </Card>
+    </View>
   );
 }
 
@@ -673,6 +689,55 @@ const s = StyleSheet.create({
     borderColor: C.line,
   },
   row: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  sub: { color: C.t2, fontSize: 13, ...font() },
+  mono: { color: C.t2, fontSize: 12.5, fontFamily: F.mono },
+  kbd: {
+    color: C.t2,
+    fontSize: 12,
+    fontFamily: F.mono,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: R.chip,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    backgroundColor: '#1A1A1A',
+    overflow: 'hidden',
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    height: 46,
+    paddingLeft: 14,
+    paddingRight: 7,
+    borderRadius: R.ctl,
+    borderWidth: 1,
+    borderColor: C.line,
+    backgroundColor: C.card,
+  },
+  inputBare: { flex: 1, height: '100%', color: C.text, fontSize: 15, ...font() },
+  hairRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    height: 52,
+    borderTopWidth: 1,
+    borderTopColor: C.lineSoft,
+  },
+  hairLast: { borderBottomWidth: 1, borderBottomColor: C.lineSoft },
+  hairTitle: { flex: 1, color: C.text, fontSize: 15, ...font() },
+  hairDate: { width: 64, textAlign: 'right', color: C.t3, fontSize: 13, ...font() },
+  reviewHead: { flexDirection: 'row', alignItems: 'flex-end', gap: 12 },
+  reviewTitle: { color: C.text, fontSize: 20, letterSpacing: -0.4, ...font('600') },
+  chipMore: {
+    height: 30,
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+    borderRadius: R.chip,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#333333',
+  },
   input: {
     height: 44,
     paddingHorizontal: 14,
