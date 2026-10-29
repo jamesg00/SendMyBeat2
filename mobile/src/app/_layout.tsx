@@ -6,6 +6,7 @@ import { useEffect } from 'react';
 
 import { AuthProvider, useAuth } from '@/api/auth';
 import { DraftProvider } from '@/state/draft';
+import { StudioProvider } from '@/state/studio';
 import { C, F } from '@/theme';
 
 SplashScreen.preventAutoHideAsync();
@@ -19,7 +20,9 @@ export default function RootLayout() {
   return (
     <AuthProvider>
       <DraftProvider>
-        <RootStack />
+        <StudioProvider>
+          <RootStack />
+        </StudioProvider>
       </DraftProvider>
     </AuthProvider>
   );

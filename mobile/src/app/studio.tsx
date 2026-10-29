@@ -1,136 +1,37 @@
 import Slider from '@react-native-community/slider';
-import * as DocumentPicker from 'expo-document-picker';
+import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { Image } from 'expo-image';
-import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { useEffect, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import * as api from '@/api/endpoints';
-import type { PickedFile, UploadJob, YouTubeUploadOptions } from '@/api/endpoints';
-import { Button, Card, IconTile, ListGroup, ListRow, Meter, Pill, Segmented, styles as ui } from '@/components/ui';
-import { useDraft } from '@/state/draft';
+import type { YouTubeUploadOptions } from '@/api/endpoints';
+import { useRequest } from '@/api/use-request';
+import { Button, Card, IconTile, JobProgress, ListGroup, ListRow, Pill, Segmented, styles as ui } from '@/components/ui';
+import { DESCRIPTION_TEMPLATES } from '@/data/templates';
+import { useDraft, type DraftDescription } from '@/state/draft';
+import { useStudio, type FileSlot, type Phase } from '@/state/studio';
 import { C, F, R } from '@/theme';
 
 type Tool = 'details' | 'visualizer' | 'look';
-type FileSlot = { name: string; uri: string; fileId?: string; status: 'uploading' | 'ready' | 'error'; error?: string };
-type Phase = { kind: 'idle' } | { kind: 'sending' } | { kind: 'job'; job: UploadJob } | { kind: 'done'; url?: string; message: string } | { kind: 'error'; message: string };
 
 const ASPECT: Record<YouTubeUploadOptions['aspectRatio'], number> = { '16:9': 16 / 9, '1:1': 1, '9:16': 9 / 16, '4:5': 4 / 5 };
 
 export default function StudioScreen() {
   const insets = useSafeAreaInsets();
-  const { run, description, setDescription } = useDraft();
+  const studio = useStudio();
   const [tool, setTool] = useState<Tool>('details');
-  const [title, setTitle] = useState(run ? `${run.query} type beat` : '');
-  const [privacy, setPrivacy] = useState<YouTubeUploadOptions['privacy']>('public');
-  const [audio, setAudio] = useState<FileSlot | null>(null);
-  const [image, setImage] = useState<FileSlot | null>(null);
-  const [format, setFormat] = useState<YouTubeUploadOptions['aspectRatio']>('16:9');
-  const [fps, setFps] = useState<YouTubeUploadOptions['renderFps']>('2');
-  const [bg, setBg] = useState<YouTubeUploadOptions['background']>('black');
-  const [scale, setScale] = useState(1);
-  const [rotation, setRotation] = useState(0);
-  const [noWatermark, setNoWatermark] = useState(false);
-  const [phase, setPhase] = useState<Phase>({ kind: 'idle' });
-
-  const jobId = phase.kind === 'job' ? phase.job.id : null;
-
-  // Poll the render + upload job the same way the website does (every 3s).
-  useEffect(() => {
-    if (!jobId) return;
-    const timer = setInterval(async () => {
-      try {
-        const { job } = await api.uploadJob(jobId);
-        if (!job) return;
-        if (job.status === 'succeeded') {
-          setPhase({ kind: 'done', url: job.result?.video_url, message: job.result?.message ?? 'Video uploaded to YouTube.' });
-        } else if (job.status === 'failed' || job.status === 'cancelled') {
-          setPhase({ kind: 'error', message: job.error ?? 'YouTube upload failed.' });
-        } else {
-          setPhase({ kind: 'job', job });
-        }
-      } catch {
-        // keep polling through brief network drops
-      }
-    }, 3000);
-    return () => clearInterval(timer);
-  }, [jobId]);
-
-  const pickAudio = async () => {
-    const res = await DocumentPicker.getDocumentAsync({ type: 'audio/*', copyToCacheDirectory: true });
-    if (res.canceled) return;
-    const a = res.assets[0];
-    const picked: PickedFile = { uri: a.uri, name: a.name, mimeType: a.mimeType ?? 'audio/mpeg', file: a.file };
-    await send(picked, setAudio, api.uploadAudio);
-  };
-
-  const pickImage = async () => {
-    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
-    if (res.canceled) return;
-    const a = res.assets[0];
-    const name = a.fileName ?? `artwork.${(a.mimeType ?? 'image/jpeg').split('/')[1]}`;
-    const picked: PickedFile = { uri: a.uri, name, mimeType: a.mimeType ?? 'image/jpeg', file: a.file };
-    await send(picked, setImage, api.uploadImage);
-  };
-
-  const send = async (
-    f: PickedFile,
-    set: (s: FileSlot) => void,
-    upload: (f: PickedFile) => Promise<api.UploadedFile>,
-  ) => {
-    set({ name: f.name, uri: f.uri, status: 'uploading' });
-    try {
-      const { file_id } = await upload(f);
-      set({ name: f.name, uri: f.uri, fileId: file_id, status: 'ready' });
-    } catch (e) {
-      set({ name: f.name, uri: f.uri, status: 'error', error: e instanceof Error ? e.message : 'Upload failed' });
-    }
-  };
-
-  const missing = !title.trim()
-    ? 'Add a video title'
-    : audio?.status !== 'ready'
-      ? 'Add your beat'
-      : image?.status !== 'ready'
-        ? 'Add artwork'
-        : null;
-
-  const publish = async () => {
-    if (missing || !audio?.fileId || !image?.fileId) return;
-    setPhase({ kind: 'sending' });
-    try {
-      // The upload endpoint needs a saved description; starter templates get saved on first use.
-      let descriptionId = description.id;
-      if (!description.saved) {
-        const created = await api.createDescription(description.title, description.content);
-        descriptionId = created.id;
-        setDescription({ ...description, id: created.id, saved: true });
-      }
-      const res = await api.startYouTubeUpload({
-        title: title.trim(),
-        descriptionId,
-        tagsId: run?.id,
-        privacy,
-        audioFileId: audio.fileId,
-        imageFileId: image.fileId,
-        aspectRatio: format,
-        imageScale: scale,
-        imageRotation: Math.round(rotation),
-        background: bg,
-        renderFps: fps,
-        removeWatermark: noWatermark,
-      });
-      if (res.job?.id) setPhase({ kind: 'job', job: res.job });
-      else setPhase({ kind: 'done', url: res.video_url, message: res.message ?? 'Upload started.' });
-    } catch (e) {
-      setPhase({ kind: 'error', message: e instanceof Error ? e.message : 'Upload failed.' });
-    }
-  };
+  const { title, privacy, audio, image, format, fps, bg, scale, rotation, noWatermark, phase, missing, set } = studio;
 
   const busy = phase.kind === 'sending' || phase.kind === 'job';
   const summary = `MP4 · ${fps} fps · ${format} · ${bg} bg · ${privacy}`;
+
+  const finish = () => {
+    studio.reset();
+    router.back();
+  };
 
   return (
     <View style={[s.root, { paddingTop: insets.top + 6 }]}>
@@ -139,10 +40,10 @@ export default function StudioScreen() {
           <Text style={{ color: C.text, fontSize: 16, fontWeight: '600' }}>✕</Text>
         </Pressable>
         <Text style={s.topTitle}>Upload Studio</Text>
-        <Pill label={busy ? 'Working' : 'Live'} />
+        <Pill label={busy ? 'Working' : studio.active ? 'Saved' : 'New'} />
       </View>
 
-      <Preview image={image} format={format} bg={bg} scale={scale} rotation={rotation} />
+      <Preview audio={audio} image={image} format={format} bg={bg} scale={scale} rotation={rotation} />
 
       <Segmented
         value={tool}
@@ -158,27 +59,33 @@ export default function StudioScreen() {
         {tool === 'details' && (
           <>
             <ListGroup>
-              <FileRow label="Beat" hint="MP3 · WAV · M4A · FLAC · OGG" slot={audio} icon="♪" onPick={pickAudio} />
-              <FileRow label="Artwork" hint="JPG · PNG · WEBP · GIF" slot={image} icon="▣" onPick={pickImage} last />
+              <FileRow label="Beat" hint="MP3 · WAV · M4A · FLAC · OGG" slot={audio} icon="♪" onPick={studio.pickAudio} />
+              <FileRow label="Artwork" hint="JPG · PNG · WEBP · GIF" slot={image} icon="▣" onPick={studio.pickImage} last />
             </ListGroup>
             <View style={{ gap: 6 }}>
               <Text style={[ui.sectionLabel, { paddingHorizontal: 4 }]}>VIDEO TITLE</Text>
-              <TextInput value={title} onChangeText={setTitle} style={s.input} placeholder="Enter beat title here" placeholderTextColor={C.t3} />
+              <TextInput
+                value={title}
+                onChangeText={(t) => set({ title: t })}
+                style={s.input}
+                placeholder="Enter beat title here"
+                placeholderTextColor={C.t3}
+              />
             </View>
-            <ListGroup>
-              <ListRow title="Description" value={description.title} onPress={() => router.back()} />
-              <ListRow title="Tags" value={run ? `${run.query} · ${run.tags.length}` : 'None'} onPress={() => router.back()} last />
-            </ListGroup>
+            <MetaPickers />
             <Text style={[ui.sectionLabel, { paddingHorizontal: 4 }]}>PRIVACY</Text>
             <Segmented
               value={privacy}
-              onChange={setPrivacy}
+              onChange={(v) => set({ privacy: v })}
               options={[
                 { value: 'public', label: 'Public' },
                 { value: 'unlisted', label: 'Unlisted' },
                 { value: 'private', label: 'Private' },
               ]}
             />
+            {studio.active && !busy ? (
+              <Button title="Start over" variant="plain" size="sm" onPress={studio.reset} />
+            ) : null}
           </>
         )}
 
@@ -201,33 +108,33 @@ export default function StudioScreen() {
         {tool === 'look' && (
           <Card>
             <Text style={ui.sectionLabel}>FORMAT</Text>
-            <Segmented compact value={format} onChange={setFormat} options={[
+            <Segmented compact value={format} onChange={(v) => set({ format: v })} options={[
               { value: '16:9', label: '16:9' },
               { value: '1:1', label: '1:1' },
               { value: '9:16', label: '9:16' },
               { value: '4:5', label: '4:5' },
             ]} />
             <Text style={ui.sectionLabel}>FRAME RATE</Text>
-            <Segmented compact value={fps} onChange={setFps} options={[
+            <Segmented compact value={fps} onChange={(v) => set({ fps: v })} options={[
               { value: '2', label: '2 · Fastest' },
               { value: '30', label: '30' },
               { value: '60', label: '60' },
             ]} />
             <Text style={s.muted}>2 fps is best for still cover art and uploads much faster. Use 30/60 for GIF artwork.</Text>
             <Text style={ui.sectionLabel}>BACKGROUND</Text>
-            <Segmented compact value={bg} onChange={setBg} options={[
+            <Segmented compact value={bg} onChange={(v) => set({ bg: v })} options={[
               { value: 'black', label: 'Black' },
               { value: 'white', label: 'White' },
               { value: 'blurred', label: 'Blurred' },
             ]} />
             <View style={s.sliderGrid}>
-              <SliderField label="Scale" value={scale} display={`${scale.toFixed(2)}x`} min={0.5} max={2} step={0.05} onChange={setScale} />
-              <SliderField label="Rotation" value={rotation} display={`${Math.round(rotation)}°`} min={-180} max={180} step={1} onChange={setRotation} />
+              <SliderField label="Scale" value={scale} display={`${scale.toFixed(2)}x`} min={0.5} max={2} step={0.05} onChange={(v) => set({ scale: v })} />
+              <SliderField label="Rotation" value={rotation} display={`${Math.round(rotation)}°`} min={-180} max={180} step={1} onChange={(v) => set({ rotation: v })} />
             </View>
             <Row label="Remove watermark">
               <Switch
                 value={noWatermark}
-                onValueChange={setNoWatermark}
+                onValueChange={(v) => set({ noWatermark: v })}
                 trackColor={{ false: C.card2, true: C.acc }}
                 thumbColor="#FFFFFF"
                 ios_backgroundColor={C.card2}
@@ -243,19 +150,106 @@ export default function StudioScreen() {
         {phase.kind === 'done' ? (
           <View style={{ flexDirection: 'row', gap: 8 }}>
             {phase.url ? <Button title="Open on YouTube" style={{ flex: 1 }} onPress={() => Linking.openURL(phase.url!)} /> : null}
-            <Button title="Done" variant="secondary" style={{ flex: 1 }} onPress={() => router.back()} />
+            <Button title="Done" variant="secondary" style={{ flex: 1 }} onPress={finish} />
           </View>
         ) : (
           <Button
-            title={busy ? 'Uploading…' : missing ?? 'Upload to YouTube'}
+            title={busy ? 'Uploading…' : missing ?? (phase.kind === 'error' ? 'Try again' : 'Upload to YouTube')}
             variant={missing && !busy ? 'secondary' : 'primary'}
-            onPress={busy || missing ? undefined : publish}
+            onPress={busy || missing ? undefined : studio.publish}
           />
         )}
-        <Text style={s.summary}>{summary}</Text>
+        <Text style={s.summary}>{busy ? 'You can close the studio. The upload keeps going.' : summary}</Text>
       </View>
     </View>
   );
+}
+
+// Description and tags are chosen right here, so the studio never has to close.
+function MetaPickers() {
+  const { run, setRun, description, setDescription } = useDraft();
+  const [open, setOpen] = useState<'desc' | 'tags' | null>(null);
+  const saved = useRequest(api.descriptions);
+  const history = useRequest(api.tagHistory);
+
+  const descriptions: DraftDescription[] = [
+    ...DESCRIPTION_TEMPLATES.map((t) => ({ id: t.id, title: t.name, content: t.content, saved: false })),
+    ...(saved.data ?? []).map((d) => ({ id: d.id, title: d.title, content: d.content, saved: true })),
+  ];
+  const toggle = (which: 'desc' | 'tags') => setOpen((cur) => (cur === which ? null : which));
+  const check = (on: boolean) => (on ? <Text style={{ color: C.acc, fontSize: 16 }}>✓</Text> : <View />);
+
+  return (
+    <View style={{ gap: 8 }}>
+      <ListGroup>
+        <ListRow title="Description" value={description.title} onPress={() => toggle('desc')} right={<Chevron open={open === 'desc'} />} />
+        <ListRow
+          title="Tags"
+          value={run ? `${run.query} · ${run.tags.length}` : 'None'}
+          onPress={() => toggle('tags')}
+          right={<Chevron open={open === 'tags'} />}
+          last
+        />
+      </ListGroup>
+
+      {open === 'desc' && (
+        <ListGroup>
+          {descriptions.map((d, i) => (
+            <ListRow
+              key={d.id}
+              title={d.title}
+              subtitle={d.saved ? undefined : 'Template'}
+              last={i === descriptions.length - 1}
+              right={check(d.id === description.id)}
+              onPress={() => {
+                setDescription(d);
+                setOpen(null);
+              }}
+            />
+          ))}
+        </ListGroup>
+      )}
+
+      {open === 'tags' && (
+        <ListGroup>
+          {history.loading ? (
+            <ListRow title="Loading your tag runs…" last />
+          ) : (history.data ?? []).length === 0 ? (
+            <ListRow title="No tag runs yet" subtitle="Generate tags in Workflow first" last />
+          ) : (
+            [
+              <ListRow
+                key="none"
+                title="No tags"
+                right={check(!run)}
+                onPress={() => {
+                  setRun(null);
+                  setOpen(null);
+                }}
+              />,
+              ...(history.data ?? []).slice(0, 10).map((r, i, arr) => (
+                <ListRow
+                  key={r.id}
+                  title={r.query}
+                  subtitle={`${r.tags.length} tags`}
+                  last={i === arr.length - 1}
+                  right={check(r.id === run?.id)}
+                  onPress={() => {
+                    setRun(r);
+                    setOpen(null);
+                  }}
+                />
+              )),
+            ]
+          )}
+        </ListGroup>
+      )}
+    </View>
+  );
+}
+
+function Chevron({ open }: { open: boolean }) {
+  return <Text style={{ color: C.t3, fontSize: 18, transform: [{ rotate: open ? '90deg' : '0deg' }] }}>›</Text>;
 }
 
 function Status({ phase }: { phase: Phase }) {
@@ -268,15 +262,14 @@ function Status({ phase }: { phase: Phase }) {
     );
   }
   if (phase.kind === 'job') {
-    const pct = Math.max(0, Math.min(100, phase.job.progress ?? 0));
     return (
-      <View style={{ gap: 6 }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-          <Text style={s.muted} numberOfLines={1}>{phase.job.message ?? 'Rendering and uploading…'}</Text>
-          <Text style={[s.muted, { fontFamily: F.mono }]}>{pct}%</Text>
-        </View>
-        <Meter value={pct / 100} />
-      </View>
+      <JobProgress
+        title="Rendering and uploading"
+        startedAt={phase.startedAt}
+        expectedSec={120}
+        progress={phase.job.progress ?? 0}
+        message={phase.job.message ?? 'Rendering your video…'}
+      />
     );
   }
   if (phase.kind === 'done') return <Text style={[s.muted, { color: C.acc, textAlign: 'center' }]}>{phase.message}</Text>;
@@ -306,7 +299,7 @@ function FileRow({ label, hint, slot, icon, onPick, last }: { label: string; hin
   );
 }
 
-function Preview({ image, format, bg, scale, rotation }: { image: FileSlot | null; format: YouTubeUploadOptions['aspectRatio']; bg: YouTubeUploadOptions['background']; scale: number; rotation: number }) {
+function Preview({ audio, image, format, bg, scale, rotation }: { audio: FileSlot | null; image: FileSlot | null; format: YouTubeUploadOptions['aspectRatio']; bg: YouTubeUploadOptions['background']; scale: number; rotation: number }) {
   const ratio = ASPECT[format];
   return (
     <View style={s.preview}>
@@ -326,6 +319,54 @@ function Preview({ image, format, bg, scale, rotation }: { image: FileSlot | nul
       <View style={s.badge}>
         <Text style={s.badgeText}>{format}</Text>
       </View>
+      {audio ? <Playback key={audio.uri} uri={audio.uri} /> : null}
+    </View>
+  );
+}
+
+function clock(sec: number) {
+  const t = Math.max(0, Math.floor(sec));
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+}
+
+// Plays the beat over the artwork, so the preview is what the rendered video will be.
+function Playback({ uri }: { uri: string }) {
+  const player = useAudioPlayer(uri);
+  const status = useAudioPlayerStatus(player);
+
+  useEffect(() => {
+    // Play through the iPhone's silent switch, like a video would.
+    void setAudioModeAsync({ playsInSilentMode: true });
+  }, []);
+
+  const duration = status.duration || 0;
+  const toggle = () => {
+    if (status.playing) player.pause();
+    else {
+      if (duration > 0 && status.currentTime >= duration - 0.2) void player.seekTo(0);
+      player.play();
+    }
+  };
+
+  return (
+    <View style={s.player}>
+      <Pressable onPress={toggle} style={s.playBtn} accessibilityRole="button" accessibilityLabel={status.playing ? 'Pause preview' : 'Play preview'}>
+        <Text style={{ color: C.onAcc, fontSize: 13, fontWeight: '700' }}>{status.playing ? '❚❚' : '▶'}</Text>
+      </Pressable>
+      <Slider
+        style={{ flex: 1 }}
+        value={status.currentTime}
+        minimumValue={0}
+        maximumValue={duration || 1}
+        onSlidingComplete={(v) => void player.seekTo(v)}
+        minimumTrackTintColor={C.acc}
+        maximumTrackTintColor="rgba(255,255,255,0.25)"
+        thumbTintColor="#FFFFFF"
+        accessibilityLabel="Preview position"
+      />
+      <Text style={s.time}>
+        {clock(status.currentTime)} / {clock(duration)}
+      </Text>
     </View>
   );
 }
@@ -367,7 +408,7 @@ const s = StyleSheet.create({
   close: { width: 36, height: 36, borderRadius: 18, backgroundColor: C.card2, alignItems: 'center', justifyContent: 'center' },
   topTitle: { color: C.text, fontSize: 17, fontWeight: '600' },
   preview: {
-    height: 200,
+    height: 220,
     borderRadius: R.card,
     overflow: 'hidden',
     backgroundColor: '#000',
@@ -380,6 +421,21 @@ const s = StyleSheet.create({
   empty: { color: C.t3, fontSize: 13 },
   badge: { position: 'absolute', top: 10, right: 10, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: 'rgba(0,0,0,0.6)' },
   badgeText: { color: C.text, fontSize: 11, fontFamily: F.mono },
+  player: {
+    position: 'absolute',
+    left: 8,
+    right: 8,
+    bottom: 8,
+    height: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 6,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+  },
+  playBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: C.acc, alignItems: 'center', justifyContent: 'center' },
+  time: { color: C.text, fontSize: 11, fontFamily: F.mono, minWidth: 72, textAlign: 'right' },
   cardTitle: { color: C.text, fontSize: 17, fontWeight: '600' },
   muted: { color: C.t3, fontSize: 12, lineHeight: 17, flexShrink: 1 },
   status: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },

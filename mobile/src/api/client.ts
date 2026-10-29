@@ -94,22 +94,28 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
 
 type Job<R> = { id: string; status: string; progress?: number; message?: string; result?: R; error?: string };
 
-// Same contract as pollBackgroundJobUntilDone on the website.
-export async function pollJob<R>(jobId: string, { intervalMs = 2500, maxAttempts = 180 } = {}): Promise<R> {
+export type JobProgress = (progress: number, message?: string) => void;
+
+// Same contract as pollBackgroundJobUntilDone on the website, plus progress reports for the UI.
+export async function pollJob<R>(
+  jobId: string,
+  { intervalMs = 2500, maxAttempts = 180, onProgress }: { intervalMs?: number; maxAttempts?: number; onProgress?: JobProgress } = {},
+): Promise<R> {
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     const { job } = await api<{ job?: Job<R> }>(`/jobs/${jobId}`);
     if (!job) throw new ApiError('Job status response missing job data', 500);
     if (job.status === 'succeeded') return job.result as R;
     if (job.status === 'failed') throw new ApiError(job.error || 'Background job failed', 500);
+    onProgress?.(job.progress ?? 0, job.message);
     await new Promise((r) => setTimeout(r, intervalMs));
   }
   throw new ApiError('This is taking longer than expected. Try again in a minute.', 408);
 }
 
 // Endpoints that either answer directly or hand back {job:{id}} to poll.
-export async function runJob<R>(path: string, body: unknown, intervalMs?: number): Promise<R> {
+export async function runJob<R>(path: string, body: unknown, intervalMs?: number, onProgress?: JobProgress): Promise<R> {
   const res = await api<{ job?: { id: string }; result?: R } & R>(path, { body });
-  if (res?.job?.id) return pollJob<R>(res.job.id, { intervalMs });
+  if (res?.job?.id) return pollJob<R>(res.job.id, { intervalMs, onProgress });
   if (res && 'result' in res && res.result) return res.result as R;
   return res as R;
 }

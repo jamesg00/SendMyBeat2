@@ -1,27 +1,27 @@
 import { useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import * as api from '@/api/endpoints';
 import type { ChannelAnalytics } from '@/api/endpoints';
-import { Button, Card, Screen, SectionLabel, styles as ui } from '@/components/ui';
+import { Button, Card, JobProgress, Screen, SectionLabel, styles as ui } from '@/components/ui';
 import { C } from '@/theme';
 
 const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
 
 export default function AnalyticsScreen() {
   const [data, setData] = useState<ChannelAnalytics | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [job, setJob] = useState<{ startedAt: number; progress: number; message?: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const analyze = async () => {
-    setBusy(true);
+    setJob({ startedAt: Date.now(), progress: 0 });
     setError(null);
     try {
-      setData(await api.analyzeChannel());
+      setData(await api.analyzeChannel((progress, message) => setJob((j) => j && { ...j, progress, message })));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Channel analysis failed.');
     } finally {
-      setBusy(false);
+      setJob(null);
     }
   };
 
@@ -68,11 +68,14 @@ export default function AnalyticsScreen() {
       )}
 
       {error ? <Text style={s.error}>{error}</Text> : null}
-      {busy ? (
-        <View style={s.busy}>
-          <ActivityIndicator color={C.acc} />
-          <Text style={s.muted}>Analyzing your channel. This can take up to a minute.</Text>
-        </View>
+      {job ? (
+        <JobProgress
+          title="Analyzing your channel"
+          startedAt={job.startedAt}
+          expectedSec={50}
+          progress={job.progress}
+          message={job.message}
+        />
       ) : (
         <Button title={data ? 'Re-analyze · 1 credit' : 'Analyze my channel · 1 credit'} onPress={analyze} />
       )}
@@ -116,7 +119,6 @@ const s = StyleSheet.create({
   cardTitle: { color: C.text, fontSize: 17, fontWeight: '600' },
   muted: { color: C.t3, fontSize: 13, lineHeight: 18, flexShrink: 1 },
   error: { color: C.danger, fontSize: 13 },
-  busy: { flexDirection: 'row', alignItems: 'center', gap: 12, height: 50 },
   chart: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, height: 60 },
   bar: { flex: 1, borderRadius: 4 },
   dot: { width: 8, height: 8, borderRadius: 4, marginTop: 6 },

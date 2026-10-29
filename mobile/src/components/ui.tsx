@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -9,7 +9,7 @@ import {
   type TextStyle,
   type ViewStyle,
 } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { C, F, R } from '@/theme';
@@ -115,9 +115,17 @@ export function Segmented<V extends string>({
   const cell = width > 0 ? (width - 6) / options.length : 0;
   const index = Math.max(0, options.findIndex((o) => o.value === value));
   const x = useSharedValue(0);
+  const placed = useRef(false);
 
   useEffect(() => {
-    x.value = withSpring(index * cell, { damping: 18, stiffness: 220 });
+    if (cell <= 0) return;
+    // Snap into place on first layout, then glide like UISegmentedControl: quick, with a barely-there settle.
+    if (!placed.current) {
+      placed.current = true;
+      x.value = index * cell;
+      return;
+    }
+    x.value = withSpring(index * cell, { duration: 280, dampingRatio: 0.82 });
   }, [index, cell, x]);
 
   const thumbStyle = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }] }));
@@ -201,10 +209,67 @@ export function Pill({ label, tone = 'accent' }: { label: string; tone?: 'accent
   );
 }
 
-export function Meter({ value, color = C.acc }: { value: number; color?: string }) {
+export function Meter({ value, color = C.acc, height = 4 }: { value: number; color?: string; height?: number }) {
+  const w = useSharedValue(Math.max(0, Math.min(1, value)));
+  useEffect(() => {
+    w.value = withTiming(Math.max(0, Math.min(1, value)), { duration: 450, easing: Easing.out(Easing.cubic) });
+  }, [value, w]);
+  const fill = useAnimatedStyle(() => ({ width: `${w.value * 100}%` }));
   return (
-    <View style={styles.meterTrack}>
-      <View style={[styles.meterFill, { width: `${Math.round(value * 100)}%`, backgroundColor: color }]} />
+    <View style={[styles.meterTrack, { height, borderRadius: height / 2 }]}>
+      <Animated.View style={[styles.meterFill, { height, borderRadius: height / 2, backgroundColor: color }, fill]} />
+    </View>
+  );
+}
+
+function clock(sec: number) {
+  const t = Math.max(0, Math.floor(sec));
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+}
+
+// Live progress for a background job. Servers report progress in big jumps (20% → 100%), so the bar
+// also creeps forward on an eased estimate from elapsed time and never sits still.
+export function JobProgress({
+  title,
+  startedAt,
+  expectedSec,
+  progress = 0,
+  message,
+  steps,
+}: {
+  title: string;
+  startedAt: number;
+  expectedSec: number;
+  progress?: number;
+  message?: string;
+  /** Stage labels shown in order as time passes; the server's message wins when there are none. */
+  steps?: string[];
+}) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 300);
+    return () => clearInterval(t);
+  }, []);
+
+  const elapsed = (now - startedAt) / 1000;
+  const estimate = 95 * (1 - Math.exp(-elapsed / (expectedSec * 0.6)));
+  const pct = Math.min(97, Math.max(progress, estimate));
+  const step = steps?.length ? steps[Math.min(steps.length - 1, Math.floor((elapsed / expectedSec) * steps.length))] : message;
+  const left = Math.max(0, expectedSec - elapsed);
+
+  return (
+    <View style={styles.job} accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: 100, now: Math.round(pct) }}>
+      <View style={styles.jobHead}>
+        <Text style={styles.jobTitle}>{title}</Text>
+        <Text style={styles.jobPct}>{Math.round(pct)}%</Text>
+      </View>
+      <Meter value={pct / 100} height={6} />
+      <View style={styles.jobHead}>
+        <Text style={styles.jobStep} numberOfLines={1}>
+          {step ?? 'Working…'}
+        </Text>
+        <Text style={styles.jobTime}>{left > 1 ? `~${clock(left)} left` : clock(elapsed)}</Text>
+      </View>
     </View>
   );
 }
@@ -238,5 +303,11 @@ export const styles = StyleSheet.create({
   pillText: { fontSize: 12, fontWeight: '600' },
   meterTrack: { height: 4, borderRadius: 2, backgroundColor: C.card2, overflow: 'hidden' },
   meterFill: { height: 4, borderRadius: 2 },
+  job: { gap: 8, padding: 14, borderRadius: R.card, backgroundColor: C.card2 },
+  jobHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 },
+  jobTitle: { color: C.text, fontSize: 15, fontWeight: '600', flexShrink: 1 },
+  jobPct: { color: C.acc, fontSize: 15, fontWeight: '700', fontFamily: F.mono },
+  jobStep: { color: C.t2, fontSize: 12, flexShrink: 1 },
+  jobTime: { color: C.t3, fontSize: 11, fontFamily: F.mono },
   iconTile: { width: 34, height: 34, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
 });
