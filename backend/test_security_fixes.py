@@ -141,3 +141,16 @@ async def test_password_hashing_runs_off_the_event_loop():
     with patch.object(server.asyncio, 'to_thread', fake_to_thread):
         hashed = await server.asyncio.to_thread(server.bcrypt.hash, 'pw')
     assert calls == [server.bcrypt.hash] and server.bcrypt.verify('pw', hashed)
+
+
+@pytest.mark.asyncio
+async def test_racing_signup_for_a_taken_username_is_a_400():
+    users = MagicMock()
+    users.find_one = AsyncMock(return_value=None)
+    users.insert_one = AsyncMock(side_effect=server.DuplicateKeyError('E11000 duplicate key'))
+    db = MagicMock(users=users)
+    request = SimpleNamespace(client=SimpleNamespace(host='203.0.113.9'), headers={})
+    with patch.object(server, 'db', db), patch.object(server, '_check_rate_limit_persistent', AsyncMock()):
+        with pytest.raises(HTTPException) as exc:
+            await server.register(server.UserRegister(username='racer', password='longpassword'), request)
+    assert exc.value.status_code == 400

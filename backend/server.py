@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo.errors import DuplicateKeyError
 import os
 import logging
 import asyncio
@@ -4906,7 +4907,11 @@ async def register(user_data: UserRegister, request: Request):
     user_doc['password_hash'] = hashed_password
     user_doc['created_at'] = user_doc['created_at'].isoformat()
     
-    await db.users.insert_one(user_doc)
+    try:
+        await db.users.insert_one(user_doc)
+    except DuplicateKeyError:
+        # Another signup for this username won the race; the unique index stopped this one.
+        raise HTTPException(status_code=400, detail="Username already exists")
     await _ensure_producer_profile(user.id, user.username)
     
     # Generate token
@@ -8175,7 +8180,11 @@ async def _set_producer_relation(*, kind: str, actor_id: str, producer_id: str, 
     pair = {"user_id": actor_id, "producer_id": producer_id}
     counter = spec["counter"]
     if on:
-        result = await collection.update_one(pair, {"$setOnInsert": {**pair, "created_at": datetime.now(timezone.utc)}}, upsert=True)
+        try:
+            result = await collection.update_one(pair, {"$setOnInsert": {**pair, "created_at": datetime.now(timezone.utc)}}, upsert=True)
+        except DuplicateKeyError:
+            # A parallel tap inserted the pair first and already moved the counter.
+            result = None
         if getattr(result, "upserted_id", None) is not None:
             await db.producer_profiles.update_one({"user_id": producer_id}, {"$inc": {counter: 1}})
     else:
