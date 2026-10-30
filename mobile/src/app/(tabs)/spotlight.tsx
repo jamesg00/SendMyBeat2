@@ -1,11 +1,11 @@
-import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import * as api from '@/api/endpoints';
 import type { Producer } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
-import { Avatar, isVerified, LikeButton, rememberProducers, TopBeat, topBeatOf, VerifiedBadge } from '@/components/producer';
+import { Avatar, isVerified, LikeButton, profileEditCount, rememberProducers, TopBeat, topBeatOf, VerifiedBadge } from '@/components/producer';
 import { Button, Card, Screen, Segmented, styles as ui } from '@/components/ui';
 import { loadSocial, useSocial } from '@/state/social';
 import { C, F, R, font } from '@/theme';
@@ -15,10 +15,45 @@ type Tab = 'community' | 'pros';
 const points = (p: Producer) => p.spotlight_score ?? p.likes ?? 0;
 const open = (p: Producer) => router.push({ pathname: '/producer/[id]', params: { id: p.user_id } });
 
+const loadSpotlight = async () => {
+  const res = await api.spotlight();
+  rememberProducers([...res.featured_producers, ...res.trending_producers, ...res.new_producers, ...(res.all_producers ?? [])]);
+  return res;
+};
+
+type Request<T> = ReturnType<typeof useRequest<T>>;
+
 export default function SpotlightScreen() {
   const [tab, setTab] = useState<Tab>('community');
+  const list = useRequest(loadSpotlight);
+  const me = useRequest(api.myProducer);
+  const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    void loadSocial();
+  }, []);
+
+  const refreshList = list.refresh;
+  const refreshMe = me.refresh;
+  const refresh = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([refreshList(), refreshMe(), loadSocial(true)]);
+    setRefreshing(false);
+  }, [refreshList, refreshMe]);
+
+  // Back from editing your profile: fetch again so your changes show.
+  const seenEdits = useRef(profileEditCount());
+  useFocusEffect(
+    useCallback(() => {
+      if (profileEditCount() === seenEdits.current) return;
+      seenEdits.current = profileEditCount();
+      void refreshList();
+      void refreshMe();
+    }, [refreshList, refreshMe]),
+  );
+
   return (
-    <Screen title="Spotlight">
+    <Screen title="Spotlight" refreshing={refreshing} onRefresh={() => void refresh()}>
       <Segmented
         value={tab}
         onChange={setTab}
@@ -27,23 +62,14 @@ export default function SpotlightScreen() {
           { value: 'pros', label: 'Pros' },
         ]}
       />
-      {tab === 'community' ? <Community /> : <ProsSoon />}
+      {tab === 'community' ? <Community list={list} me={me} /> : <ProsSoon />}
     </Screen>
   );
 }
 
-function Community() {
-  const { data, error, loading, reload } = useRequest(async () => {
-    const res = await api.spotlight();
-    rememberProducers([...res.featured_producers, ...res.trending_producers, ...res.new_producers, ...(res.all_producers ?? [])]);
-    return res;
-  });
-  const me = useRequest(api.myProducer);
+function Community({ list, me }: { list: Request<api.Spotlight>; me: Request<Producer> }) {
+  const { data, error, loading, reload } = list;
   const social = useSocial();
-
-  useEffect(() => {
-    void loadSocial();
-  }, []);
 
   if (loading) return <ActivityIndicator color={C.t2} style={{ alignSelf: 'flex-start' }} />;
   if (error || !data) {

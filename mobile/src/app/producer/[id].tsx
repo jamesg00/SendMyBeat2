@@ -1,14 +1,14 @@
 import { Image } from 'expo-image';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/api/auth';
 import * as api from '@/api/endpoints';
 import type { Producer, ProducerBeat } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
-import { Avatar, followerCount, FollowButton, isVerified, knownProducer, LikeButton, openWebLink, pickProfileImage, rememberProducers, TopBeat, topBeatOf, VerifiedBadge } from '@/components/producer';
+import { Avatar, followerCount, FollowButton, isVerified, knownProducer, LikeButton, markProfileEdited, openWebLink, pickProfileImage, rememberProducers, TopBeat, topBeatOf, VerifiedBadge } from '@/components/producer';
 import { Button, styles as ui } from '@/components/ui';
 import { loadSocial, useSocial } from '@/state/social';
 import { C, F, R, font } from '@/theme';
@@ -35,19 +35,26 @@ export default function ProducerScreen() {
   const mine = user?.id === id;
   const [editing, setEditing] = useState<'banner' | 'avatar' | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     void loadSocial();
   }, []);
 
   // Coming back from Edit profile shows your changes.
-  const reloadStats = stats.reload;
+  const refreshStats = stats.refresh;
   const setStats = stats.setData;
   useFocusEffect(
     useCallback(() => {
-      if (mine) reloadStats();
-    }, [mine, reloadStats]),
+      if (mine) void refreshStats();
+    }, [mine, refreshStats]),
   );
+
+  const pullToRefresh = async () => {
+    setRefreshing(true);
+    await refreshStats();
+    setRefreshing(false);
+  };
 
   // Your own profile: tap the banner or picture to change it right here.
   const changeImage = async (which: 'banner' | 'avatar') => {
@@ -63,6 +70,7 @@ export default function ProducerScreen() {
         rememberProducers([{ ...cur.profile, ...patch }]);
         return { ...cur, profile: { ...cur.profile, ...patch } };
       });
+      markProfileEdited();
     } catch (e) {
       setEditError(e instanceof Error ? e.message : 'Could not update your picture.');
     } finally {
@@ -86,7 +94,11 @@ export default function ProducerScreen() {
   const socials = Object.entries(p.social_links ?? {}).filter((e): e is [string, string] => typeof e[1] === 'string' && /^https?:\/\//.test(e[1]));
 
   return (
-    <ScrollView style={s.root} contentContainerStyle={{ paddingBottom: insets.bottom + 32 }} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      style={s.root}
+      contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
+      showsVerticalScrollIndicator={false}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void pullToRefresh()} tintColor={C.t2} colors={[C.t2]} />}>
       <Pressable
         onPress={mine ? () => void changeImage('banner') : undefined}
         disabled={!mine}
