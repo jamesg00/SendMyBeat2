@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/api/auth';
 import { Button, Card, Segmented, styles as ui } from '@/components/ui';
-import { C, F, R, font } from '@/theme';
+import { C, R, font } from '@/theme';
 
 type Mode = 'login' | 'register';
 
@@ -39,7 +39,7 @@ export default function LoginScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={[s.root, { paddingTop: insets.top + 60, paddingBottom: insets.bottom + 24 }]}>
         <View style={{ gap: 10 }}>
-          <Text style={s.brand}>SENDMYBEAT</Text>
+          <Text style={s.brand}>SendMyBeat</Text>
           <Text style={ui.largeTitle}>{mode === 'login' ? 'Welcome back' : 'Create account'}</Text>
           <Text style={s.sub}>Tags, descriptions and YouTube uploads for your beats.</Text>
         </View>
@@ -57,7 +57,7 @@ export default function LoginScreen() {
         />
 
         <Card>
-          <Text style={ui.sectionLabel}>USERNAME</Text>
+          <Text style={ui.sectionLabel}>Username</Text>
           <TextInput
             value={username}
             onChangeText={setUsername}
@@ -70,7 +70,7 @@ export default function LoginScreen() {
             placeholderTextColor={C.t3}
             accessibilityLabel="Username"
           />
-          <Text style={ui.sectionLabel}>PASSWORD</Text>
+          <Text style={ui.sectionLabel}>Password</Text>
           <TextInput
             value={password}
             onChangeText={setPassword}
@@ -91,7 +91,7 @@ export default function LoginScreen() {
         <Pressable onPress={() => setMode(mode === 'login' ? 'register' : 'login')} accessibilityRole="button">
           <Text style={s.switch}>
             {mode === 'login' ? 'New here? ' : 'Have an account? '}
-            <Text style={{ color: C.acc, ...font('600') }}>{mode === 'login' ? 'Sign up free' : 'Log in'}</Text>
+            <Text style={{ color: C.text, ...font('600') }}>{mode === 'login' ? 'Sign up free' : 'Log in'}</Text>
           </Text>
         </Pressable>
       </View>
@@ -100,8 +100,8 @@ export default function LoginScreen() {
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, paddingHorizontal: 16, gap: 20 },
-  brand: { fontFamily: F.brand, fontSize: 14, letterSpacing: 3, color: C.acc },
+  root: { flex: 1, paddingHorizontal: 20, gap: 22 },
+  brand: { color: C.t2, fontSize: 15, ...font('600') },
   sub: { color: C.t2, fontSize: 15, lineHeight: 21, ...font() },
   input: {
     height: 46,
@@ -109,7 +109,7 @@ const s = StyleSheet.create({
     borderRadius: R.ctl,
     borderWidth: 1,
     borderColor: C.line,
-    backgroundColor: C.card2,
+    backgroundColor: C.bg,
     color: C.text,
     fontSize: 16,
     ...font(),

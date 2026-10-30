@@ -19,7 +19,7 @@ export default function TabLayout() {
         <NativeTabs.Trigger.Icon sf="scope" md="target" />
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="prefs">
-        <NativeTabs.Trigger.Label>Prefs</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Label>Profile</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="person.crop.circle" md="account_circle" />
       </NativeTabs.Trigger>
     </NativeTabs>

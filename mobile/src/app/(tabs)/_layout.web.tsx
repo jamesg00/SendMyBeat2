@@ -20,7 +20,7 @@ export default function WebTabLayout() {
             <TabButton>Spotlight</TabButton>
           </TabTrigger>
           <TabTrigger name="prefs" href="/prefs" asChild>
-            <TabButton>Prefs</TabButton>
+            <TabButton>Profile</TabButton>
           </TabTrigger>
         </View>
       </TabList>
