@@ -49,6 +49,7 @@ try:
     from backend.services.background_jobs import BackgroundJobService
     from backend.services.spotlight_service import SpotlightService
     from backend.services import tag_metrics as tag_metrics_service  # noqa: F401
+    from backend.services import tag_autocomplete as tag_autocomplete_service  # noqa: F401
     from backend.models_spotlight import (
         ProducerProfile,
         ProducerProfileUpdate,
@@ -61,6 +62,7 @@ except ImportError:
     from services.background_jobs import BackgroundJobService
     from services.spotlight_service import SpotlightService
     from services import tag_metrics as tag_metrics_service
+    from services import tag_autocomplete as tag_autocomplete_service
     from models_spotlight import (
         ProducerProfile,
         ProducerProfileUpdate,
@@ -5734,22 +5736,8 @@ def _fetch_artist_context_from_youtube_api(youtube: Any, artist_name: str) -> di
         except Exception:
             return {}
 
-    channel_payload = _safe_execute(
-        youtube.search().list(
-            q=f'"{artist_query}"',
-            part="snippet",
-            type="channel",
-            maxResults=5,
-        )
-    )
-    channel_title = None
-    for item in channel_payload.get("items", []) or []:
-        snippet = item.get("snippet") or {}
-        candidate_title = snippet.get("title") or ""
-        if _text_mentions_artist(candidate_title, artist_query):
-            channel_title = candidate_title
-            break
-
+    # Two searches (200 units). The artist's channel is read from the top videos' channel names
+    # rather than a separate channel search.
     top_video_payload = _safe_execute(
         youtube.search().list(
             q=f'"{artist_query}"',
@@ -5768,6 +5756,14 @@ def _fetch_artist_context_from_youtube_api(youtube: Any, artist_name: str) -> di
             or _text_mentions_artist((item.get("snippet") or {}).get("channelTitle", ""), artist_query)
         ],
         limit=10,
+    )
+    channel_title = next(
+        (
+            (item.get("snippet") or {}).get("channelTitle")
+            for item in (top_video_payload.get("items", []) or [])
+            if _text_mentions_artist((item.get("snippet") or {}).get("channelTitle", ""), artist_query)
+        ),
+        None,
     )
 
     type_beat_payload = _safe_execute(
@@ -5797,7 +5793,40 @@ def _fetch_artist_context_from_youtube_api(youtube: Any, artist_name: str) -> di
         "top_video_titles": top_video_titles,
         "type_beat_search_results": type_beat_titles,
         "is_likely_underground": signal_count < 6,
+        # Raw "<artist> type beat" results, reused as competition data for that tag.
+        "type_beat_total_results": int((type_beat_payload.get("pageInfo") or {}).get("totalResults") or 0),
+        "type_beat_top_titles": [
+            (item.get("snippet") or {}).get("title", "") for item in (type_beat_payload.get("items", []) or [])
+        ][:5],
     }
+
+
+ARTIST_CONTEXT_CACHE_TTL_SECONDS = 7 * 24 * 3600
+ARTIST_CONTEXT_SEARCH_COST = 2 * tag_metrics_service.YOUTUBE_SEARCH_COST
+
+
+async def _artist_context_with_cache(youtube: Any, artist_name: str, quota_budget: list[int]) -> dict[str, Any]:
+    """Artist context from YouTube, shared by every user for a week so repeat artists cost no quota."""
+    key = _normalize_query_key(artist_name)
+    cached = await db.artist_context_cache.find_one({"artist_key": key}, {"_id": 0})
+    if cached and isinstance(cached.get("context"), dict):
+        fetched = cached.get("fetched_at")
+        if isinstance(fetched, datetime):
+            if fetched.tzinfo is None:
+                fetched = fetched.replace(tzinfo=timezone.utc)
+            if (datetime.now(timezone.utc) - fetched).total_seconds() <= ARTIST_CONTEXT_CACHE_TTL_SECONDS:
+                return cached["context"]
+    if quota_budget[0] < ARTIST_CONTEXT_SEARCH_COST:
+        raise RuntimeError("No YouTube quota left in this generation's budget for the artist lookup")
+    context = await asyncio.to_thread(_fetch_artist_context_from_youtube_api, youtube, artist_name)
+    quota_budget[0] -= ARTIST_CONTEXT_SEARCH_COST
+    if context.get("top_video_titles") or context.get("type_beat_search_results"):
+        await db.artist_context_cache.update_one(
+            {"artist_key": key},
+            {"$set": {"artist_key": key, "context": context, "fetched_at": datetime.now(timezone.utc)}},
+            upsert=True,
+        )
+    return context
 
 
 def _fetch_artist_context_no_api(artist_name: str) -> dict[str, Any]:
@@ -6478,6 +6507,10 @@ def _parse_llm_json_tags(response_text: str) -> list[str]:
     return [tag for tag in tags if isinstance(tag, str)]
 
 
+# Relevance (0-100) a tag needs to fill out a short list without proven search demand.
+TAG_TOP_UP_MIN_RELEVANCE = 60
+
+
 @api_router.post("/tags/generate")
 async def generate_tags(request: TagGenerationRequest, current_user: dict = Depends(get_current_user)):
     if not current_user.get("_execute_inline"):
@@ -6542,6 +6575,8 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
             "soundcloud": "missing",
         }
         youtube = None
+        # YouTube API units this generation may spend, shared by the artist lookup and tag scoring.
+        quota_budget = [tag_metrics_service.TAG_QUOTA_BUDGET_UNITS]
         try:
             # Get user's YouTube credentials if available for search
             user = await db.users.find_one({"id": current_user['id']})
@@ -6557,7 +6592,26 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
                 youtube = build('youtube', 'v3', developerKey=youtube_api_key)
                 source_status["youtube"] = "youtube_api_key"
 
-            artist_context = _fetch_artist_context_from_youtube_api(youtube, artist_name)
+            artist_context = await _artist_context_with_cache(youtube, artist_name, quota_budget)
+            if artist_context.get("type_beat_total_results"):
+                # The "<artist> type beat" search doubles as competition data for that tag.
+                await tag_metrics_service.set_cached_tag_metrics(
+                    db,
+                    tag_metrics_service.normalize_tag_key(f"{artist_name} type beat"),
+                    {
+                        "tag": f"{artist_name} type beat",
+                        "total_results": artist_context["type_beat_total_results"],
+                        "median_views": 0,
+                        "top_titles": artist_context.get("type_beat_top_titles") or [],
+                        "exact_title_matches": sum(
+                            1
+                            for title in artist_context.get("type_beat_top_titles") or []
+                            if tag_metrics_service.normalize_tag_key(f"{artist_name} type beat")
+                            in tag_metrics_service.normalize_tag_key(title)
+                        ),
+                        "searched": True,
+                    },
+                )
             source_status["youtube_context"] = "context_found" if (
                 artist_context.get("top_video_titles") or artist_context.get("type_beat_search_results")
             ) else "context_empty"
@@ -6665,6 +6719,8 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
             removed_counts=removed_tag_counts,
             source_map=candidate_source_map,
             min_score=min_publish_score,
+            quota_budget=quota_budget,
+            demand_lookup=tag_autocomplete_service.autocomplete_demand,
         )
         qualified_tags, qualified_scored, effective_min_score = tag_metrics_service.filter_scored_tags_by_threshold(
             pre_scored_all,
@@ -6728,7 +6784,7 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
         seen_exact: set[str] = set()
         seen_semantic: set[str] = set()
 
-        def try_push_tag(raw_tag: str, source: str, accepted_reason: str, max_tags: int) -> None:
+        def try_push_tag(raw_tag: str, source: str, accepted_reason: str, max_tags: int, min_score: int | None = None) -> None:
             if len(final_tags) >= max_tags:
                 if len(dropped_debug) < 80:
                     dropped_debug.append({"tag": raw_tag, "reason": "limit_reached"})
@@ -6767,7 +6823,7 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
 
             score_entry = scored_by_key.get(exact_key)
             composite_score = int((score_entry or {}).get("score") or 0)
-            if composite_score < effective_min_score:
+            if composite_score < (effective_min_score if min_score is None else min_score):
                 if len(dropped_debug) < 80:
                     dropped_debug.append(
                         {
@@ -6796,11 +6852,7 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
             if clean and not _is_low_intent_tag(clean):
                 llm_clean.append(clean)
 
-        remaining_lookups = max(
-            0,
-            tag_metrics_service.TAG_METRICS_MAX_LOOKUPS - int(tag_metrics_stats.get("api_calls") or 0),
-        )
-        if llm_clean and youtube is not None and remaining_lookups > 0:
+        if llm_clean:
             llm_scored, llm_metrics_stats = await tag_metrics_service.score_tags_with_youtube_proxy(
                 youtube=youtube,
                 db=db,
@@ -6813,7 +6865,8 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
                 removed_counts=removed_tag_counts,
                 source_map=candidate_source_map,
                 min_score=effective_min_score,
-                max_lookups=remaining_lookups,
+                quota_budget=quota_budget,
+                demand_lookup=tag_autocomplete_service.autocomplete_demand,
             )
             tag_metrics_stats["api_calls"] = int(tag_metrics_stats.get("api_calls") or 0) + int(
                 llm_metrics_stats.get("api_calls") or 0
@@ -6825,35 +6878,6 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
                 key = tag_metrics_service.normalize_tag_key(entry.get("tag", ""))
                 if key:
                     scored_by_key[key] = entry
-        elif llm_clean:
-            for tag in llm_clean:
-                key = _tag_exact_key(tag)
-                if key in scored_by_key:
-                    continue
-                relevance_entry = _score_tag_candidate(
-                    tag=tag,
-                    query=request.query,
-                    artist_name=artist_name,
-                    beat_tokens=beat_tokens,
-                    source="llm",
-                    kept_count=kept_tag_counts.get(key, 0),
-                    removed_count=removed_tag_counts.get(key, 0),
-                )
-                composite = tag_metrics_service.compute_composite_tag_score(
-                    metrics={
-                        "median_views": 0,
-                        "total_results": 0,
-                    },
-                    relevance_score=float(relevance_entry.get("score") or 0) * 0.65,
-                    relevance_reason="YouTube metrics unavailable; relevance-only estimate.",
-                )
-                scored_by_key[key] = tag_metrics_service.build_scored_tag_entry(
-                    tag=tag,
-                    source="llm",
-                    metrics={"median_views": 0, "total_results": 0},
-                    composite=composite,
-                    relevance_entry=relevance_entry,
-                )
 
         for tag in llm_clean:
             exact_key = _tag_exact_key(tag)
@@ -6867,6 +6891,23 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
             for tag in qualified_tags:
                 source = candidate_source_map.get(_tag_exact_key(tag), "qualified_seed")
                 try_push_tag(tag, source, "qualified_seed_fallback", max_tags=max_publish_tags)
+                if len(final_tags) >= tag_metrics_service.TAG_MIN_PACK_SIZE:
+                    break
+
+        # Still short (e.g. an underground artist few people search yet): top up with the most
+        # relevant remaining tags. They score lower, so they rank after the proven ones.
+        if len(final_tags) < tag_metrics_service.TAG_MIN_PACK_SIZE:
+            leftovers = sorted(
+                (
+                    entry for entry in scored_by_key.values()
+                    if float((entry.get("breakdown") or {}).get("relevance") or 0) >= TAG_TOP_UP_MIN_RELEVANCE
+                ),
+                key=lambda entry: -int(entry.get("score") or 0),
+            )
+            for entry in leftovers:
+                tag = str(entry.get("tag") or "")
+                source = candidate_source_map.get(_tag_exact_key(tag), str(entry.get("source") or "llm"))
+                try_push_tag(tag, source, "relevant_top_up", max_tags=max_publish_tags, min_score=0)
                 if len(final_tags) >= tag_metrics_service.TAG_MIN_PACK_SIZE:
                     break
 
@@ -9528,12 +9569,14 @@ spotlight_service = SpotlightService(
 )
 
 async def _ensure_indexes() -> None:
-    """Unique indexes the like/follow upserts and signup rely on. Failures are logged, not fatal:
+    """Unique indexes the like/follow upserts, signup and the shared tag caches rely on. Failures are logged, not fatal:
     existing duplicate data must be cleaned up before an index can be built."""
     specs = [
         (db.producer_likes, [("user_id", 1), ("producer_id", 1)], {"unique": True}),
         (db.producer_follows, [("user_id", 1), ("producer_id", 1)], {"unique": True}),
         (db.users, [("username", 1)], {"unique": True}),
+        (db.tag_autocomplete_cache, [("prefix", 1)], {"unique": True}),
+        (db.artist_context_cache, [("artist_key", 1)], {"unique": True}),
     ]
     for collection, keys, options in specs:
         try:
