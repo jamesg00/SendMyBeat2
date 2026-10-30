@@ -20,12 +20,22 @@ const theme = {
 export default function RootLayout() {
   return (
     <AuthProvider>
-      <DraftProvider>
-        <StudioProvider>
-          <RootStack />
-        </StudioProvider>
-      </DraftProvider>
+      <Session />
     </AuthProvider>
+  );
+}
+
+// Tag runs and the Upload Studio draft belong to whoever is signed in, so they start fresh
+// whenever the account changes (auth clears another account's saved work before this).
+function Session() {
+  const { ready, user } = useAuth();
+  if (!ready) return null;
+  return (
+    <DraftProvider key={user?.id ?? 'signed-out'}>
+      <StudioProvider>
+        <RootStack />
+      </StudioProvider>
+    </DraftProvider>
   );
 }
 

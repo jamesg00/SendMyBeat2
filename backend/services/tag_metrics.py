@@ -24,6 +24,34 @@ TAG_RELAXED_SCORE_DELTA = int(os.environ.get("TAG_RELAXED_SCORE_DELTA", "5"))
 TAG_MAX_PUBLISH_COUNT = int(os.environ.get("TAG_MAX_PUBLISH_COUNT", "50"))
 
 TAG_KEYWORD_CACHE_COLLECTION = "tag_keyword_cache"
+YOUTUBE_TAGS_CHAR_LIMIT = 500
+
+
+def youtube_tags_char_count(tags: list[str]) -> int:
+    """Characters YouTube counts toward its 500 limit: tags joined by commas, and a tag that
+    contains a space is wrapped in quotes, which count too."""
+    clean = [str(tag or "").strip() for tag in tags or []]
+    clean = [tag for tag in clean if tag]
+    if not clean:
+        return 0
+    return sum(len(tag) + (2 if " " in tag else 0) for tag in clean) + len(clean) - 1
+
+
+def fit_tags_to_char_limit(tags: list[str], limit: int = YOUTUBE_TAGS_CHAR_LIMIT) -> list[str]:
+    """Keep tags in order (best first) while they fit under YouTube's limit. A tag that doesn't fit
+    is skipped rather than ending the list, so shorter tags further down can use the space left."""
+    kept: list[str] = []
+    used = 0
+    for tag in tags or []:
+        clean = str(tag or "").strip()
+        if not clean:
+            continue
+        cost = len(clean) + (2 if " " in clean else 0) + (1 if kept else 0)
+        if used + cost > limit:
+            continue
+        kept.append(clean)
+        used += cost
+    return kept
 
 
 def normalize_tag_key(tag: str) -> str:

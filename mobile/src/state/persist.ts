@@ -32,3 +32,26 @@ export function removeJSON(name: string) {
     // already gone
   }
 }
+
+// Saved work (this folder and Upload Studio's draft folder) belongs to one account.
+const WORK_DIRS = ['state', 'studio'];
+
+/** Forget all saved work on this device (on sign-out). */
+export function clearSavedWork() {
+  if (!dir) return;
+  for (const name of WORK_DIRS) {
+    try {
+      const d = new Directory(Paths.document, name);
+      if (d.exists) d.delete();
+    } catch {
+      // already gone
+    }
+  }
+}
+
+/** Keep saved work only if it was made by this account; a different account starts clean. */
+export function claimSavedWork(userId: string) {
+  if (readJSON<{ id: string }>('owner')?.id === userId) return;
+  clearSavedWork();
+  writeJSON('owner', { id: userId });
+}

@@ -6877,7 +6877,10 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
 
         final_tags = sorted(final_tags, key=rank_final_tag)
         final_tags = final_tags[:max_publish_tags]
-        selected_tags_debug = selected_tags_debug[:max_publish_tags]
+        # Never hand back more than YouTube accepts: the best-ranked tags that fit in 500 characters.
+        final_tags = tag_metrics_service.fit_tags_to_char_limit(final_tags)
+        kept_keys = {_tag_exact_key(tag) for tag in final_tags}
+        selected_tags_debug = [entry for entry in selected_tags_debug if _tag_exact_key(entry.get("tag", "")) in kept_keys]
 
         source_counts = {
             "youtube_seed_tags": len(youtube_type_beat_tags),
@@ -7085,6 +7088,12 @@ async def update_tag_history(tag_id: str, request: TagHistoryUpdateRequest, curr
     unique_tags = _normalize_tag_list(request.tags, limit=120)
     if not unique_tags:
         raise HTTPException(status_code=400, detail="Tags are required")
+    used_chars = tag_metrics_service.youtube_tags_char_count(unique_tags)
+    if used_chars > tag_metrics_service.YOUTUBE_TAGS_CHAR_LIMIT:
+        raise HTTPException(
+            status_code=400,
+            detail=f"These tags use {used_chars} of YouTube's {tag_metrics_service.YOUTUBE_TAGS_CHAR_LIMIT} characters. Remove some and save again.",
+        )
 
     excluded_existing = _normalize_excluded_tags(existing.get("excluded_tags"), limit=120)
     excluded_added = _normalize_excluded_tags(request.excluded_tags, limit=120)
@@ -7345,7 +7354,7 @@ Candidate pool:
             raise ValueError("No tags returned from AI")
 
         await consume_credit(current_user['id'])
-        return TagJoinResponse(tags=final_tags)
+        return TagJoinResponse(tags=tag_metrics_service.fit_tags_to_char_limit(final_tags))
     except Exception as e:
         logging.error(
             f"Failed to parse AI joined tags: {str(e)} | "

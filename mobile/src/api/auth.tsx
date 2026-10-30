@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import { loadToken, saveToken, setUnauthorizedHandler } from './client';
 import * as endpoints from './endpoints';
 import type { User } from './endpoints';
+import { claimSavedWork, clearSavedWork } from '@/state/persist';
 import { resetSocial } from '@/state/social';
 
 type AuthState = {
@@ -21,6 +22,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     await saveToken(null);
+    clearSavedWork();
     setUser(null);
     resetSocial();
   }, []);
@@ -29,7 +31,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUnauthorizedHandler(() => void signOut());
     (async () => {
       try {
-        if (await loadToken()) setUser(await endpoints.me());
+        if (await loadToken()) {
+          const me = await endpoints.me();
+          claimSavedWork(me.id);
+          setUser(me);
+        }
       } catch {
         await saveToken(null);
       } finally {
@@ -41,6 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const finish = async (res: endpoints.TokenResponse) => {
     await saveToken(res.access_token);
+    claimSavedWork(res.user.id);
     setUser(res.user);
   };
 
