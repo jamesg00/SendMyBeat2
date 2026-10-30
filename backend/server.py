@@ -99,6 +99,7 @@ BACKEND_URL = os.environ.get('BACKEND_URL', 'https://api.sendmybeat.com')
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://www.sendmybeat.com")
 CREATOR_USER_ID = os.environ.get("CREATOR_USER_ID", "").strip()
 CREATOR_USERNAME = os.environ.get("CREATOR_USERNAME", "deadat18").strip().lower()
+# Only used to log the ids of former username-based admins; admin access is by ADMIN_USER_IDS.
 ADMIN_USERNAMES = {
     value.strip().lower()
     for value in os.environ.get("ADMIN_USERNAMES", "deadat18").split(",")
@@ -165,10 +166,26 @@ CORS_ORIGINS = build_cors_origins()
 
 
 def _client_ip(request: Request) -> str:
-    forwarded_for = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
-    real_ip = request.headers.get("x-real-ip", "").strip()
-    host = forwarded_for or real_ip or (request.client.host if request.client else "unknown")
-    return host or "unknown"
+    """The caller's address for rate limiting.
+
+    Forwarding headers are only believed when the connection itself comes from our reverse
+    proxy (a private/loopback address, e.g. Caddy or the Docker network). Even then only the
+    rightmost X-Forwarded-For entry is used: the proxy appends the address it saw, while
+    everything to its left was sent by the client and can be forged.
+    """
+    peer = request.client.host if request.client else ""
+    try:
+        from_proxy = bool(peer) and (ipaddress.ip_address(peer).is_private or ipaddress.ip_address(peer).is_loopback)
+    except ValueError:
+        from_proxy = False
+    if from_proxy:
+        hops = [h.strip() for h in request.headers.get("x-forwarded-for", "").split(",") if h.strip()]
+        if hops:
+            return hops[-1]
+        real_ip = request.headers.get("x-real-ip", "").strip()
+        if real_ip:
+            return real_ip
+    return peer or "unknown"
 
 
 def _get_request_timezone(request: Request | None) -> timezone | ZoneInfo:
@@ -2086,20 +2103,62 @@ async def check_and_use_credit(user_id: str, consume: bool = True) -> bool:
     return True
 
 async def consume_credit(user_id: str) -> None:
-    """Consume one credit for free users after a successful operation."""
-    status = await get_user_subscription_status(user_id)
-    if status['plan'] == "pro":
-        return
-    if status['plan'] in {"plus", "max", "pro"}:
-        await db.users.update_one(
-            {"id": user_id},
-            {"$inc": {"plus_monthly_ai_used": 1}}
-        )
-        return
-    await db.users.update_one(
-        {"id": user_id},
-        {"$inc": {"daily_usage_count": 1}}
+    """No-op, kept for existing callers: AI credits are now taken up front by ensure_has_credit
+    (one atomic update per queued job) and given back by refund_credit if the job fails."""
+    return None
+
+
+async def _reserve_ai_credit(user_id: str) -> bool:
+    """Take one AI credit in a single conditional update, so parallel requests can't all pass
+    a check and then spend credits that aren't there."""
+    status = await get_user_subscription_status(user_id)  # also resets the daily/monthly counters
+    plan = status.get("plan")
+    if plan == "pro":
+        return True
+    if plan in {"plus", "max"}:
+        if status.get("cost_guardrail_hit"):
+            return False
+        field, limit = "plus_monthly_ai_used", int(status.get("credits_total") or 0)
+    else:
+        field, limit = "daily_usage_count", FREE_DAILY_AI_CREDITS
+    result = await db.users.update_one(
+        {"id": user_id, "$or": [{field: {"$lt": limit}}, {field: {"$exists": False}}]},
+        {"$inc": {field: 1}},
     )
+    return int(getattr(result, "modified_count", 0) or 0) == 1
+
+
+async def refund_credit(user_id: str) -> None:
+    """Give back a credit taken by ensure_has_credit when the work didn't happen."""
+    status = await get_user_subscription_status(user_id)
+    plan = status.get("plan")
+    if plan == "pro":
+        return
+    field = "plus_monthly_ai_used" if plan in {"plus", "max"} else "daily_usage_count"
+    await db.users.update_one({"id": user_id, field: {"$gt": 0}}, {"$inc": {field: -1}})
+
+
+async def _refund_job_credit(job: dict) -> None:
+    if (job.get("payload") or {}).get("credit_reserved") and job.get("user_id"):
+        try:
+            await refund_credit(str(job["user_id"]))
+        except Exception as exc:
+            logging.error(f"Could not refund credit for job {job.get('id')}: {exc}")
+
+
+async def _queue_paid_job(*, current_user: dict, job_type: str, payload: dict, message: str, feature_name: str) -> dict:
+    """Take a credit, then queue the job; give the credit back if queueing fails."""
+    await ensure_has_credit(current_user["id"], feature_name)
+    try:
+        return await _create_background_job(
+            current_user=current_user,
+            job_type=job_type,
+            payload={**payload, "credit_reserved": True},
+            message=message,
+        )
+    except Exception:
+        await refund_credit(current_user["id"])
+        raise
 
 async def check_and_use_upload_credit(user_id: str) -> bool:
     """Check if user has upload credits and use one. Returns True if successful."""
@@ -2158,10 +2217,10 @@ async def consume_upload_credit(user_id: str) -> None:
 
 async def ensure_has_credit(user_id: str, feature_name: str = "generations") -> None:
     """
-    Check if user has credits. If not, raise HTTPException(402).
-    Does not consume credit here; consumer must call consume_credit() later.
+    Take one credit, or raise HTTPException(402) if none are left.
+    The credit is spent now; call refund_credit() if the work then doesn't happen.
     """
-    has_credit = await check_and_use_credit(user_id, consume=False)
+    has_credit = await _reserve_ai_credit(user_id)
     if not has_credit:
         status = await get_user_subscription_status(user_id)
         guardrail_hit = bool(status.get("cost_guardrail_hit"))
@@ -2225,9 +2284,21 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 
 
 def _is_admin_user(user: dict) -> bool:
+    # By id only: usernames can be registered by anyone (e.g. after an account is deleted).
     user_id = str(user.get("id") or "").strip()
-    username = str(user.get("username") or "").strip().lower()
-    return (user_id and user_id in ADMIN_USER_IDS) or (username and username in ADMIN_USERNAMES)
+    return bool(user_id) and user_id in ADMIN_USER_IDS
+
+
+async def _log_admin_id_hint() -> None:
+    """ADMIN_USERNAMES no longer grants admin. Log those users' ids so they can be moved to ADMIN_USER_IDS."""
+    if ADMIN_USER_IDS or not ADMIN_USERNAMES:
+        return
+    try:
+        rows = await db.users.find({"username": {"$in": list(ADMIN_USERNAMES)}}, {"_id": 0, "id": 1, "username": 1}).to_list(20)
+    except Exception:
+        rows = []
+    found = ", ".join(f"{r.get('username')}={r.get('id')}" for r in rows) or "none found"
+    logging.warning(f"ADMIN_USER_IDS is empty, so nobody is admin. Set ADMIN_USER_IDS in backend/.env. Ids for ADMIN_USERNAMES: {found}")
 
 
 def _can_view_tag_debug(user: dict) -> bool:
@@ -3876,7 +3947,6 @@ async def _process_youtube_upload_job(job: dict) -> None:
 
 async def _build_channel_analytics_job_payload(current_user: dict) -> dict[str, Any]:
     await _ensure_pro_user(current_user, "Channel analysis")
-    await ensure_has_credit(current_user['id'], "analytics")
 
     connection = await db.youtube_connections.find_one({"user_id": current_user['id']})
     if not connection:
@@ -4119,6 +4189,7 @@ async def _process_channel_analytics_job(job: dict) -> None:
         result = await _execute_channel_analytics_job(job)
         await _update_upload_job(job_id, status="succeeded", progress=100, message="Channel analysis complete.", result=result, error=None, extra_updates={"completed_at": _safe_iso_now(), "worker_id": UPLOAD_JOB_WORKER_ID})
     except Exception as exc:
+        await _refund_job_credit(job)
         logging.error(f"Channel analytics job {job_id} failed: {exc}")
         error_message = _friendly_youtube_error(exc)
         await _update_upload_job(job_id, status="failed", progress=100, message="Channel analysis failed.", error=error_message, extra_updates={"failed_at": _safe_iso_now(), "worker_id": UPLOAD_JOB_WORKER_ID})
@@ -4375,6 +4446,7 @@ async def _process_beat_analysis_job(job: dict) -> None:
         result = await _execute_beat_analysis_job(job)
         await _update_upload_job(job_id, status="succeeded", progress=100, message="Beat analysis complete.", result=result, error=None, extra_updates={"completed_at": _safe_iso_now(), "worker_id": UPLOAD_JOB_WORKER_ID})
     except Exception as exc:
+        await _refund_job_credit(job)
         error_message = str(exc)
         logging.error(f"Beat analysis job {job_id} failed: {error_message}")
         await _update_upload_job(job_id, status="failed", progress=100, message="Beat analysis failed.", error=error_message, extra_updates={"failed_at": _safe_iso_now(), "worker_id": UPLOAD_JOB_WORKER_ID})
@@ -4493,6 +4565,7 @@ async def _process_beat_fix_job(job: dict) -> None:
         result = await _execute_beat_fix_job(job)
         await _update_upload_job(job_id, status="succeeded", progress=100, message="Beat fixes complete.", result=result, error=None, extra_updates={"completed_at": _safe_iso_now(), "worker_id": UPLOAD_JOB_WORKER_ID})
     except Exception as exc:
+        await _refund_job_credit(job)
         error_message = str(exc)
         logging.error(f"Beat fix job {job_id} failed: {error_message}")
         await _update_upload_job(job_id, status="failed", progress=100, message="Beat fix failed.", error=error_message, extra_updates={"failed_at": _safe_iso_now(), "worker_id": UPLOAD_JOB_WORKER_ID})
@@ -4659,6 +4732,7 @@ async def _process_tag_generation_job(job: dict) -> None:
         result = await _execute_tag_generation_job(job)
         await _update_upload_job(job_id, status="succeeded", progress=100, message="Tag generation complete.", result=result, error=None, extra_updates={"completed_at": _safe_iso_now(), "worker_id": UPLOAD_JOB_WORKER_ID})
     except Exception as exc:
+        await _refund_job_credit(job)
         error_message = str(exc)
         logging.error(f"Tag generation job {job_id} failed: {error_message}")
         await _update_upload_job(job_id, status="failed", progress=100, message="Tag generation failed.", error=error_message, extra_updates={"failed_at": _safe_iso_now(), "worker_id": UPLOAD_JOB_WORKER_ID})
@@ -4687,6 +4761,7 @@ async def _process_tag_join_job(job: dict) -> None:
         result = await _execute_tag_join_job(job)
         await _update_upload_job(job_id, status="succeeded", progress=100, message="Tag join complete.", result=result, error=None, extra_updates={"completed_at": _safe_iso_now(), "worker_id": UPLOAD_JOB_WORKER_ID})
     except Exception as exc:
+        await _refund_job_credit(job)
         error_message = str(exc)
         logging.error(f"Tag join job {job_id} failed: {error_message}")
         await _update_upload_job(job_id, status="failed", progress=100, message="Tag join failed.", error=error_message, extra_updates={"failed_at": _safe_iso_now(), "worker_id": UPLOAD_JOB_WORKER_ID})
@@ -4822,7 +4897,8 @@ async def register(user_data: UserRegister, request: Request):
         raise HTTPException(status_code=400, detail="Username already exists")
     
     # Hash password
-    hashed_password = bcrypt.hash(user_data.password)
+    # bcrypt is deliberately slow; run it off the event loop so other requests keep moving.
+    hashed_password = await asyncio.to_thread(bcrypt.hash, user_data.password)
     
     # Create user
     user = User(username=user_data.username, is_admin=False)
@@ -4847,7 +4923,7 @@ async def login(user_data: UserLogin, request: Request):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
     # Verify password
-    if not bcrypt.verify(user_data.password, user_doc['password_hash']):
+    if not await asyncio.to_thread(bcrypt.verify, user_data.password, user_doc['password_hash']):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
     # Generate token
@@ -5083,11 +5159,12 @@ async def get_youtube_analytics(current_user: dict = Depends(get_current_user)):
             active_job = await _find_active_background_job(current_user=current_user, job_type="channel_analytics", cache_key=cache_key)
             if active_job:
                 return {"success": True, "queued": True, "message": "Channel analysis already in progress.", "job": _sanitize_upload_job_doc(active_job)}
-        job_doc = await _create_background_job(
+        job_doc = await _queue_paid_job(
             current_user=current_user,
             job_type="channel_analytics",
             payload=payload,
             message="Queued channel analytics job.",
+            feature_name="analytics",
         )
         return {"success": True, "queued": True, "message": "Channel analysis queued.", "job": _sanitize_upload_job_doc(job_doc)}
     except HTTPException:
@@ -6406,7 +6483,6 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
             window_seconds=600,
             detail_message="Too many tag generation requests. Please wait a few minutes.",
         )
-        await ensure_has_credit(current_user['id'], "generations")
         payload = {
             "query": request.query,
             "custom_tags": [tag for tag in (request.custom_tags or []) if isinstance(tag, str) and tag.strip()],
@@ -6417,10 +6493,11 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
         if active_job:
             return {"success": True, "queued": True, "message": "Tag generation already in progress.", "job": _sanitize_upload_job_doc(active_job)}
         payload["cache_key"] = cache_key
-        job_doc = await _create_background_job(
+        job_doc = await _queue_paid_job(
             current_user=current_user,
             job_type="tag_generation",
             payload=payload,
+            feature_name="generations",
             message="Queued tag generation.",
         )
         return {"success": True, "queued": True, "message": "Tag generation queued.", "job": _sanitize_upload_job_doc(job_doc)}
@@ -7098,7 +7175,6 @@ async def join_tags_ai(request: TagJoinRequest, current_user: dict = Depends(get
             window_seconds=600,
             detail_message="Too many tag join requests. Please wait a few minutes.",
         )
-        await ensure_has_credit(current_user['id'], "generations")
         payload = {
             "queries": request.queries,
             "candidate_tags": request.candidate_tags,
@@ -7111,10 +7187,11 @@ async def join_tags_ai(request: TagJoinRequest, current_user: dict = Depends(get
         if active_job:
             return {"success": True, "queued": True, "message": "Tag join already in progress.", "job": _sanitize_upload_job_doc(active_job)}
         payload["cache_key"] = cache_key
-        job_doc = await _create_background_job(
+        job_doc = await _queue_paid_job(
             current_user=current_user,
             job_type="tag_join",
             payload=payload,
+            feature_name="generations",
             message="Queued tag join.",
         )
         return {"success": True, "queued": True, "message": "Tag join queued.", "job": _sanitize_upload_job_doc(job_doc)}
@@ -7551,12 +7628,12 @@ async def analyze_beat(request: BeatAnalysisRequest, current_user: dict = Depend
             window_seconds=600,
             detail_message="Too many beat analysis requests. Please wait a few minutes.",
         )
-        await ensure_has_credit(current_user['id'], "beat analyses")
-        job_doc = await _create_background_job(
+        job_doc = await _queue_paid_job(
             current_user=current_user,
             job_type="beat_analysis",
             payload=request.model_dump(),
             message="Queued beat analysis job.",
+            feature_name="beat analyses",
         )
         return {"success": True, "queued": True, "message": "Beat analysis queued.", "job": _sanitize_upload_job_doc(job_doc)}
     except HTTPException:
@@ -7574,6 +7651,7 @@ SPOTLIGHT_PROFILE_PROJECTION = {
     "avatar_url": 1,
     "bio": 1,
     "top_beat_url": 1,
+    "top_beat": 1,
     "social_links": 1,
     "tags": 1,
     "verification_status": 1,
@@ -7665,7 +7743,7 @@ async def _refresh_spotlight_metrics_for_profiles(profile_docs: list[dict]) -> N
         if not youtube_url:
             return
         async with semaphore:
-            top_beats, channel_perf = await asyncio.to_thread(_fetch_channel_top_viewed_beats, youtube_url, 5)
+            top_beats, channel_perf = await asyncio.to_thread(_fetch_channel_latest_uploads, youtube_url, 5)
         next_views = int(channel_perf.get("total_views") or 0)
         next_likes = sum(int(beat.get("likes") or 0) for beat in top_beats)
         if next_views <= 0 and next_likes <= 0:
@@ -7834,29 +7912,33 @@ def _youtube_get_channel_id_from_hints(hints: dict, api_key: str) -> str | None:
                 if items:
                     return items[0].get("snippet", {}).get("channelId")
 
-        search_term = hints.get("handle") or hints.get("legacy_name")
-        if search_term:
+        lookups = []
+        if hints.get("handle"):
+            lookups.append({"forHandle": f"@{hints['handle']}"})
+        if hints.get("legacy_name"):
+            lookups.append({"forUsername": hints["legacy_name"]})
+            lookups.append({"forHandle": f"@{hints['legacy_name']}"})
+        for lookup in lookups:
             r = requests.get(
-                "https://www.googleapis.com/youtube/v3/search",
-                params={
-                    "part": "snippet",
-                    "type": "channel",
-                    "q": search_term,
-                    "maxResults": 1,
-                    "key": api_key,
-                },
+                "https://www.googleapis.com/youtube/v3/channels",
+                params={"part": "id", **lookup, "key": api_key},
                 timeout=12,
             )
             if r.status_code < 400:
                 items = r.json().get("items", [])
                 if items:
-                    return items[0].get("snippet", {}).get("channelId")
+                    return items[0].get("id")
     except Exception:
         return None
     return None
 
 
-def _fetch_channel_top_viewed_beats(youtube_url: str, top_k: int = 5) -> tuple[list[dict], dict]:
+def _fetch_channel_latest_uploads(youtube_url: str, top_k: int = 5) -> tuple[list[dict], dict]:
+    """A channel's newest uploads (newest first) and its totals.
+
+    Uses channels.list + playlistItems.list + videos.list (1 quota unit each) instead of
+    search.list, which costs 100 and has its own daily cap.
+    """
     api_key = os.environ.get("YOUTUBE_API_KEY") or os.environ.get("GOOGLE_API_KEY")
     if not api_key:
         return [], {}
@@ -7866,10 +7948,11 @@ def _fetch_channel_top_viewed_beats(youtube_url: str, top_k: int = 5) -> tuple[l
         return [], {}
 
     performance = {}
+    uploads_playlist_id = ""
     try:
         ch = requests.get(
             "https://www.googleapis.com/youtube/v3/channels",
-            params={"part": "statistics,snippet", "id": channel_id, "key": api_key},
+            params={"part": "statistics,snippet,contentDetails", "id": channel_id, "key": api_key},
             timeout=12,
         )
         if ch.status_code < 400:
@@ -7881,26 +7964,26 @@ def _fetch_channel_top_viewed_beats(youtube_url: str, top_k: int = 5) -> tuple[l
                     "total_views": int(stats.get("viewCount", 0) or 0),
                     "total_videos": int(stats.get("videoCount", 0) or 0),
                 }
+                uploads_playlist_id = items[0].get("contentDetails", {}).get("relatedPlaylists", {}).get("uploads", "")
     except Exception:
         performance = {}
 
+    if not uploads_playlist_id:
+        return [], performance
+
     try:
-        s = requests.get(
-            "https://www.googleapis.com/youtube/v3/search",
-            params={
-                "part": "snippet",
-                "channelId": channel_id,
-                "type": "video",
-                "maxResults": 25,
-                "order": "viewCount",
-                "key": api_key,
-            },
+        pl = requests.get(
+            "https://www.googleapis.com/youtube/v3/playlistItems",
+            params={"part": "contentDetails", "playlistId": uploads_playlist_id, "maxResults": max(1, min(top_k, 50)), "key": api_key},
             timeout=15,
         )
-        if s.status_code >= 400:
+        if pl.status_code >= 400:
             return [], performance
-        items = s.json().get("items", [])
-        video_ids = [i.get("id", {}).get("videoId") for i in items if i.get("id", {}).get("videoId")]
+        video_ids = [
+            i.get("contentDetails", {}).get("videoId")
+            for i in pl.json().get("items", [])
+            if i.get("contentDetails", {}).get("videoId")
+        ]
         if not video_ids:
             return [], performance
 
@@ -7923,14 +8006,16 @@ def _fetch_channel_top_viewed_beats(youtube_url: str, top_k: int = 5) -> tuple[l
             sn = item.get("snippet", {})
             st = item.get("statistics", {})
             title = sn.get("title") or "Untitled"
+            thumbs = sn.get("thumbnails") or {}
             beats.append({
                 "title": title,
                 "url": f"https://www.youtube.com/watch?v={vid}" if vid else None,
                 "views": int(st.get("viewCount", 0) or 0),
                 "likes": int(st.get("likeCount", 0) or 0),
                 "published_at": sn.get("publishedAt"),
+                "thumbnail": (thumbs.get("medium") or thumbs.get("default") or {}).get("url"),
             })
-        beats = sorted(beats, key=lambda b: b.get("views", 0), reverse=True)
+        beats = sorted(beats, key=lambda b: b.get("published_at") or "", reverse=True)
         return beats[:max(1, top_k)], performance
     except Exception:
         return [], performance
@@ -8020,6 +8105,7 @@ async def get_producer_stats(user_id: str):
     if cached and isinstance(cached.get("payload"), dict):
         return cached["payload"]
 
+    await _ensure_producer_youtube_channel_id(user_id)
     payload = await _compute_producer_stats_payload(user_id)
     return _serialize_for_cache(payload)
 
@@ -8037,8 +8123,6 @@ async def update_my_producer_profile(
         update_fields['avatar_url'] = update_data.avatar_url
     if update_data.banner_url is not None:
         update_fields['banner_url'] = update_data.banner_url
-    if update_data.top_beat_url is not None:
-        update_fields['top_beat_url'] = update_data.top_beat_url
     if update_data.social_links is not None:
         update_fields['social_links'] = update_data.social_links
     if update_data.tags is not None:
@@ -8052,6 +8136,11 @@ async def update_my_producer_profile(
         {"$set": update_fields},
         upsert=True
     )
+
+    if update_data.top_beat_url is not None:
+        await _apply_top_beat_url_from_profile_form(current_user['id'], update_data.top_beat_url)
+
+    await db.producer_stats_cache.delete_many({"user_id": current_user['id']})
 
     # Return updated
     updated = await db.producer_profiles.find_one({"user_id": current_user['id']})
@@ -8130,6 +8219,300 @@ async def unfollow_producer(producer_id: str, current_user: dict = Depends(get_c
     return await _set_producer_relation(kind="follow", actor_id=current_user["id"], producer_id=producer_id, on=False)
 
 
+async def _ensure_producer_youtube_channel_id(user_id: str) -> None:
+    """Remember the channel id of a producer who connected YouTube, so their profile can show
+    latest uploads without them pasting a channel link. One channels.list(mine) call, once."""
+    profile = await db.producer_profiles.find_one(
+        {"user_id": user_id}, {"_id": 0, "social_links": 1, "youtube_channel_id": 1, "youtube_channel_lookup_at": 1}
+    )
+    if not profile or profile.get("youtube_channel_id"):
+        return
+    if ((profile.get("social_links") or {}).get("youtube") or "").strip():
+        return
+    # This runs from a public endpoint: try at most once a day per producer, success or not.
+    last_try = profile.get("youtube_channel_lookup_at")
+    if isinstance(last_try, datetime):
+        if last_try.tzinfo is None:
+            last_try = last_try.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) - last_try < timedelta(hours=24):
+            return
+    if not await db.youtube_connections.find_one({"user_id": user_id}, {"_id": 0, "user_id": 1}):
+        return
+    await db.producer_profiles.update_one(
+        {"user_id": user_id}, {"$set": {"youtube_channel_lookup_at": datetime.now(timezone.utc)}}
+    )
+    try:
+        credentials = await refresh_youtube_token(user_id)
+        youtube = build("youtube", "v3", credentials=credentials)
+        response = await asyncio.to_thread(lambda: youtube.channels().list(part="id", mine=True).execute())
+        channel_id = ((response.get("items") or [{}])[0]).get("id")
+    except Exception as exc:
+        logging.warning(f"Could not resolve YouTube channel for {user_id}: {exc}")
+        return
+    if channel_id:
+        await db.producer_profiles.update_one({"user_id": user_id}, {"$set": {"youtube_channel_id": channel_id}})
+
+
+# --- Top beat: a YouTube video or an uploaded audio file -----------------------------------
+
+TOP_BEAT_MAX_BYTES = 25 * 1024 * 1024
+TOP_BEAT_AUDIO_TYPES = {".mp3": "audio/mpeg", ".m4a": "audio/mp4", ".wav": "audio/wav", ".ogg": "audio/ogg", ".flac": "audio/flac"}
+_YOUTUBE_VIDEO_ID = re.compile(r"(?:youtube\.com/(?:watch\?(?:.*&)?v=|shorts/|embed/|live/)|youtu\.be/)([A-Za-z0-9_-]{11})")
+
+
+class TopBeatLinkRequest(BaseModel):
+    url: str
+    title: Optional[str] = None
+
+
+def _youtube_video_id(url: str) -> str | None:
+    match = _YOUTUBE_VIDEO_ID.search((url or "").strip())
+    return match.group(1) if match else None
+
+
+def _youtube_video_title(video_id: str) -> str | None:
+    api_key = os.environ.get("YOUTUBE_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+    if not api_key:
+        return None
+    try:
+        r = requests.get(
+            "https://www.googleapis.com/youtube/v3/videos",
+            params={"part": "snippet", "id": video_id, "key": api_key},
+            timeout=10,
+        )
+        items = r.json().get("items", []) if r.status_code < 400 else []
+        return (items[0].get("snippet", {}).get("title") if items else None) or None
+    except Exception:
+        return None
+
+
+async def _delete_top_beat_file(user_id: str, file_id: str | None) -> None:
+    if not file_id:
+        return
+    upload_doc = await db.uploads.find_one({"id": file_id, "user_id": user_id, "file_type": "top_beat"})
+    if upload_doc:
+        try:
+            media_storage.delete(upload_doc)
+        except Exception as exc:
+            logging.warning(f"Could not delete top beat file {file_id}: {exc}")
+        await db.uploads.delete_one({"id": file_id})
+
+
+async def _swap_top_beat(user_id: str, top_beat: dict | None) -> None:
+    """Set the profile's top beat in one atomic write, then delete the audio file it replaced.
+
+    Two uploads racing each read back a different previous value, so every replaced file is
+    cleaned up exactly once and none is left orphaned.
+    """
+    from pymongo import ReturnDocument
+
+    previous = await db.producer_profiles.find_one_and_update(
+        {"user_id": user_id},
+        {"$set": {
+            "top_beat": top_beat,
+            "top_beat_url": (top_beat or {}).get("url") or "",
+            "updated_at": datetime.now(timezone.utc),
+        }},
+        projection={"_id": 0, "top_beat": 1},
+        upsert=True,
+        return_document=ReturnDocument.BEFORE,
+    )
+    old = (previous or {}).get("top_beat") or {}
+    if old.get("kind") == "audio" and old.get("file_id") != (top_beat or {}).get("file_id"):
+        await _delete_top_beat_file(user_id, old.get("file_id"))
+    await db.producer_stats_cache.delete_many({"user_id": user_id})
+
+
+async def _apply_top_beat_url_from_profile_form(user_id: str, url: str) -> None:
+    """The website's profile form sends top_beat_url on every save; only act when it changed."""
+    profile = await db.producer_profiles.find_one({"user_id": user_id}, {"_id": 0, "top_beat": 1, "top_beat_url": 1}) or {}
+    current = ((profile.get("top_beat") or {}).get("url") or profile.get("top_beat_url") or "").strip()
+    if url == current:
+        return
+    if not url:
+        await _swap_top_beat(user_id, None)
+        return
+    video_id = _youtube_video_id(url)
+    if video_id:
+        top_beat = {
+            "kind": "youtube",
+            "video_id": video_id,
+            "url": f"https://www.youtube.com/watch?v={video_id}",
+            "thumbnail": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg",
+            "title": "Top beat",
+        }
+    else:
+        # Any other https page (BeatStars, SoundCloud…) is shown as a link to open.
+        top_beat = {"kind": "link", "url": url, "title": "Top beat"}
+    top_beat["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await _swap_top_beat(user_id, top_beat)
+
+
+@api_router.put("/producers/top-beat")
+async def set_top_beat_link(request: TopBeatLinkRequest, current_user: dict = Depends(get_current_user)):
+    """Set the profile's top beat to a YouTube video."""
+    _enforce_action_rate_limit(
+        f"top_beat_link:{current_user['id']}",
+        limit=10,
+        window_seconds=600,
+        detail_message="You've changed your top beat a lot. Try again in a few minutes.",
+    )
+    video_id = _youtube_video_id(request.url)
+    if not video_id:
+        raise HTTPException(status_code=400, detail="Paste a YouTube video link (youtube.com/watch?v=… or youtu.be/…).")
+    title = (request.title or "").strip()[:100] or await asyncio.to_thread(_youtube_video_title, video_id) or "Top beat"
+    top_beat = {
+        "kind": "youtube",
+        "video_id": video_id,
+        "url": f"https://www.youtube.com/watch?v={video_id}",
+        "thumbnail": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg",
+        "title": title,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await _swap_top_beat(current_user["id"], top_beat)
+    return {"top_beat": top_beat}
+
+
+@api_router.post("/producers/top-beat/audio")
+async def upload_top_beat_audio(
+    file: UploadFile = File(...),
+    title: str = Form(""),
+    current_user: dict = Depends(get_current_user),
+):
+    """Upload an audio file as the profile's top beat; anyone viewing the profile can play it."""
+    if not file or not file.filename:
+        raise HTTPException(status_code=400, detail="No audio file provided.")
+    file_ext = Path(file.filename).suffix.lower()
+    _assert_content_type_matches(file, expected_prefixes=("audio/",))
+    sample = await file.read(8192)
+    await file.seek(0)
+    detected_ext = _sniff_audio_format(sample)
+    if not detected_ext:
+        raise HTTPException(status_code=400, detail="Uploaded audio contents are invalid or unsupported.")
+    _assert_extension_matches_signature(
+        file_ext=file_ext,
+        detected_ext=detected_ext,
+        allowed_extensions=list(TOP_BEAT_AUDIO_TYPES),
+        detail_message="Use an MP3, M4A, WAV, OGG or FLAC file.",
+    )
+
+    user_id = current_user["id"]
+    _enforce_action_rate_limit(
+        f"top_beat_upload:{user_id}",
+        limit=10,
+        window_seconds=600,
+        detail_message="You've uploaded a lot of top beats. Try again in a few minutes.",
+    )
+    file_id = str(uuid.uuid4())
+    storage_meta = await media_storage.save_upload_file(
+        upload_file=file, file_id=file_id, file_ext=file_ext, max_bytes=TOP_BEAT_MAX_BYTES
+    )
+    upload_doc = {
+        "id": file_id,
+        "user_id": user_id,
+        "original_filename": file.filename,
+        "stored_filename": storage_meta["stored_filename"],
+        "file_type": "top_beat",
+        "file_path": storage_meta["file_path"],
+        "storage_backend": storage_meta["storage_backend"],
+        "storage_key": storage_meta["storage_key"],
+        "file_size": storage_meta["file_size"],
+        "uploaded_at": datetime.now(timezone.utc).isoformat(),
+    }
+    top_beat = {
+        "kind": "audio",
+        "file_id": file_id,
+        # The version suffix makes players fetch the new file instead of a cached old one.
+        "url": f"{BACKEND_URL}/api/producers/{user_id}/top-beat/audio?v={file_id[:8]}",
+        "title": (title or "").strip()[:100] or Path(file.filename).stem[:100],
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        await db.uploads.insert_one(upload_doc)
+        await _swap_top_beat(user_id, top_beat)
+    except Exception:
+        # Don't leave a file nobody points to.
+        try:
+            media_storage.delete(upload_doc)
+        except Exception:
+            pass
+        await db.uploads.delete_one({"id": file_id})
+        raise
+    return {"top_beat": top_beat}
+
+
+@api_router.delete("/producers/top-beat")
+async def clear_top_beat(current_user: dict = Depends(get_current_user)):
+    await _swap_top_beat(current_user["id"], None)
+    return {"top_beat": None}
+
+
+def _parse_byte_range(range_header: str | None, size: int) -> tuple[int, int] | None | str:
+    """(start, end) for a single "bytes=" range, None for no/unsupported range, "invalid" for 416."""
+    match = re.match(r"bytes=(\d*)-(\d*)$", (range_header or "").strip())
+    if not match or not any(match.groups()):
+        return None
+    start_raw, end_raw = match.groups()
+    if start_raw == "":
+        start, end = max(0, size - int(end_raw)), size - 1
+    else:
+        start = int(start_raw)
+        end = min(int(end_raw), size - 1) if end_raw else size - 1
+    if start >= size or start > end:
+        return "invalid"
+    return start, end
+
+
+def _read_file_slice(path: Path, start: int, length: int) -> bytes:
+    with open(path, "rb") as fh:
+        fh.seek(start)
+        return fh.read(length)
+
+
+async def _audio_file_response(path: Path, media_type: str, range_header: str | None):
+    """Serve audio with byte-range support (iOS players probe and seek with Range requests),
+    reading only the requested bytes; a plain request streams the file from disk."""
+    from fastapi.responses import Response
+
+    size = path.stat().st_size
+    headers = {"Accept-Ranges": "bytes", "Cache-Control": "public, max-age=3600"}
+    byte_range = _parse_byte_range(range_header, size)
+    if byte_range is None:
+        return FileResponse(path, media_type=media_type, headers=headers)
+    if byte_range == "invalid":
+        return Response(status_code=416, headers={**headers, "Content-Range": f"bytes */{size}"})
+    start, end = byte_range
+    # Cap one response at 2 MB; players ask again for the rest.
+    end = min(end, start + 2 * 1024 * 1024 - 1)
+    chunk = await asyncio.to_thread(_read_file_slice, path, start, end - start + 1)
+    return Response(
+        content=chunk,
+        status_code=206,
+        media_type=media_type,
+        headers={**headers, "Content-Range": f"bytes {start}-{end}/{size}"},
+    )
+
+
+@api_router.get("/producers/{user_id}/top-beat/audio")
+async def stream_top_beat_audio(user_id: str, request: Request):
+    _enforce_action_rate_limit(
+        f"top_beat_stream:{_client_ip(request)}",
+        limit=300,
+        window_seconds=60,
+        detail_message="Too many requests. Try again in a minute.",
+    )
+    profile = await db.producer_profiles.find_one({"user_id": user_id}, {"_id": 0, "top_beat": 1}) or {}
+    top_beat = profile.get("top_beat") or {}
+    if top_beat.get("kind") != "audio" or not top_beat.get("file_id"):
+        raise HTTPException(status_code=404, detail="No uploaded top beat.")
+    upload_doc = await db.uploads.find_one({"id": top_beat["file_id"], "user_id": user_id, "file_type": "top_beat"})
+    if not upload_doc or not media_storage.exists(upload_doc):
+        raise HTTPException(status_code=404, detail="Top beat file is missing.")
+    suffix = media_storage.get_suffix(upload_doc).lower()
+    async with media_storage.local_path_for_processing(upload_doc) as path:
+        return await _audio_file_response(path, TOP_BEAT_AUDIO_TYPES.get(suffix, "audio/mpeg"), request.headers.get("range"))
+
+
 @api_router.post("/producers/avatar")
 async def upload_producer_avatar(
     file: UploadFile = File(...),
@@ -8163,6 +8546,7 @@ async def upload_producer_avatar(
         upsert=True
     )
 
+    await db.producer_stats_cache.delete_many({"user_id": current_user["id"]})
     return {"avatar_url": avatar_data_url}
 
 
@@ -8194,6 +8578,7 @@ async def upload_producer_banner(
         {"$set": {"banner_url": banner_data_url, "updated_at": datetime.now(timezone.utc)}},
         upsert=True
     )
+    await db.producer_stats_cache.delete_many({"user_id": current_user["id"]})
     return {"banner_url": banner_data_url}
 
 
@@ -8370,12 +8755,12 @@ async def fix_beat(request: BeatFixRequest, current_user: dict = Depends(get_cur
             window_seconds=600,
             detail_message="Too many beat fix requests. Please wait a few minutes.",
         )
-        await ensure_has_credit(current_user['id'], "fixes")
-        job_doc = await _create_background_job(
+        job_doc = await _queue_paid_job(
             current_user=current_user,
             job_type="beat_fix",
             payload=request.model_dump(),
             message="Queued beat fix job.",
+            feature_name="fixes",
         )
         return {"success": True, "queued": True, "message": "Beat fix queued.", "job": _sanitize_upload_job_doc(job_doc)}
     except HTTPException:
@@ -9061,14 +9446,31 @@ spotlight_service = SpotlightService(
     build_profiles=_build_spotlight_profiles,
     profile_with_role_tag=_profile_with_role_tag,
     refresh_metrics_for_profiles=_refresh_spotlight_metrics_for_profiles,
-    fetch_channel_top_viewed_beats=_fetch_channel_top_viewed_beats,
+    fetch_channel_top_viewed_beats=_fetch_channel_latest_uploads,
     safe_iso_now=_safe_iso_now,
 )
+
+async def _ensure_indexes() -> None:
+    """Unique indexes the like/follow upserts and signup rely on. Failures are logged, not fatal:
+    existing duplicate data must be cleaned up before an index can be built."""
+    specs = [
+        (db.producer_likes, [("user_id", 1), ("producer_id", 1)], {"unique": True}),
+        (db.producer_follows, [("user_id", 1), ("producer_id", 1)], {"unique": True}),
+        (db.users, [("username", 1)], {"unique": True}),
+    ]
+    for collection, keys, options in specs:
+        try:
+            await collection.create_index(keys, **options)
+        except Exception as exc:
+            logging.error(f"Could not create index {keys} on {collection.name}: {exc}")
+
 
 @app.on_event("startup")
 async def startup_background_tasks():
     global _upload_job_worker_task, _job_watchdog_task, _spotlight_refresh_task
     _validate_security_configuration()
+    await _ensure_indexes()
+    await _log_admin_id_hint()
     _log_youtube_render_timeout_configuration()
     await _requeue_stale_background_jobs()
     if _upload_job_worker_task is None:

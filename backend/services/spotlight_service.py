@@ -174,6 +174,9 @@ class SpotlightService:
             top_beats.append({"title": f"Beat {idx + 1}: {name}", "url": None})
 
         youtube_url = ((profile.get("social_links") or {}).get("youtube") or "").strip()
+        if not youtube_url and profile.get("youtube_channel_id"):
+            # No link on the profile: fall back to the channel they connected for uploads.
+            youtube_url = f"https://www.youtube.com/channel/{profile['youtube_channel_id']}"
         channel_top_beats, channel_perf = await asyncio.to_thread(self.fetch_channel_top_viewed_beats, youtube_url, 5)
         if channel_top_beats:
             top_beats = channel_top_beats
