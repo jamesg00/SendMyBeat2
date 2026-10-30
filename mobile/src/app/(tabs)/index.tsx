@@ -1,6 +1,6 @@
 import * as Clipboard from 'expo-clipboard';
-import { router } from 'expo-router';
-import { useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, Platform, Pressable, Text, TextInput, View } from 'react-native';
 
 import { useAuth } from '@/api/auth';
@@ -9,6 +9,7 @@ import type { Description, TagRun } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
 import { Button, Card, IconTile, JobProgress, ListGroup, ListRow, Meter, Pill, PlayPauseIcon, Screen, SectionLabel, Segmented, SwipeToDelete, useUiStyles } from '@/components/ui';
 import { DescriptionEditor, TagEditor } from '@/components/editors';
+import { Avatar } from '@/components/producer';
 import { useDraft } from '@/state/draft';
 import { useStudio } from '@/state/studio';
 import { F, R, font, makeStyles, useColors } from '@/theme';
@@ -42,6 +43,16 @@ export default function WorkflowScreen() {
   const last = draft.lastGenerated;
   const runs = last && !(history.data ?? []).some((r) => r.id === last.id) ? [last, ...(history.data ?? [])] : (history.data ?? []);
 
+  // Your Spotlight profile, for the picture in the header; refreshed whenever you come back here.
+  const me = useRequest(api.myProducer);
+  const refreshMe = me.refresh;
+  useFocusEffect(
+    useCallback(() => {
+      void refreshMe();
+    }, [refreshMe]),
+  );
+  const openProfile = me.data ? () => router.push({ pathname: '/producer/[id]', params: { id: me.data!.user_id } }) : undefined;
+
   const openRun = (r: TagRun) => {
     draft.setRun(r);
     setStep('review');
@@ -60,9 +71,21 @@ export default function WorkflowScreen() {
       accessory={
         <View style={s.header}>
           {sub.data ? <Pill label={planLabel(sub.data.plan)} tone="muted" /> : null}
-          <View style={s.avatar} accessibilityLabel={user?.username} accessibilityRole="image">
-            <Text style={s.avatarText}>{user?.username.charAt(0).toUpperCase()}</Text>
-          </View>
+          <Pressable
+            onPress={openProfile}
+            disabled={!openProfile}
+            hitSlop={6}
+            style={({ pressed }) => pressed && { opacity: 0.7 }}
+            accessibilityRole="button"
+            accessibilityLabel="Your Spotlight profile">
+            {me.data ? (
+              <Avatar producer={me.data} size={32} />
+            ) : (
+              <View style={s.avatar}>
+                <Text style={s.avatarText}>{user?.username.charAt(0).toUpperCase()}</Text>
+              </View>
+            )}
+          </Pressable>
         </View>
       }>
       <View style={s.usage}>
