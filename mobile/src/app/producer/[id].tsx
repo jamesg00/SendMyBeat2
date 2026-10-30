@@ -1,14 +1,15 @@
 import { Image } from 'expo-image';
-import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect } from 'react';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useAuth } from '@/api/auth';
 import * as api from '@/api/endpoints';
 import type { Producer, ProducerBeat } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
-import { Avatar, followerCount, FollowButton, isVerified, knownProducer, LikeButton, openWebLink, TopBeat, topBeatOf, VerifiedBadge } from '@/components/producer';
-import { styles as ui } from '@/components/ui';
+import { Avatar, followerCount, FollowButton, isVerified, knownProducer, LikeButton, openWebLink, pickProfileImage, rememberProducers, TopBeat, topBeatOf, VerifiedBadge } from '@/components/producer';
+import { Button, styles as ui } from '@/components/ui';
 import { loadSocial, useSocial } from '@/state/social';
 import { C, F, R, font } from '@/theme';
 
@@ -30,10 +31,44 @@ export default function ProducerScreen() {
   const insets = useSafeAreaInsets();
   const stats = useRequest(() => api.producerStats(id));
   const social = useSocial();
+  const { user } = useAuth();
+  const mine = user?.id === id;
+  const [editing, setEditing] = useState<'banner' | 'avatar' | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
 
   useEffect(() => {
     void loadSocial();
   }, []);
+
+  // Coming back from Edit profile shows your changes.
+  const reloadStats = stats.reload;
+  const setStats = stats.setData;
+  useFocusEffect(
+    useCallback(() => {
+      if (mine) reloadStats();
+    }, [mine, reloadStats]),
+  );
+
+  // Your own profile: tap the banner or picture to change it right here.
+  const changeImage = async (which: 'banner' | 'avatar') => {
+    setEditError(null);
+    try {
+      const file = await pickProfileImage(which === 'banner' ? [4, 1] : [1, 1]);
+      if (!file) return;
+      setEditing(which);
+      const patch =
+        which === 'banner' ? { banner_url: (await api.uploadBanner(file)).banner_url } : { avatar_url: (await api.uploadAvatar(file)).avatar_url };
+      setStats((cur) => {
+        if (!cur) return cur as never;
+        rememberProducers([{ ...cur.profile, ...patch }]);
+        return { ...cur, profile: { ...cur.profile, ...patch } };
+      });
+    } catch (e) {
+      setEditError(e instanceof Error ? e.message : 'Could not update your picture.');
+    } finally {
+      setEditing(null);
+    }
+  };
   const p: Producer | undefined = stats.data?.profile ?? knownProducer(id);
 
   if (!p) {
@@ -52,19 +87,44 @@ export default function ProducerScreen() {
 
   return (
     <ScrollView style={s.root} contentContainerStyle={{ paddingBottom: insets.bottom + 32 }} showsVerticalScrollIndicator={false}>
-      {p.banner_url ? <Image source={{ uri: p.banner_url }} style={s.banner} contentFit="cover" /> : <View style={s.banner} />}
+      <Pressable
+        onPress={mine ? () => void changeImage('banner') : undefined}
+        disabled={!mine}
+        accessibilityRole={mine ? 'button' : undefined}
+        accessibilityLabel={mine ? 'Change banner' : undefined}>
+        {p.banner_url ? <Image source={{ uri: p.banner_url }} style={s.banner} contentFit="cover" /> : <View style={s.banner} />}
+        {mine ? (
+          <View style={s.editPill}>
+            {editing === 'banner' ? <ActivityIndicator color={C.text} size="small" /> : <Text style={s.editPillText}>Edit banner</Text>}
+          </View>
+        ) : null}
+      </Pressable>
       <Pressable onPress={() => router.back()} style={[s.back, { top: 14 }]} accessibilityRole="button" accessibilityLabel="Close profile">
         <Text style={{ color: C.text, fontSize: 15, ...font('600') }}>✕</Text>
       </Pressable>
 
       <View style={s.body}>
         <View style={s.head}>
-          <View style={s.avatarRing}>
+          <Pressable
+            onPress={mine ? () => void changeImage('avatar') : undefined}
+            disabled={!mine}
+            accessibilityRole={mine ? 'button' : undefined}
+            accessibilityLabel={mine ? 'Change profile picture' : undefined}
+            style={s.avatarRing}>
             <Avatar producer={p} size={76} />
-          </View>
+            {mine ? (
+              <View style={s.avatarBadge}>
+                {editing === 'avatar' ? <ActivityIndicator color={C.onPrimary} size="small" /> : <Text style={s.avatarBadgeText}>Edit</Text>}
+              </View>
+            ) : null}
+          </Pressable>
           <View style={s.actions}>
             <LikeButton producer={p} size="md" />
-            <FollowButton producer={p} />
+            {mine ? (
+              <Button title="Edit profile" variant="secondary" size="sm" onPress={() => router.push('/profile-edit')} />
+            ) : (
+              <FollowButton producer={p} />
+            )}
           </View>
         </View>
 
@@ -77,7 +137,14 @@ export default function ProducerScreen() {
             {compact.format(followerCount(social, p))} followers{p.role_tag ? ` · ${p.role_tag}` : ''}
           </Text>
           {social.error ? <Text style={[s.sub, { color: C.danger }]}>{social.error}</Text> : null}
-          {p.bio ? <Text style={s.sub}>{p.bio}</Text> : null}
+          {editError ? <Text style={[s.sub, { color: C.danger }]}>{editError}</Text> : null}
+          {p.bio ? (
+            <Text style={s.sub}>{p.bio}</Text>
+          ) : mine ? (
+            <Pressable onPress={() => router.push('/profile-edit')} accessibilityRole="button">
+              <Text style={[s.sub, { color: C.t3 }]}>Add a bio ›</Text>
+            </Pressable>
+          ) : null}
           {socials.length > 0 ? (
             <View style={s.socials}>
               {socials.map(([key, url]) => (
@@ -105,9 +172,18 @@ export default function ProducerScreen() {
 
         {topBeat ? (
           <View style={{ gap: 8 }}>
-            <Text style={ui.sectionLabel}>Top beat</Text>
-            <TopBeat beat={topBeat} />
+            <View style={s.rowBetween}>
+              <Text style={ui.sectionLabel}>Top beat</Text>
+              {mine ? (
+                <Pressable onPress={() => router.push('/profile-edit')} hitSlop={8} accessibilityRole="button">
+                  <Text style={s.change}>Change</Text>
+                </Pressable>
+              ) : null}
+            </View>
+            <TopBeat key={topBeat.url} beat={topBeat} />
           </View>
+        ) : mine ? (
+          <Button title="Add your top beat" variant="secondary" size="md" onPress={() => router.push('/profile-edit')} />
         ) : null}
 
         {(p.tags ?? []).length > 0 ? (
@@ -181,6 +257,33 @@ const s = StyleSheet.create({
   head: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginTop: -36 },
   avatarRing: { borderRadius: 42, borderWidth: 4, borderColor: C.bg },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingBottom: 4 },
+  editPill: {
+    position: 'absolute',
+    left: 16,
+    bottom: 10,
+    height: 28,
+    paddingHorizontal: 10,
+    borderRadius: 7,
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+  },
+  editPillText: { color: C.text, fontSize: 12, ...font('500') },
+  avatarBadge: {
+    position: 'absolute',
+    right: -6,
+    bottom: 0,
+    height: 24,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    backgroundColor: C.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarBadgeText: { color: C.onPrimary, fontSize: 11, ...font('600') },
+  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  change: { color: C.t2, fontSize: 13, ...font('500') },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   name: { color: C.text, fontSize: 22, letterSpacing: -0.4, ...font('600') },
   role: { color: C.t2, fontSize: 12, fontFamily: F.mono },

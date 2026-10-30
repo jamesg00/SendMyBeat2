@@ -35,7 +35,7 @@ from collections.abc import Callable
 import html
 import hashlib
 import time
-from urllib.parse import urlencode, urlparse, urljoin
+from urllib.parse import unquote, urlencode, urlparse, urljoin
 from itsdangerous import URLSafeSerializer, BadSignature
 import socket
 import ipaddress
@@ -8424,7 +8424,7 @@ async def upload_top_beat_audio(
         "file_id": file_id,
         # The version suffix makes players fetch the new file instead of a cached old one.
         "url": f"{BACKEND_URL}/api/producers/{user_id}/top-beat/audio?v={file_id[:8]}",
-        "title": (title or "").strip()[:100] or Path(file.filename).stem[:100],
+        "title": (title or "").strip()[:100] or unquote(Path(file.filename).stem)[:100],
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
     try:
@@ -8463,37 +8463,47 @@ def _parse_byte_range(range_header: str | None, size: int) -> tuple[int, int] | 
     return start, end
 
 
-def _read_file_slice(path: Path, start: int, length: int) -> bytes:
-    with open(path, "rb") as fh:
-        fh.seek(start)
-        return fh.read(length)
+_AUDIO_CHUNK = 256 * 1024
 
 
-async def _audio_file_response(path: Path, media_type: str, range_header: str | None):
-    """Serve audio with byte-range support (iOS players probe and seek with Range requests),
-    reading only the requested bytes; a plain request streams the file from disk."""
-    from fastapi.responses import Response
+async def _iter_file_range(path: Path, start: int, end: int):
+    """Yield bytes start..end (inclusive) in small chunks, so memory stays flat however big the range."""
+    fh = await asyncio.to_thread(open, path, "rb")
+    try:
+        await asyncio.to_thread(fh.seek, start)
+        remaining = end - start + 1
+        while remaining > 0:
+            chunk = await asyncio.to_thread(fh.read, min(_AUDIO_CHUNK, remaining))
+            if not chunk:
+                break
+            remaining -= len(chunk)
+            yield chunk
+    finally:
+        await asyncio.to_thread(fh.close)
+
+
+async def _audio_file_response(path: Path, media_type: str, range_header: str | None, *, head: bool = False):
+    """Serve audio the way iPhone players expect: every byte range they ask for, in full
+    (a short answer to "bytes=0-" leaves AVPlayer loading forever), streamed from disk."""
+    from fastapi.responses import Response, StreamingResponse
 
     size = path.stat().st_size
     headers = {"Accept-Ranges": "bytes", "Cache-Control": "public, max-age=3600"}
     byte_range = _parse_byte_range(range_header, size)
-    if byte_range is None:
-        return FileResponse(path, media_type=media_type, headers=headers)
     if byte_range == "invalid":
         return Response(status_code=416, headers={**headers, "Content-Range": f"bytes */{size}"})
-    start, end = byte_range
-    # Cap one response at 2 MB; players ask again for the rest.
-    end = min(end, start + 2 * 1024 * 1024 - 1)
-    chunk = await asyncio.to_thread(_read_file_slice, path, start, end - start + 1)
-    return Response(
-        content=chunk,
-        status_code=206,
-        media_type=media_type,
-        headers={**headers, "Content-Range": f"bytes {start}-{end}/{size}"},
-    )
+    if byte_range is None:
+        start, end, status = 0, size - 1, 200
+    else:
+        (start, end), status = byte_range, 206
+        headers["Content-Range"] = f"bytes {start}-{end}/{size}"
+    headers["Content-Length"] = str(end - start + 1)
+    if head:
+        return Response(status_code=status, media_type=media_type, headers=headers)
+    return StreamingResponse(_iter_file_range(path, start, end), status_code=status, media_type=media_type, headers=headers)
 
 
-@api_router.get("/producers/{user_id}/top-beat/audio")
+@api_router.api_route("/producers/{user_id}/top-beat/audio", methods=["GET", "HEAD"])
 async def stream_top_beat_audio(user_id: str, request: Request):
     _enforce_action_rate_limit(
         f"top_beat_stream:{_client_ip(request)}",
@@ -8510,7 +8520,12 @@ async def stream_top_beat_audio(user_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Top beat file is missing.")
     suffix = media_storage.get_suffix(upload_doc).lower()
     async with media_storage.local_path_for_processing(upload_doc) as path:
-        return await _audio_file_response(path, TOP_BEAT_AUDIO_TYPES.get(suffix, "audio/mpeg"), request.headers.get("range"))
+        return await _audio_file_response(
+            path,
+            TOP_BEAT_AUDIO_TYPES.get(suffix, "audio/mpeg"),
+            request.headers.get("range"),
+            head=getattr(request, "method", "GET") == "HEAD",
+        )
 
 
 @api_router.post("/producers/avatar")
