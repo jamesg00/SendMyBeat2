@@ -1,157 +1,147 @@
 # SendMyBeat
 
-SendMyBeat is a producer workflow app for generating metadata, finding artwork, analyzing beats and channels, and uploading beats to YouTube from one place.
+**Tags, descriptions and YouTube uploads for beat producers.**
 
-The product is built around a fast publish loop:
-- generate tags and descriptions
-- find or import artwork
-- check thumbnail quality
-- render audio + artwork into video
-- upload directly to YouTube
+SendMyBeat finds the tags that rank, writes the description, renders your beat and cover art into a video and uploads it to your channel. There's a web app at [sendmybeat.com](https://www.sendmybeat.com) and an iOS / Android app built with Expo.
 
-## Current Product Areas
-- Upload Studio: audio upload, artwork upload/import, metadata editing, preview layout, watermark controls, YouTube upload
-- AI metadata tools: tag generation, tag join, description generation, description refine
-- Beat tools: beat analysis, beat fix, thumbnail check
-- Artwork finder: web image/artwork search for artist and project-inspired visuals
-- YouTube analytics: channel analysis with AI growth recommendations
-- Producer Spotlight: public producer profiles with fallback avatars and optional Google connection
-- Growth tools: `Grow in 120` challenge and streak tracking
+<p align="center">
+  <img src="docs/screenshots/landing.png" width="240" alt="Landing screen: Tags, descriptions and uploads for every beat" />
+  <img src="docs/screenshots/workflow.png" width="240" alt="Workflow tab with tag generation and description templates" />
+  <img src="docs/screenshots/tag-ranking.png" width="240" alt="Tag ranking: every tag numbered with its score, demand and competition" />
+</p>
 
-## Recent Changes
-- Background job architecture added for heavy flows:
-  - YouTube upload
-  - channel analytics
-  - beat analysis / beat fix
-  - thumbnail check
-  - tag generation / tag join
-  - image search
-- Admin ops and launch hardening added:
-  - health endpoints
-  - queue visibility
-  - overload mode
-  - feature kill switches
-  - per-feature rate limits
-- Spotlight no longer requires Google connection to appear
-- Upload Studio close/reopen behavior fixed
-- Image search ranking and query building updated repeatedly to improve result relevance
-- Subscription plans changed to capped fair-use tiers instead of unlimited Max
+## The mobile app
 
-## Current Pricing Logic
-Frontend pricing and backend limits are aligned to:
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshots/upload-studio.png" width="230" alt="Upload Studio" /><br /><sub><b>Upload Studio</b><br />Beat + artwork → video → YouTube</sub></td>
+    <td align="center"><img src="docs/screenshots/analytics.png" width="230" alt="Analytics" /><br /><sub><b>Analytics</b><br />Views per upload and what to fix</sub></td>
+    <td align="center"><img src="docs/screenshots/spotlight.png" width="230" alt="Spotlight" /><br /><sub><b>Spotlight</b><br />Producer of the week, trending, leaderboard</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/producer-profile.png" width="230" alt="Producer profile" /><br /><sub><b>Producer profile</b><br />Likes, follows, top beat, uploads</sub></td>
+    <td align="center"><img src="docs/screenshots/themes.png" width="230" alt="Appearance: theme gallery" /><br /><sub><b>Themes</b><br />Eleven looks with a cross-fade</sub></td>
+    <td align="center"><img src="docs/screenshots/spotlight-ocean.png" width="230" alt="Spotlight in the Ocean theme" /><br /><sub><b>Ocean theme</b><br />Every screen follows the theme</sub></td>
+  </tr>
+</table>
 
-- Free:
-  - 2 AI generations per day
-  - 1 YouTube upload per day
-- Plus:
-  - $5/month
-  - 150 AI generations per month
-  - 60 YouTube uploads per month
-- Max:
-  - $12/month
-  - 500 AI generations per month
-  - 150 YouTube uploads per month
+<sub>Screenshots are the app's web build with sample data (`docs/screenshots/`). On a phone the tab bar is the system one.</sub>
 
-Backend billing notes:
-- Plus and Max are both metered monthly plans
-- Max is no longer unlimited
-- Plus and Max both use monthly LLM cost guardrails
+### What it does
+- **Workflow:** type an artist or vibe and get a ranked tag set that always fits YouTube's 500-character limit. Review and edit tags as chips or in the **Ranking** view, pick or write a description, then hand it all to Upload Studio. Tag runs keep going in the background and pick back up after the app restarts.
+- **Upload Studio:** choose a beat and artwork, hear it under the live preview, set the format (16:9, 1:1, 9:16, 4:5), frame rate, background and privacy, and upload. The render log shows each stage. From Workflow you can swipe the job away to cancel it, or retry a failed one.
+- **Analytics:** views across your latest uploads, a channel health score, and AI reviews of weak titles with better ones to try. Plus and Max plans.
+- **Spotlight:** the producer community. Producer of the week, trending producers, a leaderboard, likes and follows, and profiles with a top beat (YouTube link or uploaded audio) and latest uploads. Pull down to refresh. Edit your own profile, picture and banner in place.
+- **Themes:** Console (the default: true black, hairlines, white buttons) plus Light, Dark, Noir, Paper, Mint, Midnight, Ocean, Sunset, Rose and Match system. Changing theme cross-fades the whole app.
 
-## Tech Stack
-- Frontend: React + CRACO + Tailwind CSS
-- Backend: FastAPI
-- Database: MongoDB
-- Media: FFmpeg
-- Auth: JWT + Google OAuth
-- Billing: Stripe
-- AI: Grok by default, OpenAI fallback for some vision/model failures
-- Infra: Docker Compose deployment supported
+## How tag ranking works
+Every generated tag gets a 0–100 score, and the final set is picked to make the best use of YouTube's 500 characters.
 
-## Repo Structure
+1. **Candidates.** Tags come from YouTube search results for the artist, Spotify and SoundCloud track names, your own custom tags and AI suggestions grounded in that context.
+2. **Demand.** Each tag is checked against YouTube's search autocomplete, typed one word at a time. A phrase YouTube suggests after only a word or two, near the top, is searched a lot; one it never suggests isn't. This uses no API quota and is cached for a week.
+3. **Competition.** The most promising tags get a YouTube search: how many results there are, and how many top videos already use the exact phrase in their title.
+4. **Relevance.** How closely the tag matches your search and artist, plus what you kept or removed in earlier runs.
+5. **Track record.** Seven and 28 days after a video is uploaded through SendMyBeat, its views are compared with that producer's usual upload. Tags behind at least 3 tracked videos gain or lose up to 10 points ("Proven on 5 uploads").
+6. **Picking the set.** The best tag goes in first. Then each next tag is chosen by score, by how much it adds over what's already picked, and by the mix: core artist tags, crossovers, sound/mood tags and long-tail phrases. It stops when 500 characters are used, counted the way YouTube counts them.
+
+A generation spends **at most 300 YouTube API units** (`TAG_QUOTA_BUDGET_UNITS`). Artist lookups and search results are cached and shared across users, so repeat artists cost nothing.
+
+## Plans
+| | Free | Plus | Max |
+|---|---|---|---|
+| Price | $0 | $5 / month | $12 / month |
+| AI generations | 2 a day | 150 a month | 500 a month |
+| YouTube uploads | 1 a day | 60 a month | 150 a month |
+| Channel analytics | – | ✓ | ✓ |
+| Watermark-free uploads | – | ✓ | ✓ |
+
+Limits are env-configurable (see [Cost / plan tuning](#cost--plan-tuning)). Plus and Max also have monthly LLM cost guardrails. Upload credits are only spent once a video is live on YouTube. Billing runs through Stripe on the website.
+
+## What it uses
+
+| Part | Built with |
+|---|---|
+| **Mobile app** (`mobile/`) | Expo SDK 58, React Native, React 19 with the React Compiler, TypeScript, Expo Router (native tabs), Reanimated, react-native-svg, expo-audio, expo-image, expo-file-system, expo-secure-store, react-native-view-shot (theme cross-fade) |
+| **Mobile type** | Satoshi and Clash Grotesk from [Fontshare](https://www.fontshare.com) (downloaded on `npm install`, not committed: their license doesn't allow publishing them in a public repo), Geist Mono for numbers |
+| **Web app** (`frontend/`) | React, CRACO, Tailwind CSS |
+| **API** (`backend/`) | FastAPI on Python, MongoDB via Motor, in-process background job worker |
+| **YouTube** | YouTube Data API v3 (search, uploads, channel stats), Google OAuth, YouTube search autocomplete for tag demand |
+| **AI** | Grok (xAI) by default, OpenAI as fallback for some vision/model calls |
+| **Media** | FFmpeg / ffprobe for rendering beat + artwork into video |
+| **Payments** | Stripe subscriptions |
+| **Hosting** | Docker Compose on AWS Lightsail behind nginx (see [DEPLOY.md](DEPLOY.md)) |
+
+## Repo structure
 ```text
 SendMyBeat2/
   backend/
-    server.py
+    server.py                 # FastAPI routes (still the main surface)
+    models_spotlight.py
+    storage.py                # media storage abstraction (local today)
     services/
-      background_jobs.py
-      spotlight_service.py
-    storage.py
-  frontend/
-    src/
+      background_jobs.py      # persisted async jobs
+      spotlight_service.py    # Spotlight cache and refresh loop
+      tag_metrics.py          # tag scoring, labels and set selection
+      tag_autocomplete.py     # search demand from YouTube autocomplete
+      tag_outcomes.py         # upload results → tag track records
+  frontend/                   # web app (React)
+  mobile/                     # iOS / Android app (Expo)
+    src/app/                  # screens (Expo Router)
+    src/components/           # shared UI, editors, producer cards, theme transition
+    src/state/                # draft, Upload Studio, likes/follows
+    src/theme.ts              # palettes, useColors(), makeStyles()
+    scripts/fetch-fonts.mjs   # downloads the Fontshare fonts on install
+  docs/screenshots/
   docker-compose.yml
-  README.md
   DEPLOY.md
   GROWTH_PLAN.md
 ```
 
-## Architecture Notes
-
-### Backend
-`backend/server.py` is still the main route surface, but some shared systems were extracted:
-- `backend/services/background_jobs.py`: persisted async job processing
-- `backend/services/spotlight_service.py`: Spotlight caching / refresh helpers
-- `backend/storage.py`: media storage abstraction
-
-### Async Job Flows
-These flows now queue work instead of doing everything inline in the request:
-- YouTube upload
-- channel analytics
-- beat analysis
-- beat fix
-- thumbnail check
-- tag generation
-- tag join
-- image search
-
-Current limitation:
-- the worker is still in-process with the API app
-- this is safer than the old synchronous model, but not yet a separate durable worker deployment
-
-### Storage
-- media storage is abstracted
-- current implementation is still local storage
-- object storage is the next scaling step
-
-## Local Development
+## Local development
 
 ### Backend
 ```bash
 cd backend
 python -m venv .venv
-.venv/Scripts/activate
+.venv/Scripts/activate        # macOS / Linux: source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn server:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### Frontend
+Tests:
+```bash
+pip install pytest pytest-asyncio
+python -m pytest -q --continue-on-collection-errors
+```
+
+### Web app
 ```bash
 cd frontend
 npm install --legacy-peer-deps
 npm start
 ```
 
+### Mobile app
+Needs **Node 22.13 or newer**.
+```bash
+cd mobile
+npm install          # also downloads the Satoshi / Clash Grotesk fonts
+npx expo start -c    # scan the QR code with your phone
+```
+It talks to `https://api.sendmybeat.com` by default; set `EXPO_PUBLIC_API_URL` to use a local backend. Before a PR: `npx tsc --noEmit` and `npx eslint src`.
+
+Colors always come from the active theme. Use `useColors()` for colors, and `makeStyles((C) => ({ ... }))` instead of `StyleSheet.create`, so screens re-render when the theme changes.
+
 ## Docker Compose
-The repo includes a local/prod-style Docker Compose setup for:
-- `mongo`
-- `backend`
-- `frontend`
-
-Typical rebuild:
+Services: `mongo`, `backend`, `frontend`.
 ```bash
-docker compose up -d --build backend frontend
+docker compose up -d --build backend frontend   # rebuild
+docker compose ps                                # status
+docker compose logs -f backend                   # backend logs
 ```
+Deploying a backend change on the server: `git pull`, then `docker compose up -d --build backend`.
 
-Check status:
-```bash
-docker compose ps
-```
-
-Check backend logs:
-```bash
-docker compose logs -f backend
-```
-
-## Important Backend Env Vars
+## Important backend env vars
 
 ### Core
 ```env
@@ -197,13 +187,27 @@ STRIPE_WEBHOOK_SECRET=...
 STRIPE_PRICE_ID_PLUS=...
 STRIPE_PRICE_ID_MAX=...
 ```
+Legacy fallback still supported: `STRIPE_PRICE_ID=...`
 
-Legacy fallback still supported:
+### Tag ranking
 ```env
-STRIPE_PRICE_ID=...
+TAG_QUOTA_BUDGET_UNITS=300              # YouTube API units per generation
+TAG_AUTOCOMPLETE_MAX_FETCHES=80         # uncached autocomplete lookups per generation
+TAG_AUTOCOMPLETE_CACHE_TTL_SECONDS=604800
+TAG_METRICS_CACHE_TTL_SECONDS=1209600   # YouTube search results per tag
+TAG_MIN_PUBLISH_SCORE=58
+TAG_OUTCOME_MIN_VIDEOS=3                # tracked uploads before a tag's record counts
+TAG_OUTCOME_MAX_BOOST=10
+TAG_OUTCOME_COLLECT_INTERVAL_SECONDS=21600
 ```
 
-### Ops / Launch Hardening
+### Spotlight
+```env
+SPOTLIGHT_REFRESH_INTERVAL_SECONDS=1800  # metrics refresh (uses YouTube quota)
+SPOTLIGHT_PAYLOAD_MAX_AGE_SECONDS=60     # list rebuilt from the database (no quota)
+```
+
+### Ops / launch hardening
 ```env
 OPS_DEFAULT_MAX_QUEUED_JOBS=60
 OPS_DEFAULT_MAX_PROCESSING_JOBS=8
@@ -219,7 +223,7 @@ JOB_YOUTUBE_STAGE_TIMEOUT_SECONDS=900
 JOB_HEARTBEAT_INTERVAL_SECONDS=15
 ```
 
-### YouTube Render Tuning
+### YouTube render tuning
 ```env
 YOUTUBE_RENDER_TIMEOUT_SECONDS=240
 YOUTUBE_RENDER_PRESET=veryfast
@@ -230,7 +234,7 @@ YOUTUBE_MAX_AUDIO_DURATION_SECONDS=900
 PRIORITIZE_YOUTUBE_UPLOAD_JOBS=true
 ```
 
-### Cost / Plan Tuning
+### Cost / plan tuning
 ```env
 HOSTING_COST_USD=12
 
@@ -246,65 +250,40 @@ MAX_MONTHLY_UPLOAD_CREDITS=150
 MAX_MONTHLY_LLM_COST_CAP_USD=7.50
 ```
 
-## Health And Ops Endpoints
-- `/api/health`
-- `/api/health/ready`
-- `/api/admin/ops`
-- `/api/admin/costs`
+## Health and ops endpoints
+- `/api/health`, `/api/health/ready`: health monitoring
+- `/api/admin/ops`: queue visibility, overload mode, heavy-feature toggles
+- `/api/admin/costs`: rough cost tracking
+- `/api/jobs/{id}/cancel`: users stop their own jobs (queued ones cancel at once with the credit returned; running ones stop at the next checkpoint)
 
-These support:
-- health monitoring
-- queue visibility
-- overload mode
-- heavy-feature toggles
-- rough cost tracking
+Admin clear-job sets `cancel_requested=true` and marks the job terminal immediately. If FFmpeg is already running, the worker stops at the next cancellation checkpoint, before the YouTube upload continues.
 
-Admin clear-job behavior:
-- sets `cancel_requested=true`
-- marks the job as terminal in Mongo immediately
-- if FFmpeg is already running, the worker stops at the next cancellation checkpoint before YouTube upload continues
-
-## Known Operational Risks
-- background jobs still run in-process
-- media is still local-storage-backed
-- Spotlight can still do expensive work on cache miss
-- `backend/server.py` is still a large monolith despite recent extraction work
-
-## Subscription / Billing Notes
-- user plan state comes from Stripe + Mongo user linkage
-- a manual subscription sync endpoint exists at `/api/subscription/sync`
-- if a paid user appears as free, first verify the Stripe subscription is still active, then refresh billing status
+## Known operational risks
+- Background jobs still run in-process with the API.
+- Media is still stored locally.
+- `backend/server.py` is still a large monolith despite the extracted services.
+- YouTube search autocomplete is an undocumented endpoint. If it's blocked, tag demand falls back to neutral and generation keeps working.
 
 ## Troubleshooting
-- If a heavy feature seems slow:
-  - check queue depth in admin ops
-  - check job `stage` and `last_heartbeat_at`
-  - check overload mode / feature toggles
-  - check backend logs
-- If YouTube upload jobs fail during rendering:
-  - confirm FFmpeg and ffprobe exist inside the backend container
-  - confirm the uploaded audio duration is below `YOUTUBE_MAX_AUDIO_DURATION_SECONDS`
-  - default render profile is fast 720p/30 FPS: `YOUTUBE_RENDER_PRESET=veryfast`, `YOUTUBE_RENDER_CRF=26`, `YOUTUBE_RENDER_MAX_HEIGHT=720`, `YOUTUBE_RENDER_FPS=30`
-  - use `YOUTUBE_RENDER_FPS=60` only when you intentionally want smoother output and accept slower renders
-  - tune `YOUTUBE_RENDER_PRESET`, `YOUTUBE_RENDER_CRF`, and optional `YOUTUBE_RENDER_MAX_HEIGHT` if you need more quality or lower CPU time
-  - run `python tools/check_youtube_render_sample.py` to verify a true 16:9 artwork renders as 1280x720 without black borders
-- If image search quality regresses:
-  - restart backend after image-search logic changes
-  - remember image-search behavior is query-sensitive between artist mode and project mode
-- If thumbnail check fails:
-  - confirm the selected visual is a still image, not a video
-  - confirm the configured vision model exists
-- If billing looks wrong:
-  - verify Stripe subscription status
-  - verify `stripe_customer_id` and `stripe_subscription_id` are linked on the user record
+- **A heavy feature seems slow:** check queue depth in admin ops, the job's `stage` and `last_heartbeat_at`, overload mode / feature toggles, and backend logs.
+- **YouTube upload jobs fail while rendering:**
+  - Confirm FFmpeg and ffprobe exist in the backend container.
+  - Confirm the audio is shorter than `YOUTUBE_MAX_AUDIO_DURATION_SECONDS`.
+  - The default render profile is fast 720p/30 FPS. Use `YOUTUBE_RENDER_FPS=60` only when you accept slower renders.
+  - Run `python tools/check_youtube_render_sample.py` to verify 16:9 artwork renders as 1280×720 without borders.
+- **Tag demand looks flat:** from the server, run `curl "https://suggestqueries.google.com/complete/search?client=firefox&ds=yt&q=future%20type"`. It should return JSON. Generation logs show per-run autocomplete stats under `tag_metrics.autocomplete`.
+- **Mobile app won't bundle:** run `npm install` in `mobile/` (new dependencies, fonts), use Node 22.13+, and restart with `npx expo start -c`.
+- **Thumbnail check fails:** confirm the visual is a still image and the configured vision model exists.
+- **Billing looks wrong:**
+  - Verify the Stripe subscription status and the user's `stripe_customer_id` / `stripe_subscription_id`.
+  - `/api/subscription/sync` forces a refresh.
 
-## Related Docs
-- [DEPLOY.md](/c:/Users/James/Desktop/SendMyBeat/SendMyBeat2/DEPLOY.md)
-- [GROWTH_PLAN.md](/c:/Users/James/Desktop/SendMyBeat/SendMyBeat2/GROWTH_PLAN.md)
+## Security notes
+- Don't expose MongoDB (`27017`) publicly; only publish `80/443` behind a reverse proxy.
+- Don't use `CORS_ORIGINS=*` in production.
+- `APP_ENCRYPTION_KEY` is required in production so stored YouTube tokens are encrypted at rest.
+- User links are checked before opening (https only, known social sites), and likes, follows, tag generation and job cancels are rate limited.
 
-## Deployment Security Notes
-- Do not expose MongoDB (`27017`) publicly.
-- Prefer Caddy or another reverse proxy for HTTPS and only publish `80/443`.
-- Do not use `CORS_ORIGINS=*` in production.
-- In production, `APP_ENCRYPTION_KEY` is required so stored YouTube tokens are encrypted at rest.
-- Upload credits are now consumed only after a successful YouTube upload, not when the job is first queued.
+## Related docs
+- [DEPLOY.md](DEPLOY.md): self-hosting on AWS Lightsail
+- [GROWTH_PLAN.md](GROWTH_PLAN.md)
