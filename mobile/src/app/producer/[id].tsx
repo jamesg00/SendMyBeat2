@@ -1,13 +1,15 @@
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect } from 'react';
 import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import * as api from '@/api/endpoints';
 import type { Producer, ProducerBeat } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
-import { Avatar, isVerified, knownProducer, TopBeat, VerifiedBadge } from '@/components/producer';
+import { Avatar, followerCount, FollowButton, isVerified, knownProducer, LikeButton, TopBeat, VerifiedBadge } from '@/components/producer';
 import { styles as ui } from '@/components/ui';
+import { loadSocial, useSocial } from '@/state/social';
 import { C, F, R, font } from '@/theme';
 
 const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
@@ -27,6 +29,11 @@ export default function ProducerScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const stats = useRequest(() => api.producerStats(id));
+  const social = useSocial();
+
+  useEffect(() => {
+    void loadSocial();
+  }, []);
   const p: Producer | undefined = stats.data?.profile ?? knownProducer(id);
 
   if (!p) {
@@ -54,9 +61,9 @@ export default function ProducerScreen() {
           <View style={s.avatarRing}>
             <Avatar producer={p} size={76} />
           </View>
-          <View style={s.likes} accessibilityLabel={`${st?.likes ?? p.likes ?? 0} likes`}>
-            <Text style={{ color: C.danger, fontSize: 13 }}>♥</Text>
-            <Text style={s.mono}>{compact.format(st?.likes ?? p.likes ?? 0)}</Text>
+          <View style={s.actions}>
+            <LikeButton producer={p} size="md" />
+            <FollowButton producer={p} />
           </View>
         </View>
 
@@ -65,7 +72,10 @@ export default function ProducerScreen() {
             <Text style={s.name}>{p.username}</Text>
             {isVerified(p) ? <VerifiedBadge size={16} /> : null}
           </View>
-          {p.role_tag ? <Text style={s.role}>{p.role_tag}</Text> : null}
+          <Text style={s.role}>
+            {compact.format(followerCount(social, p))} followers{p.role_tag ? ` · ${p.role_tag}` : ''}
+          </Text>
+          {social.error ? <Text style={[s.sub, { color: C.danger }]}>{social.error}</Text> : null}
           {p.bio ? <Text style={s.sub}>{p.bio}</Text> : null}
           {socials.length > 0 ? (
             <View style={s.socials}>
@@ -165,17 +175,7 @@ const s = StyleSheet.create({
   body: { paddingHorizontal: 20, gap: 18 },
   head: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginTop: -36 },
   avatarRing: { borderRadius: 42, borderWidth: 4, borderColor: C.bg },
-  likes: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    height: 34,
-    paddingHorizontal: 12,
-    borderRadius: 9,
-    borderWidth: 1,
-    borderColor: '#2A2A2A',
-    backgroundColor: C.card2,
-  },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingBottom: 4 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   name: { color: C.text, fontSize: 22, letterSpacing: -0.4, ...font('600') },
   role: { color: C.t2, fontSize: 12, fontFamily: F.mono },

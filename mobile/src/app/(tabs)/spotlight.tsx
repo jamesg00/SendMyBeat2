@@ -1,12 +1,13 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import * as api from '@/api/endpoints';
 import type { Producer } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
-import { Avatar, isVerified, rememberProducers, TopBeat, VerifiedBadge } from '@/components/producer';
+import { Avatar, isVerified, LikeButton, rememberProducers, TopBeat, VerifiedBadge } from '@/components/producer';
 import { Button, Card, Screen, Segmented, styles as ui } from '@/components/ui';
+import { loadSocial, useSocial } from '@/state/social';
 import { C, F, R, font } from '@/theme';
 
 type Tab = 'community' | 'pros';
@@ -38,6 +39,11 @@ function Community() {
     return res;
   });
   const me = useRequest(api.myProducer);
+  const social = useSocial();
+
+  useEffect(() => {
+    void loadSocial();
+  }, []);
 
   if (loading) return <ActivityIndicator color={C.t2} style={{ alignSelf: 'flex-start' }} />;
   if (error || !data) {
@@ -57,9 +63,11 @@ function Community() {
   const myRank = me.data ? ranked.findIndex((p) => p.user_id === me.data!.user_id) : -1;
 
   if (!star) return <Text style={s.muted}>No producers in Spotlight yet.</Text>;
+  const notice = social.error ? <Text style={s.error}>{social.error}</Text> : null;
 
   return (
     <>
+      {notice}
       <Featured producer={star} label={data.featured_producers[0] ? 'Producer of the week' : 'Top producer'} />
 
       {trending.length > 0 ? (
@@ -134,10 +142,7 @@ function Featured({ producer: p, label }: { producer: Producer; label: string })
               {p.spotlight_tier ? ` · ${p.spotlight_tier}` : ''}
             </Text>
           </View>
-          <View style={s.likes} accessibilityLabel={`${p.likes ?? 0} likes`}>
-            <Text style={{ color: C.danger, fontSize: 12 }}>♥</Text>
-            <Text style={s.mono}>{p.likes ?? 0}</Text>
-          </View>
+          <LikeButton producer={p} />
         </View>
       </Pressable>
       <View style={{ gap: 10, paddingHorizontal: 14, paddingBottom: 14 }}>
@@ -203,17 +208,6 @@ const s = StyleSheet.create({
   featuredHead: { flexDirection: 'row', alignItems: 'flex-end', gap: 12, paddingHorizontal: 14, marginTop: -28, paddingBottom: 12 },
   featuredAvatar: { borderRadius: 32, borderWidth: 3, borderColor: C.card },
   featuredName: { color: C.text, fontSize: 17, flexShrink: 1, ...font('600') },
-  likes: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    height: 30,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#2A2A2A',
-    backgroundColor: C.card2,
-  },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   chip: {
     color: C.t2,

@@ -3,7 +3,9 @@ import { Image } from 'expo-image';
 import { useEffect } from 'react';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { useAuth } from '@/api/auth';
 import type { Producer } from '@/api/endpoints';
+import { followersOf, likesOf, toggleFollow, toggleLike, useSocial } from '@/state/social';
 import { C, F, font } from '@/theme';
 
 // Producers the Spotlight tab already loaded, so a profile can open instantly before its stats arrive.
@@ -12,6 +14,55 @@ export const rememberProducers = (list: Producer[]) => list.forEach((p) => known
 export const knownProducer = (id: string) => known.get(id);
 
 export const isVerified = (p: Producer) => p.verification_status === 'approved';
+
+const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
+
+// Heart with the in-app like count. Your own profile shows the count without the button.
+export function LikeButton({ producer, size = 'sm' }: { producer: Producer; size?: 'sm' | 'md' }) {
+  const social = useSocial();
+  const { user } = useAuth();
+  const mine = user?.id === producer.user_id;
+  const liked = social.liked.has(producer.user_id);
+  const count = likesOf(social, producer);
+  const h = size === 'md' ? 34 : 30;
+  return (
+    <Pressable
+      onPress={mine ? undefined : () => void toggleLike(producer)}
+      disabled={mine}
+      accessibilityRole="button"
+      accessibilityState={{ selected: liked, disabled: mine }}
+      accessibilityLabel={`${liked ? 'Unlike' : 'Like'} ${producer.username}, ${count} likes`}
+      hitSlop={6}
+      style={({ pressed }) => [s.pill, { height: h }, liked && s.pillOn, pressed && { transform: [{ scale: 0.94 }] }]}>
+      <Text style={{ color: liked ? C.danger : C.t2, fontSize: 13 }}>{liked ? '♥' : '♡'}</Text>
+      <Text style={[s.count, liked && { color: C.text }]}>{compact.format(count)}</Text>
+    </Pressable>
+  );
+}
+
+export function FollowButton({ producer }: { producer: Producer }) {
+  const social = useSocial();
+  const { user } = useAuth();
+  if (user?.id === producer.user_id) return null;
+  const following = social.following.has(producer.user_id);
+  return (
+    <Pressable
+      onPress={() => void toggleFollow(producer)}
+      accessibilityRole="button"
+      accessibilityState={{ selected: following }}
+      accessibilityLabel={following ? `Unfollow ${producer.username}` : `Follow ${producer.username}`}
+      style={({ pressed }) => [
+        s.follow,
+        following ? { backgroundColor: C.card2, borderWidth: 1, borderColor: '#2A2A2A' } : { backgroundColor: C.primary },
+        pressed && { transform: [{ scale: 0.96 }] },
+      ]}>
+      <Text style={[s.followText, { color: following ? C.text : C.onPrimary }]}>{following ? 'Following' : 'Follow'}</Text>
+    </Pressable>
+  );
+}
+
+export const followerCount = (social: ReturnType<typeof useSocial>, p: Producer) => followersOf(social, p);
+
 
 export function Avatar({ producer, size, ring }: { producer: Producer; size: number; ring?: string }) {
   const box = {
@@ -101,6 +152,20 @@ function PlayableBeat({ url, title }: { url: string; title: string }) {
 }
 
 const s = StyleSheet.create({
+  pill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    backgroundColor: C.card2,
+  },
+  pillOn: { borderColor: 'rgba(255,107,107,0.4)', backgroundColor: 'rgba(255,107,107,0.08)' },
+  count: { color: C.t2, fontSize: 12.5, fontFamily: F.mono },
+  follow: { height: 34, paddingHorizontal: 14, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  followText: { fontSize: 13, ...font('600') },
   avatar: { backgroundColor: '#1A1A1A', borderWidth: 1, borderColor: '#2A2A2A', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   badge: { backgroundColor: C.text, alignItems: 'center', justifyContent: 'center' },
   beat: {

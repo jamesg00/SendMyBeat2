@@ -7579,6 +7579,9 @@ SPOTLIGHT_PROFILE_PROJECTION = {
     "verification_status": 1,
     "likes": 1,
     "views": 1,
+    "app_likes": 1,
+    "followers": 1,
+    "banner_url": 1,
     "featured": 1,
     "created_at": 1,
     "updated_at": 1,
@@ -8053,6 +8056,78 @@ async def update_my_producer_profile(
     # Return updated
     updated = await db.producer_profiles.find_one({"user_id": current_user['id']})
     return await _profile_with_role_tag(updated)
+
+
+# --- Spotlight likes and follows --------------------------------------------------------------
+# One document per (user, producer) pair; the producer's counter only moves when a pair is
+# actually created or removed, so repeated taps can't inflate it.
+
+SOCIAL_RELATIONS = {
+    "like": {"collection": "producer_likes", "counter": "app_likes", "state": "liked", "count": "app_likes"},
+    "follow": {"collection": "producer_follows", "counter": "followers", "state": "following", "count": "followers"},
+}
+
+
+async def _set_producer_relation(*, kind: str, actor_id: str, producer_id: str, on: bool) -> dict:
+    spec = SOCIAL_RELATIONS[kind]
+    if producer_id == actor_id:
+        raise HTTPException(status_code=400, detail=f"You can't {kind} yourself.")
+    _enforce_action_rate_limit(
+        f"spotlight_{kind}:{actor_id}",
+        limit=60,
+        window_seconds=60,
+        detail_message="Slow down a little and try again.",
+    )
+    profile = await db.producer_profiles.find_one({"user_id": producer_id}, {"_id": 0, "user_id": 1})
+    if not profile or not await db.users.find_one({"id": producer_id, "deleted": {"$ne": True}}, {"_id": 0, "id": 1}):
+        raise HTTPException(status_code=404, detail="Producer not found.")
+
+    collection = db[spec["collection"]]
+    pair = {"user_id": actor_id, "producer_id": producer_id}
+    counter = spec["counter"]
+    if on:
+        result = await collection.update_one(pair, {"$setOnInsert": {**pair, "created_at": datetime.now(timezone.utc)}}, upsert=True)
+        if getattr(result, "upserted_id", None) is not None:
+            await db.producer_profiles.update_one({"user_id": producer_id}, {"$inc": {counter: 1}})
+    else:
+        result = await collection.delete_one(pair)
+        if getattr(result, "deleted_count", 0):
+            await db.producer_profiles.update_one({"user_id": producer_id, counter: {"$gt": 0}}, {"$inc": {counter: -1}})
+
+    await db.producer_stats_cache.delete_many({"user_id": producer_id})
+    updated = await db.producer_profiles.find_one({"user_id": producer_id}, {"_id": 0, counter: 1}) or {}
+    return {spec["state"]: on, spec["count"]: int(updated.get(counter) or 0)}
+
+
+@api_router.get("/producers/me/social")
+async def get_my_spotlight_social(current_user: dict = Depends(get_current_user)):
+    """Producer ids the current user has liked and follows, for the Spotlight buttons."""
+    liked = await db.producer_likes.find({"user_id": current_user["id"]}, {"_id": 0, "producer_id": 1}).to_list(1000)
+    following = await db.producer_follows.find({"user_id": current_user["id"]}, {"_id": 0, "producer_id": 1}).to_list(1000)
+    return {
+        "liked": [row["producer_id"] for row in liked if row.get("producer_id")],
+        "following": [row["producer_id"] for row in following if row.get("producer_id")],
+    }
+
+
+@api_router.post("/producers/{producer_id}/like")
+async def like_producer(producer_id: str, current_user: dict = Depends(get_current_user)):
+    return await _set_producer_relation(kind="like", actor_id=current_user["id"], producer_id=producer_id, on=True)
+
+
+@api_router.delete("/producers/{producer_id}/like")
+async def unlike_producer(producer_id: str, current_user: dict = Depends(get_current_user)):
+    return await _set_producer_relation(kind="like", actor_id=current_user["id"], producer_id=producer_id, on=False)
+
+
+@api_router.post("/producers/{producer_id}/follow")
+async def follow_producer(producer_id: str, current_user: dict = Depends(get_current_user)):
+    return await _set_producer_relation(kind="follow", actor_id=current_user["id"], producer_id=producer_id, on=True)
+
+
+@api_router.delete("/producers/{producer_id}/follow")
+async def unfollow_producer(producer_id: str, current_user: dict = Depends(get_current_user)):
+    return await _set_producer_relation(kind="follow", actor_id=current_user["id"], producer_id=producer_id, on=False)
 
 
 @api_router.post("/producers/avatar")

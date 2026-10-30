@@ -8,6 +8,17 @@ from typing import Any, Callable
 from pydantic import BaseModel
 
 
+
+def spotlight_trending_score(profile: dict, growth: dict) -> float:
+    """Rank for Spotlight: YouTube likes/views, in-app hearts and follows, and streak activity."""
+    likes = float(profile.get("likes") or 0)
+    views = float(profile.get("views") or 0)
+    app_likes = float(profile.get("app_likes") or 0)
+    followers = float(profile.get("followers") or 0)
+    streak = float(growth.get("current_streak") or 0)
+    days = float(growth.get("total_days_completed") or 0)
+    return likes * 4.0 + views * 0.15 + app_likes * 4.0 + followers * 6.0 + streak * 8.0 + days * 1.5
+
 class SpotlightService:
     def __init__(
         self,
@@ -89,11 +100,7 @@ class SpotlightService:
 
         def trending_score(profile: dict) -> float:
             growth = growth_by_user.get(profile.get("user_id"), {})
-            likes = float(profile.get("likes") or 0)
-            views = float(profile.get("views") or 0)
-            streak = float(growth.get("current_streak") or 0)
-            days = float(growth.get("total_days_completed") or 0)
-            return likes * 4.0 + views * 0.15 + streak * 8.0 + days * 1.5
+            return spotlight_trending_score(profile, growth)
 
         def created_at_ts(profile: dict) -> float:
             value = profile.get("created_at")
@@ -219,11 +226,7 @@ class SpotlightService:
 
             def trending_score(profile: dict) -> float:
                 growth = growth_by_user.get(profile.get("user_id"), {})
-                likes = float(profile.get("likes") or 0)
-                views = float(profile.get("views") or 0)
-                streak = float(growth.get("current_streak") or 0)
-                days = float(growth.get("total_days_completed") or 0)
-                return likes * 4.0 + views * 0.15 + streak * 8.0 + days * 1.5
+                return spotlight_trending_score(profile, growth)
 
             def created_at_ts(profile: dict) -> float:
                 value = profile.get("created_at")

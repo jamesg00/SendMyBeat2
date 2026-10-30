@@ -23,6 +23,10 @@ class ProducerProfile(BaseModel):
     verification_application: Optional[dict] = None
     likes: int = 0
     views: int = 0
+    # In-app hearts and follows from other SendMyBeat users; kept apart from `likes`,
+    # which the metrics refresh overwrites with YouTube likes.
+    app_likes: int = 0
+    followers: int = 0
     featured: bool = False
     google_connected: bool = False
     spotlight_eligible: bool = False

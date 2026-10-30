@@ -65,6 +65,9 @@ export type Producer = {
   spotlight_tier?: string;
   spotlight_score?: number;
   current_streak?: number;
+  /** In-app hearts and follows (separate from YouTube likes). */
+  app_likes?: number;
+  followers?: number;
 };
 export type ProducerBeat = { title?: string; url?: string | null; views?: number; likes?: number; published_at?: string };
 export type ProducerStats = {
@@ -103,6 +106,11 @@ export const analyzeChannel = (onProgress?: JobProgress) => runJob<ChannelAnalyt
 export const spotlight = () => api<Spotlight>('/producers/spotlight');
 export const producerStats = (userId: string) => api<ProducerStats>(`/producers/${userId}/stats`);
 export const myProducer = () => api<Producer>('/producers/me');
+export const mySpotlightSocial = () => api<{ liked: string[]; following: string[] }>('/producers/me/social');
+export const setLike = (userId: string, on: boolean) =>
+  api<{ liked: boolean; app_likes: number }>(`/producers/${userId}/like`, { method: on ? 'POST' : 'DELETE' });
+export const setFollow = (userId: string, on: boolean) =>
+  api<{ following: boolean; followers: number }>(`/producers/${userId}/follow`, { method: on ? 'POST' : 'DELETE' });
 
 export const createDescription = (title: string, content: string) =>
   api<Description>('/descriptions', { body: { title, content } });
