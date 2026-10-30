@@ -52,11 +52,28 @@ export type Producer = {
   user_id: string;
   username: string;
   avatar_url?: string | null;
+  banner_url?: string | null;
   bio?: string;
   tags?: string[];
   likes?: number;
   views?: number;
+  featured?: boolean;
+  role_tag?: string | null;
+  top_beat_url?: string | null;
+  social_links?: Record<string, string | null | undefined>;
+  verification_status?: string;
   spotlight_tier?: string;
+  spotlight_score?: number;
+  current_streak?: number;
+};
+export type ProducerBeat = { title?: string; url?: string | null; views?: number; likes?: number; published_at?: string };
+export type ProducerStats = {
+  profile: Producer;
+  stats: { likes?: number; views?: number; current_streak?: number; longest_streak?: number; total_days_completed?: number };
+  top_beats?: ProducerBeat[];
+  channel_top_beats?: ProducerBeat[];
+  channel?: { connected?: boolean; name?: string | null; performance?: { subscriber_count?: number; total_views?: number; total_videos?: number } };
+  member_since?: string;
 };
 export type Spotlight = {
   featured_producers: Producer[];
@@ -84,6 +101,8 @@ export const descriptions = () => api<Description[]>('/descriptions');
 export const youtubeStatus = () => api<YouTubeStatus>('/youtube/status');
 export const analyzeChannel = (onProgress?: JobProgress) => runJob<ChannelAnalytics>('/youtube/analytics', {}, 3000, onProgress);
 export const spotlight = () => api<Spotlight>('/producers/spotlight');
+export const producerStats = (userId: string) => api<ProducerStats>(`/producers/${userId}/stats`);
+export const myProducer = () => api<Producer>('/producers/me');
 
 export const createDescription = (title: string, content: string) =>
   api<Description>('/descriptions', { body: { title, content } });
