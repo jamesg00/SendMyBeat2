@@ -1,4 +1,6 @@
-import { api, runJob } from './client';
+import { File } from 'expo-file-system';
+
+import { api, runJob, type JobProgress } from './client';
 
 // Shapes follow the Pydantic models in backend/server.py and backend/models_spotlight.py.
 export type User = { id: string; username: string; is_admin?: boolean; email?: string | null };
@@ -57,15 +59,25 @@ export const me = () => api<User>('/auth/me');
 
 export const subscriptionStatus = () => api<SubscriptionStatus>('/subscription/status');
 export const tagHistory = () => api<TagRun[]>('/tags/history');
-export const generateTags = (query: string) =>
-  runJob<TagRun>('/tags/generate', { query, custom_tags: [] }, 2500);
+// Starts tag generation; returns either the finished run or a job to follow with pollJob.
+export const startTagGeneration = (query: string) =>
+  api<{ job?: { id: string } } & Partial<TagRun>>('/tags/generate', { body: { query, custom_tags: [] } });
+
+// Removed tags are sent as excluded so future runs for this artist learn from them, like the website.
+export const updateTags = (id: string, tags: string[], removed: string[], added: string[]) =>
+  api<TagRun>(`/tags/history/${id}`, { method: 'PATCH', body: { tags, excluded_tags: removed, added_tags: added } });
 export const descriptions = () => api<Description[]>('/descriptions');
 export const youtubeStatus = () => api<YouTubeStatus>('/youtube/status');
-export const analyzeChannel = () => runJob<ChannelAnalytics>('/youtube/analytics', {}, 3000);
+export const analyzeChannel = (onProgress?: JobProgress) => runJob<ChannelAnalytics>('/youtube/analytics', {}, 3000, onProgress);
 export const spotlight = () => api<Spotlight>('/producers/spotlight');
 
 export const createDescription = (title: string, content: string) =>
   api<Description>('/descriptions', { body: { title, content } });
+
+export const updateDescription = (id: string, title: string, content: string) =>
+  api<Description>(`/descriptions/${id}`, { method: 'PUT', body: { title, content } });
+
+export const deleteDescription = (id: string) => api<unknown>(`/descriptions/${id}`, { method: 'DELETE' });
 
 // A picked file. On web the picker also hands back a real File object.
 export type PickedFile = { uri: string; name: string; mimeType: string; file?: Blob };
@@ -73,8 +85,11 @@ export type PickedFile = { uri: string; name: string; mimeType: string; file?: B
 function fileForm(f: PickedFile) {
   const form = new FormData();
   if (f.file) form.append('file', f.file, f.name);
-  // React Native's FormData accepts {uri, name, type} for local files
-  else form.append('file', { uri: f.uri, name: f.name, type: f.mimeType } as unknown as Blob);
+  // Expo's fetch can't send {uri} parts; it takes any part with bytes(), name and type.
+  else {
+    const local = new File(f.uri);
+    form.append('file', { name: f.name, type: f.mimeType, bytes: () => local.bytes() } as unknown as Blob);
+  }
   return form;
 }
 

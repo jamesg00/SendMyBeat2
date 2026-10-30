@@ -21,6 +21,7 @@ from authlib.integrations.starlette_client import OAuth, OAuthError
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request as GoogleRequest
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
 import json
 import base64
@@ -3918,7 +3919,7 @@ async def _execute_channel_analytics_job(job: dict) -> dict:
         )
 
     youtube = build('youtube', 'v3', credentials=creds)
-    channels_response = youtube.channels().list(part='statistics,snippet', mine=True).execute()
+    channels_response = youtube.channels().list(part='statistics,snippet,contentDetails', mine=True).execute()
     if not channels_response.get('items'):
         raise HTTPException(status_code=404, detail="No channel found")
 
@@ -3926,14 +3927,8 @@ async def _execute_channel_analytics_job(job: dict) -> dict:
     channel_stats = channel['statistics']
     channel_snippet = channel['snippet']
 
-    search_response = youtube.search().list(
-        part='id',
-        forMine=True,
-        type='video',
-        order='date',
-        maxResults=6
-    ).execute()
-    video_ids = [item['id']['videoId'] for item in search_response.get('items', [])]
+    uploads_playlist_id = channel.get('contentDetails', {}).get('relatedPlaylists', {}).get('uploads', '')
+    video_ids = _recent_upload_ids(youtube, uploads_playlist_id, 6)
 
     recent_videos = []
     if video_ids:
@@ -4110,14 +4105,49 @@ Provide your analysis in this EXACT JSON format:
     return result
 
 
+def _recent_upload_ids(youtube, uploads_playlist_id: str, max_results: int) -> list[str]:
+    """Newest video ids from the channel's uploads playlist.
+
+    playlistItems.list costs 1 quota unit; search.list(forMine=True) costs 100 and has its own
+    "Search Queries per day" cap, which channel analytics kept running into.
+    """
+    if not uploads_playlist_id:
+        return []
+    response = youtube.playlistItems().list(
+        part="contentDetails",
+        playlistId=uploads_playlist_id,
+        maxResults=max_results,
+    ).execute()
+    return [
+        item["contentDetails"]["videoId"]
+        for item in response.get("items", [])
+        if item.get("contentDetails", {}).get("videoId")
+    ]
+
+
+def _friendly_youtube_error(exc: Exception) -> str:
+    """A message safe to show users instead of Google's raw error (which names our project)."""
+    if isinstance(exc, HttpError):
+        status = getattr(getattr(exc, "resp", None), "status", None)
+        text = str(exc)
+        if status in (403, 429) and ("quota" in text.lower() or "rateLimitExceeded" in text):
+            return "YouTube's daily limit for SendMyBeat was reached. Try again tomorrow."
+        if status in (401, 403):
+            return "YouTube didn't allow this request. Reconnect YouTube on sendmybeat.com and try again."
+        return "YouTube is not responding right now. Try again in a few minutes."
+    if isinstance(exc, HTTPException):
+        return str(exc.detail)
+    return str(exc)
+
+
 async def _process_channel_analytics_job(job: dict) -> None:
     job_id = job["id"]
     try:
         result = await _execute_channel_analytics_job(job)
         await _update_upload_job(job_id, status="succeeded", progress=100, message="Channel analysis complete.", result=result, error=None, extra_updates={"completed_at": _safe_iso_now(), "worker_id": UPLOAD_JOB_WORKER_ID})
     except Exception as exc:
-        error_message = str(exc)
-        logging.error(f"Channel analytics job {job_id} failed: {error_message}")
+        logging.error(f"Channel analytics job {job_id} failed: {exc}")
+        error_message = _friendly_youtube_error(exc)
         await _update_upload_job(job_id, status="failed", progress=100, message="Channel analysis failed.", error=error_message, extra_updates={"failed_at": _safe_iso_now(), "worker_id": UPLOAD_JOB_WORKER_ID})
 
 
@@ -4697,14 +4727,10 @@ async def _estimate_best_upload_hour_utc(user_id: str) -> int:
     try:
         credentials = await refresh_youtube_token(user_id)
         youtube = build("youtube", "v3", credentials=credentials)
-        search_response = youtube.search().list(
-            part="id",
-            forMine=True,
-            type="video",
-            order="date",
-            maxResults=25
-        ).execute()
-        video_ids = [item["id"]["videoId"] for item in search_response.get("items", []) if item.get("id", {}).get("videoId")]
+        channels_response = youtube.channels().list(part="contentDetails", mine=True).execute()
+        channel_items = channels_response.get("items") or [{}]
+        uploads_playlist_id = channel_items[0].get("contentDetails", {}).get("relatedPlaylists", {}).get("uploads", "")
+        video_ids = _recent_upload_ids(youtube, uploads_playlist_id, 25)
         if not video_ids:
             return 18
 

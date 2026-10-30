@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -9,10 +9,10 @@ import {
   type TextStyle,
   type ViewStyle,
 } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { C, F, R } from '@/theme';
+import { C, F, R, font } from '@/theme';
 
 export function Screen({
   title,
@@ -50,7 +50,7 @@ export function Card({ children, style }: { children: ReactNode; style?: StylePr
 export function SectionLabel({ children, right }: { children: string; right?: ReactNode }) {
   return (
     <View style={styles.sectionRow}>
-      <Text style={styles.sectionLabel}>{children.toUpperCase()}</Text>
+      <Text style={styles.sectionLabel}>{children}</Text>
       {right}
     </View>
   );
@@ -68,10 +68,10 @@ type ButtonProps = {
   style?: StyleProp<ViewStyle>;
 };
 
-// Flat solid buttons with a small press-scale, matching Clippr's Btn.qml.
+// Primary is white-on-black like the system's own prominent buttons; mint stays for status only.
 export function Button({ title, onPress, variant = 'primary', size = 'lg', style }: ButtonProps) {
-  const height = size === 'lg' ? 50 : size === 'md' ? 40 : 30;
-  const radius = size === 'lg' ? 14 : size === 'md' ? 12 : 9;
+  const height = size === 'lg' ? 50 : size === 'md' ? 40 : 32;
+  const radius = size === 'lg' ? 12 : size === 'md' ? 10 : 8;
   return (
     <Pressable
       onPress={onPress}
@@ -79,17 +79,17 @@ export function Button({ title, onPress, variant = 'primary', size = 'lg', style
       style={({ pressed }) => [
         styles.button,
         { height, borderRadius: radius, paddingHorizontal: size === 'sm' ? 12 : 16 },
-        variant === 'primary' && { backgroundColor: C.acc },
+        variant === 'primary' && { backgroundColor: C.primary },
         variant === 'secondary' && { backgroundColor: C.card2, borderWidth: 1, borderColor: C.line },
         variant === 'plain' && { backgroundColor: 'transparent', paddingHorizontal: 0 },
-        pressed && { transform: [{ scale: 0.97 }], opacity: 0.9 },
+        pressed && { transform: [{ scale: 0.97 }], opacity: 0.85 },
         style,
       ]}>
       <Text
         style={[
           styles.buttonText,
-          { fontSize: size === 'lg' ? 15 : size === 'md' ? 14 : 12 },
-          { color: variant === 'primary' ? C.onAcc : variant === 'plain' ? C.acc : C.text },
+          { fontSize: size === 'lg' ? 16 : size === 'md' ? 15 : 13 },
+          { color: variant === 'primary' ? C.onPrimary : variant === 'plain' ? C.t2 : C.text },
         ]}>
         {title}
       </Text>
@@ -99,7 +99,7 @@ export function Button({ title, onPress, variant = 'primary', size = 'lg', style
 
 export type SegOption<V extends string> = { value: V; label: string };
 
-// iOS-style segmented control: the solid accent thumb springs between options.
+// iOS dark segmented control: a grey thumb springs between options.
 export function Segmented<V extends string>({
   options,
   value,
@@ -112,12 +112,20 @@ export function Segmented<V extends string>({
   compact?: boolean;
 }) {
   const [width, setWidth] = useState(0);
-  const cell = width > 0 ? (width - 6) / options.length : 0;
+  const cell = width > 0 ? (width - 4) / options.length : 0;
   const index = Math.max(0, options.findIndex((o) => o.value === value));
   const x = useSharedValue(0);
+  const placed = useRef(false);
 
   useEffect(() => {
-    x.value = withSpring(index * cell, { damping: 18, stiffness: 220 });
+    if (cell <= 0) return;
+    // Snap into place on first layout, then glide like UISegmentedControl: quick, with a barely-there settle.
+    if (!placed.current) {
+      placed.current = true;
+      x.value = index * cell;
+      return;
+    }
+    x.value = withSpring(index * cell, { duration: 280, dampingRatio: 0.82 });
   }, [index, cell, x]);
 
   const thumbStyle = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }] }));
@@ -138,7 +146,7 @@ export function Segmented<V extends string>({
             accessibilityRole="tab"
             accessibilityState={{ selected: active }}
             style={[styles.segItem, { height: h }]}>
-            <Text style={[styles.segText, { color: active ? C.onAcc : C.t2, fontSize: compact ? 12 : 13 }]}>
+            <Text style={[active ? styles.segTextOn : styles.segText, { fontSize: compact ? 12 : 13 }]}>
               {o.label}
             </Text>
           </Pressable>
@@ -195,48 +203,145 @@ export function ListRow({
 
 export function Pill({ label, tone = 'accent' }: { label: string; tone?: 'accent' | 'muted' }) {
   return (
-    <View style={[styles.pill, { backgroundColor: tone === 'accent' ? C.accSoft : C.card2 }]}>
+    <View
+      style={[
+        styles.pill,
+        tone === 'accent' ? { backgroundColor: C.accSoft, borderColor: C.accLine } : { backgroundColor: C.card2, borderColor: C.line },
+      ]}>
       <Text style={[styles.pillText, { color: tone === 'accent' ? C.acc : C.t2 }]}>{label}</Text>
     </View>
   );
 }
 
-export function Meter({ value, color = C.acc }: { value: number; color?: string }) {
+export function Meter({ value, color = C.text, height = 2 }: { value: number; color?: string; height?: number }) {
+  const w = useSharedValue(Math.max(0, Math.min(1, value)));
+  useEffect(() => {
+    w.value = withTiming(Math.max(0, Math.min(1, value)), { duration: 450, easing: Easing.out(Easing.cubic) });
+  }, [value, w]);
+  const fill = useAnimatedStyle(() => ({ width: `${w.value * 100}%` }));
   return (
-    <View style={styles.meterTrack}>
-      <View style={[styles.meterFill, { width: `${Math.round(value * 100)}%`, backgroundColor: color }]} />
+    <View style={[styles.meterTrack, { height, borderRadius: height / 2 }]}>
+      <Animated.View style={[styles.meterFill, { height, borderRadius: height / 2, backgroundColor: color }, fill]} />
     </View>
   );
 }
 
-export function IconTile({ children, tint = C.accSoft }: { children: ReactNode; tint?: string }) {
+function clock(sec: number) {
+  const t = Math.max(0, Math.floor(sec));
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+}
+
+// Live progress for a background job, shown like a deploy log. Servers report progress in big
+// jumps (20% → 100%), so the bar also creeps forward on an eased estimate from elapsed time.
+export function JobProgress({
+  title,
+  startedAt,
+  expectedSec,
+  progress = 0,
+  message,
+  steps,
+}: {
+  title: string;
+  startedAt: number;
+  expectedSec: number;
+  progress?: number;
+  message?: string;
+  /** Stage labels shown in order as time passes; the server's message is used when there are none. */
+  steps?: string[];
+}) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 300);
+    return () => clearInterval(t);
+  }, []);
+
+  const elapsed = (now - startedAt) / 1000;
+  const estimate = 95 * (1 - Math.exp(-elapsed / (expectedSec * 0.6)));
+  const pct = Math.min(97, Math.max(progress, estimate));
+  const left = Math.max(0, expectedSec - elapsed);
+  const per = steps?.length ? expectedSec / steps.length : 0;
+  const current = steps?.length ? Math.min(steps.length - 1, Math.floor(elapsed / per)) : 0;
+  const lines = steps?.length
+    ? steps.map((label, i) => ({ label, at: i * per, state: i < current ? 'done' : i === current ? 'now' : 'next' }))
+    : [{ label: message ?? 'Working…', at: 0, state: 'now' }];
+
+  return (
+    <View style={styles.job} accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: 100, now: Math.round(pct) }}>
+      <View style={styles.jobHead}>
+        <Text style={styles.jobTitle} numberOfLines={1}>
+          {title}
+        </Text>
+        <Text style={styles.jobPct}>{Math.round(pct)}%</Text>
+      </View>
+      <Meter value={pct / 100} color={C.acc} />
+      <View style={{ gap: 8 }}>
+        {lines.slice(0, current + 2).map((l) => (
+          <View key={l.label} style={styles.logLine}>
+            <Text style={styles.logTime}>{l.state === 'next' ? '--:--' : clock(l.at)}</Text>
+            <Text style={[styles.logMark, l.state === 'done' && { color: C.acc }, l.state === 'next' && { color: C.t3 }]}>
+              {l.state === 'done' ? '✓' : l.state === 'now' ? '●' : '○'}
+            </Text>
+            <Text
+              style={[styles.logText, l.state === 'now' && { color: C.text }, l.state === 'next' && { color: C.t3 }]}
+              numberOfLines={1}>
+              {l.label}
+            </Text>
+          </View>
+        ))}
+      </View>
+      <Text style={styles.jobTime}>{left > 1 ? `~${clock(left)} left` : `${clock(elapsed)} elapsed`}</Text>
+    </View>
+  );
+}
+
+export function IconTile({ children, tint = C.card2 }: { children: ReactNode; tint?: string }) {
   return <View style={[styles.iconTile, { backgroundColor: tint }]}>{children}</View>;
 }
 
 export const styles = StyleSheet.create({
-  screen: { paddingHorizontal: 16, paddingBottom: 140, gap: 16, backgroundColor: C.bg },
-  titleRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
-  largeTitle: { color: C.text, fontSize: 34, fontWeight: '700', letterSpacing: -0.6 },
+  screen: { paddingHorizontal: 20, paddingBottom: 140, gap: 20, backgroundColor: C.bg },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  largeTitle: { color: C.text, fontSize: 30, lineHeight: 36, letterSpacing: -0.9, ...font('600') },
   card: { backgroundColor: C.card, borderRadius: R.card, borderWidth: 1, borderColor: C.line, padding: 16, gap: 12 },
-  sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 4 },
-  sectionLabel: { color: C.t3, fontSize: 11, fontWeight: '600', letterSpacing: 0.6 },
-  body: { color: C.text, fontSize: 15 },
+  sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 2 },
+  sectionLabel: { color: C.t2, fontSize: 13, ...font('500') },
+  body: { color: C.text, fontSize: 15, ...font() },
   button: { alignItems: 'center', justifyContent: 'center' },
-  buttonText: { fontWeight: '600' },
-  seg: { flexDirection: 'row', padding: 3, borderRadius: R.ctl, backgroundColor: C.card2 },
-  segThumb: { position: 'absolute', top: 3, left: 3, borderRadius: R.thumb, backgroundColor: C.acc },
+  buttonText: { ...font('600') },
+  seg: { flexDirection: 'row', padding: 2, borderRadius: 9, backgroundColor: C.segTrack },
+  segThumb: {
+    position: 'absolute',
+    top: 2,
+    left: 2,
+    borderRadius: R.thumb,
+    backgroundColor: C.segThumb,
+    shadowColor: '#000',
+    shadowOpacity: 0.35,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+  },
   segItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  segText: { fontWeight: '600' },
+  segText: { color: C.text, ...font('500') },
+  segTextOn: { color: '#FFFFFF', ...font('600') },
   listGroup: { backgroundColor: C.card, borderRadius: R.card, borderWidth: 1, borderColor: C.line, overflow: 'hidden' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 8 },
-  rowDivider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: C.line },
-  rowTitle: { color: C.text, fontSize: 15 },
-  rowSub: { color: C.t3, fontSize: 12, fontFamily: F.mono },
-  rowValue: { color: C.t3, fontSize: 15 },
+  rowDivider: { borderBottomWidth: 1, borderBottomColor: C.lineSoft },
+  rowTitle: { color: C.text, fontSize: 15, ...font() },
+  rowSub: { color: C.t2, fontSize: 13, ...font() },
+  rowValue: { color: C.t2, fontSize: 14, ...font() },
   chevron: { color: C.t3, fontSize: 20, marginTop: -2 },
-  pill: { paddingHorizontal: 9, paddingVertical: 3, borderRadius: 999, alignSelf: 'flex-start' },
-  pillText: { fontSize: 12, fontWeight: '600' },
-  meterTrack: { height: 4, borderRadius: 2, backgroundColor: C.card2, overflow: 'hidden' },
-  meterFill: { height: 4, borderRadius: 2 },
-  iconTile: { width: 34, height: 34, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  pill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: R.chip, alignSelf: 'flex-start', borderWidth: 1 },
+  pillText: { fontSize: 12, ...font('500') },
+  meterTrack: { backgroundColor: C.lineSoft, overflow: 'hidden' },
+  meterFill: {},
+  job: { gap: 12, padding: 16, borderRadius: R.card, backgroundColor: C.card, borderWidth: 1, borderColor: C.line },
+  jobHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 },
+  jobTitle: { color: C.text, fontSize: 15, flexShrink: 1, ...font('600') },
+  jobPct: { color: C.text, fontSize: 15, fontFamily: F.monoMedium },
+  logLine: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  logTime: { color: C.t3, fontSize: 12, fontFamily: F.mono, width: 40 },
+  logMark: { color: C.text, fontSize: 12, fontFamily: F.mono, width: 12, textAlign: 'center' },
+  logText: { color: C.t2, fontSize: 12.5, fontFamily: F.mono, flexShrink: 1 },
+  jobTime: { color: C.t3, fontSize: 12, fontFamily: F.mono },
+  iconTile: { width: 32, height: 32, borderRadius: 8, borderWidth: 1, borderColor: C.line, alignItems: 'center', justifyContent: 'center' },
 });

@@ -1,3 +1,5 @@
+import { Geist_400Regular, Geist_500Medium, Geist_600SemiBold, Geist_700Bold } from '@expo-google-fonts/geist';
+import { GeistMono_400Regular, GeistMono_500Medium } from '@expo-google-fonts/geist-mono';
 import { useFonts } from 'expo-font';
 import { DarkTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -6,27 +8,38 @@ import { useEffect } from 'react';
 
 import { AuthProvider, useAuth } from '@/api/auth';
 import { DraftProvider } from '@/state/draft';
+import { StudioProvider } from '@/state/studio';
 import { C, F } from '@/theme';
 
 SplashScreen.preventAutoHideAsync();
 
 const theme = {
   ...DarkTheme,
-  colors: { ...DarkTheme.colors, background: C.bg, card: C.card, primary: C.acc, text: C.text, border: C.line },
+  colors: { ...DarkTheme.colors, background: C.bg, card: C.card, primary: C.text, text: C.text, border: C.line },
 };
 
 export default function RootLayout() {
   return (
     <AuthProvider>
       <DraftProvider>
-        <RootStack />
+        <StudioProvider>
+          <RootStack />
+        </StudioProvider>
       </DraftProvider>
     </AuthProvider>
   );
 }
 
 function RootStack() {
-  const [fontsLoaded] = useFonts({ [F.brand]: require('@/assets/fonts/karmatic-arcade.ttf') });
+  const [fontsLoaded] = useFonts({
+    [F.brand]: require('@/assets/fonts/karmatic-arcade.ttf'),
+    Geist_400Regular,
+    Geist_500Medium,
+    Geist_600SemiBold,
+    Geist_700Bold,
+    GeistMono_400Regular,
+    GeistMono_500Medium,
+  });
   const { ready, user } = useAuth();
   const loaded = fontsLoaded && ready;
 

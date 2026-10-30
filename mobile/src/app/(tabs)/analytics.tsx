@@ -1,89 +1,130 @@
 import { useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import Svg, { Circle, Line, Polygon, Polyline } from 'react-native-svg';
 
 import * as api from '@/api/endpoints';
 import type { ChannelAnalytics } from '@/api/endpoints';
-import { Button, Card, Screen, SectionLabel, styles as ui } from '@/components/ui';
-import { C } from '@/theme';
+import { Button, Card, JobProgress, Screen, styles as ui } from '@/components/ui';
+import { C, F, font } from '@/theme';
 
 const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
 
 export default function AnalyticsScreen() {
   const [data, setData] = useState<ChannelAnalytics | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [job, setJob] = useState<{ startedAt: number; progress: number; message?: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const analyze = async () => {
-    setBusy(true);
+    setJob({ startedAt: Date.now(), progress: 0 });
     setError(null);
     try {
-      setData(await api.analyzeChannel());
+      setData(await api.analyzeChannel((progress, message) => setJob((j) => j && { ...j, progress, message })));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Channel analysis failed.');
     } finally {
-      setBusy(false);
+      setJob(null);
     }
   };
 
+  // Oldest to newest, so the line reads left to right.
   const views = (data?.recent_videos ?? []).slice(0, 8).map((v) => v.views ?? 0).reverse();
-  const max = Math.max(1, ...views);
+  const total = views.reduce((a, b) => a + b, 0);
 
   return (
-    <Screen title="Analytics">
+    <Screen
+      title="Analytics"
+      accessory={data && !job ? <Button title="Refresh" variant="secondary" size="sm" onPress={analyze} /> : null}>
       {data ? (
         <>
           <Text style={s.channel}>{data.channel_name}</Text>
-          <Card style={s.stats}>
-            <Stat label="Subs" value={compact.format(data.subscriber_count)} />
-            <Stat label="Views" value={compact.format(data.total_views)} divider />
-            <Stat label="Videos" value={compact.format(data.total_videos)} divider />
-          </Card>
 
-          {views.length > 0 && (
-            <Card style={{ gap: 14 }}>
-              <Text style={s.cardTitle}>Recent video views</Text>
-              <View style={s.chart} accessibilityLabel={`Views for your last ${views.length} videos, oldest to newest`}>
-                {views.map((v, i) => (
-                  <View
-                    key={i}
-                    style={[s.bar, { height: Math.max(4, (v / max) * 60), backgroundColor: i === views.length - 1 ? C.acc : C.card2 }]}
-                  />
-                ))}
+          {views.length > 1 ? (
+            <View style={{ gap: 14 }}>
+              <View style={{ gap: 4 }}>
+                <Text style={ui.sectionLabel}>Views, last {views.length} uploads</Text>
+                <Text style={s.hero}>{compact.format(total)}</Text>
               </View>
-            </Card>
-          )}
+              <ViewsChart views={views} />
+            </View>
+          ) : null}
+
+          <View style={s.stats}>
+            <Stat label="Subscribers" value={compact.format(data.subscriber_count)} />
+            <Stat label="Total views" value={compact.format(data.total_views)} divider />
+            <Stat label="Videos" value={compact.format(data.total_videos)} divider />
+          </View>
 
           <Insights title="Working well" color={C.acc} items={data.insights?.what_works} />
-          <Insights title="Needs improvement" color={C.danger} items={data.insights?.needs_improvement} />
+          <Insights title="Needs work" color={C.danger} items={data.insights?.needs_improvement} />
           <Insights title="Next steps" color={C.warn} items={data.insights?.recommendations} />
         </>
-      ) : (
+      ) : job ? null : (
         <Card>
-          <Text style={s.cardTitle}>YouTube channel analytics</Text>
-          <Text style={s.muted}>
-            Get AI insights on what is working on your channel and what to post next. Uses 1 AI credit and needs YouTube
+          <Text style={s.cardTitle}>Channel analytics</Text>
+          <Text style={s.body}>
+            AI insights on what is working on your channel and what to post next. Uses 1 AI credit and needs YouTube
             connected.
           </Text>
+          <Button title="Analyze my channel" onPress={analyze} />
         </Card>
       )}
 
+      {job ? (
+        <JobProgress
+          title="Analyzing your channel"
+          startedAt={job.startedAt}
+          expectedSec={50}
+          progress={job.progress}
+          steps={['Loading channel data', 'Reading recent uploads', 'Generating AI insights', 'Writing recommendations']}
+        />
+      ) : null}
       {error ? <Text style={s.error}>{error}</Text> : null}
-      {busy ? (
-        <View style={s.busy}>
-          <ActivityIndicator color={C.acc} />
-          <Text style={s.muted}>Analyzing your channel. This can take up to a minute.</Text>
-        </View>
-      ) : (
-        <Button title={data ? 'Re-analyze · 1 credit' : 'Analyze my channel · 1 credit'} onPress={analyze} />
-      )}
     </Screen>
+  );
+}
+
+// A thin line with a faint fill; the newest upload is marked in mint.
+function ViewsChart({ views }: { views: number[] }) {
+  const [w, setW] = useState(0);
+  const h = 140;
+  const top = 12;
+  const bottom = h - 18;
+  const pad = 5;
+  const max = Math.max(1, ...views);
+  const pts = views.map((v, i) => [pad + (i / (views.length - 1)) * (w - pad * 2), bottom - (v / max) * (bottom - top)] as const);
+  const line = pts.map(([x, y]) => `${x},${y}`).join(' ');
+  const last = pts[pts.length - 1];
+
+  return (
+    <View
+      onLayout={(e) => setW(e.nativeEvent.layout.width)}
+      style={{ gap: 6 }}
+      accessibilityRole="image"
+      accessibilityLabel={`Views per upload for your last ${views.length} uploads, oldest to newest. Newest: ${compact.format(views[views.length - 1])}.`}>
+      {w > 0 ? (
+        <Svg width={w} height={h}>
+          <Line x1={0} y1={top} x2={w} y2={top} stroke={C.card2} strokeWidth={1} />
+          <Line x1={0} y1={(top + bottom) / 2} x2={w} y2={(top + bottom) / 2} stroke={C.card2} strokeWidth={1} />
+          <Line x1={0} y1={bottom} x2={w} y2={bottom} stroke={C.line} strokeWidth={1} />
+          <Polygon points={`${pad},${bottom} ${line} ${w - pad},${bottom}`} fill="rgba(237,237,237,0.05)" />
+          <Polyline points={line} fill="none" stroke={C.text} strokeWidth={1.75} strokeLinejoin="round" strokeLinecap="round" />
+          <Circle cx={last[0]} cy={last[1]} r={4} fill={C.bg} stroke={C.acc} strokeWidth={2} />
+        </Svg>
+      ) : (
+        <View style={{ height: h }} />
+      )}
+      <View style={s.axis}>
+        <Text style={s.mono}>Oldest</Text>
+        <Text style={s.mono}>Newest · {compact.format(views[views.length - 1])}</Text>
+      </View>
+    </View>
   );
 }
 
 function Stat({ label, value, divider }: { label: string; value: string; divider?: boolean }) {
   return (
     <View style={[s.stat, divider && s.statDivider]}>
-      <Text style={ui.sectionLabel}>{label.toUpperCase()}</Text>
+      <Text style={s.statLabel}>{label}</Text>
       <Text style={s.statValue}>{value}</Text>
     </View>
   );
@@ -93,32 +134,31 @@ function Insights({ title, color, items }: { title: string; color: string; items
   const list = Array.isArray(items) ? items.filter((x): x is string => typeof x === 'string') : [];
   if (list.length === 0) return null;
   return (
-    <>
-      <SectionLabel>{title}</SectionLabel>
-      <Card style={{ gap: 10 }}>
-        {list.slice(0, 5).map((item, i) => (
-          <View key={i} style={{ flexDirection: 'row', gap: 10 }}>
-            <View style={[s.dot, { backgroundColor: color }]} />
-            <Text style={s.item}>{item}</Text>
-          </View>
-        ))}
-      </Card>
-    </>
+    <View style={{ gap: 12 }}>
+      <Text style={ui.sectionLabel}>{title}</Text>
+      {list.slice(0, 5).map((item, i) => (
+        <View key={i} style={{ flexDirection: 'row', gap: 12 }}>
+          <View style={[s.bar, { backgroundColor: color }]} />
+          <Text style={s.item}>{item}</Text>
+        </View>
+      ))}
+    </View>
   );
 }
 
 const s = StyleSheet.create({
-  channel: { color: C.t2, fontSize: 15, marginTop: -8 },
-  stats: { flexDirection: 'row', padding: 0, gap: 0 },
-  stat: { flex: 1, padding: 14, gap: 4 },
-  statDivider: { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: C.line },
-  statValue: { color: C.text, fontSize: 22, fontWeight: '700' },
-  cardTitle: { color: C.text, fontSize: 17, fontWeight: '600' },
-  muted: { color: C.t3, fontSize: 13, lineHeight: 18, flexShrink: 1 },
-  error: { color: C.danger, fontSize: 13 },
-  busy: { flexDirection: 'row', alignItems: 'center', gap: 12, height: 50 },
-  chart: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, height: 60 },
-  bar: { flex: 1, borderRadius: 4 },
-  dot: { width: 8, height: 8, borderRadius: 4, marginTop: 6 },
-  item: { flex: 1, color: C.text, fontSize: 14, lineHeight: 20 },
+  channel: { color: C.t2, fontSize: 13, marginTop: -14, ...font() },
+  hero: { color: C.text, fontSize: 40, lineHeight: 44, letterSpacing: -1.4, ...font('600') },
+  axis: { flexDirection: 'row', justifyContent: 'space-between' },
+  mono: { color: C.t3, fontSize: 11, fontFamily: F.mono },
+  stats: { flexDirection: 'row', borderTopWidth: 1, borderBottomWidth: 1, borderColor: C.lineSoft },
+  stat: { flex: 1, paddingVertical: 14, gap: 4 },
+  statDivider: { borderLeftWidth: 1, borderLeftColor: C.lineSoft, paddingLeft: 14 },
+  statLabel: { color: C.t2, fontSize: 12, ...font() },
+  statValue: { color: C.text, fontSize: 20, letterSpacing: -0.4, ...font('600') },
+  cardTitle: { color: C.text, fontSize: 17, ...font('600') },
+  body: { color: C.t2, fontSize: 14, lineHeight: 20, ...font() },
+  error: { color: C.danger, fontSize: 13, ...font() },
+  bar: { width: 3, borderRadius: 2 },
+  item: { flex: 1, color: C.text, fontSize: 15, lineHeight: 21, ...font() },
 });

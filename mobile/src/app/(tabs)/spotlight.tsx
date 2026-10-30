@@ -6,7 +6,7 @@ import * as api from '@/api/endpoints';
 import type { Producer } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
 import { Button, Card, ListGroup, ListRow, Screen, SectionLabel, Segmented, styles as ui } from '@/components/ui';
-import { C, F } from '@/theme';
+import { C, F, font } from '@/theme';
 
 type Filter = 'featured' | 'trending' | 'new';
 
@@ -31,10 +31,10 @@ export default function SpotlightScreen() {
       />
 
       {loading ? (
-        <ActivityIndicator color={C.acc} />
+        <ActivityIndicator color={C.t2} style={{ alignSelf: 'flex-start' }} />
       ) : error ? (
         <Card>
-          <Text style={{ color: C.danger, fontSize: 14 }}>{error}</Text>
+          <Text style={{ color: C.danger, fontSize: 14, ...font() }}>{error}</Text>
           <Button title="Try again" variant="secondary" size="md" onPress={reload} />
         </Card>
       ) : !top ? (
@@ -42,7 +42,7 @@ export default function SpotlightScreen() {
       ) : (
         <>
           <Card style={{ gap: 14 }}>
-            <Text style={ui.sectionLabel}>{filter === 'featured' ? 'FEATURED PRODUCER' : 'TOP PRODUCER'}</Text>
+            <Text style={ui.sectionLabel}>{filter === 'featured' ? 'Featured producer' : filter === 'trending' ? 'Trending now' : 'Newest producer'}</Text>
             <View style={s.featured}>
               <Avatar producer={top} size={56} />
               <View style={{ gap: 4, flex: 1 }}>
@@ -89,15 +89,15 @@ function Avatar({ producer, size }: { producer: Producer; size: number }) {
   }
   return (
     <View style={[s.avatar, style]}>
-      <Text style={{ color: C.acc, fontWeight: '600', fontSize: size * 0.38 }}>{producer.username.charAt(0).toUpperCase()}</Text>
+      <Text style={{ color: C.t2, fontSize: size * 0.38, ...font('600') }}>{producer.username.charAt(0).toUpperCase()}</Text>
     </View>
   );
 }
 
 const s = StyleSheet.create({
   featured: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  name: { color: C.text, fontSize: 17, fontWeight: '600' },
-  meta: { color: C.t3, fontSize: 13 },
+  name: { color: C.text, fontSize: 17, ...font('600') },
+  meta: { color: C.t2, fontSize: 13, ...font() },
   rank: { width: 18, color: C.t3, fontSize: 13, fontFamily: F.mono },
-  avatar: { backgroundColor: C.card2, alignItems: 'center', justifyContent: 'center' },
+  avatar: { backgroundColor: '#1A1A1A', borderWidth: 1, borderColor: '#2A2A2A', alignItems: 'center', justifyContent: 'center' },
 });

@@ -1,26 +1,55 @@
-import { Platform } from 'react-native';
+import type { TextStyle } from 'react-native';
 
-// Clippr "mint" palette (see YouTube Clip Downloader/clipdl/qml_ui/qml/Theme.qml) so both apps feel like one family.
+// v3 "Console" look: true black, hairline borders, Geist type, white primary actions.
+// Mint (acc) is reserved for status: done, uploaded, progress, positive change.
+// See the "SendMyBeat App Redesign Plan" doc, section "Second pass: v3 Console".
 export const C = {
-  bg: '#060D09',
-  card: '#0B1510',
-  card2: '#14231B',
-  line: 'rgba(255,255,255,0.08)',
-  lineSoft: 'rgba(255,255,255,0.06)',
-  text: '#ECF2EE',
-  t2: '#A3B8AC',
-  t3: '#86998D',
+  bg: '#000000',
+  card: '#0A0A0A',
+  card2: '#111111',
+  line: '#262626',
+  lineSoft: '#1F1F1F',
+  text: '#EDEDED',
+  t2: '#A1A1A1',
+  t3: '#8F8F8F',
+  primary: '#EDEDED',
+  onPrimary: '#0A0A0A',
+  segTrack: '#1C1C1E',
+  segThumb: '#636366',
   acc: '#2EE59D',
-  onAcc: '#04140C',
-  accSoft: 'rgba(46,229,157,0.18)',
+  onAcc: '#03140C',
+  accSoft: 'rgba(46,229,157,0.12)',
+  accLine: '#1E5A42',
   danger: '#FF6B6B',
-  warn: '#FFD25A',
+  warn: '#F5A524',
   youtube: '#FF3B30',
 } as const;
 
-export const R = { card: 16, ctl: 11, thumb: 8 } as const;
+export const R = { card: 12, ctl: 10, thumb: 7, chip: 6 } as const;
 
+// Each Geist weight is its own font family, so pick the family instead of fontWeight
+// (Android ignores fontWeight on custom fonts).
 export const F = {
-  mono: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'ui-monospace, Consolas, monospace' }),
+  regular: 'Geist_400Regular',
+  medium: 'Geist_500Medium',
+  semibold: 'Geist_600SemiBold',
+  bold: 'Geist_700Bold',
+  mono: 'GeistMono_400Regular',
+  monoMedium: 'GeistMono_500Medium',
   brand: 'KarmaticArcade',
 } as const;
+
+const WEIGHTS: Record<string, string> = {
+  '400': F.regular,
+  normal: F.regular,
+  '500': F.medium,
+  '600': F.semibold,
+  '700': F.bold,
+  '800': F.bold,
+  bold: F.bold,
+};
+
+/** Geist at a given weight, e.g. `...font('600')`. */
+export const font = (weight: TextStyle['fontWeight'] = '400'): TextStyle => ({
+  fontFamily: WEIGHTS[String(weight)] ?? F.regular,
+});
