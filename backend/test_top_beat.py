@@ -50,20 +50,38 @@ def test_byte_range_parsing():
     assert server._parse_byte_range('bytes=200-', 100) == 'invalid'
 
 
+async def body_of(response):
+    return b''.join([chunk async for chunk in response.body_iterator])
+
+
 @pytest.mark.asyncio
-async def test_audio_responses_read_only_the_requested_bytes(tmp_path):
+async def test_audio_ranges_are_answered_in_full(tmp_path):
     path = tmp_path / 'beat.mp3'
-    data = bytes(range(256)) * 4
+    # Bigger than one read chunk, so streaming has to stitch several together.
+    data = bytes(range(256)) * 4096
     path.write_bytes(data)
 
     probe = await server._audio_file_response(path, 'audio/mpeg', 'bytes=0-1')
-    assert probe.status_code == 206 and probe.body == data[:2]
+    assert probe.status_code == 206 and await body_of(probe) == data[:2]
     assert probe.headers['content-range'] == f'bytes 0-1/{len(data)}'
+    assert probe.headers['content-length'] == '2'
+
+    # iPhone players ask for "the rest" after probing; a short answer stalls them forever.
+    rest = await server._audio_file_response(path, 'audio/mpeg', 'bytes=0-')
+    assert await body_of(rest) == data
+    assert rest.headers['content-range'] == f'bytes 0-{len(data) - 1}/{len(data)}'
+
+    middle = await server._audio_file_response(path, 'audio/mpeg', 'bytes=300000-700000')
+    assert await body_of(middle) == data[300000:700001]
 
     full = await server._audio_file_response(path, 'audio/mpeg', None)
     assert full.status_code == 200 and full.headers['accept-ranges'] == 'bytes'
+    assert await body_of(full) == data
 
-    past_end = await server._audio_file_response(path, 'audio/mpeg', 'bytes=999999-')
+    head = await server._audio_file_response(path, 'audio/mpeg', None, head=True)
+    assert head.status_code == 200 and head.headers['content-length'] == str(len(data)) and head.body == b''
+
+    past_end = await server._audio_file_response(path, 'audio/mpeg', 'bytes=99999999-')
     assert past_end.status_code == 416
 
 

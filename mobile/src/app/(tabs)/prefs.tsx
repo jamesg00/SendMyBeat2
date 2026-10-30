@@ -26,7 +26,11 @@ export default function ProfileScreen() {
 
   return (
     <Screen title="Profile">
-      <View style={s.profile}>
+      <Pressable
+        style={({ pressed }) => [s.profile, pressed && { opacity: 0.7 }]}
+        onPress={() => (me.data ? router.push({ pathname: '/producer/[id]', params: { id: me.data.user_id } }) : undefined)}
+        accessibilityRole="button"
+        accessibilityLabel="Open your Spotlight profile">
         {me.data ? (
           <Avatar producer={me.data} size={52} />
         ) : (
@@ -39,7 +43,7 @@ export default function ProfileScreen() {
           <Text style={s.sub}>{plan} plan</Text>
         </View>
         <Button title="Edit profile" variant="secondary" size="sm" onPress={() => router.push('/profile-edit')} />
-      </View>
+      </Pressable>
 
       {sub.data ? (
         <View style={{ gap: 8 }}>

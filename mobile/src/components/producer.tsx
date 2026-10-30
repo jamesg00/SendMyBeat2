@@ -1,10 +1,11 @@
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { Image } from 'expo-image';
+import * as ImagePicker from 'expo-image-picker';
 import { useEffect } from 'react';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useAuth } from '@/api/auth';
-import type { Producer, TopBeat as TopBeatData } from '@/api/endpoints';
+import type { PickedFile, Producer, TopBeat as TopBeatData } from '@/api/endpoints';
 import { followersOf, likesOf, toggleFollow, toggleLike, useSocial } from '@/state/social';
 import { C, F, font } from '@/theme';
 
@@ -14,6 +15,23 @@ export const rememberProducers = (list: Producer[]) => list.forEach((p) => known
 export const knownProducer = (id: string) => known.get(id);
 
 export const isVerified = (p: Producer) => p.verification_status === 'approved';
+
+/** Pick and crop a profile picture or banner. */
+export async function pickProfileImage(aspect: [number, number]): Promise<PickedFile | null> {
+  const res = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ['images'],
+    allowsEditing: true,
+    aspect,
+    quality: 0.85,
+    // The server takes JPG, PNG or WEBP; this makes iOS hand back a JPEG instead of HEIC.
+    preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
+  });
+  if (res.canceled) return null;
+  const a = res.assets[0];
+  const mimeType = a.mimeType === 'image/png' || a.mimeType === 'image/webp' ? a.mimeType : 'image/jpeg';
+  return { uri: a.uri, name: `image.${mimeType.split('/')[1].replace('jpeg', 'jpg')}`, mimeType, file: a.file };
+}
+
 
 /** Open a link from a producer profile, but only real web pages, never tel:, intent: or app links. */
 export function openWebLink(url: string | null | undefined) {

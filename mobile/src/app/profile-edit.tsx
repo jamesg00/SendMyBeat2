@@ -1,14 +1,13 @@
 import * as DocumentPicker from 'expo-document-picker';
 import { Image } from 'expo-image';
-import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import * as api from '@/api/endpoints';
-import type { PickedFile, Producer, TopBeat as TopBeatData } from '@/api/endpoints';
-import { Avatar, rememberProducers, TopBeat, topBeatOf } from '@/components/producer';
+import type { Producer, TopBeat as TopBeatData } from '@/api/endpoints';
+import { Avatar, pickProfileImage, rememberProducers, TopBeat, topBeatOf } from '@/components/producer';
 import { Button, Segmented, styles as ui } from '@/components/ui';
 import { C, F, R, font } from '@/theme';
 
@@ -21,21 +20,6 @@ const LINKS = [
 ] as const;
 
 const withScheme = (url: string) => (!url.trim() ? '' : /^https?:\/\//i.test(url.trim()) ? url.trim() : `https://${url.trim()}`);
-
-async function pickImage(aspect: [number, number]): Promise<PickedFile | null> {
-  const res = await ImagePicker.launchImageLibraryAsync({
-    mediaTypes: ['images'],
-    allowsEditing: true,
-    aspect,
-    quality: 0.85,
-    // The server takes JPG, PNG or WEBP; this makes iOS hand back a JPEG instead of HEIC.
-    preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
-  });
-  if (res.canceled) return null;
-  const a = res.assets[0];
-  const mimeType = a.mimeType === 'image/png' || a.mimeType === 'image/webp' ? a.mimeType : 'image/jpeg';
-  return { uri: a.uri, name: `image.${mimeType.split('/')[1].replace('jpeg', 'jpg')}`, mimeType, file: a.file };
-}
 
 // Edit your Spotlight profile: banner, picture, bio, tags, links and top beat.
 export default function ProfileEditScreen() {
@@ -74,7 +58,7 @@ export default function ProfileEditScreen() {
 
   const changeBanner = () =>
     run('banner', async () => {
-      const f = await pickImage([4, 1]);
+      const f = await pickProfileImage([4, 1]);
       if (!f) return;
       const { banner_url } = await api.uploadBanner(f);
       setMe((m) => m && { ...m, banner_url });
@@ -82,7 +66,7 @@ export default function ProfileEditScreen() {
 
   const changeAvatar = () =>
     run('avatar', async () => {
-      const f = await pickImage([1, 1]);
+      const f = await pickProfileImage([1, 1]);
       if (!f) return;
       const { avatar_url } = await api.uploadAvatar(f);
       setMe((m) => m && { ...m, avatar_url });
@@ -206,6 +190,14 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
+const readableName = (name: string) => {
+  try {
+    return decodeURIComponent(name);
+  } catch {
+    return name;
+  }
+};
+
 // Your top beat is either a YouTube video or an audio file you upload; it saves right away.
 function TopBeatEditor({ beat, onChange }: { beat: TopBeatData | null; onChange: (b: TopBeatData | null) => void }) {
   const [mode, setMode] = useState<'youtube' | 'audio'>(beat?.kind === 'audio' ? 'audio' : 'youtube');
@@ -232,7 +224,7 @@ function TopBeatEditor({ beat, onChange }: { beat: TopBeatData | null; onChange:
     if (res.canceled) return;
     const a = res.assets[0];
     await go(async () =>
-      (await api.uploadTopBeatAudio({ uri: a.uri, name: a.name, mimeType: a.mimeType ?? 'audio/mpeg', file: a.file }, title.trim())).top_beat,
+      (await api.uploadTopBeatAudio({ uri: a.uri, name: readableName(a.name), mimeType: a.mimeType ?? 'audio/mpeg', file: a.file }, title.trim())).top_beat,
     );
   };
 
