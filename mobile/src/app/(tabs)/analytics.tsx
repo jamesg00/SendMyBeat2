@@ -1,12 +1,12 @@
 import * as Clipboard from 'expo-clipboard';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import Svg, { Circle, Line, Polyline, Text as SvgText } from 'react-native-svg';
 
 import * as api from '@/api/endpoints';
 import type { ChannelAnalytics, ChannelVideo, VideoReview } from '@/api/endpoints';
-import { Button, Card, JobProgress, Screen, styles as ui } from '@/components/ui';
-import { C, F, R, font } from '@/theme';
+import { Button, Card, JobProgress, Screen, useUiStyles } from '@/components/ui';
+import { F, R, font, makeStyles, useColors } from '@/theme';
 
 const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
 const list = (x: unknown) => (Array.isArray(x) ? x.filter((s): s is string => typeof s === 'string' && s.trim() !== '') : []);
@@ -16,6 +16,9 @@ const day = (iso?: string) => (iso ? new Date(iso).toLocaleDateString('en', { mo
 type Upload = ChannelVideo & { views: number; review?: VideoReview; n: number };
 
 export default function AnalyticsScreen() {
+  const C = useColors();
+  const s = useStyles();
+  const ui = useUiStyles();
   const [data, setData] = useState<ChannelAnalytics | null>(null);
   const [job, setJob] = useState<{ startedAt: number; progress: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -181,6 +184,7 @@ function ViewsChart({
   selected: number;
   onSelect: (i: number) => void;
 }) {
+  const C = useColors();
   const [w, setW] = useState(0);
   const h = 170;
   const gutter = 40;
@@ -260,6 +264,8 @@ function ViewsChart({
 }
 
 function Pattern({ color, label, text, last }: { color: string; label: string; text: string; last?: boolean }) {
+  const C = useColors();
+  const s = useStyles();
   return (
     <View style={[s.pattern, !last && { borderBottomWidth: 1, borderBottomColor: C.lineSoft }]}>
       <View style={[s.bar, { backgroundColor: color }]} />
@@ -272,6 +278,8 @@ function Pattern({ color, label, text, last }: { color: string; label: string; t
 }
 
 function UploadRow({ upload, avg, open, last, onPress }: { upload: Upload; avg: number; open: boolean; last: boolean; onPress: () => void }) {
+  const C = useColors();
+  const s = useStyles();
   const [copied, setCopied] = useState(false);
   const weak = upload.review?.verdict ? /weak/i.test(upload.review.verdict) : upload.views < avg;
   const diff = avg > 0 ? ((upload.views - avg) / avg) * 100 : 0;
@@ -321,6 +329,8 @@ function UploadRow({ upload, avg, open, last, onPress }: { upload: Upload; avg: 
 }
 
 function Bullets({ title, color, items, numbered }: { title: string; color: string; items: string[]; numbered?: boolean }) {
+  const s = useStyles();
+  const ui = useUiStyles();
   if (items.length === 0) return null;
   return (
     <View style={{ gap: 12 }}>
@@ -335,7 +345,7 @@ function Bullets({ title, color, items, numbered }: { title: string; color: stri
   );
 }
 
-const s = StyleSheet.create({
+const useStyles = makeStyles((C) => ({
   channel: { color: C.t2, fontSize: 13, marginTop: -14, ...font() },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 },
   trend: { fontSize: 12, fontFamily: F.monoMedium },
@@ -374,4 +384,4 @@ const s = StyleSheet.create({
   error: { color: C.danger, fontSize: 13, ...font() },
   bar: { width: 3, borderRadius: 2 },
   item: { flex: 1, color: C.t2, fontSize: 14, lineHeight: 20, ...font() },
-});
+}));

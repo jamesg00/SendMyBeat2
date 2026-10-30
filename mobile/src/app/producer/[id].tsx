@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/api/auth';
@@ -9,9 +9,9 @@ import * as api from '@/api/endpoints';
 import type { Producer, ProducerBeat } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
 import { Avatar, followerCount, FollowButton, isVerified, knownProducer, LikeButton, markProfileEdited, openWebLink, pickProfileImage, rememberProducers, TopBeat, topBeatOf, VerifiedBadge } from '@/components/producer';
-import { Button, styles as ui } from '@/components/ui';
+import { Button, useUiStyles } from '@/components/ui';
 import { loadSocial, useSocial } from '@/state/social';
-import { C, F, R, display, font } from '@/theme';
+import { F, R, display, font, makeStyles, useColors } from '@/theme';
 
 const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
 const SOCIAL_LABELS: Record<string, string> = {
@@ -27,6 +27,9 @@ const SOCIAL_LABELS: Record<string, string> = {
 
 // A producer's Spotlight profile, opened from the Community tab as a sheet.
 export default function ProducerScreen() {
+  const C = useColors();
+  const s = useStyles();
+  const ui = useUiStyles();
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const stats = useRequest(() => api.producerStats(id));
@@ -241,6 +244,7 @@ export default function ProducerScreen() {
 }
 
 function Stat({ label, value, mono, divider }: { label: string; value: string; mono?: boolean; divider?: boolean }) {
+  const s = useStyles();
   return (
     <View style={[s.stat, divider && s.statDivider]}>
       <Text style={s.statLabel}>{label}</Text>
@@ -249,10 +253,10 @@ function Stat({ label, value, mono, divider }: { label: string; value: string; m
   );
 }
 
-const s = StyleSheet.create({
+const useStyles = makeStyles((C) => ({
   root: { flex: 1, backgroundColor: C.bg },
   center: { alignItems: 'center', justifyContent: 'center' },
-  banner: { height: 150, backgroundColor: '#111111', borderBottomWidth: 1, borderBottomColor: C.lineSoft },
+  banner: { height: 150, backgroundColor: C.card2, borderBottomWidth: 1, borderBottomColor: C.lineSoft },
   back: {
     position: 'absolute',
     right: 16,
@@ -261,7 +265,7 @@ const s = StyleSheet.create({
     borderRadius: 17,
     backgroundColor: 'rgba(0,0,0,0.7)',
     borderWidth: 1,
-    borderColor: '#2A2A2A',
+    borderColor: C.line,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -279,7 +283,7 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.7)',
     borderWidth: 1,
-    borderColor: '#2A2A2A',
+    borderColor: C.line,
   },
   editPillText: { color: C.text, fontSize: 12, ...font('500') },
   avatarBadge: {
@@ -322,7 +326,7 @@ const s = StyleSheet.create({
     overflow: 'hidden',
   },
   video: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, borderTopWidth: 1, borderTopColor: C.lineSoft },
-  thumb: { width: 72, height: 40, borderRadius: 6, backgroundColor: '#1A1A1A' },
+  thumb: { width: 72, height: 40, borderRadius: 6, backgroundColor: C.card2 },
   videoTitle: { color: C.text, fontSize: 14, lineHeight: 19, ...font() },
   lastRow: { borderBottomWidth: 1, borderBottomColor: C.lineSoft },
-});
+}));

@@ -11,10 +11,10 @@ import * as api from '@/api/endpoints';
 import type { TagRun, YouTubeUploadOptions } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
 import { DescriptionEditor, TagEditor } from '@/components/editors';
-import { Button, Card, ListGroup, ListRow, Meter, PlayPauseIcon, Segmented, styles as ui } from '@/components/ui';
+import { Button, Card, ListGroup, ListRow, Meter, PlayPauseIcon, Segmented, useUiStyles } from '@/components/ui';
 import { useDraft } from '@/state/draft';
 import { useStudio, type FileSlot, type Phase } from '@/state/studio';
-import { C, F, R, display, font } from '@/theme';
+import { F, R, display, font, makeStyles, useColors } from '@/theme';
 
 type Tool = 'details' | 'look';
 type Privacy = YouTubeUploadOptions['privacy'];
@@ -44,6 +44,7 @@ function useNow(ms = 500) {
 }
 
 export default function StudioScreen() {
+  const s = useStyles();
   const insets = useSafeAreaInsets();
   const studio = useStudio();
   const { phase } = studio;
@@ -65,6 +66,9 @@ export default function StudioScreen() {
 }
 
 function Editor() {
+  const C = useColors();
+  const s = useStyles();
+  const ui = useUiStyles();
   const studio = useStudio();
   const [tool, setTool] = useState<Tool>('details');
   const { audio, image, format, fps, bg, scale, rotation, noWatermark, phase, missing, set } = studio;
@@ -143,6 +147,8 @@ function Editor() {
 
 // One panel of label/value rows, like a settings form. Description and tags open their editors in place.
 function DetailsForm() {
+  const C = useColors();
+  const s = useStyles();
   const studio = useStudio();
   const { run, setRun, description } = useDraft();
   const [open, setOpen] = useState<'desc' | 'tags' | null>(null);
@@ -255,6 +261,8 @@ function Field({
   cycle?: boolean;
   last?: boolean;
 }) {
+  const C = useColors();
+  const s = useStyles();
   return (
     <Pressable
       onPress={onPress}
@@ -278,6 +286,8 @@ function Field({
 }
 
 function FileField({ label, hint, slot, onPick }: { label: string; hint: string; slot: FileSlot | null; onPick: () => void }) {
+  const C = useColors();
+  const s = useStyles();
   const value = !slot ? hint : slot.status === 'uploading' ? 'Uploading…' : slot.status === 'error' ? (slot.error ?? 'Upload failed') : slot.name;
   return (
     <Pressable
@@ -317,6 +327,7 @@ function Preview({
   scale: number;
   rotation: number;
 }) {
+  const s = useStyles();
   const ratio = ASPECT[format];
   return (
     <View style={s.preview}>
@@ -355,6 +366,8 @@ function bars(seed: string, n: number) {
 
 // Plays the beat under the preview, so it sounds and looks like the finished video.
 function Player({ uri }: { uri: string }) {
+  const C = useColors();
+  const s = useStyles();
   const player = useAudioPlayer(uri);
   const status = useAudioPlayerStatus(player);
   const [width, setWidth] = useState(0);
@@ -391,7 +404,7 @@ function Player({ uri }: { uri: string }) {
           {heights.map((h, i) => (
             <View
               key={i}
-              style={[s.waveBar, { height: `${h * 100}%`, backgroundColor: i / heights.length < played ? C.text : '#3A3A3A' }]}
+              style={[s.waveBar, { height: `${h * 100}%`, backgroundColor: i / heights.length < played ? C.text : C.wave }]}
             />
           ))}
         </Pressable>
@@ -406,6 +419,8 @@ function Player({ uri }: { uri: string }) {
 
 // While the server renders and uploads: stage, time, progress and a timestamped log, like a deploy.
 function RenderView({ phase, title }: { phase: Extract<Phase, { kind: 'sending' } | { kind: 'job' }>; title: string }) {
+  const C = useColors();
+  const s = useStyles();
   const now = useNow();
   const job = phase.kind === 'job' ? phase : null;
   const started = job?.startedAt ?? now;
@@ -470,6 +485,8 @@ function RenderView({ phase, title }: { phase: Extract<Phase, { kind: 'sending' 
 }
 
 function DoneView({ phase }: { phase: Extract<Phase, { kind: 'done' }> }) {
+  const C = useColors();
+  const s = useStyles();
   const studio = useStudio();
   const finish = () => {
     studio.reset();
@@ -491,6 +508,7 @@ function DoneView({ phase }: { phase: Extract<Phase, { kind: 'done' }> }) {
 }
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
+  const C = useColors();
   return (
     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
       <Text style={{ color: C.text, fontSize: 15, ...font() }}>{label}</Text>
@@ -500,6 +518,7 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 }
 
 function SliderField(props: { label: string; value: number; display: string; min: number; max: number; step: number; onChange: (v: number) => void }) {
+  const C = useColors();
   return (
     <View style={{ width: '47%', gap: 2 }}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
@@ -521,7 +540,7 @@ function SliderField(props: { label: string; value: number; display: string; min
   );
 }
 
-const s = StyleSheet.create({
+const useStyles = makeStyles((C) => ({
   root: { flex: 1, backgroundColor: C.bg, paddingHorizontal: 20, gap: 14 },
   topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', height: 44 },
   topAction: { color: C.t2, fontSize: 16, width: 90, ...font() },
@@ -598,4 +617,4 @@ const s = StyleSheet.create({
   },
   logTime: { color: C.t3, fontSize: 12, lineHeight: 17, fontFamily: F.mono },
   logText: { flex: 1, color: C.t2, fontSize: 12, lineHeight: 17, fontFamily: F.mono },
-});
+}));

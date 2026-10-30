@@ -1,10 +1,11 @@
 import { Tabs, TabList, TabSlot, TabTrigger, type TabTriggerSlotProps } from 'expo-router/ui';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View, type ViewStyle } from 'react-native';
 
-import { C, font } from '@/theme';
+import { font, makeStyles, useColors } from '@/theme';
 
 // Web has no system tab bar, so draw the floating pill from the design.
 export default function WebTabLayout() {
+  const styles = useStyles();
   return (
     <Tabs>
       <TabSlot style={{ height: '100%' }} />
@@ -30,6 +31,8 @@ export default function WebTabLayout() {
 
 // `ref` is typed for View, not Pressable, so it is dropped; the trigger only needs onPress.
 function TabButton({ children, isFocused, ref: _ref, ...props }: TabTriggerSlotProps) {
+  const C = useColors();
+  const styles = useStyles();
   return (
     <Pressable {...props} style={[styles.item, isFocused && { backgroundColor: C.card2 }]}>
       <Text style={[styles.label, { color: isFocused ? C.text : C.t2 }]}>{children}</Text>
@@ -37,7 +40,10 @@ function TabButton({ children, isFocused, ref: _ref, ...props }: TabTriggerSlotP
   );
 }
 
-const styles = StyleSheet.create({
+// backdropFilter is web-only CSS, so React Native's style types don't know it.
+const blur = { backdropFilter: 'blur(24px) saturate(180%)' } as ViewStyle;
+
+const useStyles = makeStyles((C) => ({
   bar: {
     position: 'absolute',
     left: 16,
@@ -48,11 +54,11 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     flexDirection: 'row',
     gap: 2,
-    backgroundColor: 'rgba(20,35,27,0.82)',
+    backgroundColor: C.card,
     borderWidth: 1,
     borderColor: C.line,
-    backdropFilter: 'blur(24px) saturate(180%)',
+    ...blur,
   },
   item: { flex: 1, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
   label: { fontSize: 12, ...font('600') },
-});
+}));
