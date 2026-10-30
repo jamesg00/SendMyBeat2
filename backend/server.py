@@ -51,6 +51,7 @@ try:
     from backend.services import tag_metrics as tag_metrics_service  # noqa: F401
     from backend.services import tag_autocomplete as tag_autocomplete_service  # noqa: F401
     from backend.services import tag_outcomes as tag_outcomes_service  # noqa: F401
+    from backend.services import tag_titles as tag_titles_service  # noqa: F401
     from backend.models_spotlight import (
         ProducerProfile,
         ProducerProfileUpdate,
@@ -65,6 +66,7 @@ except ImportError:
     from services import tag_metrics as tag_metrics_service
     from services import tag_autocomplete as tag_autocomplete_service
     from services import tag_outcomes as tag_outcomes_service
+    from services import tag_titles as tag_titles_service
     from models_spotlight import (
         ProducerProfile,
         ProducerProfileUpdate,
@@ -7265,6 +7267,23 @@ async def update_tag_history(tag_id: str, request: TagHistoryUpdateRequest, curr
     if updated and isinstance(updated.get("created_at"), str):
         updated["created_at"] = datetime.fromisoformat(updated["created_at"])
     return TagGenerationResponse(**_sanitize_tag_generation_doc(updated, current_user))
+
+
+@api_router.get("/tags/history/{tag_id}/titles")
+async def suggest_titles_for_run(tag_id: str, beat_name: str = "", current_user: dict = Depends(get_current_user)):
+    """Video title ideas from this run's best keywords (no AI credit, no YouTube quota)."""
+    run = await db.tag_generations.find_one(
+        {"id": tag_id, "user_id": current_user["id"]}, {"_id": 0, "query": 1, "tags": 1, "scored_tags": 1}
+    )
+    if not run:
+        raise HTTPException(status_code=404, detail="Tag generation not found")
+    scored = run.get("scored_tags") or [{"tag": tag, "score": 0} for tag in run.get("tags") or []]
+    titles = tag_titles_service.suggest_titles(
+        artist=_normalize_artist_query(run.get("query", "")),
+        scored_tags=scored,
+        beat_name=beat_name[:60],
+    )
+    return {"titles": titles}
 
 
 @api_router.delete("/tags/history/{tag_id}")

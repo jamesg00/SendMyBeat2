@@ -171,7 +171,7 @@ function StudioBanner() {
             {detail}
           </Text>
           {phase.kind === 'job' ? <Meter value={(phase.job.progress ?? 0) / 100} /> : null}
-          <Text style={s.swipeHint}>Swipe right to {running ? 'cancel' : 'delete'}</Text>
+          <Text style={s.swipeHint}>Swipe left to {running ? 'cancel' : 'delete'}</Text>
         </View>
         {phase.kind === 'error' ? (
           <Button title="Retry" size="sm" onPress={() => void studio.retry()} />

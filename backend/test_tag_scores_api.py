@@ -53,3 +53,13 @@ def test_old_runs_get_labels_when_read():
     out = server._sanitize_tag_generation_doc(doc, {'id': 'u1'})
     assert out['scored_tags'][0]['signals'] == {'demand': 'unknown', 'competition': 'unknown'}
     assert out['debug'] is None
+
+
+@pytest.mark.asyncio
+async def test_title_ideas_come_from_your_own_run():
+    db = MagicMock()
+    db.tag_generations.find_one = AsyncMock(return_value={'query': 'future type beat', 'scored_tags': [{'tag': 'future type beat', 'score': 90}]})
+    with patch.object(server, 'db', db):
+        res = await server.suggest_titles_for_run('r1', beat_name='moonwalk', current_user={'id': 'u1'})
+    assert db.tag_generations.find_one.await_args.args[0] == {'id': 'r1', 'user_id': 'u1'}
+    assert res['titles'][0]['title'] == 'Future Type Beat - "MOONWALK"'
