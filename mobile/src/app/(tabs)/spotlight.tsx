@@ -8,7 +8,7 @@ import { useRequest } from '@/api/use-request';
 import { Avatar, isVerified, LikeButton, profileEditCount, rememberProducers, TopBeat, topBeatOf, VerifiedBadge } from '@/components/producer';
 import { Button, Card, Screen, Segmented, styles as ui } from '@/components/ui';
 import { loadSocial, useSocial } from '@/state/social';
-import { C, F, R, font } from '@/theme';
+import { C, F, R, display, font } from '@/theme';
 
 type Tab = 'community' | 'pros';
 
@@ -233,7 +233,7 @@ const s = StyleSheet.create({
   banner: { height: 86, backgroundColor: '#111111', borderBottomWidth: 1, borderBottomColor: C.lineSoft },
   featuredHead: { flexDirection: 'row', alignItems: 'flex-end', gap: 12, paddingHorizontal: 14, marginTop: -28, paddingBottom: 12 },
   featuredAvatar: { borderRadius: 32, borderWidth: 3, borderColor: C.card },
-  featuredName: { color: C.text, fontSize: 17, flexShrink: 1, ...font('600') },
+  featuredName: { color: C.text, fontSize: 18, flexShrink: 1, ...display },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   chip: {
     color: C.t2,

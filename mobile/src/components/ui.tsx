@@ -13,7 +13,7 @@ import {
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { C, F, R, font } from '@/theme';
+import { C, F, R, display, font } from '@/theme';
 
 export function Screen({
   title,
@@ -308,7 +308,7 @@ export function IconTile({ children, tint = C.card2 }: { children: ReactNode; ti
 export const styles = StyleSheet.create({
   screen: { paddingHorizontal: 20, paddingBottom: 140, gap: 20, backgroundColor: C.bg },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  largeTitle: { color: C.text, fontSize: 30, lineHeight: 36, letterSpacing: -0.9, ...font('600') },
+  largeTitle: { color: C.text, fontSize: 30, lineHeight: 36, letterSpacing: -0.3, ...display },
   card: { backgroundColor: C.card, borderRadius: R.card, borderWidth: 1, borderColor: C.line, padding: 16, gap: 12 },
   sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 2 },
   sectionLabel: { color: C.t2, fontSize: 13, ...font('500') },
