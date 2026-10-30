@@ -11,6 +11,7 @@ import * as api from '@/api/endpoints';
 import type { TagRun, YouTubeUploadOptions } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
 import { DescriptionEditor, TagEditor } from '@/components/editors';
+import { usePlan } from '@/components/pros';
 import { Button, Card, ListGroup, ListRow, Meter, PlayPauseIcon, Segmented, useUiStyles } from '@/components/ui';
 import { useDraft } from '@/state/draft';
 import { useStudio, type FileSlot, type Phase } from '@/state/studio';
@@ -86,6 +87,9 @@ function TitleIdeas({ runId, beatName, onPick }: { runId: string; beatName: stri
   const s = useStyles();
   const ui = useUiStyles();
   const [ideas, setIdeas] = useState<api.TitleIdea[] | null>(null);
+  // A title step from your plan ("Lead 3 titles with ...") shows here, where titles are written.
+  const { plan } = usePlan();
+  const titleStep = plan?.steps.find((st) => (st.kind === 'title_formula' || st.kind === 'title_pair') && !st.done);
   const [error, setError] = useState(false);
 
   useEffect(() => {
@@ -107,6 +111,11 @@ function TitleIdeas({ runId, beatName, onPick }: { runId: string; beatName: stri
   return (
     <View style={{ gap: 8 }}>
       <Text style={ui.sectionLabel}>Title ideas · tap to use</Text>
+      {titleStep ? (
+        <Text style={s.planHint}>
+          {plan!.pro_name}’s move: {titleStep.text} · {titleStep.count ?? 0}/{titleStep.target}
+        </Text>
+      ) : null}
       <View style={s.panel}>
         {ideas.map((idea, i) => (
           <Pressable
@@ -609,6 +618,7 @@ const useStyles = makeStyles((C) => ({
   topAction: { color: C.t2, fontSize: 16, width: 90, ...font() },
   topTitle: { color: C.text, fontSize: 17, ...display },
   idea: { paddingHorizontal: 14, paddingVertical: 12, gap: 4 },
+  planHint: { color: C.acc, fontSize: 12.5, lineHeight: 17, ...font() },
   ideaDivider: { borderBottomWidth: 1, borderBottomColor: C.lineSoft },
   ideaTitle: { color: C.text, fontSize: 14.5, lineHeight: 20, ...font() },
   ideaMeta: { color: C.t3, fontSize: 11.5, fontFamily: F.mono },

@@ -7,6 +7,7 @@ import { useAuth } from '@/api/auth';
 import * as api from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
 import { Avatar } from '@/components/producer';
+import { PlanCard, usePlan } from '@/components/pros';
 import { Button, ListGroup, ListRow, Meter, Screen, useUiStyles } from '@/components/ui';
 import { F, font, makeStyles, THEMES, useColors, useThemeId } from '@/theme';
 
@@ -16,6 +17,7 @@ export default function ProfileScreen() {
   const s = useStyles();
   const ui = useUiStyles();
   const themeId = useThemeId();
+  const { plan: stylePlan, setPlan: setStylePlan } = usePlan();
   const { user, signOut } = useAuth();
   const sub = useRequest(api.subscriptionStatus);
   const yt = useRequest(api.youtubeStatus);
@@ -57,6 +59,8 @@ export default function ProfileScreen() {
           </View>
         </View>
       ) : null}
+
+      {stylePlan ? <PlanCard plan={stylePlan} onChange={setStylePlan} full /> : null}
 
       <View style={{ gap: 8 }}>
         <Text style={ui.sectionLabel}>App</Text>

@@ -71,6 +71,8 @@ function RootStack() {
           <Stack.Screen name="producer/[id]" options={{ presentation: 'modal' }} />
           <Stack.Screen name="profile-edit" options={{ presentation: 'modal' }} />
           <Stack.Screen name="appearance" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="pro/[id]" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="pro-plan/[id]" options={{ presentation: 'modal' }} />
         </Stack.Protected>
         <Stack.Protected guard={!user}>
           <Stack.Screen name="login" />

@@ -10,6 +10,7 @@ import { useRequest } from '@/api/use-request';
 import { Button, Card, IconTile, JobProgress, ListGroup, ListRow, Meter, Pill, PlayPauseIcon, Screen, SectionLabel, Segmented, SwipeToDelete, useUiStyles } from '@/components/ui';
 import { DescriptionEditor, TagEditor } from '@/components/editors';
 import { Avatar } from '@/components/producer';
+import { PlanCard, usePlan } from '@/components/pros';
 import { useDraft } from '@/state/draft';
 import { useStudio } from '@/state/studio';
 import { F, R, font, makeStyles, useColors } from '@/theme';
@@ -42,6 +43,8 @@ export default function WorkflowScreen() {
   // A run that finished after the list loaded (e.g. resumed after a restart) still shows up.
   const last = draft.lastGenerated;
   const runs = last && !(history.data ?? []).some((r) => r.id === last.id) ? [last, ...(history.data ?? [])] : (history.data ?? []);
+
+  const { plan, setPlan } = usePlan();
 
   // Your Spotlight profile, for the picture in the header; refreshed whenever you come back here.
   const me = useRequest(api.myProducer);
@@ -111,6 +114,7 @@ export default function WorkflowScreen() {
         ]}
       />
 
+      {step === 'build' && plan ? <PlanCard plan={plan} onChange={setPlan} /> : null}
       {step === 'build' && (
         <BuildStep
           runs={runs}

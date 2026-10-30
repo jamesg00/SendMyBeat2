@@ -6,6 +6,7 @@ import * as api from '@/api/endpoints';
 import type { Producer } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
 import { Avatar, isVerified, LikeButton, profileEditCount, rememberProducers, TopBeat, topBeatOf, VerifiedBadge } from '@/components/producer';
+import { PlanCard, ProsGallery, usePlan } from '@/components/pros';
 import { Button, Card, Screen, Segmented, useUiStyles } from '@/components/ui';
 import { loadSocial, useSocial } from '@/state/social';
 import { F, R, display, font, makeStyles, useColors } from '@/theme';
@@ -62,7 +63,7 @@ export default function SpotlightScreen() {
           { value: 'pros', label: 'Pros' },
         ]}
       />
-      {tab === 'community' ? <Community list={list} me={me} /> : <ProsSoon />}
+      {tab === 'community' ? <Community list={list} me={me} /> : <Pros />}
     </Screen>
   );
 }
@@ -216,15 +217,14 @@ function LeaderRow({ producer: p, rank, you, last }: { producer: Producer; rank:
   );
 }
 
-function ProsSoon() {
-  const s = useStyles();
+// Pros: your plan (if you have one) above the gallery of producers.
+function Pros() {
+  const { plan, setPlan } = usePlan();
   return (
-    <Card>
-      <Text style={s.cardTitle}>What the pros are posting</Text>
-      <Text style={s.sub}>
-        Coming next: the latest uploads from well-known producers, their title formulas, and how your channel compares.
-      </Text>
-    </Card>
+    <>
+      {plan ? <PlanCard plan={plan} onChange={setPlan} /> : null}
+      <ProsGallery />
+    </>
   );
 }
 
