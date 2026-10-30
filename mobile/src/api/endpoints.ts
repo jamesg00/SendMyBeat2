@@ -20,16 +20,30 @@ export type TagRun = { id: string; query: string; tags: string[]; created_at?: s
 export type Description = { id: string; title: string; content: string; is_ai_generated?: boolean };
 export type YouTubeStatus = { connected: boolean; email?: string | null; name?: string | null };
 
+export type ChannelVideo = {
+  id?: string;
+  title?: string;
+  views?: number;
+  likes?: number;
+  comments?: number;
+  published_at?: string;
+};
+/** One AI review per recent upload; index 1 is the newest upload. */
+export type VideoReview = { index: number; verdict?: string; reason?: string; fix?: string; better_title?: string };
 export type ChannelAnalytics = {
   channel_name: string;
   subscriber_count: number;
   total_views: number;
   total_videos: number;
-  recent_videos: { title?: string; views?: number; likes?: number; comments?: number }[];
+  /** Newest first. */
+  recent_videos: ChannelVideo[];
   insights: {
+    channel_health_score?: string;
+    title_patterns?: { winning?: string; losing?: string };
+    video_reviews?: VideoReview[];
     what_works?: string[];
-    needs_improvement?: string[];
-    recommendations?: string[];
+    critical_issues?: string[];
+    immediate_actions?: string[];
     [key: string]: unknown;
   };
 };
@@ -38,11 +52,31 @@ export type Producer = {
   user_id: string;
   username: string;
   avatar_url?: string | null;
+  banner_url?: string | null;
   bio?: string;
   tags?: string[];
   likes?: number;
   views?: number;
+  featured?: boolean;
+  role_tag?: string | null;
+  top_beat_url?: string | null;
+  social_links?: Record<string, string | null | undefined>;
+  verification_status?: string;
   spotlight_tier?: string;
+  spotlight_score?: number;
+  current_streak?: number;
+  /** In-app hearts and follows (separate from YouTube likes). */
+  app_likes?: number;
+  followers?: number;
+};
+export type ProducerBeat = { title?: string; url?: string | null; views?: number; likes?: number; published_at?: string };
+export type ProducerStats = {
+  profile: Producer;
+  stats: { likes?: number; views?: number; current_streak?: number; longest_streak?: number; total_days_completed?: number };
+  top_beats?: ProducerBeat[];
+  channel_top_beats?: ProducerBeat[];
+  channel?: { connected?: boolean; name?: string | null; performance?: { subscriber_count?: number; total_views?: number; total_videos?: number } };
+  member_since?: string;
 };
 export type Spotlight = {
   featured_producers: Producer[];
@@ -70,6 +104,13 @@ export const descriptions = () => api<Description[]>('/descriptions');
 export const youtubeStatus = () => api<YouTubeStatus>('/youtube/status');
 export const analyzeChannel = (onProgress?: JobProgress) => runJob<ChannelAnalytics>('/youtube/analytics', {}, 3000, onProgress);
 export const spotlight = () => api<Spotlight>('/producers/spotlight');
+export const producerStats = (userId: string) => api<ProducerStats>(`/producers/${userId}/stats`);
+export const myProducer = () => api<Producer>('/producers/me');
+export const mySpotlightSocial = () => api<{ liked: string[]; following: string[] }>('/producers/me/social');
+export const setLike = (userId: string, on: boolean) =>
+  api<{ liked: boolean; app_likes: number }>(`/producers/${userId}/like`, { method: on ? 'POST' : 'DELETE' });
+export const setFollow = (userId: string, on: boolean) =>
+  api<{ following: boolean; followers: number }>(`/producers/${userId}/follow`, { method: on ? 'POST' : 'DELETE' });
 
 export const createDescription = (title: string, content: string) =>
   api<Description>('/descriptions', { body: { title, content } });

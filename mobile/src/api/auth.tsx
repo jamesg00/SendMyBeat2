@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import { loadToken, saveToken, setUnauthorizedHandler } from './client';
 import * as endpoints from './endpoints';
 import type { User } from './endpoints';
+import { resetSocial } from '@/state/social';
 
 type AuthState = {
   ready: boolean;
@@ -21,6 +22,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(async () => {
     await saveToken(null);
     setUser(null);
+    resetSocial();
   }, []);
 
   useEffect(() => {
