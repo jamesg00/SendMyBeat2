@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
+  Animated as RNAnimated,
+  PanResponder,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -12,6 +14,7 @@ import {
 } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Path, Rect } from 'react-native-svg';
 
 import { C, F, R, display, font } from '@/theme';
 
@@ -301,11 +304,77 @@ export function JobProgress({
   );
 }
 
+const SWIPE_DELETE_AT = 96;
+
+/** Swipe right to reveal Delete; letting go past the line calls onDelete (which should confirm). */
+export function SwipeToDelete({ children, onDelete, label }: { children: ReactNode; onDelete: () => void; label: string }) {
+  const [x] = useState(() => new RNAnimated.Value(0));
+  // Rebuilt when onDelete changes; it keeps no state between events, so that's safe mid-swipe.
+  const pan = useMemo(() => {
+    const settle = () => RNAnimated.spring(x, { toValue: 0, useNativeDriver: true, bounciness: 6 }).start();
+    return PanResponder.create({
+      // Only clear horizontal drags, so the screen still scrolls normally.
+      onMoveShouldSetPanResponder: (_, g) => g.dx > 8 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
+      onPanResponderMove: (_, g) => x.setValue(Math.max(0, g.dx)),
+      onPanResponderRelease: (_, g) => {
+        settle();
+        if (g.dx > SWIPE_DELETE_AT) onDelete();
+      },
+      onPanResponderTerminate: settle,
+    });
+  }, [onDelete, x]);
+  const reveal = x.interpolate({ inputRange: [0, SWIPE_DELETE_AT], outputRange: [0, 1], extrapolate: 'clamp' });
+
+  return (
+    <View
+      accessibilityActions={[{ name: 'delete', label }]}
+      onAccessibilityAction={(e) => e.nativeEvent.actionName === 'delete' && onDelete()}>
+      <RNAnimated.View style={[styles.swipeBehind, { opacity: reveal }]} importantForAccessibility="no-hide-descendants">
+        <Text style={styles.swipeLabel}>{label}</Text>
+      </RNAnimated.View>
+      <RNAnimated.View style={{ transform: [{ translateX: x }] }} {...pan.panHandlers}>
+        {children}
+      </RNAnimated.View>
+    </View>
+  );
+}
+
+/** Drawn play / pause glyph. Text characters like "▶" turn into emoji on iOS. */
+export function PlayPauseIcon({ playing, size = 12, color = C.onPrimary }: { playing: boolean; size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 12 12" accessibilityElementsHidden importantForAccessibility="no">
+      {playing ? (
+        <>
+          <Rect x={2} y={1} width={3} height={10} rx={0.8} fill={color} />
+          <Rect x={7} y={1} width={3} height={10} rx={0.8} fill={color} />
+        </>
+      ) : (
+        // Nudged right so the triangle looks centred in a round button.
+        <Path d="M3.2 1.4 L10.6 6 L3.2 10.6 Z" fill={color} strokeLinejoin="round" />
+      )}
+    </Svg>
+  );
+}
+
 export function IconTile({ children, tint = C.card2 }: { children: ReactNode; tint?: string }) {
   return <View style={[styles.iconTile, { backgroundColor: tint }]}>{children}</View>;
 }
 
 export const styles = StyleSheet.create({
+  swipeBehind: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    borderRadius: R.card,
+    backgroundColor: 'rgba(255,107,107,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,107,107,0.35)',
+    justifyContent: 'center',
+    paddingHorizontal: 18,
+  },
+  swipeLabel: { color: C.danger, fontSize: 15, ...font('600') },
   screen: { paddingHorizontal: 20, paddingBottom: 140, gap: 20, backgroundColor: C.bg },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   largeTitle: { color: C.text, fontSize: 30, lineHeight: 36, letterSpacing: -0.3, ...display },

@@ -1,6 +1,6 @@
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -130,8 +130,38 @@ async def test_changing_the_top_beat_patches_spotlight():
 @pytest.mark.asyncio
 async def test_spotlight_response_is_not_cached_by_clients():
     db = MagicMock()
-    db.spotlight_cache.find_one = AsyncMock(return_value={'payload': {'featured_producers': [], 'trending_producers': [], 'new_producers': []}})
+    db.spotlight_cache.find_one = AsyncMock(return_value={'payload': EMPTY_PAYLOAD, 'payload_built_at': datetime.now(timezone.utc)})
     response = server.Response()
     with patch.object(server, 'db', db):
         await server.get_producer_spotlight(response)
     assert response.headers['cache-control'] == 'no-store'
+
+
+EMPTY_PAYLOAD = {'featured_producers': [], 'trending_producers': [], 'new_producers': [], 'all_producers': []}
+
+
+@pytest.mark.asyncio
+async def test_a_fresh_list_is_served_from_the_cache():
+    db = MagicMock()
+    db.spotlight_cache.find_one = AsyncMock(return_value={'payload': EMPTY_PAYLOAD, 'updated_at': datetime.now(timezone.utc).isoformat()})
+    db.spotlight_cache.update_one = AsyncMock()
+    with patch.object(server, 'db', db), patch.object(server, '_compute_spotlight_payload', AsyncMock()) as compute:
+        await server.get_producer_spotlight(server.Response())
+    compute.assert_not_awaited()
+    db.spotlight_cache.update_one.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_an_older_list_is_rebuilt_from_the_database_without_youtube_calls():
+    stale = datetime.now(timezone.utc) - timedelta(minutes=5)
+    db = MagicMock()
+    db.spotlight_cache.find_one = AsyncMock(return_value={'payload': EMPTY_PAYLOAD, 'payload_built_at': stale})
+    db.spotlight_cache.update_one = AsyncMock()
+    with patch.object(server, 'db', db), \
+            patch.object(server, '_compute_spotlight_payload', AsyncMock(return_value=EMPTY_PAYLOAD)) as compute, \
+            patch.object(server, '_refresh_spotlight_metrics_for_profiles', AsyncMock()) as metrics:
+        await server.get_producer_spotlight(server.Response())
+    compute.assert_awaited_once()
+    metrics.assert_not_awaited()
+    saved = db.spotlight_cache.update_one.await_args.args[1]['$set']
+    assert 'payload_built_at' in saved and 'refreshed_at' not in saved

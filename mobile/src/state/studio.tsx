@@ -91,6 +91,10 @@ type Studio = StudioSettings & {
   pickImage: () => Promise<void>;
   publish: () => Promise<void>;
   reset: () => void;
+  /** Stop the upload if one is running, then clear the draft. */
+  discard: () => Promise<void>;
+  /** Try a failed upload again with the same files and settings. */
+  retry: () => Promise<void>;
 };
 
 const StudioContext = createContext<Studio | null>(null);
@@ -254,6 +258,17 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const discard = async () => {
+    if (phase.kind === 'job') {
+      try {
+        await api.cancelJob(phase.job.id);
+      } catch {
+        // already finished or gone; the draft is cleared either way
+      }
+    }
+    reset();
+  };
+
   const value: Studio = {
     ...settings,
     audio,
@@ -270,6 +285,8 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     pickImage,
     publish,
     reset,
+    discard,
+    retry: publish,
   };
 
   return <StudioContext.Provider value={value}>{children}</StudioContext.Provider>;

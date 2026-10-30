@@ -1,26 +1,13 @@
 import * as Clipboard from 'expo-clipboard';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { useAuth } from '@/api/auth';
 import * as api from '@/api/endpoints';
 import type { Description, TagRun } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
-import {
-  Button,
-  Card,
-  IconTile,
-  JobProgress,
-  ListGroup,
-  ListRow,
-  Meter,
-  Pill,
-  Screen,
-  SectionLabel,
-  Segmented,
-  styles as ui,
-} from '@/components/ui';
+import { Button, Card, IconTile, JobProgress, ListGroup, ListRow, Meter, Pill, PlayPauseIcon, Screen, SectionLabel, Segmented, SwipeToDelete, styles as ui } from '@/components/ui';
 import { DescriptionEditor, TagEditor } from '@/components/editors';
 import { useDraft } from '@/state/draft';
 import { useStudio } from '@/state/studio';
@@ -128,6 +115,18 @@ function planLabel(plan: api.SubscriptionStatus['plan']) {
   return plan.charAt(0).toUpperCase() + plan.slice(1);
 }
 
+// Alert.alert does nothing on web, so the web preview uses the browser's confirm.
+function confirmAction(title: string, message: string, action: string, onYes: () => void) {
+  if (Platform.OS === 'web') {
+    if (globalThis.confirm?.(`${title}\n\n${message}`)) onYes();
+    return;
+  }
+  Alert.alert(title, message, [
+    { text: 'Keep', style: 'cancel' },
+    { text: action, style: 'destructive', onPress: onYes },
+  ]);
+}
+
 function openStudio(open: () => void) {
   open();
   router.push('/studio');
@@ -154,17 +153,30 @@ function StudioBanner() {
     detail = phase.message;
   }
 
+  const running = phase.kind === 'job' || phase.kind === 'sending';
+  const askToDelete = () =>
+    running
+      ? confirmAction('Cancel this upload?', 'SendMyBeat stops rendering and uploading it, and the draft is deleted.', 'Cancel upload', () => void studio.discard())
+      : confirmAction('Delete this draft?', 'The beat, artwork and settings in Upload Studio are removed.', 'Delete', () => void studio.discard());
+
   return (
-    <Card style={s.banner}>
-      <View style={{ flex: 1, gap: 6 }}>
-        <Text style={[s.cardTitle, { fontSize: 15, ...font() }, phase.kind === 'error' && { color: C.danger }]}>{title}</Text>
-        <Text style={s.muted} numberOfLines={1}>
-          {detail}
-        </Text>
-        {phase.kind === 'job' ? <Meter value={(phase.job.progress ?? 0) / 100} /> : null}
-      </View>
-      <Button title="Open" size="sm" onPress={() => openStudio(studio.open)} />
-    </Card>
+    <SwipeToDelete onDelete={askToDelete} label={running ? 'Cancel upload' : 'Delete'}>
+      <Card style={s.banner}>
+        <View style={{ flex: 1, gap: 6 }}>
+          <Text style={[s.cardTitle, { fontSize: 15, ...font() }, phase.kind === 'error' && { color: C.danger }]}>{title}</Text>
+          <Text style={s.muted} numberOfLines={1}>
+            {detail}
+          </Text>
+          {phase.kind === 'job' ? <Meter value={(phase.job.progress ?? 0) / 100} /> : null}
+          <Text style={s.swipeHint}>Swipe right to {running ? 'cancel' : 'delete'}</Text>
+        </View>
+        {phase.kind === 'error' ? (
+          <Button title="Retry" size="sm" onPress={() => void studio.retry()} />
+        ) : (
+          <Button title="Open" size="sm" onPress={() => openStudio(studio.open)} />
+        )}
+      </Card>
+    </SwipeToDelete>
   );
 }
 
@@ -369,7 +381,7 @@ function UploadStep({ run }: { run: TagRun | null }) {
           last
           left={
             <IconTile tint={C.youtube}>
-              <Text style={{ color: '#fff', fontSize: 14, ...font() }}>▶</Text>
+              <PlayPauseIcon playing={false} size={13} color="#fff" />
             </IconTile>
           }
         />
@@ -388,6 +400,7 @@ function UploadStep({ run }: { run: TagRun | null }) {
 }
 
 const s = StyleSheet.create({
+  swipeHint: { color: C.t3, fontSize: 11.5, fontFamily: F.mono },
   header: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   avatar: {
     width: 32,

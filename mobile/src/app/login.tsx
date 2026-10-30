@@ -4,7 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } fr
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Polyline, Text as SvgText } from 'react-native-svg';
 
-import { Button, JobProgress, Meter, styles as ui } from '@/components/ui';
+import { Button, JobProgress, Meter, PlayPauseIcon, styles as ui } from '@/components/ui';
 import { C, F, R, font } from '@/theme';
 
 // The first screen before signing in: what SendMyBeat does, previews of each part of the app
@@ -188,7 +188,7 @@ function StudioPreview() {
       </View>
       <View style={s.player}>
         <View style={s.playBtn}>
-          <Text style={{ color: C.onPrimary, fontSize: 11, ...font('700') }}>❚❚</Text>
+          <PlayPauseIcon playing size={11} />
         </View>
         <View style={{ flex: 1, gap: 6 }}>
           <View style={s.wave}>
