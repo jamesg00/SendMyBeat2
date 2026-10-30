@@ -1,21 +1,17 @@
 import { GeistMono_400Regular, GeistMono_500Medium } from '@expo-google-fonts/geist-mono';
 import { useFonts } from 'expo-font';
-import { DarkTheme, Stack, ThemeProvider } from 'expo-router';
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 
 import { AuthProvider, useAuth } from '@/api/auth';
+import { ThemeTransition } from '@/components/theme-transition';
 import { DraftProvider } from '@/state/draft';
 import { StudioProvider } from '@/state/studio';
-import { C, F } from '@/theme';
+import { F, useColors } from '@/theme';
 
 SplashScreen.preventAutoHideAsync();
-
-const theme = {
-  ...DarkTheme,
-  colors: { ...DarkTheme.colors, background: C.bg, card: C.card, primary: C.text, text: C.text, border: C.line },
-};
 
 export default function RootLayout() {
   return (
@@ -33,13 +29,16 @@ function Session() {
   return (
     <DraftProvider key={user?.id ?? 'signed-out'}>
       <StudioProvider>
-        <RootStack />
+        <ThemeTransition>
+          <RootStack />
+        </ThemeTransition>
       </StudioProvider>
     </DraftProvider>
   );
 }
 
 function RootStack() {
+  const C = useColors();
   const [fontsLoaded] = useFonts({
     [F.brand]: require('@/assets/fonts/karmatic-arcade.ttf'),
     [F.regular]: require('@/assets/fonts/Satoshi-Regular.otf'),
@@ -58,9 +57,12 @@ function RootStack() {
 
   if (!loaded) return null;
 
+  const base = C.dark ? DarkTheme : DefaultTheme;
+  const theme = { ...base, colors: { ...base.colors, background: C.bg, card: C.card, primary: C.text, text: C.text, border: C.line } };
+
   return (
     <ThemeProvider value={theme}>
-      <StatusBar style="light" />
+      <StatusBar style={C.dark ? 'light' : 'dark'} />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.bg } }}>
         {/* Signed out, every app route lands on the landing screen (not the auth sheet). */}
         <Stack.Protected guard={!!user} redirectTo="/login">
@@ -68,6 +70,7 @@ function RootStack() {
           <Stack.Screen name="studio" options={{ presentation: 'fullScreenModal' }} />
           <Stack.Screen name="producer/[id]" options={{ presentation: 'modal' }} />
           <Stack.Screen name="profile-edit" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="appearance" options={{ presentation: 'modal' }} />
         </Stack.Protected>
         <Stack.Protected guard={!user}>
           <Stack.Screen name="login" />

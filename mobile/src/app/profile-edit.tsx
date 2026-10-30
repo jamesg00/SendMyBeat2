@@ -2,14 +2,14 @@ import * as DocumentPicker from 'expo-document-picker';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import * as api from '@/api/endpoints';
 import type { Producer, TopBeat as TopBeatData } from '@/api/endpoints';
 import { Avatar, markProfileEdited, pickProfileImage, rememberProducers, TopBeat, topBeatOf } from '@/components/producer';
-import { Button, Segmented, styles as ui } from '@/components/ui';
-import { C, F, R, display, font } from '@/theme';
+import { Button, Segmented, useUiStyles } from '@/components/ui';
+import { F, R, display, font, makeStyles, useColors } from '@/theme';
 
 const LINKS = [
   { key: 'youtube', label: 'YouTube', placeholder: 'youtube.com/@yourchannel' },
@@ -23,6 +23,9 @@ const withScheme = (url: string) => (!url.trim() ? '' : /^https?:\/\//i.test(url
 
 // Edit your Spotlight profile: banner, picture, bio, tags, links and top beat.
 export default function ProfileEditScreen() {
+  const C = useColors();
+  const s = useStyles();
+  const ui = useUiStyles();
   const insets = useSafeAreaInsets();
   const [me, setMe] = useState<Producer | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -194,6 +197,7 @@ export default function ProfileEditScreen() {
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  const ui = useUiStyles();
   return (
     <View style={{ gap: 8 }}>
       <Text style={ui.sectionLabel}>{label}</Text>
@@ -212,6 +216,9 @@ const readableName = (name: string) => {
 
 // Your top beat is either a YouTube video or an audio file you upload; it saves right away.
 function TopBeatEditor({ beat, onChange }: { beat: TopBeatData | null; onChange: (b: TopBeatData | null) => void }) {
+  const C = useColors();
+  const s = useStyles();
+  const ui = useUiStyles();
   const [mode, setMode] = useState<'youtube' | 'audio'>(beat?.kind === 'audio' ? 'audio' : 'youtube');
   const [url, setUrl] = useState(beat?.kind === 'youtube' ? beat.url : '');
   const [title, setTitle] = useState(beat?.title && beat.title !== 'Top beat' ? beat.title : '');
@@ -298,13 +305,13 @@ function TopBeatEditor({ beat, onChange }: { beat: TopBeatData | null; onChange:
   );
 }
 
-const s = StyleSheet.create({
+const useStyles = makeStyles((C) => ({
   root: { flex: 1, backgroundColor: C.bg },
   center: { alignItems: 'center', justifyContent: 'center' },
   topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 12 },
   topAction: { color: C.t2, fontSize: 16, width: 80, ...font() },
   topTitle: { color: C.text, fontSize: 17, ...display },
-  banner: { height: 120, backgroundColor: '#111111', borderTopWidth: 1, borderBottomWidth: 1, borderColor: C.lineSoft },
+  banner: { height: 120, backgroundColor: C.card2, borderTopWidth: 1, borderBottomWidth: 1, borderColor: C.lineSoft },
   bannerHint: {
     position: 'absolute',
     right: 12,
@@ -315,7 +322,7 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.7)',
     borderWidth: 1,
-    borderColor: '#2A2A2A',
+    borderColor: C.line,
   },
   hintText: { color: C.text, fontSize: 12, ...font('500') },
   body: { paddingHorizontal: 20, gap: 22 },
@@ -354,4 +361,4 @@ const s = StyleSheet.create({
   linkRow: { flexDirection: 'row', alignItems: 'center', gap: 12, height: 48, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: C.lineSoft },
   linkLabel: { width: 84, color: C.t2, fontSize: 14, ...font() },
   linkInput: { flex: 1, height: '100%', color: C.text, fontSize: 14, ...font() },
-});
+}));

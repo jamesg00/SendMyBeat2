@@ -1,14 +1,14 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 
 import * as api from '@/api/endpoints';
 import type { Producer } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
 import { Avatar, isVerified, LikeButton, profileEditCount, rememberProducers, TopBeat, topBeatOf, VerifiedBadge } from '@/components/producer';
-import { Button, Card, Screen, Segmented, styles as ui } from '@/components/ui';
+import { Button, Card, Screen, Segmented, useUiStyles } from '@/components/ui';
 import { loadSocial, useSocial } from '@/state/social';
-import { C, F, R, display, font } from '@/theme';
+import { F, R, display, font, makeStyles, useColors } from '@/theme';
 
 type Tab = 'community' | 'pros';
 
@@ -68,6 +68,9 @@ export default function SpotlightScreen() {
 }
 
 function Community({ list, me }: { list: Request<api.Spotlight>; me: Request<Producer> }) {
+  const C = useColors();
+  const s = useStyles();
+  const ui = useUiStyles();
   const { data, error, loading, reload } = list;
   const social = useSocial();
 
@@ -148,6 +151,7 @@ function Community({ list, me }: { list: Request<api.Spotlight>; me: Request<Pro
 }
 
 function Featured({ producer: p, label }: { producer: Producer; label: string }) {
+  const s = useStyles();
   return (
     <View style={s.featured}>
       <Pressable onPress={() => open(p)} accessibilityRole="button" accessibilityLabel={`Open ${p.username}`}>
@@ -192,6 +196,8 @@ function Featured({ producer: p, label }: { producer: Producer; label: string })
 }
 
 function LeaderRow({ producer: p, rank, you, last }: { producer: Producer; rank: number; you?: boolean; last?: boolean }) {
+  const C = useColors();
+  const s = useStyles();
   return (
     <Pressable
       onPress={() => open(p)}
@@ -211,6 +217,7 @@ function LeaderRow({ producer: p, rank, you, last }: { producer: Producer; rank:
 }
 
 function ProsSoon() {
+  const s = useStyles();
   return (
     <Card>
       <Text style={s.cardTitle}>What the pros are posting</Text>
@@ -221,7 +228,7 @@ function ProsSoon() {
   );
 }
 
-const s = StyleSheet.create({
+const useStyles = makeStyles((C) => ({
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   muted: { color: C.t3, fontSize: 13, ...font() },
@@ -230,7 +237,7 @@ const s = StyleSheet.create({
   error: { color: C.danger, fontSize: 14, ...font() },
   cardTitle: { color: C.text, fontSize: 17, ...font('600') },
   featured: { borderRadius: 14, borderWidth: 1, borderColor: C.line, backgroundColor: C.card, overflow: 'hidden' },
-  banner: { height: 86, backgroundColor: '#111111', borderBottomWidth: 1, borderBottomColor: C.lineSoft },
+  banner: { height: 86, backgroundColor: C.card2, borderBottomWidth: 1, borderBottomColor: C.lineSoft },
   featuredHead: { flexDirection: 'row', alignItems: 'flex-end', gap: 12, paddingHorizontal: 14, marginTop: -28, paddingBottom: 12 },
   featuredAvatar: { borderRadius: 32, borderWidth: 3, borderColor: C.card },
   featuredName: { color: C.text, fontSize: 18, flexShrink: 1, ...display },
@@ -253,4 +260,4 @@ const s = StyleSheet.create({
   lastRow: { borderBottomWidth: 1, borderBottomColor: C.lineSoft },
   rank: { width: 22, color: C.t2, fontSize: 13, fontFamily: F.monoMedium },
   leaderName: { color: C.text, fontSize: 15, flexShrink: 1, ...font() },
-});
+}));

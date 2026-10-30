@@ -1,11 +1,11 @@
 import { router } from 'expo-router';
 import { useEffect, useState, type ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Polyline, Text as SvgText } from 'react-native-svg';
 
-import { Button, JobProgress, Meter, PlayPauseIcon, styles as ui } from '@/components/ui';
-import { C, F, R, font } from '@/theme';
+import { Button, JobProgress, Meter, PlayPauseIcon, useUiStyles } from '@/components/ui';
+import { F, R, display, font, makeStyles, useColors } from '@/theme';
 
 // The first screen before signing in: what SendMyBeat does, previews of each part of the app
 // built from its own pieces, and the plans. Log in and sign up open the auth sheet.
@@ -30,6 +30,9 @@ const PLANS = [
 ];
 
 export default function LandingScreen() {
+  const C = useColors();
+  const s = useStyles();
+  const ui = useUiStyles();
   const insets = useSafeAreaInsets();
   const narrow = useWindowDimensions().width < 360; // iPhone SE (1st gen) and small Androids
   return (
@@ -120,6 +123,7 @@ export default function LandingScreen() {
 }
 
 function Feature({ n, title, body, children }: { n: string; title: string; body: string; children: ReactNode }) {
+  const s = useStyles();
   return (
     <View style={{ gap: 12 }}>
       <View style={{ gap: 6 }}>
@@ -151,6 +155,8 @@ function TagRunDemo() {
 const SAMPLE_TAGS = ['dark trap type beat', 'trap beat 2026', 'hard trap instrumental', 'free type beat', 'dark piano trap', '808 beat'];
 
 function TagEditorPreview() {
+  const C = useColors();
+  const s = useStyles();
   const chars = 438;
   return (
     <View style={s.panel} accessible accessibilityLabel={`Example tag editor, ${chars} of 500 characters used`}>
@@ -177,6 +183,8 @@ function TagEditorPreview() {
 }
 
 function StudioPreview() {
+  const C = useColors();
+  const s = useStyles();
   const bars = Array.from({ length: 40 }, (_, i) => 0.35 + 0.3 * Math.abs(Math.sin(i * 0.9)) + 0.3 * Math.abs(Math.sin(i * 0.37)));
   return (
     <View style={s.panel} accessible accessibilityLabel="Example Upload Studio: video preview, waveform player and the render settings">
@@ -193,7 +201,7 @@ function StudioPreview() {
         <View style={{ flex: 1, gap: 6 }}>
           <View style={s.wave}>
             {bars.map((h, i) => (
-              <View key={i} style={[s.waveBar, { height: `${Math.min(1, h) * 100}%`, backgroundColor: i < 11 ? C.text : '#3A3A3A' }]} />
+              <View key={i} style={[s.waveBar, { height: `${Math.min(1, h) * 100}%`, backgroundColor: i < 11 ? C.text : C.wave }]} />
             ))}
           </View>
           <View style={s.rowBetween}>
@@ -213,6 +221,8 @@ function StudioPreview() {
 const VIEWS = [8.2, 10.6, 7.4, 12.9, 10.1, 11.8, 15.9, 21.0];
 
 function ChartPreview() {
+  const C = useColors();
+  const s = useStyles();
   const [w, setW] = useState(0);
   const h = 120;
   const top = 14;
@@ -264,6 +274,8 @@ const LEADERS = [
 ];
 
 function LeaderboardPreview() {
+  const s = useStyles();
+  const ui = useUiStyles();
   return (
     <View style={s.panel} accessible accessibilityLabel="Example Spotlight leaderboard with you ranked 14th">
       <View style={s.rowBetween}>
@@ -281,6 +293,8 @@ function LeaderboardPreview() {
 }
 
 function LeaderRow({ rank, name, pts, you }: { rank: string; name: string; pts: number; you?: boolean }) {
+  const C = useColors();
+  const s = useStyles();
   return (
     <View style={[s.leader, you && s.you]}>
       <Text style={[s.rank, (you || Number(rank) <= 3) && { color: C.text }]}>{rank}</Text>
@@ -295,14 +309,14 @@ function LeaderRow({ rank, name, pts, you }: { rank: string; name: string; pts: 
   );
 }
 
-const s = StyleSheet.create({
+const useStyles = makeStyles((C) => ({
   root: { paddingHorizontal: 20, gap: 40 },
   topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', height: 44, marginBottom: -12 },
   logo: { color: C.text, fontSize: 16, fontFamily: F.brand },
   topLink: { minHeight: 44, minWidth: 44, alignItems: 'flex-end', justifyContent: 'center' },
   topLinkText: { color: C.t2, fontSize: 15, ...font('500') },
   eyebrow: { color: C.t2, fontSize: 12, fontFamily: F.mono },
-  hero: { ...ui.largeTitle, fontSize: 36, lineHeight: 42 },
+  hero: { color: C.text, fontSize: 36, lineHeight: 42, letterSpacing: -0.3, ...display },
   lede: { color: C.t2, fontSize: 16, lineHeight: 23, ...font() },
   fine: { color: C.t3, fontSize: 12.5, textAlign: 'center', fontFamily: F.mono },
   note: { color: C.t3, fontSize: 13, lineHeight: 18, textAlign: 'center', ...font() },
@@ -326,7 +340,7 @@ const s = StyleSheet.create({
     borderColor: C.line,
     backgroundColor: C.bg,
   },
-  chipNew: { borderColor: C.accLine, backgroundColor: '#06140E' },
+  chipNew: { borderColor: C.accLine, backgroundColor: C.accSoft },
   chipText: { color: C.text, fontFamily: F.mono, fontSize: 12 },
   chipX: { color: C.t3, fontSize: 13, ...font() },
   chipMore: { paddingHorizontal: 9, paddingVertical: 6, borderRadius: R.chip, borderWidth: 1, borderColor: C.lineSoft },
@@ -345,8 +359,8 @@ const s = StyleSheet.create({
     aspectRatio: 1,
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: '#2A2A2A',
-    backgroundColor: '#1A1A1A',
+    borderColor: C.line,
+    backgroundColor: C.card2,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -378,7 +392,7 @@ const s = StyleSheet.create({
   leader: { flexDirection: 'row', alignItems: 'center', gap: 12, height: 46, borderTopWidth: 1, borderTopColor: C.lineSoft },
   you: { backgroundColor: C.card2, marginHorizontal: -14, marginBottom: -14, paddingHorizontal: 14, height: 46 + 14, paddingBottom: 14 },
   rank: { width: 22, color: C.t2, fontSize: 13, fontFamily: F.monoMedium },
-  avatar: { width: 26, height: 26, borderRadius: 13, backgroundColor: '#1A1A1A', borderWidth: 1, borderColor: '#2A2A2A', alignItems: 'center', justifyContent: 'center' },
+  avatar: { width: 26, height: 26, borderRadius: 13, backgroundColor: C.card2, borderWidth: 1, borderColor: C.line, alignItems: 'center', justifyContent: 'center' },
   avatarText: { color: C.t2, fontSize: 11, ...font('600') },
   leaderName: { flex: 1, color: C.text, fontSize: 15, ...font() },
 
@@ -394,4 +408,4 @@ const s = StyleSheet.create({
   closing: { gap: 14, paddingTop: 8, borderTopWidth: 1, borderTopColor: C.lineSoft },
   switchBtn: { minHeight: 44, justifyContent: 'center' },
   switch: { color: C.t2, fontSize: 14, textAlign: 'center', ...font() },
-});
+}));

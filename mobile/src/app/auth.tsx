@@ -1,17 +1,20 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/api/auth';
-import { Button, Card, Segmented, styles as ui } from '@/components/ui';
-import { C, R, font } from '@/theme';
+import { Button, Card, Segmented, useUiStyles } from '@/components/ui';
+import { R, font, makeStyles, useColors } from '@/theme';
 
 type Mode = 'login' | 'register';
 
 // Log in or sign up, opened as a sheet from the landing screen. Once signed in, the root
 // layout's guard swaps the whole stack for the app.
 export default function AuthScreen() {
+  const C = useColors();
+  const s = useStyles();
+  const ui = useUiStyles();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ mode?: string }>();
   const { signIn, signUp } = useAuth();
@@ -113,7 +116,7 @@ export default function AuthScreen() {
   );
 }
 
-const s = StyleSheet.create({
+const useStyles = makeStyles((C) => ({
   root: { paddingHorizontal: 20, paddingTop: 8, gap: 22 },
   topBar: { flexDirection: 'row', height: 44, alignItems: 'center' },
   close: { minHeight: 44, justifyContent: 'center' },
@@ -133,4 +136,4 @@ const s = StyleSheet.create({
   error: { color: C.danger, fontSize: 14, ...font() },
   switchBtn: { minHeight: 44, justifyContent: 'center' },
   switch: { color: C.t2, fontSize: 14, textAlign: 'center', ...font() },
-});
+}));

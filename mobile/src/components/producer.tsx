@@ -2,14 +2,14 @@ import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-au
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useEffect } from 'react';
-import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, Text, View } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 
 import { useAuth } from '@/api/auth';
 import type { PickedFile, Producer, TopBeat as TopBeatData } from '@/api/endpoints';
 import { PlayPauseIcon } from '@/components/ui';
 import { followersOf, likesOf, toggleFollow, toggleLike, useSocial } from '@/state/social';
-import { C, F, font } from '@/theme';
+import { F, font, makeStyles, useColors } from '@/theme';
 
 // Producers the Spotlight tab already loaded, so a profile can open instantly before its stats arrive.
 const known = new Map<string, Producer>();
@@ -51,6 +51,8 @@ const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFracti
 
 // Heart with the in-app like count. Your own profile shows the count without the button.
 export function LikeButton({ producer, size = 'sm' }: { producer: Producer; size?: 'sm' | 'md' }) {
+  const C = useColors();
+  const s = useStyles();
   const social = useSocial();
   const { user } = useAuth();
   const mine = user?.id === producer.user_id;
@@ -73,6 +75,8 @@ export function LikeButton({ producer, size = 'sm' }: { producer: Producer; size
 }
 
 export function FollowButton({ producer }: { producer: Producer }) {
+  const C = useColors();
+  const s = useStyles();
   const social = useSocial();
   const { user } = useAuth();
   if (user?.id === producer.user_id) return null;
@@ -85,7 +89,7 @@ export function FollowButton({ producer }: { producer: Producer }) {
       accessibilityLabel={following ? `Unfollow ${producer.username}` : `Follow ${producer.username}`}
       style={({ pressed }) => [
         s.follow,
-        following ? { backgroundColor: C.card2, borderWidth: 1, borderColor: '#2A2A2A' } : { backgroundColor: C.primary },
+        following ? { backgroundColor: C.card2, borderWidth: 1, borderColor: C.line } : { backgroundColor: C.primary },
         pressed && { transform: [{ scale: 0.96 }] },
       ]}>
       <Text style={[s.followText, { color: following ? C.text : C.onPrimary }]}>{following ? 'Following' : 'Follow'}</Text>
@@ -97,6 +101,7 @@ export const followerCount = (social: ReturnType<typeof useSocial>, p: Producer)
 
 
 export function Avatar({ producer, size, ring }: { producer: Producer; size: number; ring?: string }) {
+  const s = useStyles();
   const box = {
     width: size,
     height: size,
@@ -118,6 +123,7 @@ const hasOwnPicture = (p: Producer) => !!p.avatar_url && !p.avatar_url.startsWit
 
 /** A plain grey person, until the producer adds their own picture. */
 function DefaultPerson({ size }: { size: number }) {
+  const C = useColors();
   return (
     <Svg width={size} height={size} viewBox="0 0 40 40" accessibilityElementsHidden importantForAccessibility="no">
       <Circle cx={20} cy={15.5} r={7} fill={C.t3} />
@@ -127,6 +133,8 @@ function DefaultPerson({ size }: { size: number }) {
 }
 
 export function VerifiedBadge({ size = 14 }: { size?: number }) {
+  const C = useColors();
+  const s = useStyles();
   return (
     <View style={[s.badge, { width: size, height: size, borderRadius: size / 2 }]} accessibilityLabel="Verified" accessibilityRole="image">
       <Text style={{ color: C.bg, fontSize: size * 0.7, lineHeight: size, ...font('700') }}>✓</Text>
@@ -152,6 +160,7 @@ function clock(sec: number) {
 
 // YouTube top beats show their thumbnail and open in YouTube; uploaded audio plays right here.
 export function TopBeat({ beat }: { beat: TopBeatData }) {
+  const s = useStyles();
   if (beat.kind === 'audio' && (isAudioFile(beat.url) || beat.file_id || /\/top-beat\/audio/.test(beat.url))) {
     return <PlayableBeat url={beat.url} title={beat.title || 'Top beat'} />;
   }
@@ -181,6 +190,8 @@ export function TopBeat({ beat }: { beat: TopBeatData }) {
 }
 
 function PlayableBeat({ url, title }: { url: string; title: string }) {
+  const C = useColors();
+  const s = useStyles();
   const player = useAudioPlayer(url);
   const status = useAudioPlayerStatus(player);
   const duration = status.duration || 0;
@@ -218,7 +229,7 @@ function PlayableBeat({ url, title }: { url: string; title: string }) {
   );
 }
 
-const s = StyleSheet.create({
+const useStyles = makeStyles((C) => ({
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -226,14 +237,14 @@ const s = StyleSheet.create({
     paddingHorizontal: 10,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#2A2A2A',
+    borderColor: C.line,
     backgroundColor: C.card2,
   },
-  pillOn: { borderColor: 'rgba(255,107,107,0.4)', backgroundColor: 'rgba(255,107,107,0.08)' },
+  pillOn: { borderColor: C.dangerLine, backgroundColor: C.dangerSoft },
   count: { color: C.t2, fontSize: 12.5, fontFamily: F.mono },
   follow: { height: 34, paddingHorizontal: 14, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
   followText: { fontSize: 13, ...font('600') },
-  avatar: { backgroundColor: '#1A1A1A', borderWidth: 1, borderColor: '#2A2A2A', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  avatar: { backgroundColor: C.card2, borderWidth: 1, borderColor: C.line, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   badge: { backgroundColor: C.text, alignItems: 'center', justifyContent: 'center' },
   beat: {
     flexDirection: 'row',
@@ -245,11 +256,11 @@ const s = StyleSheet.create({
     borderColor: C.lineSoft,
     backgroundColor: C.card2,
   },
-  play: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#1A1A1A', alignItems: 'center', justifyContent: 'center' },
-  thumb: { width: 72, height: 40, borderRadius: 6, backgroundColor: '#1A1A1A' },
+  play: { width: 34, height: 34, borderRadius: 17, backgroundColor: C.card2, alignItems: 'center', justifyContent: 'center' },
+  thumb: { width: 72, height: 40, borderRadius: 6, backgroundColor: C.card2 },
   track: { height: 2, backgroundColor: C.line, overflow: 'hidden' },
   trackFill: { height: 2, backgroundColor: C.text },
   playIcon: { color: C.text, fontSize: 12, ...font('700') },
   beatTitle: { color: C.text, fontSize: 13, ...font('500') },
   beatMeta: { color: C.t3, fontSize: 11.5, fontFamily: F.mono },
-});
+}));

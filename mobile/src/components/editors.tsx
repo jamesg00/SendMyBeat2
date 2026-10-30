@@ -1,13 +1,13 @@
 import * as Clipboard from 'expo-clipboard';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
 
 import * as api from '@/api/endpoints';
 import type { Description, ScoredTag, TagLevel, TagRun } from '@/api/endpoints';
 import { Button, Card, ListGroup, ListRow, Meter, Segmented } from '@/components/ui';
 import { DESCRIPTION_TEMPLATES } from '@/data/templates';
 import { useDraft, type DraftDescription } from '@/state/draft';
-import { C, F, R, font } from '@/theme';
+import { F, R, font, makeStyles, useColors } from '@/theme';
 
 // The description and tag editors, shared by Workflow and Upload Studio.
 
@@ -29,6 +29,8 @@ export function DescriptionEditor({
   onSaved: (d: Description) => void;
   onDeleted: (id: string) => void;
 }) {
+  const C = useColors();
+  const s = useStyles();
   const { description, setDescription } = useDraft();
   const [editing, setEditing] = useState<Editing | null>(null);
   const [busy, setBusy] = useState(false);
@@ -153,6 +155,8 @@ const DEMAND: Record<TagLevel, string> = { high: 'High demand', medium: 'Some de
 const COMPETITION: Record<TagLevel, string> = { low: 'Low competition', medium: 'Medium competition', high: 'High competition', unknown: '' };
 // High demand is the good-news status, so it gets the mint dot; some demand is grey, low is a ring.
 function DemandDot({ level }: { level: TagLevel }) {
+  const C = useColors();
+  const s = useStyles();
   if (level === 'unknown') return null;
   return <View style={[s.dot, level === 'high' && { backgroundColor: C.acc }, level === 'medium' && { backgroundColor: C.t2 }, level === 'low' && s.dotLow]} />;
 }
@@ -162,6 +166,8 @@ const levels = (entry: ScoredTag) =>
 
 // Remove tags with a tap, add your own, and save back to the run (the server learns from removals).
 export function TagEditor({ run, onSaved }: { run: TagRun; onSaved: (r: TagRun) => void }) {
+  const C = useColors();
+  const s = useStyles();
   const [tags, setTags] = useState(run.tags);
   const [input, setInput] = useState('');
   const [showAll, setShowAll] = useState(false);
@@ -369,6 +375,8 @@ export function TagEditor({ run, onSaved }: { run: TagRun; onSaved: (r: TagRun) 
 
 // Every tag best to worst: rank, score bar and what the score is made of.
 function Ranking({ tags, scores }: { tags: string[]; scores: Map<string, ScoredTag> }) {
+  const C = useColors();
+  const s = useStyles();
   const rows = tags
     .map((tag) => ({ tag, entry: scores.get(keyOf(tag)) }))
     .sort((a, b) => (b.entry?.score ?? -1) - (a.entry?.score ?? -1));
@@ -399,7 +407,7 @@ function Ranking({ tags, scores }: { tags: string[]; scores: Map<string, ScoredT
   );
 }
 
-const s = StyleSheet.create({
+const useStyles = makeStyles((C) => ({
   rankRow: { flexDirection: 'row', gap: 12, paddingVertical: 12, borderTopWidth: 1, borderTopColor: C.lineSoft },
   rankLast: { borderBottomWidth: 1, borderBottomColor: C.lineSoft },
   rankNum: { width: 22, color: C.t2, fontSize: 13, fontFamily: F.monoMedium, paddingTop: 1 },
@@ -410,9 +418,9 @@ const s = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#1A1A1A',
+    backgroundColor: C.card2,
     borderWidth: 1,
-    borderColor: '#2A2A2A',
+    borderColor: C.line,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -446,8 +454,8 @@ const s = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: R.chip,
     borderWidth: 1,
-    borderColor: '#2A2A2A',
-    backgroundColor: '#1A1A1A',
+    borderColor: C.line,
+    backgroundColor: C.card2,
     overflow: 'hidden',
   },
   inputRow: {
@@ -483,7 +491,7 @@ const s = StyleSheet.create({
     borderRadius: R.chip,
     borderWidth: 1,
     borderStyle: 'dashed',
-    borderColor: '#333333',
+    borderColor: C.line,
   },
   input: {
     height: 44,
@@ -510,7 +518,7 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: C.line,
   },
-  chipNew: { borderColor: C.accLine, backgroundColor: '#06140E' },
+  chipNew: { borderColor: C.accLine, backgroundColor: C.accSoft },
   chipText: { color: C.text, fontFamily: F.mono, fontSize: 12.5 },
   chipX: { color: C.t3, fontSize: 14, marginTop: -1, ...font() },
   chipScore: { color: C.t3, fontFamily: F.mono, fontSize: 11 },
@@ -533,4 +541,4 @@ const s = StyleSheet.create({
     lineHeight: 21,
     ...font(),
   },
-});
+}));

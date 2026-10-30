@@ -5,7 +5,6 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
-  StyleSheet,
   Text,
   View,
   type StyleProp,
@@ -16,7 +15,7 @@ import Animated, { Easing, useAnimatedStyle, useSharedValue, withSpring, withTim
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path, Rect } from 'react-native-svg';
 
-import { C, F, R, display, font } from '@/theme';
+import { F, R, display, font, makeStyles, useColors } from '@/theme';
 
 export function Screen({
   title,
@@ -34,6 +33,8 @@ export function Screen({
   onRefresh?: () => void;
   children: ReactNode;
 }) {
+  const C = useColors();
+  const styles = useUiStyles();
   const insets = useSafeAreaInsets();
   return (
     <ScrollView
@@ -54,10 +55,12 @@ export function Screen({
 }
 
 export function Card({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
+  const styles = useUiStyles();
   return <View style={[styles.card, style]}>{children}</View>;
 }
 
 export function SectionLabel({ children, right }: { children: string; right?: ReactNode }) {
+  const styles = useUiStyles();
   return (
     <View style={styles.sectionRow}>
       <Text style={styles.sectionLabel}>{children}</Text>
@@ -67,6 +70,7 @@ export function SectionLabel({ children, right }: { children: string; right?: Re
 }
 
 export function T({ children, style }: { children: ReactNode; style?: StyleProp<TextStyle> }) {
+  const styles = useUiStyles();
   return <Text style={[styles.body, style]}>{children}</Text>;
 }
 
@@ -80,6 +84,8 @@ type ButtonProps = {
 
 // Primary is white-on-black like the system's own prominent buttons; mint stays for status only.
 export function Button({ title, onPress, variant = 'primary', size = 'lg', style }: ButtonProps) {
+  const C = useColors();
+  const styles = useUiStyles();
   const height = size === 'lg' ? 50 : size === 'md' ? 40 : 32;
   const radius = size === 'lg' ? 12 : size === 'md' ? 10 : 8;
   return (
@@ -121,6 +127,7 @@ export function Segmented<V extends string>({
   onChange: (v: V) => void;
   compact?: boolean;
 }) {
+  const styles = useUiStyles();
   const [width, setWidth] = useState(0);
   const cell = width > 0 ? (width - 4) / options.length : 0;
   const index = Math.max(0, options.findIndex((o) => o.value === value));
@@ -167,6 +174,7 @@ export function Segmented<V extends string>({
 }
 
 export function ListGroup({ children }: { children: ReactNode }) {
+  const styles = useUiStyles();
   return <View style={styles.listGroup}>{children}</View>;
 }
 
@@ -189,6 +197,8 @@ export function ListRow({
   last?: boolean;
   height?: number;
 }) {
+  const C = useColors();
+  const styles = useUiStyles();
   return (
     <Pressable
       onPress={onPress}
@@ -212,6 +222,8 @@ export function ListRow({
 }
 
 export function Pill({ label, tone = 'accent' }: { label: string; tone?: 'accent' | 'muted' }) {
+  const C = useColors();
+  const styles = useUiStyles();
   return (
     <View
       style={[
@@ -223,7 +235,9 @@ export function Pill({ label, tone = 'accent' }: { label: string; tone?: 'accent
   );
 }
 
-export function Meter({ value, color = C.text, height = 2 }: { value: number; color?: string; height?: number }) {
+export function Meter({ value, color, height = 2 }: { value: number; color?: string; height?: number }) {
+  const C = useColors();
+  const styles = useUiStyles();
   const w = useSharedValue(Math.max(0, Math.min(1, value)));
   useEffect(() => {
     w.value = withTiming(Math.max(0, Math.min(1, value)), { duration: 450, easing: Easing.out(Easing.cubic) });
@@ -231,7 +245,7 @@ export function Meter({ value, color = C.text, height = 2 }: { value: number; co
   const fill = useAnimatedStyle(() => ({ width: `${w.value * 100}%` }));
   return (
     <View style={[styles.meterTrack, { height, borderRadius: height / 2 }]}>
-      <Animated.View style={[styles.meterFill, { height, borderRadius: height / 2, backgroundColor: color }, fill]} />
+      <Animated.View style={[styles.meterFill, { height, borderRadius: height / 2, backgroundColor: color ?? C.text }, fill]} />
     </View>
   );
 }
@@ -259,6 +273,8 @@ export function JobProgress({
   /** Stage labels shown in order as time passes; the server's message is used when there are none. */
   steps?: string[];
 }) {
+  const C = useColors();
+  const styles = useUiStyles();
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 300);
@@ -308,6 +324,7 @@ const SWIPE_DELETE_AT = 96;
 
 /** Swipe right to reveal Delete; letting go past the line calls onDelete (which should confirm). */
 export function SwipeToDelete({ children, onDelete, label }: { children: ReactNode; onDelete: () => void; label: string }) {
+  const styles = useUiStyles();
   const [x] = useState(() => new RNAnimated.Value(0));
   // Rebuilt when onDelete changes; it keeps no state between events, so that's safe mid-swipe.
   const pan = useMemo(() => {
@@ -340,27 +357,31 @@ export function SwipeToDelete({ children, onDelete, label }: { children: ReactNo
 }
 
 /** Drawn play / pause glyph. Text characters like "▶" turn into emoji on iOS. */
-export function PlayPauseIcon({ playing, size = 12, color = C.onPrimary }: { playing: boolean; size?: number; color?: string }) {
+export function PlayPauseIcon({ playing, size = 12, color }: { playing: boolean; size?: number; color?: string }) {
+  const C = useColors();
+  const fill = color ?? C.onPrimary;
   return (
     <Svg width={size} height={size} viewBox="0 0 12 12" accessibilityElementsHidden importantForAccessibility="no">
       {playing ? (
         <>
-          <Rect x={2} y={1} width={3} height={10} rx={0.8} fill={color} />
-          <Rect x={7} y={1} width={3} height={10} rx={0.8} fill={color} />
+          <Rect x={2} y={1} width={3} height={10} rx={0.8} fill={fill} />
+          <Rect x={7} y={1} width={3} height={10} rx={0.8} fill={fill} />
         </>
       ) : (
         // Nudged right so the triangle looks centred in a round button.
-        <Path d="M3.2 1.4 L10.6 6 L3.2 10.6 Z" fill={color} strokeLinejoin="round" />
+        <Path d="M3.2 1.4 L10.6 6 L3.2 10.6 Z" fill={fill} strokeLinejoin="round" />
       )}
     </Svg>
   );
 }
 
-export function IconTile({ children, tint = C.card2 }: { children: ReactNode; tint?: string }) {
-  return <View style={[styles.iconTile, { backgroundColor: tint }]}>{children}</View>;
+export function IconTile({ children, tint }: { children: ReactNode; tint?: string }) {
+  const C = useColors();
+  const styles = useUiStyles();
+  return <View style={[styles.iconTile, { backgroundColor: tint ?? C.card2 }]}>{children}</View>;
 }
 
-export const styles = StyleSheet.create({
+export const useUiStyles = makeStyles((C) => ({
   swipeBehind: {
     position: 'absolute',
     top: 0,
@@ -368,9 +389,9 @@ export const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     borderRadius: R.card,
-    backgroundColor: 'rgba(255,107,107,0.14)',
+    backgroundColor: C.dangerSoft,
     borderWidth: 1,
-    borderColor: 'rgba(255,107,107,0.35)',
+    borderColor: C.dangerLine,
     justifyContent: 'center',
     paddingHorizontal: 18,
   },
@@ -398,7 +419,7 @@ export const styles = StyleSheet.create({
   },
   segItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   segText: { color: C.text, ...font('500') },
-  segTextOn: { color: '#FFFFFF', ...font('600') },
+  segTextOn: { color: C.text, ...font('600') },
   listGroup: { backgroundColor: C.card, borderRadius: R.card, borderWidth: 1, borderColor: C.line, overflow: 'hidden' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 8 },
   rowDivider: { borderBottomWidth: 1, borderBottomColor: C.lineSoft },
@@ -420,4 +441,4 @@ export const styles = StyleSheet.create({
   logText: { color: C.t2, fontSize: 12.5, fontFamily: F.mono, flexShrink: 1 },
   jobTime: { color: C.t3, fontSize: 12, fontFamily: F.mono },
   iconTile: { width: 32, height: 32, borderRadius: 8, borderWidth: 1, borderColor: C.line, alignItems: 'center', justifyContent: 'center' },
-});
+}));

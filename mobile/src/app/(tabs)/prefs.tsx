@@ -1,18 +1,21 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback } from 'react';
 import * as WebBrowser from 'expo-web-browser';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import { useAuth } from '@/api/auth';
 import * as api from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
 import { Avatar } from '@/components/producer';
-import { Button, ListGroup, ListRow, Meter, Screen, styles as ui } from '@/components/ui';
-import { C, F, font } from '@/theme';
+import { Button, ListGroup, ListRow, Meter, Screen, useUiStyles } from '@/components/ui';
+import { F, font, makeStyles, THEMES, useColors, useThemeId } from '@/theme';
 
 const site = (path: string) => WebBrowser.openBrowserAsync(`https://www.sendmybeat.com${path}`);
 
 export default function ProfileScreen() {
+  const s = useStyles();
+  const ui = useUiStyles();
+  const themeId = useThemeId();
   const { user, signOut } = useAuth();
   const sub = useRequest(api.subscriptionStatus);
   const yt = useRequest(api.youtubeStatus);
@@ -54,6 +57,13 @@ export default function ProfileScreen() {
           </View>
         </View>
       ) : null}
+
+      <View style={{ gap: 8 }}>
+        <Text style={ui.sectionLabel}>App</Text>
+        <ListGroup>
+          <ListRow title="Appearance" value={THEMES.find((t) => t.id === themeId)?.label} onPress={() => router.push('/appearance')} last />
+        </ListGroup>
+      </View>
 
       <View style={{ gap: 8 }}>
         <Text style={ui.sectionLabel}>Account</Text>
@@ -99,6 +109,8 @@ export default function ProfileScreen() {
 }
 
 function Usage({ label, left, total, last }: { label: string; left: number; total: number; last?: boolean }) {
+  const C = useColors();
+  const s = useStyles();
   return (
     <View style={[s.usage, !last && { borderBottomWidth: 1, borderBottomColor: C.lineSoft }]}>
       <View style={s.usageHead}>
@@ -112,15 +124,15 @@ function Usage({ label, left, total, last }: { label: string; left: number; tota
   );
 }
 
-const s = StyleSheet.create({
+const useStyles = makeStyles((C) => ({
   profile: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   avatar: {
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: '#1A1A1A',
+    backgroundColor: C.card2,
     borderWidth: 1,
-    borderColor: '#2A2A2A',
+    borderColor: C.line,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -136,4 +148,4 @@ const s = StyleSheet.create({
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: C.acc },
   external: { color: C.t3, fontSize: 14, ...font() },
   signOut: { color: C.danger, fontSize: 15, ...font() },
-});
+}));

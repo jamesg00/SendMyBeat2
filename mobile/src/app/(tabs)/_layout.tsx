@@ -1,9 +1,10 @@
 import { NativeTabs } from 'expo-router/native-tabs';
 
-import { C } from '@/theme';
+import { useColors } from '@/theme';
 
 // Native tab bar: Liquid Glass on iOS 26, Material on Android.
 export default function TabLayout() {
+  const C = useColors();
   return (
     <NativeTabs tintColor={C.text} backgroundColor={C.card} minimizeBehavior="onScrollDown">
       <NativeTabs.Trigger name="index">

@@ -1,17 +1,17 @@
 import * as Clipboard from 'expo-clipboard';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Platform, Pressable, Text, TextInput, View } from 'react-native';
 
 import { useAuth } from '@/api/auth';
 import * as api from '@/api/endpoints';
 import type { Description, TagRun } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
-import { Button, Card, IconTile, JobProgress, ListGroup, ListRow, Meter, Pill, PlayPauseIcon, Screen, SectionLabel, Segmented, SwipeToDelete, styles as ui } from '@/components/ui';
+import { Button, Card, IconTile, JobProgress, ListGroup, ListRow, Meter, Pill, PlayPauseIcon, Screen, SectionLabel, Segmented, SwipeToDelete, useUiStyles } from '@/components/ui';
 import { DescriptionEditor, TagEditor } from '@/components/editors';
 import { useDraft } from '@/state/draft';
 import { useStudio } from '@/state/studio';
-import { C, F, R, font } from '@/theme';
+import { F, R, font, makeStyles, useColors } from '@/theme';
 
 type Step = 'build' | 'review' | 'upload';
 
@@ -30,6 +30,7 @@ function upsert<T extends { id: string }>(list: T[] | null, item: T) {
 }
 
 export default function WorkflowScreen() {
+  const s = useStyles();
   const { user } = useAuth();
   const [step, setStep] = useState<Step>('build');
   const draft = useDraft();
@@ -134,6 +135,8 @@ function openStudio(open: () => void) {
 
 // Shown while Upload Studio holds a draft or an upload, so it's one tap to get back to it.
 function StudioBanner() {
+  const C = useColors();
+  const s = useStyles();
   const studio = useStudio();
   if (!studio.active) return null;
   const { phase, audio, image } = studio;
@@ -181,6 +184,9 @@ function StudioBanner() {
 }
 
 function UsageMeter({ label, left, total }: { label: string; left: number; total: number }) {
+  const C = useColors();
+  const s = useStyles();
+  const ui = useUiStyles();
   return (
     <View style={{ flex: 1, gap: 8 }}>
       <View style={s.meterHead}>
@@ -214,6 +220,9 @@ function BuildStep({
   onDescriptionSaved: (d: Description) => void;
   onDescriptionDeleted: (id: string) => void;
 }) {
+  const C = useColors();
+  const s = useStyles();
+  const ui = useUiStyles();
   const { generation, generationError, lastGenerated, run } = useDraft();
   const [query, setQuery] = useState('');
 
@@ -319,6 +328,7 @@ function ReviewStep({
   onDone: () => void;
   onTagsSaved: (r: TagRun) => void;
 }) {
+  const s = useStyles();
   const { run, setRun, description } = useDraft();
   const [copied, setCopied] = useState(false);
 
@@ -368,6 +378,8 @@ function ReviewStep({
 }
 
 function UploadStep({ run }: { run: TagRun | null }) {
+  const C = useColors();
+  const s = useStyles();
   const yt = useRequest(api.youtubeStatus);
   const studio = useStudio();
   return (
@@ -399,16 +411,16 @@ function UploadStep({ run }: { run: TagRun | null }) {
   );
 }
 
-const s = StyleSheet.create({
+const useStyles = makeStyles((C) => ({
   swipeHint: { color: C.t3, fontSize: 11.5, fontFamily: F.mono },
   header: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   avatar: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#1A1A1A',
+    backgroundColor: C.card2,
     borderWidth: 1,
-    borderColor: '#2A2A2A',
+    borderColor: C.line,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -442,8 +454,8 @@ const s = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: R.chip,
     borderWidth: 1,
-    borderColor: '#2A2A2A',
-    backgroundColor: '#1A1A1A',
+    borderColor: C.line,
+    backgroundColor: C.card2,
     overflow: 'hidden',
   },
   inputRow: {
@@ -479,7 +491,7 @@ const s = StyleSheet.create({
     borderRadius: R.chip,
     borderWidth: 1,
     borderStyle: 'dashed',
-    borderColor: '#333333',
+    borderColor: C.line,
   },
   input: {
     height: 44,
@@ -506,7 +518,7 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: C.line,
   },
-  chipNew: { borderColor: C.accLine, backgroundColor: '#06140E' },
+  chipNew: { borderColor: C.accLine, backgroundColor: C.accSoft },
   chipText: { color: C.text, fontFamily: F.mono, fontSize: 12.5 },
   chipX: { color: C.t3, fontSize: 14, marginTop: -1, ...font() },
   description: {
@@ -521,4 +533,4 @@ const s = StyleSheet.create({
     lineHeight: 21,
     ...font(),
   },
-});
+}));
