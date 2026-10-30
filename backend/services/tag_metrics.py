@@ -12,6 +12,8 @@ from datetime import datetime, timezone
 from statistics import median
 from typing import Any, Callable
 
+from . import tag_outcomes
+
 logger = logging.getLogger(__name__)
 
 TAG_MIN_PUBLISH_SCORE = int(os.environ.get("TAG_MIN_PUBLISH_SCORE", "58"))
@@ -340,7 +342,14 @@ def tag_signals(breakdown: dict[str, Any] | None) -> dict[str, str]:
     if breakdown.get("competition_known") and breakdown.get("demand_source") in ("autocomplete", "unknown"):
         value = float(breakdown.get("competition") or 0)
         competition = "low" if value >= 70 else "medium" if value >= 40 else "high"
-    return {"demand": demand, "competition": competition}
+    signals: dict[str, Any] = {"demand": demand, "competition": competition}
+    record = breakdown.get("track_record") or {}
+    boost = float(record.get("boost") or 0)
+    if boost >= 2 or boost <= -2:
+        # How this tag's videos did on SendMyBeat against their channels' normal.
+        signals["record"] = "proven" if boost > 0 else "weak"
+        signals["record_videos"] = int(record.get("videos") or 0)
+    return signals
 
 
 def _cache_is_fresh(doc: dict[str, Any] | None, ttl_seconds: int) -> bool:
@@ -494,6 +503,7 @@ async def score_tags_with_youtube_proxy(
     cache_ttl_seconds: int | None = None,
     quota_budget: list[int] | None = None,
     demand_lookup: Callable[..., Any] | None = None,
+    track_record: dict[str, dict] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """
     Score every candidate. Returns all scored entries (best first) and a stats dict.
@@ -502,6 +512,7 @@ async def score_tags_with_youtube_proxy(
     2. Competition from cached YouTube searches; the best few uncached tags are searched while
        `quota_budget` (remaining API units, shared with the caller) allows.
     3. Relevance from `relevance_scorer`.
+    4. A few points up or down from `track_record`: how the tag's past SendMyBeat uploads did.
     """
     min_score = TAG_MIN_PUBLISH_SCORE if min_score is None else int(min_score)
     max_lookups = TAG_METRICS_MAX_LOOKUPS if max_lookups is None else int(max_lookups)
@@ -581,6 +592,10 @@ async def score_tags_with_youtube_proxy(
             demand=demand,
             demand_known=known,
         )
+        record = (track_record or {}).get(tag_key)
+        boost = tag_outcomes.boost_for(record)
+        if boost:
+            composite["score"] = max(1, min(100, round(composite["score"] + boost)))
         entry = build_scored_tag_entry(
             tag=tag,
             source=source_map.get(tag_key, source),
@@ -589,6 +604,9 @@ async def score_tags_with_youtube_proxy(
             relevance_entry=relevance_entry,
         )
         entry["breakdown"]["autocomplete"] = demand_by_key.get(tag_key, (None, {}))[1]
+        if record:
+            entry["breakdown"]["track_record"] = {"videos": int(record.get("videos") or 0), "boost": round(boost, 1)}
+            entry["signals"] = tag_signals(entry["breakdown"])
         scored_by_key[tag_key] = entry
 
     scored_list = sorted(

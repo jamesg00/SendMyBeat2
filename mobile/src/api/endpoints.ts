@@ -18,7 +18,13 @@ export type SubscriptionStatus = {
 
 export type TagLevel = 'high' | 'medium' | 'low' | 'unknown';
 /** The server's score for one tag: demand from YouTube search suggestions, competition from YouTube results. */
-export type ScoredTag = { tag: string; score: number; reason?: string; signals?: { demand: TagLevel; competition: TagLevel } };
+export type ScoredTag = {
+  tag: string;
+  score: number;
+  reason?: string;
+  /** `record`: how videos uploaded with this tag did against their channels' normal (once enough exist). */
+  signals?: { demand: TagLevel; competition: TagLevel; record?: 'proven' | 'weak'; record_videos?: number };
+};
 export type TagRun = { id: string; query: string; tags: string[]; scored_tags?: ScoredTag[]; created_at?: string };
 export type Description = { id: string; title: string; content: string; is_ai_generated?: boolean };
 export type YouTubeStatus = { connected: boolean; email?: string | null; name?: string | null };
