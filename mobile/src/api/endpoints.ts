@@ -48,6 +48,16 @@ export type ChannelAnalytics = {
   };
 };
 
+/** A profile's showcase beat: a YouTube video or an uploaded audio file the server streams. */
+export type TopBeat = {
+  /** link = any other web page (BeatStars, SoundCloud…), opened in the browser. */
+  kind: 'youtube' | 'audio' | 'link';
+  url: string;
+  title?: string;
+  thumbnail?: string;
+  video_id?: string;
+  file_id?: string;
+};
 export type Producer = {
   user_id: string;
   username: string;
@@ -60,6 +70,7 @@ export type Producer = {
   featured?: boolean;
   role_tag?: string | null;
   top_beat_url?: string | null;
+  top_beat?: TopBeat | null;
   social_links?: Record<string, string | null | undefined>;
   verification_status?: string;
   spotlight_tier?: string;
@@ -69,7 +80,7 @@ export type Producer = {
   app_likes?: number;
   followers?: number;
 };
-export type ProducerBeat = { title?: string; url?: string | null; views?: number; likes?: number; published_at?: string };
+export type ProducerBeat = { title?: string; url?: string | null; views?: number; likes?: number; published_at?: string; thumbnail?: string | null };
 export type ProducerStats = {
   profile: Producer;
   stats: { likes?: number; views?: number; current_streak?: number; longest_streak?: number; total_days_completed?: number };
@@ -106,6 +117,18 @@ export const analyzeChannel = (onProgress?: JobProgress) => runJob<ChannelAnalyt
 export const spotlight = () => api<Spotlight>('/producers/spotlight');
 export const producerStats = (userId: string) => api<ProducerStats>(`/producers/${userId}/stats`);
 export const myProducer = () => api<Producer>('/producers/me');
+export type ProfileUpdate = { bio?: string; tags?: string[]; social_links?: Record<string, string> };
+export const updateMyProducer = (body: ProfileUpdate) => api<Producer>('/producers/me', { method: 'PUT', body });
+export const uploadAvatar = (f: PickedFile) => api<{ avatar_url: string }>('/producers/avatar', { body: fileForm(f) });
+export const uploadBanner = (f: PickedFile) => api<{ banner_url: string }>('/producers/banner', { body: fileForm(f) });
+export const setTopBeatLink = (url: string, title?: string) =>
+  api<{ top_beat: TopBeat }>('/producers/top-beat', { method: 'PUT', body: { url, title } });
+export function uploadTopBeatAudio(f: PickedFile, title: string) {
+  const form = fileForm(f);
+  form.append('title', title);
+  return api<{ top_beat: TopBeat }>('/producers/top-beat/audio', { body: form });
+}
+export const clearTopBeat = () => api<{ top_beat: null }>('/producers/top-beat', { method: 'DELETE' });
 export const mySpotlightSocial = () => api<{ liked: string[]; following: string[] }>('/producers/me/social');
 export const setLike = (userId: string, on: boolean) =>
   api<{ liked: boolean; app_likes: number }>(`/producers/${userId}/like`, { method: on ? 'POST' : 'DELETE' });

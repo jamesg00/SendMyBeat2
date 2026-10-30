@@ -5,17 +5,18 @@ import { router } from 'expo-router';
 import { useEffect, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Path } from 'react-native-svg';
 
 import * as api from '@/api/endpoints';
-import type { YouTubeUploadOptions } from '@/api/endpoints';
+import type { TagRun, YouTubeUploadOptions } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
+import { DescriptionEditor, TagEditor } from '@/components/editors';
 import { Button, Card, ListGroup, ListRow, Meter, Segmented, styles as ui } from '@/components/ui';
-import { DESCRIPTION_TEMPLATES } from '@/data/templates';
-import { useDraft, type DraftDescription } from '@/state/draft';
+import { useDraft } from '@/state/draft';
 import { useStudio, type FileSlot, type Phase } from '@/state/studio';
 import { C, F, R, font } from '@/theme';
 
-type Tool = 'details' | 'visualizer' | 'look';
+type Tool = 'details' | 'look';
 type Privacy = YouTubeUploadOptions['privacy'];
 
 const ASPECT: Record<YouTubeUploadOptions['aspectRatio'], number> = { '16:9': 16 / 9, '1:1': 1, '9:16': 9 / 16, '4:5': 4 / 5 };
@@ -78,29 +79,12 @@ function Editor() {
         onChange={setTool}
         options={[
           { value: 'details', label: 'Details' },
-          { value: 'visualizer', label: 'Visualizer' },
           { value: 'look', label: 'Look' },
         ]}
       />
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ gap: 12, paddingBottom: 12 }} showsVerticalScrollIndicator={false}>
         {tool === 'details' && <DetailsForm />}
-
-        {tool === 'visualizer' && (
-          <Card>
-            <Text style={s.cardTitle}>Visualizer is website-only for now</Text>
-            <Text style={s.muted}>
-              The visualizer is recorded live in your browser before upload. Uploads from the app use your artwork as the
-              video. For a visualizer video, upload from sendmybeat.com.
-            </Text>
-            <Button
-              title="Open sendmybeat.com"
-              variant="secondary"
-              size="md"
-              onPress={() => Linking.openURL('https://www.sendmybeat.com/dashboard')}
-            />
-          </Card>
-        )}
 
         {tool === 'look' && (
           <Card>
@@ -157,21 +141,22 @@ function Editor() {
   );
 }
 
-// One panel of label/value rows, like a settings form. Description and tags open their lists in place.
+// One panel of label/value rows, like a settings form. Description and tags open their editors in place.
 function DetailsForm() {
   const studio = useStudio();
-  const { run, setRun, description, setDescription } = useDraft();
+  const { run, setRun, description } = useDraft();
   const [open, setOpen] = useState<'desc' | 'tags' | null>(null);
+  const [pickRun, setPickRun] = useState(false);
   const saved = useRequest(api.descriptions);
   const history = useRequest(api.tagHistory);
 
-  const descriptions: DraftDescription[] = [
-    ...(saved.data ?? []).map((d) => ({ id: d.id, title: d.title, content: d.content, saved: true })),
-    ...DESCRIPTION_TEMPLATES.map((t) => ({ id: t.id, title: t.name, content: t.content, saved: false })),
-  ];
   const toggle = (which: 'desc' | 'tags') => setOpen((cur) => (cur === which ? null : which));
   const check = (on: boolean) => (on ? <Text style={{ color: C.text, fontSize: 15, fontFamily: F.mono }}>✓</Text> : <View />);
   const nextPrivacy = () => studio.set({ privacy: PRIVACY[(PRIVACY.indexOf(studio.privacy) + 1) % PRIVACY.length] });
+  const choose = (r: TagRun | null) => {
+    setRun(r);
+    setPickRun(false);
+  };
 
   return (
     <>
@@ -201,56 +186,51 @@ function DetailsForm() {
       </View>
 
       {open === 'desc' && (
-        <ListGroup>
-          {descriptions.map((d, i) => (
-            <ListRow
-              key={d.id}
-              title={d.title}
-              subtitle={d.saved ? undefined : 'Template'}
-              last={i === descriptions.length - 1}
-              right={check(d.id === description.id)}
-              onPress={() => {
-                setDescription(d);
-                setOpen(null);
-              }}
-            />
-          ))}
-        </ListGroup>
+        <DescriptionEditor
+          saved={saved.data ?? []}
+          onSaved={(d) => saved.setData((cur) => [d, ...(cur ?? []).filter((x) => x.id !== d.id)])}
+          onDeleted={(id) => saved.setData((cur) => (cur ?? []).filter((x) => x.id !== id))}
+        />
       )}
 
       {open === 'tags' && (
-        <ListGroup>
-          {history.loading ? (
-            <ListRow title="Loading your tag runs…" last />
-          ) : (history.data ?? []).length === 0 ? (
-            <ListRow title="No tag runs yet" subtitle="Generate tags in Workflow first" last />
-          ) : (
-            [
-              <ListRow
-                key="none"
-                title="No tags"
-                right={check(!run)}
-                onPress={() => {
-                  setRun(null);
-                  setOpen(null);
+        <View style={{ gap: 12 }}>
+          {run && !pickRun ? (
+            <>
+              <TagEditor
+                key={run.id}
+                run={run}
+                onSaved={(r) => {
+                  setRun(r);
+                  history.setData((cur) => (cur ?? []).map((x) => (x.id === r.id ? r : x)));
                 }}
-              />,
-              ...(history.data ?? []).slice(0, 10).map((r, i, arr) => (
-                <ListRow
-                  key={r.id}
-                  title={r.query}
-                  subtitle={`${r.tags.length} tags`}
-                  last={i === arr.length - 1}
-                  right={check(r.id === run?.id)}
-                  onPress={() => {
-                    setRun(r);
-                    setOpen(null);
-                  }}
-                />
-              )),
-            ]
+              />
+              <Button title="Use a different tag set" variant="plain" size="sm" onPress={() => setPickRun(true)} />
+            </>
+          ) : (
+            <ListGroup>
+              {history.loading ? (
+                <ListRow title="Loading your tag runs…" last />
+              ) : (history.data ?? []).length === 0 ? (
+                <ListRow title="No tag runs yet" subtitle="Generate tags in Workflow first" last />
+              ) : (
+                [
+                  <ListRow key="none" title="No tags" right={check(!run)} onPress={() => choose(null)} />,
+                  ...(history.data ?? []).slice(0, 10).map((r, i, arr) => (
+                    <ListRow
+                      key={r.id}
+                      title={r.query}
+                      subtitle={`${r.tags.length} tags`}
+                      last={i === arr.length - 1}
+                      right={check(r.id === run?.id)}
+                      onPress={() => choose(r)}
+                    />
+                  )),
+                ]
+              )}
+            </ListGroup>
           )}
-        </ListGroup>
+        </View>
       )}
 
       {studio.active ? <Button title="Start over" variant="plain" size="sm" onPress={studio.reset} /> : null}
@@ -286,7 +266,13 @@ function Field({
         {value}
         {detail ? <Text style={s.fieldDetail}> {detail}</Text> : null}
       </Text>
-      <Text style={[s.chevron, open && { transform: [{ rotate: '90deg' }] }]}>{cycle ? '↕' : '›'}</Text>
+      {cycle ? (
+        <Svg width={10} height={16} viewBox="0 0 10 16" accessibilityElementsHidden importantForAccessibility="no">
+          <Path d="M2 6l3-3 3 3M2 10l3 3 3-3" fill="none" stroke={C.t3} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
+        </Svg>
+      ) : (
+        <Text style={[s.chevron, open && { transform: [{ rotate: '90deg' }] }]}>›</Text>
+      )}
     </Pressable>
   );
 }

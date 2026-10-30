@@ -1,10 +1,11 @@
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { Image } from 'expo-image';
+import * as ImagePicker from 'expo-image-picker';
 import { useEffect } from 'react';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useAuth } from '@/api/auth';
-import type { Producer } from '@/api/endpoints';
+import type { PickedFile, Producer, TopBeat as TopBeatData } from '@/api/endpoints';
 import { followersOf, likesOf, toggleFollow, toggleLike, useSocial } from '@/state/social';
 import { C, F, font } from '@/theme';
 
@@ -14,6 +15,28 @@ export const rememberProducers = (list: Producer[]) => list.forEach((p) => known
 export const knownProducer = (id: string) => known.get(id);
 
 export const isVerified = (p: Producer) => p.verification_status === 'approved';
+
+/** Pick and crop a profile picture or banner. */
+export async function pickProfileImage(aspect: [number, number]): Promise<PickedFile | null> {
+  const res = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ['images'],
+    allowsEditing: true,
+    aspect,
+    quality: 0.85,
+    // The server takes JPG, PNG or WEBP; this makes iOS hand back a JPEG instead of HEIC.
+    preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
+  });
+  if (res.canceled) return null;
+  const a = res.assets[0];
+  const mimeType = a.mimeType === 'image/png' || a.mimeType === 'image/webp' ? a.mimeType : 'image/jpeg';
+  return { uri: a.uri, name: `image.${mimeType.split('/')[1].replace('jpeg', 'jpg')}`, mimeType, file: a.file };
+}
+
+
+/** Open a link from a producer profile, but only real web pages, never tel:, intent: or app links. */
+export function openWebLink(url: string | null | undefined) {
+  if (url && /^https?:\/\/[^\s]+$/i.test(url.trim())) void Linking.openURL(url.trim());
+}
 
 const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
 
@@ -89,64 +112,86 @@ export function VerifiedBadge({ size = 14 }: { size?: number }) {
   );
 }
 
-// Direct audio files can play in the app; YouTube, BeatStars and other pages open in the browser.
-const playable = (url: string) => /\.(mp3|m4a|wav|aac|ogg)(\?|$)/i.test(url);
+const isYouTube = (url: string) => /(?:youtube\.com|youtu\.be)\//i.test(url);
+const isAudioFile = (url: string) => /\.(mp3|m4a|wav|aac|ogg|flac)(\?|$)/i.test(url);
 
-export function TopBeat({ url, title = 'Top beat' }: { url: string; title?: string }) {
-  if (!playable(url)) {
-    return (
-      <Pressable onPress={() => Linking.openURL(url)} style={({ pressed }) => [s.beat, pressed && { opacity: 0.7 }]} accessibilityRole="link">
+/** The producer's top beat, from the structured field or, for older profiles, the plain link. */
+export function topBeatOf(p: Producer): TopBeatData | null {
+  if (p.top_beat?.url) return p.top_beat;
+  const url = p.top_beat_url?.trim();
+  if (!url) return null;
+  return { kind: isYouTube(url) ? 'youtube' : isAudioFile(url) ? 'audio' : 'link', url, title: 'Top beat' };
+}
+
+function clock(sec: number) {
+  const t = Math.max(0, Math.floor(sec));
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+}
+
+// YouTube top beats show their thumbnail and open in YouTube; uploaded audio plays right here.
+export function TopBeat({ beat }: { beat: TopBeatData }) {
+  if (beat.kind === 'audio' && (isAudioFile(beat.url) || beat.file_id || /\/top-beat\/audio/.test(beat.url))) {
+    return <PlayableBeat url={beat.url} title={beat.title || 'Top beat'} />;
+  }
+  return (
+    <Pressable
+      onPress={() => openWebLink(beat.url)}
+      style={({ pressed }) => [s.beat, pressed && { opacity: 0.7 }]}
+      accessibilityRole="link"
+      accessibilityLabel={`${beat.title || 'Top beat'}, opens ${beat.kind === 'youtube' ? 'YouTube' : 'link'}`}>
+      {beat.thumbnail ? (
+        <Image source={{ uri: beat.thumbnail }} style={s.thumb} contentFit="cover" />
+      ) : (
         <View style={s.play}>
           <Text style={s.playIcon}>↗</Text>
         </View>
-        <View style={{ flex: 1, gap: 2 }}>
-          <Text style={s.beatTitle} numberOfLines={1}>
-            {title}
-          </Text>
-          <Text style={s.beatMeta} numberOfLines={1}>
-            {url.replace(/^https?:\/\/(www\.)?/, '')}
-          </Text>
-        </View>
-      </Pressable>
-    );
-  }
-  return <PlayableBeat url={url} title={title} />;
+      )}
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text style={s.beatTitle} numberOfLines={2}>
+          {beat.title || 'Top beat'}
+        </Text>
+        <Text style={s.beatMeta} numberOfLines={1}>
+          {beat.kind === 'youtube' ? 'YouTube ↗' : beat.url.replace(/^https?:\/\/(www\.)?/, '')}
+        </Text>
+      </View>
+    </Pressable>
+  );
 }
-
-const PREVIEW_SECONDS = 30;
 
 function PlayableBeat({ url, title }: { url: string; title: string }) {
   const player = useAudioPlayer(url);
   const status = useAudioPlayerStatus(player);
-  const t = Math.floor(status.currentTime);
+  const duration = status.duration || 0;
+  const played = duration > 0 ? status.currentTime / duration : 0;
 
   useEffect(() => {
     void setAudioModeAsync({ playsInSilentMode: true });
   }, []);
 
-  // A preview, not the whole beat.
-  useEffect(() => {
-    if (status.playing && status.currentTime >= PREVIEW_SECONDS) {
-      player.pause();
-      void player.seekTo(0);
-    }
-  }, [status.playing, status.currentTime, player]);
+  const toggle = () => {
+    if (status.playing) return player.pause();
+    if (duration > 0 && status.currentTime >= duration - 0.2) void player.seekTo(0);
+    player.play();
+  };
 
   return (
     <View style={s.beat}>
       <Pressable
-        onPress={() => (status.playing ? player.pause() : player.play())}
+        onPress={toggle}
         style={[s.play, { backgroundColor: C.primary }]}
         accessibilityRole="button"
-        accessibilityLabel={status.playing ? 'Pause top beat' : 'Play top beat'}>
+        accessibilityLabel={status.playing ? `Pause ${title}` : `Play ${title}`}>
         <Text style={[s.playIcon, { color: C.onPrimary }]}>{status.playing ? '❚❚' : '▶'}</Text>
       </Pressable>
-      <View style={{ flex: 1, gap: 2 }}>
+      <View style={{ flex: 1, gap: 5 }}>
         <Text style={s.beatTitle} numberOfLines={1}>
           {title}
         </Text>
-        <Text style={s.beatMeta}>{status.playing || t > 0 ? `0:${String(t).padStart(2, '0')} / 0:${PREVIEW_SECONDS}` : `${PREVIEW_SECONDS}s preview`}</Text>
+        <View style={s.track}>
+          <View style={[s.trackFill, { width: `${played * 100}%` }]} />
+        </View>
       </View>
+      <Text style={s.beatMeta}>{duration > 0 ? `${clock(status.currentTime)} / ${clock(duration)}` : status.isBuffering ? 'Loading…' : ''}</Text>
     </View>
   );
 }
@@ -179,6 +224,9 @@ const s = StyleSheet.create({
     backgroundColor: C.card2,
   },
   play: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#1A1A1A', alignItems: 'center', justifyContent: 'center' },
+  thumb: { width: 72, height: 40, borderRadius: 6, backgroundColor: '#1A1A1A' },
+  track: { height: 2, backgroundColor: C.line, overflow: 'hidden' },
+  trackFill: { height: 2, backgroundColor: C.text },
   playIcon: { color: C.text, fontSize: 12, ...font('700') },
   beatTitle: { color: C.text, fontSize: 13, ...font('500') },
   beatMeta: { color: C.t3, fontSize: 11.5, fontFamily: F.mono },

@@ -5,7 +5,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import * as api from '@/api/endpoints';
 import type { Producer } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
-import { Avatar, isVerified, LikeButton, rememberProducers, TopBeat, VerifiedBadge } from '@/components/producer';
+import { Avatar, isVerified, LikeButton, rememberProducers, TopBeat, topBeatOf, VerifiedBadge } from '@/components/producer';
 import { Button, Card, Screen, Segmented, styles as ui } from '@/components/ui';
 import { loadSocial, useSocial } from '@/state/social';
 import { C, F, R, font } from '@/theme';
@@ -151,7 +151,7 @@ function Featured({ producer: p, label }: { producer: Producer; label: string })
             {p.bio}
           </Text>
         ) : null}
-        {p.top_beat_url ? <TopBeat url={p.top_beat_url} /> : null}
+        {topBeatOf(p) ? <TopBeat beat={topBeatOf(p)!} /> : null}
         <View style={s.chips}>
           {(p.tags ?? []).slice(0, 3).map((t) => (
             <Text key={t} style={s.chip}>
