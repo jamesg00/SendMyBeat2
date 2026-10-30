@@ -53,7 +53,8 @@ function RootStack() {
     <ThemeProvider value={theme}>
       <StatusBar style="light" />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.bg } }}>
-        <Stack.Protected guard={!!user}>
+        {/* Signed out, every app route lands on the landing screen (not the auth sheet). */}
+        <Stack.Protected guard={!!user} redirectTo="/login">
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="studio" options={{ presentation: 'fullScreenModal' }} />
           <Stack.Screen name="producer/[id]" options={{ presentation: 'modal' }} />
@@ -61,6 +62,7 @@ function RootStack() {
         </Stack.Protected>
         <Stack.Protected guard={!user}>
           <Stack.Screen name="login" />
+          <Stack.Screen name="auth" options={{ presentation: 'modal' }} />
         </Stack.Protected>
       </Stack>
     </ThemeProvider>
