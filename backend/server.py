@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, UploadFile, File, Form, Request
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, UploadFile, File, Form, Request, Response
 from fastapi.responses import FileResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
@@ -8043,7 +8043,7 @@ async def _compute_producer_stats_payload(user_id: str) -> dict[str, Any]:
 
 async def _spotlight_payload_only_has_active_users(payload: dict[str, Any]) -> bool:
     user_ids: set[str] = set()
-    for section in ("featured_producers", "trending_producers", "new_producers", "all_producers"):
+    for section in SPOTLIGHT_SECTIONS:
         for item in payload.get(section) or []:
             user_id = str((item or {}).get("user_id") or "").strip()
             if user_id:
@@ -8052,6 +8052,44 @@ async def _spotlight_payload_only_has_active_users(payload: dict[str, Any]) -> b
         return True
     active_count = await db.users.count_documents({"id": {"$in": list(user_ids)}, "deleted": {"$ne": True}})
     return active_count == len(user_ids)
+
+
+SPOTLIGHT_SECTIONS = ("featured_producers", "trending_producers", "new_producers", "all_producers")
+
+
+async def _patch_spotlight_cache_profile(user_id: str) -> None:
+    """Copy a producer's edited profile into the cached Spotlight payload in place.
+
+    Rebuilding the cache runs the metrics refresh (YouTube calls for every producer), so edits
+    only rewrite that producer's entries; counts and ranking catch up on the next rebuild.
+    """
+    try:
+        cached = await db.spotlight_cache.find_one({"key": "global"}, {"_id": 0, "payload": 1})
+        payload = (cached or {}).get("payload")
+        if not isinstance(payload, dict):
+            return
+        sections = [
+            section for section in SPOTLIGHT_SECTIONS
+            if any((item or {}).get("user_id") == user_id for item in payload.get(section) or [])
+        ]
+        if not sections:
+            return
+        doc = await db.producer_profiles.find_one({"user_id": user_id}, SPOTLIGHT_PROFILE_PROJECTION)
+        if not doc:
+            return
+        fields = {key: value for key, value in doc.items() if key in SPOTLIGHT_PROFILE_PROJECTION and key not in ("_id", "user_id")}
+        if not (fields.get("username") or "").strip():
+            fields.pop("username", None)  # the cached entry already has the account's name
+        fields["avatar_url"] = _normalize_spotlight_avatar_url(fields.get("avatar_url"))
+        fields["verification_status"] = fields.get("verification_status") or "none"
+        fields = _serialize_for_cache(fields)
+        await db.spotlight_cache.update_one(
+            {"key": "global"},
+            {"$set": {f"payload.{section}.$[p].{key}": value for section in sections for key, value in fields.items()}},
+            array_filters=[{"p.user_id": user_id}],
+        )
+    except Exception as exc:  # never fail the edit itself over the cache
+        logging.warning(f"Spotlight cache patch failed for {user_id}: {exc}")
 
 
 async def _refresh_spotlight_caches_once() -> dict[str, Any]:
@@ -8063,8 +8101,10 @@ async def _spotlight_refresh_loop() -> None:
 
 
 @api_router.get("/producers/spotlight", response_model=SpotlightResponse)
-async def get_producer_spotlight():
+async def get_producer_spotlight(response: Response):
     """Get featured, trending, and new producers for the spotlight page."""
+    # Profile edits patch the cache right away; don't let phones or proxies hold an older copy.
+    response.headers["Cache-Control"] = "no-store"
     cached = await db.spotlight_cache.find_one({"key": "global"}, {"_id": 0, "payload": 1})
     if cached and isinstance(cached.get("payload"), dict):
         if await _spotlight_payload_only_has_active_users(cached["payload"]):
@@ -8146,6 +8186,7 @@ async def update_my_producer_profile(
         await _apply_top_beat_url_from_profile_form(current_user['id'], update_data.top_beat_url)
 
     await db.producer_stats_cache.delete_many({"user_id": current_user['id']})
+    await _patch_spotlight_cache_profile(current_user['id'])
 
     # Return updated
     updated = await db.producer_profiles.find_one({"user_id": current_user['id']})
@@ -8330,6 +8371,7 @@ async def _swap_top_beat(user_id: str, top_beat: dict | None) -> None:
     if old.get("kind") == "audio" and old.get("file_id") != (top_beat or {}).get("file_id"):
         await _delete_top_beat_file(user_id, old.get("file_id"))
     await db.producer_stats_cache.delete_many({"user_id": user_id})
+    await _patch_spotlight_cache_profile(user_id)
 
 
 async def _apply_top_beat_url_from_profile_form(user_id: str, url: str) -> None:
@@ -8571,6 +8613,7 @@ async def upload_producer_avatar(
     )
 
     await db.producer_stats_cache.delete_many({"user_id": current_user["id"]})
+    await _patch_spotlight_cache_profile(current_user["id"])
     return {"avatar_url": avatar_data_url}
 
 
@@ -8603,6 +8646,7 @@ async def upload_producer_banner(
         upsert=True
     )
     await db.producer_stats_cache.delete_many({"user_id": current_user["id"]})
+    await _patch_spotlight_cache_profile(current_user["id"])
     return {"banner_url": banner_data_url}
 
 

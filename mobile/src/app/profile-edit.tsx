@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import * as api from '@/api/endpoints';
 import type { Producer, TopBeat as TopBeatData } from '@/api/endpoints';
-import { Avatar, pickProfileImage, rememberProducers, TopBeat, topBeatOf } from '@/components/producer';
+import { Avatar, markProfileEdited, pickProfileImage, rememberProducers, TopBeat, topBeatOf } from '@/components/producer';
 import { Button, Segmented, styles as ui } from '@/components/ui';
 import { C, F, R, font } from '@/theme';
 
@@ -44,6 +44,17 @@ export default function ProfileEditScreen() {
     );
   }, []);
 
+  // Pictures and the top beat save right away; keep Spotlight's copy of you in step.
+  const patchMe = (patch: Partial<Producer>) => {
+    setMe((m) => {
+      if (!m) return m;
+      const next = { ...m, ...patch };
+      rememberProducers([next]);
+      return next;
+    });
+    markProfileEdited();
+  };
+
   const run = async (what: string, fn: () => Promise<void>) => {
     setBusy(what);
     setError(null);
@@ -61,7 +72,7 @@ export default function ProfileEditScreen() {
       const f = await pickProfileImage([4, 1]);
       if (!f) return;
       const { banner_url } = await api.uploadBanner(f);
-      setMe((m) => m && { ...m, banner_url });
+      patchMe({ banner_url });
     });
 
   const changeAvatar = () =>
@@ -69,7 +80,7 @@ export default function ProfileEditScreen() {
       const f = await pickProfileImage([1, 1]);
       if (!f) return;
       const { avatar_url } = await api.uploadAvatar(f);
-      setMe((m) => m && { ...m, avatar_url });
+      patchMe({ avatar_url });
     });
 
   const save = () =>
@@ -82,6 +93,7 @@ export default function ProfileEditScreen() {
         .slice(0, 12);
       const updated = await api.updateMyProducer({ bio: bio.trim(), tags: tagList, social_links });
       rememberProducers([updated]);
+      markProfileEdited();
       router.back();
     });
 
@@ -151,7 +163,7 @@ export default function ProfileEditScreen() {
             />
           </Field>
 
-          <TopBeatEditor beat={topBeatOf(me)} onChange={(top_beat) => setMe((m) => m && { ...m, top_beat, top_beat_url: top_beat?.url ?? '' })} />
+          <TopBeatEditor beat={topBeatOf(me)} onChange={(top_beat) => patchMe({ top_beat, top_beat_url: top_beat?.url ?? '' })} />
 
           <View style={{ gap: 8 }}>
             <Text style={ui.sectionLabel}>Links</Text>

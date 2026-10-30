@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -18,11 +19,16 @@ export function Screen({
   title,
   accessory,
   header,
+  refreshing,
+  onRefresh,
   children,
 }: {
   title: string;
   accessory?: ReactNode;
   header?: ReactNode;
+  /** Pass both to enable pull to refresh. */
+  refreshing?: boolean;
+  onRefresh?: () => void;
   children: ReactNode;
 }) {
   const insets = useSafeAreaInsets();
@@ -30,7 +36,8 @@ export function Screen({
     <ScrollView
       style={{ flex: 1, backgroundColor: C.bg }}
       contentContainerStyle={[styles.screen, { paddingTop: insets.top + 12 }]}
-      showsVerticalScrollIndicator={false}>
+      showsVerticalScrollIndicator={false}
+      refreshControl={onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={C.t2} colors={[C.t2]} /> : undefined}>
       {header}
       <View style={styles.titleRow}>
         <Text style={styles.largeTitle} accessibilityRole="header">

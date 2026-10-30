@@ -34,7 +34,9 @@ export function resetSocial() {
   set({ loaded: false, liked: new Set(), following: new Set(), likes: {}, followers: {}, error: null });
 }
 
-export function loadSocial() {
+/** Fetch your likes and follows once per session; `force` fetches again (pull to refresh). */
+export function loadSocial(force = false) {
+  if (force) loading = null;
   loading ??= api.mySpotlightSocial().then(
     (r) => set({ loaded: true, liked: new Set(r.liked), following: new Set(r.following) }),
     () => {

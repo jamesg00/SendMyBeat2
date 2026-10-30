@@ -14,6 +14,13 @@ const known = new Map<string, Producer>();
 export const rememberProducers = (list: Producer[]) => list.forEach((p) => known.set(p.user_id, p));
 export const knownProducer = (id: string) => known.get(id);
 
+// Bumped when you edit your own profile, so Spotlight knows to fetch again when you come back.
+let profileEdits = 0;
+export const markProfileEdited = () => {
+  profileEdits += 1;
+};
+export const profileEditCount = () => profileEdits;
+
 export const isVerified = (p: Producer) => p.verification_status === 'approved';
 
 /** Pick and crop a profile picture or banner. */
