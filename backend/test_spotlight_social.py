@@ -78,6 +78,18 @@ async def test_liking_twice_does_not_increment_again():
 
 
 @pytest.mark.asyncio
+async def test_parallel_double_tap_is_not_a_server_error():
+    # The unique index rejects the second upsert of a racing pair; that's an existing like, not a 500.
+    db, relation, profiles = make_db(counter=6)
+    relation.update_one = AsyncMock(side_effect=server.DuplicateKeyError('E11000 duplicate key'))
+    with patch.object(server, 'db', db):
+        result = await server._set_producer_relation(kind='like', actor_id=actor(), producer_id='producer', on=True)
+
+    assert result == {'liked': True, 'app_likes': 6}
+    profiles.update_one.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_unfollow_decrements_only_when_a_pair_was_removed():
     db, relation, profiles = make_db(deleted=1, counter=2)
     with patch.object(server, 'db', db):
