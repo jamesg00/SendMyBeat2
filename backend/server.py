@@ -8190,14 +8190,52 @@ async def get_producer_spotlight(response: Response):
     """Get featured, trending, and new producers for the spotlight page."""
     # Profile edits patch the cache right away; don't let phones or proxies hold an older copy.
     response.headers["Cache-Control"] = "no-store"
-    cached = await db.spotlight_cache.find_one({"key": "global"}, {"_id": 0, "payload": 1})
-    if cached and isinstance(cached.get("payload"), dict):
-        if await _spotlight_payload_only_has_active_users(cached["payload"]):
-            return SpotlightResponse(**cached["payload"])
-        await db.spotlight_cache.delete_many({})
+    cached = await _fresh_spotlight_payload()
+    if cached is not None:
+        return SpotlightResponse(**cached)
+    async with _spotlight_rebuild_lock:
+        cached = await _fresh_spotlight_payload()  # rebuilt by another request while we waited
+        if cached is not None:
+            return SpotlightResponse(**cached)
+        payload = _serialize_for_cache(await _compute_spotlight_payload())
+        await db.spotlight_cache.update_one(
+            {"key": "global"},
+            {"$set": {"key": "global", "payload": payload, "payload_built_at": datetime.now(timezone.utc)}},
+            upsert=True,
+        )
+        return SpotlightResponse(**payload)
 
-    payload = await _compute_spotlight_payload()
-    return SpotlightResponse(**payload)
+
+# The list is rebuilt from the database (no YouTube calls) at most this often, so new producers and
+# new pictures show up on a pull to refresh. View/like metrics still refresh on the slower loop.
+SPOTLIGHT_PAYLOAD_MAX_AGE_SECONDS = int(os.environ.get("SPOTLIGHT_PAYLOAD_MAX_AGE_SECONDS", "60"))
+_spotlight_rebuild_lock = asyncio.Lock()
+
+
+def _as_utc(value: Any) -> Optional[datetime]:
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    if not isinstance(value, datetime):
+        return None
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
+async def _fresh_spotlight_payload() -> Optional[dict]:
+    """The cached Spotlight list if it was built within the last minute and lists no deleted users."""
+    cached = await db.spotlight_cache.find_one(
+        {"key": "global"}, {"_id": 0, "payload": 1, "payload_built_at": 1, "updated_at": 1}
+    )
+    if not cached or not isinstance(cached.get("payload"), dict):
+        return None
+    built = _as_utc(cached.get("payload_built_at")) or _as_utc(cached.get("updated_at"))
+    if not built or (datetime.now(timezone.utc) - built).total_seconds() > SPOTLIGHT_PAYLOAD_MAX_AGE_SECONDS:
+        return None
+    if not await _spotlight_payload_only_has_active_users(cached["payload"]):
+        return None
+    return cached["payload"]
 
 @api_router.get("/producers/me", response_model=ProducerProfile)
 async def get_my_producer_profile(current_user: dict = Depends(get_current_user)):
@@ -9106,6 +9144,50 @@ async def get_background_job(job_id: str, current_user: dict = Depends(get_curre
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return {"success": True, "job": _sanitize_upload_job_doc(job)}
+
+
+FINISHED_JOB_STATUSES = {"succeeded", "failed", "cancelled"}
+
+
+@api_router.post("/jobs/{job_id}/cancel")
+async def cancel_my_job(job_id: str, current_user: dict = Depends(get_current_user)):
+    """Stop one of your own jobs. A queued job is cancelled right away (and its credit returned); a
+    running one stops at its next checkpoint. Upload credits are only spent once a video is live."""
+    _enforce_action_rate_limit(
+        f"job_cancel:{current_user['id']}",
+        limit=20,
+        window_seconds=60,
+        detail_message="Too many cancel requests. Please wait a moment.",
+    )
+    job = await db.upload_jobs.find_one({"id": job_id, "user_id": current_user["id"]}, {"_id": 0})
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.get("status") in FINISHED_JOB_STATUSES:
+        return {"success": True, "cancelled": False, "job": _sanitize_upload_job_doc(job)}
+
+    now = _safe_iso_now()
+    # Only flip a job that is still queued, so a worker that just picked it up isn't overwritten.
+    queued = await db.upload_jobs.update_one(
+        {"id": job_id, "user_id": current_user["id"], "status": "queued"},
+        {"$set": {
+            "status": "cancelled",
+            "progress": 100,
+            "message": "Cancelled.",
+            "cancel_requested": True,
+            "error_code": "USER_CANCELLED",
+            "failed_at": now,
+            "updated_at": now,
+        }},
+    )
+    if getattr(queued, "modified_count", 0):
+        await _refund_job_credit(job)
+    else:
+        await db.upload_jobs.update_one(
+            {"id": job_id, "user_id": current_user["id"]},
+            {"$set": {"cancel_requested": True, "message": "Cancelling…", "updated_at": now}},
+        )
+    updated = await db.upload_jobs.find_one({"id": job_id, "user_id": current_user["id"]}, {"_id": 0}) or job
+    return {"success": True, "cancelled": True, "job": _sanitize_upload_job_doc(updated)}
 
 
 @api_router.get("/health")

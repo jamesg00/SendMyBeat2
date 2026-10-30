@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import * as api from '@/api/endpoints';
 import type { Description, ScoredTag, TagLevel, TagRun } from '@/api/endpoints';
-import { Button, Card, ListGroup, ListRow, Meter } from '@/components/ui';
+import { Button, Card, ListGroup, ListRow, Meter, Segmented } from '@/components/ui';
 import { DESCRIPTION_TEMPLATES } from '@/data/templates';
 import { useDraft, type DraftDescription } from '@/state/draft';
 import { C, F, R, font } from '@/theme';
@@ -168,6 +168,7 @@ export function TagEditor({ run, onSaved }: { run: TagRun; onSaved: (r: TagRun) 
   const [saving, setSaving] = useState(false);
   const [note, setNote] = useState<{ text: string; error?: boolean } | null>(null);
   const [detail, setDetail] = useState<ScoredTag | null>(null);
+  const [view, setView] = useState<'tags' | 'ranking'>('tags');
 
   const original = new Set(run.tags.map(keyOf));
   const scores = new Map((run.scored_tags ?? []).map((e) => [keyOf(e.tag), e]));
@@ -263,7 +264,23 @@ export function TagEditor({ run, onSaved }: { run: TagRun; onSaved: (r: TagRun) 
         </View>
       </View>
 
-      {demandCounts.length ? (
+      {scores.size ? (
+        <Segmented
+          compact
+          value={view}
+          onChange={setView}
+          options={[
+            { value: 'tags', label: 'Tags' },
+            { value: 'ranking', label: 'Ranking' },
+          ]}
+        />
+      ) : null}
+
+      {view === 'ranking' && scores.size ? (
+        <Ranking tags={tags} scores={scores} />
+      ) : null}
+
+      {view === 'tags' && demandCounts.length ? (
         <View style={s.legend}>
           {demandCounts.map(([level, n]) => (
             <View key={level} style={s.legendItem}>
@@ -277,7 +294,7 @@ export function TagEditor({ run, onSaved }: { run: TagRun; onSaved: (r: TagRun) 
         </View>
       ) : null}
 
-      {detail ? (
+      {view === 'tags' && detail ? (
         <Pressable onPress={() => setDetail(null)} style={s.detail} accessibilityRole="button" accessibilityHint="Tap to close">
           <View style={s.meterHead}>
             <Text style={s.detailTag} numberOfLines={1}>
@@ -290,7 +307,7 @@ export function TagEditor({ run, onSaved }: { run: TagRun; onSaved: (r: TagRun) 
         </Pressable>
       ) : null}
 
-      <View style={s.chips}>
+      <View style={[s.chips, view === 'ranking' && { display: 'none' }]}>
         {visible.map((tag) => {
           const isNew = !original.has(keyOf(tag));
           const scored = scores.get(keyOf(tag));
@@ -350,7 +367,44 @@ export function TagEditor({ run, onSaved }: { run: TagRun; onSaved: (r: TagRun) 
   );
 }
 
+// Every tag best to worst: rank, score bar and what the score is made of.
+function Ranking({ tags, scores }: { tags: string[]; scores: Map<string, ScoredTag> }) {
+  const rows = tags
+    .map((tag) => ({ tag, entry: scores.get(keyOf(tag)) }))
+    .sort((a, b) => (b.entry?.score ?? -1) - (a.entry?.score ?? -1));
+  return (
+    <View>
+      {rows.map(({ tag, entry }, i) => (
+        <View
+          key={tag}
+          style={[s.rankRow, i === rows.length - 1 && s.rankLast]}
+          accessible
+          accessibilityLabel={entry ? `Number ${i + 1}, ${tag}, score ${entry.score}. ${levels(entry)}` : `${tag}, not scored yet`}>
+          <Text style={s.rankNum}>{entry ? i + 1 : '–'}</Text>
+          <View style={{ flex: 1, gap: 6 }}>
+            <View style={s.meterHead}>
+              <Text style={s.rankTag} numberOfLines={1}>
+                {tag}
+              </Text>
+              <Text style={s.rankScore}>{entry ? entry.score : '–'}</Text>
+            </View>
+            {entry ? <Meter value={entry.score / 100} color={entry.signals?.demand === 'high' ? C.acc : C.text} /> : null}
+            <Text style={s.muted} numberOfLines={1}>
+              {entry ? levels(entry) || 'Scored on relevance' : 'Save to score this tag'}
+            </Text>
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 const s = StyleSheet.create({
+  rankRow: { flexDirection: 'row', gap: 12, paddingVertical: 12, borderTopWidth: 1, borderTopColor: C.lineSoft },
+  rankLast: { borderBottomWidth: 1, borderBottomColor: C.lineSoft },
+  rankNum: { width: 22, color: C.t2, fontSize: 13, fontFamily: F.monoMedium, paddingTop: 1 },
+  rankTag: { flex: 1, color: C.text, fontSize: 13.5, fontFamily: F.mono },
+  rankScore: { color: C.text, fontSize: 13.5, fontFamily: F.monoMedium },
   header: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   avatar: {
     width: 32,

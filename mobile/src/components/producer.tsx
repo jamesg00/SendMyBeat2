@@ -3,9 +3,11 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useEffect } from 'react';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import Svg, { Circle, Path } from 'react-native-svg';
 
 import { useAuth } from '@/api/auth';
 import type { PickedFile, Producer, TopBeat as TopBeatData } from '@/api/endpoints';
+import { PlayPauseIcon } from '@/components/ui';
 import { followersOf, likesOf, toggleFollow, toggleLike, useSocial } from '@/state/social';
 import { C, F, font } from '@/theme';
 
@@ -101,13 +103,26 @@ export function Avatar({ producer, size, ring }: { producer: Producer; size: num
     borderRadius: size / 2,
     ...(ring ? { borderWidth: 2, borderColor: ring } : null),
   };
-  if (producer.avatar_url) {
-    return <Image source={{ uri: producer.avatar_url }} style={[s.avatar, box]} contentFit="cover" accessibilityLabel={producer.username} />;
+  if (hasOwnPicture(producer)) {
+    return <Image source={{ uri: producer.avatar_url! }} style={[s.avatar, box]} contentFit="cover" accessibilityLabel={producer.username} />;
   }
   return (
-    <View style={[s.avatar, box]} accessibilityLabel={producer.username} accessibilityRole="image">
-      <Text style={{ color: C.t2, fontSize: size * 0.38, ...font('600') }}>{producer.username.charAt(0).toUpperCase()}</Text>
+    <View style={[s.avatar, box]} accessibilityLabel={`${producer.username}, no profile picture yet`} accessibilityRole="image">
+      <DefaultPerson size={size} />
     </View>
+  );
+}
+
+// The server fills in a generated SVG for producers without a picture; uploads are always JPEG/WebP.
+const hasOwnPicture = (p: Producer) => !!p.avatar_url && !p.avatar_url.startsWith('data:image/svg');
+
+/** A plain grey person, until the producer adds their own picture. */
+function DefaultPerson({ size }: { size: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 40 40" accessibilityElementsHidden importantForAccessibility="no">
+      <Circle cx={20} cy={15.5} r={7} fill={C.t3} />
+      <Path d="M6 38c1.8-7.6 7.4-11.6 14-11.6S32.2 30.4 34 38" fill={C.t3} />
+    </Svg>
   );
 }
 
@@ -188,7 +203,7 @@ function PlayableBeat({ url, title }: { url: string; title: string }) {
         style={[s.play, { backgroundColor: C.primary }]}
         accessibilityRole="button"
         accessibilityLabel={status.playing ? `Pause ${title}` : `Play ${title}`}>
-        <Text style={[s.playIcon, { color: C.onPrimary }]}>{status.playing ? '❚❚' : '▶'}</Text>
+        <PlayPauseIcon playing={status.playing} />
       </Pressable>
       <View style={{ flex: 1, gap: 5 }}>
         <Text style={s.beatTitle} numberOfLines={1}>

@@ -11,7 +11,7 @@ import * as api from '@/api/endpoints';
 import type { TagRun, YouTubeUploadOptions } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
 import { DescriptionEditor, TagEditor } from '@/components/editors';
-import { Button, Card, ListGroup, ListRow, Meter, Segmented, styles as ui } from '@/components/ui';
+import { Button, Card, ListGroup, ListRow, Meter, PlayPauseIcon, Segmented, styles as ui } from '@/components/ui';
 import { useDraft } from '@/state/draft';
 import { useStudio, type FileSlot, type Phase } from '@/state/studio';
 import { C, F, R, display, font } from '@/theme';
@@ -378,7 +378,7 @@ function Player({ uri }: { uri: string }) {
   return (
     <View style={s.player}>
       <Pressable onPress={toggle} style={s.playBtn} accessibilityRole="button" accessibilityLabel={status.playing ? 'Pause preview' : 'Play preview'}>
-        <Text style={{ color: C.onPrimary, fontSize: 12, ...font('700') }}>{status.playing ? '❚❚' : '▶'}</Text>
+        <PlayPauseIcon playing={status.playing} />
       </Pressable>
       <View style={{ flex: 1, gap: 6 }}>
         <Pressable

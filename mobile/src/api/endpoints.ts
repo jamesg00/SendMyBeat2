@@ -215,3 +215,5 @@ export async function startYouTubeUpload(o: YouTubeUploadOptions) {
 }
 
 export const uploadJob = (id: string) => api<{ job?: UploadJob }>(`/youtube/upload-jobs/${id}`);
+/** Stop one of your jobs: queued ones cancel at once, running ones at their next step. */
+export const cancelJob = (id: string) => api<{ cancelled: boolean; job?: UploadJob }>(`/jobs/${id}/cancel`, { method: 'POST' });
