@@ -1,13 +1,13 @@
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect } from 'react';
-import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import * as api from '@/api/endpoints';
 import type { Producer, ProducerBeat } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
-import { Avatar, followerCount, FollowButton, isVerified, knownProducer, LikeButton, TopBeat, VerifiedBadge } from '@/components/producer';
+import { Avatar, followerCount, FollowButton, isVerified, knownProducer, LikeButton, openWebLink, TopBeat, topBeatOf, VerifiedBadge } from '@/components/producer';
 import { styles as ui } from '@/components/ui';
 import { loadSocial, useSocial } from '@/state/social';
 import { C, F, R, font } from '@/theme';
@@ -47,6 +47,7 @@ export default function ProducerScreen() {
   const st = stats.data?.stats;
   const perf = stats.data?.channel?.performance;
   const beats: ProducerBeat[] = (stats.data?.channel_top_beats?.length ? stats.data.channel_top_beats : stats.data?.top_beats) ?? [];
+  const topBeat = topBeatOf(p);
   const socials = Object.entries(p.social_links ?? {}).filter((e): e is [string, string] => typeof e[1] === 'string' && /^https?:\/\//.test(e[1]));
 
   return (
@@ -80,7 +81,7 @@ export default function ProducerScreen() {
           {socials.length > 0 ? (
             <View style={s.socials}>
               {socials.map(([key, url]) => (
-                <Pressable key={key} onPress={() => Linking.openURL(url)} accessibilityRole="link" hitSlop={6}>
+                <Pressable key={key} onPress={() => openWebLink(url)} accessibilityRole="link" hitSlop={6}>
                   <Text style={s.social}>{SOCIAL_LABELS[key.toLowerCase()] ?? key} ↗</Text>
                 </Pressable>
               ))}
@@ -102,10 +103,10 @@ export default function ProducerScreen() {
           </Text>
         ) : null}
 
-        {p.top_beat_url ? (
+        {topBeat ? (
           <View style={{ gap: 8 }}>
             <Text style={ui.sectionLabel}>Top beat</Text>
-            <TopBeat url={p.top_beat_url} />
+            <TopBeat beat={topBeat} />
           </View>
         ) : null}
 
@@ -120,23 +121,27 @@ export default function ProducerScreen() {
         ) : null}
 
         <View>
-          <Text style={[ui.sectionLabel, { paddingBottom: 8 }]}>Most viewed on YouTube</Text>
+          <Text style={[ui.sectionLabel, { paddingBottom: 8 }]}>Latest uploads</Text>
           {stats.loading ? (
             <ActivityIndicator color={C.t2} style={{ alignSelf: 'flex-start' }} />
           ) : beats.filter((b) => b.url).length === 0 ? (
-            <Text style={s.muted}>No YouTube uploads linked yet.</Text>
+            <Text style={s.muted}>No YouTube channel linked yet.</Text>
           ) : (
             beats
               .filter((b) => b.url)
               .map((b, i, arr) => (
                 <Pressable
                   key={b.url ?? i}
-                  onPress={() => Linking.openURL(b.url!)}
+                  onPress={() => openWebLink(b.url)}
                   accessibilityRole="link"
                   style={({ pressed }) => [s.video, i === arr.length - 1 && s.lastRow, pressed && { backgroundColor: C.card }]}>
-                  <Text style={s.videoTitle} numberOfLines={1}>
-                    {b.title}
-                  </Text>
+                  {b.thumbnail ? <Image source={{ uri: b.thumbnail }} style={s.thumb} contentFit="cover" /> : null}
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={s.videoTitle} numberOfLines={2}>
+                      {b.title}
+                    </Text>
+                    {b.published_at ? <Text style={s.mono}>{new Date(b.published_at).toLocaleDateString('en', { month: 'short', day: 'numeric' })}</Text> : null}
+                  </View>
                   {b.views != null ? <Text style={s.mono}>{compact.format(b.views)}</Text> : null}
                 </Pressable>
               ))
@@ -201,7 +206,8 @@ const s = StyleSheet.create({
     borderColor: C.line,
     overflow: 'hidden',
   },
-  video: { flexDirection: 'row', alignItems: 'center', gap: 12, height: 50, borderTopWidth: 1, borderTopColor: C.lineSoft },
-  videoTitle: { flex: 1, color: C.text, fontSize: 14, ...font() },
+  video: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, borderTopWidth: 1, borderTopColor: C.lineSoft },
+  thumb: { width: 72, height: 40, borderRadius: 6, backgroundColor: '#1A1A1A' },
+  videoTitle: { color: C.text, fontSize: 14, lineHeight: 19, ...font() },
   lastRow: { borderBottomWidth: 1, borderBottomColor: C.lineSoft },
 });

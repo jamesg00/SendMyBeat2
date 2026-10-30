@@ -1,9 +1,12 @@
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback } from 'react';
 import * as WebBrowser from 'expo-web-browser';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useAuth } from '@/api/auth';
 import * as api from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
+import { Avatar } from '@/components/producer';
 import { Button, ListGroup, ListRow, Meter, Screen, styles as ui } from '@/components/ui';
 import { C, F, font } from '@/theme';
 
@@ -14,20 +17,28 @@ export default function ProfileScreen() {
   const sub = useRequest(api.subscriptionStatus);
   const yt = useRequest(api.youtubeStatus);
   const descriptions = useRequest(api.descriptions);
+  const me = useRequest(api.myProducer);
+  const reloadMe = me.reload;
+  // Coming back from Edit profile shows the new picture and details.
+  useFocusEffect(useCallback(() => reloadMe(), [reloadMe]));
 
   const plan = sub.data ? sub.data.plan.charAt(0).toUpperCase() + sub.data.plan.slice(1) : '…';
 
   return (
     <Screen title="Profile">
       <View style={s.profile}>
-        <View style={s.avatar} accessibilityRole="image" accessibilityLabel={user?.username}>
-          <Text style={s.avatarText}>{user?.username.charAt(0).toUpperCase()}</Text>
-        </View>
+        {me.data ? (
+          <Avatar producer={me.data} size={52} />
+        ) : (
+          <View style={s.avatar} accessibilityRole="image" accessibilityLabel={user?.username}>
+            <Text style={s.avatarText}>{user?.username.charAt(0).toUpperCase()}</Text>
+          </View>
+        )}
         <View style={{ flex: 1, gap: 3 }}>
           <Text style={s.name}>{user?.username}</Text>
           <Text style={s.sub}>{plan} plan</Text>
         </View>
-        <Button title="Manage" variant="secondary" size="sm" onPress={() => site('/dashboard')} />
+        <Button title="Edit profile" variant="secondary" size="sm" onPress={() => router.push('/profile-edit')} />
       </View>
 
       {sub.data ? (
@@ -54,6 +65,13 @@ export default function ProfileScreen() {
             }
             onPress={() => site('/dashboard')}
           />
+          {me.data ? (
+            <ListRow
+              title="My Spotlight profile"
+              onPress={() => router.push({ pathname: '/producer/[id]', params: { id: me.data!.user_id } })}
+            />
+          ) : null}
+          <ListRow title="Plan and billing" value={plan} onPress={() => site('/dashboard')} />
           <ListRow
             title="Descriptions"
             right={

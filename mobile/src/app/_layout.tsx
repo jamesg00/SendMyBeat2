@@ -57,6 +57,7 @@ function RootStack() {
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="studio" options={{ presentation: 'fullScreenModal' }} />
           <Stack.Screen name="producer/[id]" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="profile-edit" options={{ presentation: 'modal' }} />
         </Stack.Protected>
         <Stack.Protected guard={!user}>
           <Stack.Screen name="login" />

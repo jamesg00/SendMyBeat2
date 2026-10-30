@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 type State<T> = { data: T | null; error: string | null; loading: boolean };
 
@@ -21,12 +21,13 @@ export function useRequest<T>(fn: () => Promise<T>) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nonce]);
 
-  const reload = () => {
+  // Stable identities so screens can reload on focus without effect loops.
+  const reload = useCallback(() => {
     setState((s) => ({ ...s, loading: true, error: null }));
     setNonce((n) => n + 1);
-  };
+  }, []);
 
-  const setData = (update: (cur: T | null) => T) => setState((s) => ({ ...s, data: update(s.data) }));
+  const setData = useCallback((update: (cur: T | null) => T) => setState((s) => ({ ...s, data: update(s.data) })), []);
 
   return { ...state, setData, reload };
 }
