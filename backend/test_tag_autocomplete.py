@@ -189,3 +189,19 @@ async def test_autocomplete_outage_falls_back_to_neutral_demand():
     )
     assert scored[0]["breakdown"]["demand_source"] == "unknown"
     assert "error" in stats["autocomplete"]
+
+
+def test_signal_labels():
+    signals = tag_metrics.tag_signals
+    assert signals({"demand_source": "autocomplete", "demand": 80, "competition_known": True, "competition": 85}) == {
+        "demand": "high",
+        "competition": "low",
+    }
+    assert signals({"demand_source": "autocomplete", "demand": 30, "competition_known": False, "competition": 50}) == {
+        "demand": "medium",
+        "competition": "unknown",
+    }
+    assert signals({"demand_source": "autocomplete", "demand": 10, "competition_known": True, "competition": 20})["competition"] == "high"
+    # Runs scored on view counts before autocomplete: no labels rather than misleading ones.
+    assert signals({"demand_source": "views", "demand": 90, "competition": 90}) == {"demand": "unknown", "competition": "unknown"}
+    assert signals(None) == {"demand": "unknown", "competition": "unknown"}

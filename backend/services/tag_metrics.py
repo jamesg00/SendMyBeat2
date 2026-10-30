@@ -232,7 +232,23 @@ def compute_composite_tag_score(
         "monthly_search_proxy": med,
         "total_results": total,
         "demand_source": ("autocomplete" if demand_known else "unknown") if demand is not None else "views",
+        "competition_known": demand is None or competition_from_metrics(metrics) is not None,
     }
+
+
+def tag_signals(breakdown: dict[str, Any] | None) -> dict[str, str]:
+    """Plain labels for the app: demand high/medium/low and competition low/medium/high, or
+    "unknown" when we have no real data (older runs scored on view counts count as unknown)."""
+    breakdown = breakdown or {}
+    demand = "unknown"
+    if breakdown.get("demand_source") == "autocomplete":
+        value = float(breakdown.get("demand") or 0)
+        demand = "high" if value >= 55 else "medium" if value >= 20 else "low"
+    competition = "unknown"
+    if breakdown.get("competition_known") and breakdown.get("demand_source") in ("autocomplete", "unknown"):
+        value = float(breakdown.get("competition") or 0)
+        competition = "low" if value >= 70 else "medium" if value >= 40 else "high"
+    return {"demand": demand, "competition": competition}
 
 
 def _cache_is_fresh(doc: dict[str, Any] | None, ttl_seconds: int) -> bool:
@@ -294,6 +310,7 @@ def build_scored_tag_entry(
         "relevance": composite.get("relevance"),
         "monthly_search_proxy": composite.get("monthly_search_proxy"),
         "demand_source": composite.get("demand_source"),
+        "competition_known": composite.get("competition_known"),
         "total_results": composite.get("total_results"),
         "median_views": metrics.get("median_views"),
         "avg_views": metrics.get("avg_views"),
@@ -306,6 +323,7 @@ def build_scored_tag_entry(
         "score": int(composite.get("score") or 0),
         "reason": str(composite.get("reason") or ""),
         "breakdown": breakdown,
+        "signals": tag_signals(breakdown),
         "source": source,
         "feedback_counts": (relevance_entry or {}).get("feedback_counts") or {"kept": 0, "removed": 0},
     }
