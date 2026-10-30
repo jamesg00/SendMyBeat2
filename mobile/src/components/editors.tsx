@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import * as api from '@/api/endpoints';
-import type { Description, TagRun } from '@/api/endpoints';
+import type { Description, ScoredTag, TagLevel, TagRun } from '@/api/endpoints';
 import { Button, Card, ListGroup, ListRow, Meter } from '@/components/ui';
 import { DESCRIPTION_TEMPLATES } from '@/data/templates';
 import { useDraft, type DraftDescription } from '@/state/draft';
@@ -149,6 +149,17 @@ export function DescriptionEditor({
 
 const keyOf = (t: string) => t.trim().toLowerCase();
 
+const DEMAND: Record<TagLevel, string> = { high: 'High demand', medium: 'Some demand', low: 'Low demand', unknown: '' };
+const COMPETITION: Record<TagLevel, string> = { low: 'Low competition', medium: 'Medium competition', high: 'High competition', unknown: '' };
+// High demand is the good-news status, so it gets the mint dot; some demand is grey, low is a ring.
+function DemandDot({ level }: { level: TagLevel }) {
+  if (level === 'unknown') return null;
+  return <View style={[s.dot, level === 'high' && { backgroundColor: C.acc }, level === 'medium' && { backgroundColor: C.t2 }, level === 'low' && s.dotLow]} />;
+}
+
+const levels = (entry: ScoredTag) =>
+  [DEMAND[entry.signals?.demand ?? 'unknown'], COMPETITION[entry.signals?.competition ?? 'unknown']].filter(Boolean).join(' · ');
+
 // Remove tags with a tap, add your own, and save back to the run (the server learns from removals).
 export function TagEditor({ run, onSaved }: { run: TagRun; onSaved: (r: TagRun) => void }) {
   const [tags, setTags] = useState(run.tags);
@@ -156,8 +167,13 @@ export function TagEditor({ run, onSaved }: { run: TagRun; onSaved: (r: TagRun) 
   const [showAll, setShowAll] = useState(false);
   const [saving, setSaving] = useState(false);
   const [note, setNote] = useState<{ text: string; error?: boolean } | null>(null);
+  const [detail, setDetail] = useState<ScoredTag | null>(null);
 
   const original = new Set(run.tags.map(keyOf));
+  const scores = new Map((run.scored_tags ?? []).map((e) => [keyOf(e.tag), e]));
+  const demandCounts = (['high', 'medium', 'low'] as const)
+    .map((level) => [level, tags.filter((t) => scores.get(keyOf(t))?.signals?.demand === level).length] as const)
+    .filter(([, n]) => n > 0);
   const current = new Set(tags.map(keyOf));
   const removed = run.tags.filter((t) => !current.has(keyOf(t)));
   const added = tags.filter((t) => !original.has(keyOf(t)));
@@ -247,17 +263,49 @@ export function TagEditor({ run, onSaved }: { run: TagRun; onSaved: (r: TagRun) 
         </View>
       </View>
 
+      {demandCounts.length ? (
+        <View style={s.legend}>
+          {demandCounts.map(([level, n]) => (
+            <View key={level} style={s.legendItem}>
+              <DemandDot level={level} />
+              <Text style={s.muted}>
+                {n} {DEMAND[level].toLowerCase()}
+              </Text>
+            </View>
+          ))}
+          <Text style={s.muted}>Hold a tag for details</Text>
+        </View>
+      ) : null}
+
+      {detail ? (
+        <Pressable onPress={() => setDetail(null)} style={s.detail} accessibilityRole="button" accessibilityHint="Tap to close">
+          <View style={s.meterHead}>
+            <Text style={s.detailTag} numberOfLines={1}>
+              {detail.tag}
+            </Text>
+            <Text style={s.mono}>{detail.score}/100</Text>
+          </View>
+          {levels(detail) ? <Text style={s.detailLevels}>{levels(detail)}</Text> : null}
+          {detail.reason ? <Text style={s.muted}>{detail.reason}</Text> : null}
+        </Pressable>
+      ) : null}
+
       <View style={s.chips}>
         {visible.map((tag) => {
           const isNew = !original.has(keyOf(tag));
+          const scored = scores.get(keyOf(tag));
           return (
             <Pressable
               key={tag}
               onPress={() => setTags(tags.filter((t) => t !== tag))}
+              onLongPress={scored ? () => setDetail(scored) : undefined}
               style={({ pressed }) => [s.chip, isNew && s.chipNew, pressed && { opacity: 0.6 }]}
               accessibilityRole="button"
-              accessibilityLabel={`Remove tag ${tag}`}>
+              accessibilityLabel={`Remove tag ${tag}`}
+              accessibilityHint={scored ? `Score ${scored.score}. ${DEMAND[scored.signals?.demand ?? 'unknown']}. Hold for details.` : undefined}>
+              {scored ? <DemandDot level={scored.signals?.demand ?? 'unknown'} /> : null}
               <Text style={[s.chipText, isNew && { color: C.acc }]}>{isNew ? `+ ${tag}` : tag}</Text>
+              {scored ? <Text style={s.chipScore}>{scored.score}</Text> : null}
               <Text style={[s.chipX, isNew && { color: C.acc }]}>×</Text>
             </Pressable>
           );
@@ -411,6 +459,14 @@ const s = StyleSheet.create({
   chipNew: { borderColor: C.accLine, backgroundColor: '#06140E' },
   chipText: { color: C.text, fontFamily: F.mono, fontSize: 12.5 },
   chipX: { color: C.t3, fontSize: 14, marginTop: -1, ...font() },
+  chipScore: { color: C.t3, fontFamily: F.mono, fontSize: 11 },
+  dot: { width: 6, height: 6, borderRadius: 3 },
+  dotLow: { borderWidth: 1, borderColor: C.t3 },
+  legend: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 12, rowGap: 4 },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  detail: { gap: 4, padding: 12, borderRadius: R.ctl, borderWidth: 1, borderColor: C.line, backgroundColor: C.card2 },
+  detailTag: { flex: 1, color: C.text, fontFamily: F.mono, fontSize: 13 },
+  detailLevels: { color: C.text, fontSize: 13, ...font('500') },
   description: {
     padding: 14,
     borderRadius: R.ctl,

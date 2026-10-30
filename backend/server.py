@@ -2314,7 +2314,56 @@ def _sanitize_tag_generation_doc(doc: Optional[dict], current_user: dict) -> Opt
     sanitized = dict(doc)
     if not _can_view_tag_debug(current_user):
         sanitized["debug"] = None
+    # Runs saved before score labels existed get them on the way out.
+    sanitized["scored_tags"] = [
+        entry if not isinstance(entry, dict) or "signals" in entry
+        else {**entry, "signals": tag_metrics_service.tag_signals(entry.get("breakdown"))}
+        for entry in (sanitized.get("scored_tags") or [])
+    ]
     return sanitized
+
+
+async def _rescore_tags(
+    *,
+    tags: list[str],
+    query: str,
+    existing_scored: list[dict[str, Any]] | None = None,
+    kept_counts: dict[str, int] | None = None,
+    removed_counts: dict[str, int] | None = None,
+) -> list[dict[str, Any]]:
+    """Scores for a saved tag list, in its order. Tags already scored keep their score; new ones
+    are scored on autocomplete demand and relevance (no YouTube API quota)."""
+    known = {
+        _tag_exact_key(entry.get("tag", "")): entry
+        for entry in (existing_scored or [])
+        if isinstance(entry, dict) and entry.get("tag")
+    }
+    new_tags = [tag for tag in tags if _tag_exact_key(tag) not in known]
+    if new_tags:
+        artist_name = _normalize_artist_query(query)
+        beat_tokens = {token for token in _tag_exact_key(query).split() if token and token not in _TAG_NOISE_WORDS}
+        try:
+            fresh, _ = await tag_metrics_service.score_tags_with_youtube_proxy(
+                youtube=None,
+                db=db,
+                tags_with_sources=[(tag, "custom") for tag in new_tags],
+                query=query,
+                artist_name=artist_name,
+                beat_tokens=beat_tokens,
+                relevance_scorer=_score_tag_candidate,
+                kept_counts=kept_counts,
+                removed_counts=removed_counts,
+                demand_lookup=tag_autocomplete_service.autocomplete_demand,
+            )
+        except Exception as exc:
+            logging.warning(f"Rescoring tags failed, using relevance only: {exc}")
+            fresh = _score_tag_list(
+                tags=new_tags, query=query, artist_name=artist_name, beat_tokens=beat_tokens,
+                kept_counts=kept_counts, removed_counts=removed_counts,
+            )
+        for entry in fresh:
+            known[_tag_exact_key(entry.get("tag", ""))] = entry
+    return [known[_tag_exact_key(tag)] for tag in tags if _tag_exact_key(tag) in known]
 
 
 async def _ensure_pro_user(current_user: dict, feature_name: str = "This feature") -> None:
@@ -7088,18 +7137,7 @@ async def save_tag_history(request: TagHistorySaveRequest, current_user: dict = 
     if len(unique_tags) > 120:
         raise HTTPException(status_code=400, detail="Tag limit exceeded (max 120)")
 
-    artist_name = _normalize_artist_query(request.query)
-    beat_tokens = {
-        token
-        for token in _tag_exact_key(request.query).split()
-        if token and token not in _TAG_NOISE_WORDS
-    }
-    scored_tags = _score_tag_list(
-        tags=unique_tags,
-        query=request.query.strip(),
-        artist_name=artist_name,
-        beat_tokens=beat_tokens,
-    )
+    scored_tags = await _rescore_tags(tags=unique_tags, query=request.query.strip())
 
     tag_gen = TagGenerationResponse(
         user_id=current_user['id'],
@@ -7163,12 +7201,6 @@ async def update_tag_history(tag_id: str, request: TagHistoryUpdateRequest, curr
         "edited_count": int(feedback_summary.get("edited_count") or 0) + edited_count,
     }
 
-    artist_name = _normalize_artist_query(existing.get("query", ""))
-    beat_tokens = {
-        token
-        for token in _tag_exact_key(existing.get("query", "")).split()
-        if token and token not in _TAG_NOISE_WORDS
-    }
     try:
         prior_generations = await db.tag_generations.find(
             {"user_id": current_user["id"], "query_key": existing.get("query_key") or _normalize_query_key(existing.get("query", ""))},
@@ -7177,11 +7209,10 @@ async def update_tag_history(tag_id: str, request: TagHistoryUpdateRequest, curr
     except (AttributeError, TypeError):
         prior_generations = []
     kept_tag_counts, removed_tag_counts = _build_tag_feedback_maps(prior_generations)
-    scored_tags = _score_tag_list(
+    scored_tags = await _rescore_tags(
         tags=unique_tags,
         query=existing.get("query", ""),
-        artist_name=artist_name,
-        beat_tokens=beat_tokens,
+        existing_scored=existing.get("scored_tags"),
         kept_counts=kept_tag_counts,
         removed_counts=removed_tag_counts,
     )

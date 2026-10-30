@@ -16,7 +16,10 @@ export type SubscriptionStatus = {
   resets_at?: string | null;
 };
 
-export type TagRun = { id: string; query: string; tags: string[]; created_at?: string };
+export type TagLevel = 'high' | 'medium' | 'low' | 'unknown';
+/** The server's score for one tag: demand from YouTube search suggestions, competition from YouTube results. */
+export type ScoredTag = { tag: string; score: number; reason?: string; signals?: { demand: TagLevel; competition: TagLevel } };
+export type TagRun = { id: string; query: string; tags: string[]; scored_tags?: ScoredTag[]; created_at?: string };
 export type Description = { id: string; title: string; content: string; is_ai_generated?: boolean };
 export type YouTubeStatus = { connected: boolean; email?: string | null; name?: string | null };
 
