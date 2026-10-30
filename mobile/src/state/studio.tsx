@@ -11,11 +11,12 @@ import { useDraft, type DraftDescription } from '@/state/draft';
 // Upload Studio lives here instead of in the screen, so closing the studio keeps the draft and
 // the render job keeps polling. On native the draft is also saved to disk and survives app restarts.
 
+export type LogLine = { at: number; text: string };
 export type FileSlot = { name: string; uri: string; fileId?: string; status: 'uploading' | 'ready' | 'error'; error?: string };
 export type Phase =
   | { kind: 'idle' }
   | { kind: 'sending' }
-  | { kind: 'job'; job: UploadJob; startedAt: number }
+  | { kind: 'job'; job: UploadJob; startedAt: number; log: LogLine[] }
   | { kind: 'done'; url?: string; message: string }
   | { kind: 'error'; message: string };
 
@@ -105,7 +106,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     const p = saved?.phase;
     if (!p || p.kind === 'sending') return { kind: 'idle' };
     // Drafts saved before uploads tracked their start time.
-    if (p.kind === 'job' && !p.startedAt) return { ...p, startedAt: Date.now() };
+    if (p.kind === 'job') return { ...p, startedAt: p.startedAt || Date.now(), log: p.log ?? [] };
     return p;
   });
   const restored = useRef(false);
@@ -143,7 +144,12 @@ export function StudioProvider({ children }: { children: ReactNode }) {
         } else if (job.status === 'failed' || job.status === 'cancelled') {
           setPhase({ kind: 'error', message: job.error ?? 'YouTube upload failed.' });
         } else {
-          setPhase((cur) => ({ kind: 'job', job, startedAt: cur.kind === 'job' ? cur.startedAt : Date.now() }));
+          setPhase((cur) => {
+            const log = cur.kind === 'job' ? cur.log : [];
+            // Each new server message becomes a timestamped log line.
+            const next = job.message && job.message !== log[log.length - 1]?.text ? [...log, { at: Date.now(), text: job.message }] : log;
+            return { kind: 'job', job, startedAt: cur.kind === 'job' ? cur.startedAt : Date.now(), log: next };
+          });
         }
       } catch {
         // keep polling through brief network drops
@@ -226,7 +232,10 @@ export function StudioProvider({ children }: { children: ReactNode }) {
         renderFps: s.fps,
         removeWatermark: s.noWatermark,
       });
-      if (res.job?.id) setPhase({ kind: 'job', job: res.job, startedAt: Date.now() });
+      if (res.job?.id) {
+        const now = Date.now();
+        setPhase({ kind: 'job', job: res.job, startedAt: now, log: [{ at: now, text: 'Sent beat and artwork to SendMyBeat' }] });
+      }
       else setPhase({ kind: 'done', url: res.video_url, message: res.message ?? 'Upload started.' });
     } catch (e) {
       setPhase({ kind: 'error', message: e instanceof Error ? e.message : 'Upload failed.' });

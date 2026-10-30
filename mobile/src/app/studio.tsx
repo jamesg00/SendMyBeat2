@@ -9,41 +9,69 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as api from '@/api/endpoints';
 import type { YouTubeUploadOptions } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
-import { Button, Card, IconTile, JobProgress, ListGroup, ListRow, Pill, Segmented, styles as ui } from '@/components/ui';
+import { Button, Card, ListGroup, ListRow, Meter, Segmented, styles as ui } from '@/components/ui';
 import { DESCRIPTION_TEMPLATES } from '@/data/templates';
 import { useDraft, type DraftDescription } from '@/state/draft';
 import { useStudio, type FileSlot, type Phase } from '@/state/studio';
 import { C, F, R, font } from '@/theme';
 
 type Tool = 'details' | 'visualizer' | 'look';
+type Privacy = YouTubeUploadOptions['privacy'];
 
 const ASPECT: Record<YouTubeUploadOptions['aspectRatio'], number> = { '16:9': 16 / 9, '1:1': 1, '9:16': 9 / 16, '4:5': 4 / 5 };
+const RESOLUTION: Record<YouTubeUploadOptions['aspectRatio'], string> = { '16:9': '1920×1080', '1:1': '1080×1080', '9:16': '1080×1920', '4:5': '1080×1350' };
+const PRIVACY: Privacy[] = ['public', 'unlisted', 'private'];
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+// Server progress milestones for a YouTube upload job (backend/server.py): encoding starts at 41,
+// the YouTube upload at 65, done at 100.
+const STAGES = ['Sent', 'Render', 'YouTube', 'Live'] as const;
+const stageOf = (p: number) => (p >= 100 ? 3 : p >= 65 ? 2 : 1);
+
+function clock(sec: number) {
+  const t = Math.max(0, Math.floor(sec));
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+}
+
+function useNow(ms = 500) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), ms);
+    return () => clearInterval(t);
+  }, [ms]);
+  return now;
+}
 
 export default function StudioScreen() {
   const insets = useSafeAreaInsets();
   const studio = useStudio();
-  const [tool, setTool] = useState<Tool>('details');
-  const { title, privacy, audio, image, format, fps, bg, scale, rotation, noWatermark, phase, missing, set } = studio;
-
-  const busy = phase.kind === 'sending' || phase.kind === 'job';
-  const summary = `MP4 · ${fps} fps · ${format} · ${bg} bg · ${privacy}`;
-
-  const finish = () => {
-    studio.reset();
-    router.back();
-  };
+  const { phase } = studio;
+  const working = phase.kind === 'sending' || phase.kind === 'job';
 
   return (
-    <View style={[s.root, { paddingTop: insets.top + 6 }]}>
+    <View style={[s.root, { paddingTop: insets.top + 4, paddingBottom: insets.bottom + 8 }]}>
       <View style={s.topBar}>
-        <Pressable onPress={() => router.back()} style={s.close} accessibilityRole="button" accessibilityLabel="Close Upload Studio">
-          <Text style={{ color: C.text, fontSize: 16, ...font('600') }}>✕</Text>
+        <Pressable onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Close Upload Studio" hitSlop={10}>
+          <Text style={s.topAction}>Close</Text>
         </Pressable>
         <Text style={s.topTitle}>Upload Studio</Text>
-        <Pill label={busy ? 'Working' : studio.active ? 'Saved' : 'New'} />
+        <Text style={s.topStatus}>{!working && studio.active ? 'Draft saved' : ''}</Text>
       </View>
 
-      <Preview audio={audio} image={image} format={format} bg={bg} scale={scale} rotation={rotation} />
+      {working ? <RenderView phase={phase} title={studio.title} /> : phase.kind === 'done' ? <DoneView phase={phase} /> : <Editor />}
+    </View>
+  );
+}
+
+function Editor() {
+  const studio = useStudio();
+  const [tool, setTool] = useState<Tool>('details');
+  const { audio, image, format, fps, bg, scale, rotation, noWatermark, phase, missing, set } = studio;
+
+  return (
+    <>
+      <Preview image={image} format={format} fps={fps} bg={bg} scale={scale} rotation={rotation} />
+      {audio ? <Player key={audio.uri} uri={audio.uri} /> : null}
 
       <Segmented
         value={tool}
@@ -55,39 +83,8 @@ export default function StudioScreen() {
         ]}
       />
 
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ gap: 12, paddingBottom: 16 }} showsVerticalScrollIndicator={false}>
-        {tool === 'details' && (
-          <>
-            <ListGroup>
-              <FileRow label="Beat" hint="MP3 · WAV · M4A · FLAC · OGG" slot={audio} icon="♪" onPick={studio.pickAudio} />
-              <FileRow label="Artwork" hint="JPG · PNG · WEBP · GIF" slot={image} icon="▣" onPick={studio.pickImage} last />
-            </ListGroup>
-            <View style={{ gap: 6 }}>
-              <Text style={[ui.sectionLabel, { paddingHorizontal: 4 }]}>VIDEO TITLE</Text>
-              <TextInput
-                value={title}
-                onChangeText={(t) => set({ title: t })}
-                style={s.input}
-                placeholder="Enter beat title here"
-                placeholderTextColor={C.t3}
-              />
-            </View>
-            <MetaPickers />
-            <Text style={[ui.sectionLabel, { paddingHorizontal: 4 }]}>PRIVACY</Text>
-            <Segmented
-              value={privacy}
-              onChange={(v) => set({ privacy: v })}
-              options={[
-                { value: 'public', label: 'Public' },
-                { value: 'unlisted', label: 'Unlisted' },
-                { value: 'private', label: 'Private' },
-              ]}
-            />
-            {studio.active && !busy ? (
-              <Button title="Start over" variant="plain" size="sm" onPress={studio.reset} />
-            ) : null}
-          </>
-        )}
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ gap: 12, paddingBottom: 12 }} showsVerticalScrollIndicator={false}>
+        {tool === 'details' && <DetailsForm />}
 
         {tool === 'visualizer' && (
           <Card>
@@ -107,21 +104,21 @@ export default function StudioScreen() {
 
         {tool === 'look' && (
           <Card>
-            <Text style={ui.sectionLabel}>FORMAT</Text>
+            <Text style={ui.sectionLabel}>Format</Text>
             <Segmented compact value={format} onChange={(v) => set({ format: v })} options={[
               { value: '16:9', label: '16:9' },
               { value: '1:1', label: '1:1' },
               { value: '9:16', label: '9:16' },
               { value: '4:5', label: '4:5' },
             ]} />
-            <Text style={ui.sectionLabel}>FRAME RATE</Text>
+            <Text style={ui.sectionLabel}>Frame rate</Text>
             <Segmented compact value={fps} onChange={(v) => set({ fps: v })} options={[
               { value: '2', label: '2 · Fastest' },
               { value: '30', label: '30' },
               { value: '60', label: '60' },
             ]} />
             <Text style={s.muted}>2 fps is best for still cover art and uploads much faster. Use 30/60 for GIF artwork.</Text>
-            <Text style={ui.sectionLabel}>BACKGROUND</Text>
+            <Text style={ui.sectionLabel}>Background</Text>
             <Segmented compact value={bg} onChange={(v) => set({ bg: v })} options={[
               { value: 'black', label: 'Black' },
               { value: 'white', label: 'White' },
@@ -145,52 +142,63 @@ export default function StudioScreen() {
         )}
       </ScrollView>
 
-      <View style={{ gap: 8, paddingBottom: insets.bottom + 8 }}>
-        <Status phase={phase} />
-        {phase.kind === 'done' ? (
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            {phase.url ? <Button title="Open on YouTube" style={{ flex: 1 }} onPress={() => Linking.openURL(phase.url!)} /> : null}
-            <Button title="Done" variant="secondary" style={{ flex: 1 }} onPress={finish} />
-          </View>
-        ) : (
-          <Button
-            title={busy ? 'Uploading…' : missing ?? (phase.kind === 'error' ? 'Try again' : 'Upload to YouTube')}
-            variant={missing && !busy ? 'secondary' : 'primary'}
-            onPress={busy || missing ? undefined : studio.publish}
-          />
-        )}
-        <Text style={s.summary}>{busy ? 'You can close the studio. The upload keeps going.' : summary}</Text>
+      <View style={{ gap: 8 }}>
+        {phase.kind === 'error' ? <Text style={[s.muted, { color: C.danger, textAlign: 'center' }]}>{phase.message}</Text> : null}
+        <Button
+          title={missing ?? (phase.kind === 'error' ? 'Try again' : 'Upload to YouTube')}
+          variant={missing ? 'secondary' : 'primary'}
+          onPress={missing ? undefined : studio.publish}
+        />
+        <Text style={s.summary}>
+          mp4 · {RESOLUTION[format]} · {fps} fps · {studio.privacy}
+        </Text>
       </View>
-    </View>
+    </>
   );
 }
 
-// Description and tags are chosen right here, so the studio never has to close.
-function MetaPickers() {
+// One panel of label/value rows, like a settings form. Description and tags open their lists in place.
+function DetailsForm() {
+  const studio = useStudio();
   const { run, setRun, description, setDescription } = useDraft();
   const [open, setOpen] = useState<'desc' | 'tags' | null>(null);
   const saved = useRequest(api.descriptions);
   const history = useRequest(api.tagHistory);
 
   const descriptions: DraftDescription[] = [
-    ...DESCRIPTION_TEMPLATES.map((t) => ({ id: t.id, title: t.name, content: t.content, saved: false })),
     ...(saved.data ?? []).map((d) => ({ id: d.id, title: d.title, content: d.content, saved: true })),
+    ...DESCRIPTION_TEMPLATES.map((t) => ({ id: t.id, title: t.name, content: t.content, saved: false })),
   ];
   const toggle = (which: 'desc' | 'tags') => setOpen((cur) => (cur === which ? null : which));
-  const check = (on: boolean) => (on ? <Text style={{ color: C.acc, fontSize: 16, ...font() }}>✓</Text> : <View />);
+  const check = (on: boolean) => (on ? <Text style={{ color: C.text, fontSize: 15, fontFamily: F.mono }}>✓</Text> : <View />);
+  const nextPrivacy = () => studio.set({ privacy: PRIVACY[(PRIVACY.indexOf(studio.privacy) + 1) % PRIVACY.length] });
 
   return (
-    <View style={{ gap: 8 }}>
-      <ListGroup>
-        <ListRow title="Description" value={description.title} onPress={() => toggle('desc')} right={<Chevron open={open === 'desc'} />} />
-        <ListRow
-          title="Tags"
-          value={run ? `${run.query} · ${run.tags.length}` : 'None'}
+    <>
+      <View style={s.panel}>
+        <FileField label="Beat" hint="mp3 · wav · m4a · flac · ogg" slot={studio.audio} onPick={studio.pickAudio} />
+        <FileField label="Artwork" hint="jpg · png · webp · gif" slot={studio.image} onPick={studio.pickImage} />
+        <View style={s.field}>
+          <Text style={s.fieldLabel}>Title</Text>
+          <TextInput
+            value={studio.title}
+            onChangeText={(t) => studio.set({ title: t })}
+            style={s.fieldInput}
+            placeholder="Video title"
+            placeholderTextColor={C.t3}
+            accessibilityLabel="Video title"
+          />
+        </View>
+        <Field label="Desc." value={description.title} onPress={() => toggle('desc')} open={open === 'desc'} />
+        <Field
+          label="Tags"
+          value={run ? run.query : 'None'}
+          detail={run ? `· ${run.tags.length}` : undefined}
           onPress={() => toggle('tags')}
-          right={<Chevron open={open === 'tags'} />}
-          last
+          open={open === 'tags'}
         />
-      </ListGroup>
+        <Field label="Privacy" value={cap(studio.privacy)} onPress={nextPrivacy} cycle last />
+      </View>
 
       {open === 'desc' && (
         <ListGroup>
@@ -244,62 +252,85 @@ function MetaPickers() {
           )}
         </ListGroup>
       )}
-    </View>
+
+      {studio.active ? <Button title="Start over" variant="plain" size="sm" onPress={studio.reset} /> : null}
+    </>
   );
 }
 
-function Chevron({ open }: { open: boolean }) {
-  return <Text style={{ color: C.t3, fontSize: 18, transform: [{ rotate: open ? '90deg' : '0deg' }] }}>›</Text>;
-}
-
-function Status({ phase }: { phase: Phase }) {
-  if (phase.kind === 'sending') {
-    return (
-      <View style={s.status}>
-        <ActivityIndicator color={C.acc} />
-        <Text style={s.muted}>Sending to SendMyBeat…</Text>
-      </View>
-    );
-  }
-  if (phase.kind === 'job') {
-    return (
-      <JobProgress
-        title="Rendering and uploading"
-        startedAt={phase.startedAt}
-        expectedSec={120}
-        progress={phase.job.progress ?? 0}
-        message={phase.job.message ?? 'Rendering your video…'}
-      />
-    );
-  }
-  if (phase.kind === 'done') return <Text style={[s.muted, { color: C.acc, textAlign: 'center' }]}>{phase.message}</Text>;
-  if (phase.kind === 'error') return <Text style={[s.muted, { color: C.danger, textAlign: 'center' }]}>{phase.message}</Text>;
-  return null;
-}
-
-function FileRow({ label, hint, slot, icon, onPick, last }: { label: string; hint: string; slot: FileSlot | null; icon: string; onPick: () => void; last?: boolean }) {
-  const subtitle = !slot ? hint : slot.status === 'uploading' ? 'Uploading…' : slot.status === 'error' ? slot.error : slot.name;
+function Field({
+  label,
+  value,
+  detail,
+  onPress,
+  open,
+  cycle,
+  last,
+}: {
+  label: string;
+  value: string;
+  detail?: string;
+  onPress: () => void;
+  open?: boolean;
+  cycle?: boolean;
+  last?: boolean;
+}) {
   return (
-    <ListRow
-      title={label}
-      subtitle={subtitle}
-      height={60}
-      last={last}
-      left={
-        <IconTile tint={slot?.status === 'error' ? 'rgba(255,107,107,0.12)' : C.card2}>
-          {slot?.status === 'uploading' ? (
-            <ActivityIndicator color={C.acc} size="small" />
-          ) : (
-            <Text style={{ color: slot?.status === 'error' ? C.danger : C.acc, fontSize: 15, ...font() }}>{slot?.status === 'ready' ? '✓' : icon}</Text>
-          )}
-        </IconTile>
-      }
-      right={<Button title={slot ? 'Replace' : 'Choose'} variant="secondary" size="sm" onPress={onPick} />}
-    />
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${label}: ${value}`}
+      style={({ pressed }) => [s.field, last && { borderBottomWidth: 0 }, pressed && { backgroundColor: C.card2 }]}>
+      <Text style={s.fieldLabel}>{label}</Text>
+      <Text style={s.fieldValue} numberOfLines={1}>
+        {value}
+        {detail ? <Text style={s.fieldDetail}> {detail}</Text> : null}
+      </Text>
+      <Text style={[s.chevron, open && { transform: [{ rotate: '90deg' }] }]}>{cycle ? '↕' : '›'}</Text>
+    </Pressable>
   );
 }
 
-function Preview({ audio, image, format, bg, scale, rotation }: { audio: FileSlot | null; image: FileSlot | null; format: YouTubeUploadOptions['aspectRatio']; bg: YouTubeUploadOptions['background']; scale: number; rotation: number }) {
+function FileField({ label, hint, slot, onPick }: { label: string; hint: string; slot: FileSlot | null; onPick: () => void }) {
+  const value = !slot ? hint : slot.status === 'uploading' ? 'Uploading…' : slot.status === 'error' ? (slot.error ?? 'Upload failed') : slot.name;
+  return (
+    <Pressable
+      onPress={onPick}
+      accessibilityRole="button"
+      accessibilityLabel={`${label}: ${slot ? value : 'choose a file'}`}
+      style={({ pressed }) => [s.field, pressed && { backgroundColor: C.card2 }]}>
+      <Text style={s.fieldLabel}>{label}</Text>
+      <Text
+        style={[s.fieldMono, !slot && { color: C.t3 }, slot?.status === 'error' && { color: C.danger }]}
+        numberOfLines={1}>
+        {value}
+      </Text>
+      {slot?.status === 'uploading' ? (
+        <ActivityIndicator color={C.t2} size="small" />
+      ) : slot?.status === 'ready' ? (
+        <View style={s.dot} accessibilityLabel="Uploaded" />
+      ) : (
+        <Text style={s.choose}>{slot ? 'Retry' : 'Choose'}</Text>
+      )}
+    </Pressable>
+  );
+}
+
+function Preview({
+  image,
+  format,
+  fps,
+  bg,
+  scale,
+  rotation,
+}: {
+  image: FileSlot | null;
+  format: YouTubeUploadOptions['aspectRatio'];
+  fps: string;
+  bg: YouTubeUploadOptions['background'];
+  scale: number;
+  rotation: number;
+}) {
   const ratio = ASPECT[format];
   return (
     <View style={s.preview}>
@@ -308,7 +339,7 @@ function Preview({ audio, image, format, bg, scale, rotation }: { audio: FileSlo
         {image ? (
           <Image
             source={{ uri: image.uri }}
-            style={{ width: '62%', aspectRatio: 1, transform: [{ scale }, { rotate: `${rotation}deg` }] }}
+            style={{ height: '78%', aspectRatio: 1, transform: [{ scale }, { rotate: `${rotation}deg` }] }}
             contentFit="contain"
             accessibilityLabel="Artwork preview"
           />
@@ -317,22 +348,31 @@ function Preview({ audio, image, format, bg, scale, rotation }: { audio: FileSlo
         )}
       </View>
       <View style={s.badge}>
-        <Text style={s.badgeText}>{format}</Text>
+        <Text style={s.badgeText}>
+          {format} · {fps} fps
+        </Text>
       </View>
-      {audio ? <Playback key={audio.uri} uri={audio.uri} /> : null}
     </View>
   );
 }
 
-function clock(sec: number) {
-  const t = Math.max(0, Math.floor(sec));
-  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+// A stable, made-up waveform per file (the app has no decoded audio to draw from); played bars turn white.
+function bars(seed: string, n: number) {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return Array.from({ length: n }, (_, i) => {
+    h = (h * 1103515245 + 12345) >>> 0;
+    const wave = 0.55 + 0.25 * Math.sin(i / 3) + 0.2 * ((h % 1000) / 1000);
+    return Math.max(0.2, Math.min(1, wave));
+  });
 }
 
-// Plays the beat over the artwork, so the preview is what the rendered video will be.
-function Playback({ uri }: { uri: string }) {
+// Plays the beat under the preview, so it sounds and looks like the finished video.
+function Player({ uri }: { uri: string }) {
   const player = useAudioPlayer(uri);
   const status = useAudioPlayerStatus(player);
+  const [width, setWidth] = useState(0);
+  const [heights] = useState(() => bars(uri, 44));
 
   useEffect(() => {
     // Play through the iPhone's silent switch, like a video would.
@@ -340,6 +380,7 @@ function Playback({ uri }: { uri: string }) {
   }, []);
 
   const duration = status.duration || 0;
+  const played = duration > 0 ? status.currentTime / duration : 0;
   const toggle = () => {
     if (status.playing) player.pause();
     else {
@@ -351,22 +392,114 @@ function Playback({ uri }: { uri: string }) {
   return (
     <View style={s.player}>
       <Pressable onPress={toggle} style={s.playBtn} accessibilityRole="button" accessibilityLabel={status.playing ? 'Pause preview' : 'Play preview'}>
-        <Text style={{ color: C.onPrimary, fontSize: 13, ...font('700') }}>{status.playing ? '❚❚' : '▶'}</Text>
+        <Text style={{ color: C.onPrimary, fontSize: 12, ...font('700') }}>{status.playing ? '❚❚' : '▶'}</Text>
       </Pressable>
-      <Slider
-        style={{ flex: 1 }}
-        value={status.currentTime}
-        minimumValue={0}
-        maximumValue={duration || 1}
-        onSlidingComplete={(v) => void player.seekTo(v)}
-        minimumTrackTintColor={C.text}
-        maximumTrackTintColor="rgba(255,255,255,0.25)"
-        thumbTintColor="#FFFFFF"
-        accessibilityLabel="Preview position"
-      />
-      <Text style={s.time}>
-        {clock(status.currentTime)} / {clock(duration)}
-      </Text>
+      <View style={{ flex: 1, gap: 6 }}>
+        <Pressable
+          onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
+          onPress={(e) => duration > 0 && width > 0 && void player.seekTo((e.nativeEvent.locationX / width) * duration)}
+          accessibilityRole="adjustable"
+          accessibilityLabel="Preview position"
+          accessibilityValue={{ text: `${clock(status.currentTime)} of ${clock(duration)}` }}
+          style={s.wave}>
+          {heights.map((h, i) => (
+            <View
+              key={i}
+              style={[s.waveBar, { height: `${h * 100}%`, backgroundColor: i / heights.length < played ? C.text : '#3A3A3A' }]}
+            />
+          ))}
+        </Pressable>
+        <View style={s.timeRow}>
+          <Text style={[s.time, { color: C.text }]}>{clock(status.currentTime)}</Text>
+          <Text style={s.time}>{clock(duration)}</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+// While the server renders and uploads: stage, time, progress and a timestamped log, like a deploy.
+function RenderView({ phase, title }: { phase: Extract<Phase, { kind: 'sending' } | { kind: 'job' }>; title: string }) {
+  const now = useNow();
+  const job = phase.kind === 'job' ? phase : null;
+  const started = job?.startedAt ?? now;
+  const elapsed = (now - started) / 1000;
+  const server = job?.job.progress ?? 0;
+  // Server progress moves in jumps, so ease forward between reports (capped below done).
+  const pct = Math.min(99, Math.max(server, 95 * (1 - Math.exp(-elapsed / 90))));
+  const stage = job ? stageOf(server) : 0;
+  const left = Math.max(0, 150 - elapsed);
+  const log = job?.log ?? [];
+
+  return (
+    <View style={{ flex: 1, gap: 18 }}>
+      <View style={{ gap: 6, paddingTop: 8 }}>
+        <View style={s.statusRow}>
+          <View style={[s.statusDot, { backgroundColor: C.warn }]} />
+          <Text style={s.sub}>{stage <= 1 ? 'Rendering' : 'Uploading to YouTube'}</Text>
+          <Text style={s.monoSub}>· {clock(elapsed)}</Text>
+        </View>
+        <Text style={s.renderTitle} numberOfLines={2}>
+          {title || 'Untitled beat'}
+        </Text>
+      </View>
+
+      <View style={{ gap: 8 }}>
+        <View style={s.timeRow}>
+          <Text style={s.monoSub}>{Math.round(pct)}%</Text>
+          <Text style={s.monoSub}>{left > 1 ? `~${clock(left)} left` : 'finishing'}</Text>
+        </View>
+        <Meter value={pct / 100} height={4} />
+      </View>
+
+      <View style={s.stages}>
+        {STAGES.map((name, i) => (
+          <View key={name} style={{ flex: 1, gap: 6 }}>
+            <View style={{ height: 2, backgroundColor: i < stage ? C.acc : i === stage ? C.warn : C.line }} />
+            <Text style={[s.stageText, i === stage && { color: C.text, ...font('600') }, i > stage && { color: C.t3 }]}>{name}</Text>
+          </View>
+        ))}
+      </View>
+
+      <View style={s.logPanel}>
+        <View style={s.logHead}>
+          <Text style={[s.sub, { color: C.text, ...font('500') }]}>Log</Text>
+          {job ? <Text style={s.monoSub}>job {job.job.id.slice(0, 6)}…</Text> : null}
+        </View>
+        <ScrollView contentContainerStyle={{ padding: 14, gap: 7 }}>
+          {log.length === 0 ? <Text style={s.logText}>Sending files…</Text> : null}
+          {log.map((l, i) => (
+            <View key={`${l.at}-${i}`} style={{ flexDirection: 'row', gap: 10 }}>
+              <Text style={s.logTime}>{new Date(l.at).toLocaleTimeString('en-GB')}</Text>
+              <Text style={[s.logText, i === log.length - 1 && { color: C.text }]}>{l.text}</Text>
+            </View>
+          ))}
+        </ScrollView>
+      </View>
+
+      <Text style={s.sub}>Safe to close. The upload keeps running and shows on Workflow.</Text>
+      <Button title="Close" variant="secondary" onPress={() => router.back()} />
+    </View>
+  );
+}
+
+function DoneView({ phase }: { phase: Extract<Phase, { kind: 'done' }> }) {
+  const studio = useStudio();
+  const finish = () => {
+    studio.reset();
+    router.back();
+  };
+  return (
+    <View style={{ flex: 1, gap: 18, paddingTop: 8 }}>
+      <View style={s.statusRow}>
+        <View style={[s.statusDot, { backgroundColor: C.acc }]} />
+        <Text style={s.sub}>Live on YouTube</Text>
+      </View>
+      <Text style={s.renderTitle}>{studio.title || 'Your beat'}</Text>
+      <Text style={s.sub}>{phase.message}</Text>
+      <View style={{ flex: 1 }} />
+      {phase.url ? <Button title="Open on YouTube" onPress={() => Linking.openURL(phase.url!)} /> : null}
+      <Button title="Done" variant="secondary" onPress={finish} />
     </View>
   );
 }
@@ -403,43 +536,80 @@ function SliderField(props: { label: string; value: number; display: string; min
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.bg, paddingHorizontal: 16, gap: 12 },
+  root: { flex: 1, backgroundColor: C.bg, paddingHorizontal: 20, gap: 14 },
   topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', height: 44 },
-  close: { width: 36, height: 36, borderRadius: 18, backgroundColor: C.card2, alignItems: 'center', justifyContent: 'center' },
-  topTitle: { color: C.text, fontSize: 17, ...font('600') },
+  topAction: { color: C.t2, fontSize: 16, width: 90, ...font() },
+  topTitle: { color: C.text, fontSize: 16, ...font('600') },
+  topStatus: { color: C.t3, fontSize: 12, width: 90, textAlign: 'right', ...font() },
   preview: {
-    height: 220,
+    aspectRatio: 16 / 9,
     borderRadius: R.card,
     overflow: 'hidden',
-    backgroundColor: '#000',
+    backgroundColor: C.card,
     borderWidth: 1,
-    borderColor: C.line,
+    borderColor: C.lineSoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
   frame: { maxWidth: '100%', maxHeight: '100%', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
-  empty: { color: C.t3, fontSize: 13, ...font() },
-  badge: { position: 'absolute', top: 10, right: 10, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: 'rgba(0,0,0,0.6)' },
-  badgeText: { color: C.text, fontSize: 11, fontFamily: F.mono },
-  player: {
+  empty: { color: C.t3, fontSize: 13, fontFamily: F.mono },
+  badge: {
     position: 'absolute',
-    left: 8,
-    right: 8,
-    bottom: 8,
-    height: 44,
+    top: 10,
+    left: 10,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: C.line,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+  },
+  badgeText: { color: C.t2, fontSize: 11, fontFamily: F.mono },
+  player: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  playBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: C.primary, alignItems: 'center', justifyContent: 'center' },
+  wave: { height: 30, flexDirection: 'row', alignItems: 'center', gap: 2 },
+  waveBar: { flex: 1, borderRadius: 1 },
+  timeRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  time: { color: C.t3, fontSize: 11, fontFamily: F.mono },
+  panel: { borderRadius: R.card, borderWidth: 1, borderColor: C.line, backgroundColor: C.card, overflow: 'hidden' },
+  field: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 6,
-    borderRadius: 12,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    gap: 12,
+    height: 50,
+    paddingHorizontal: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: C.lineSoft,
   },
-  playBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: C.primary, alignItems: 'center', justifyContent: 'center' },
-  time: { color: C.text, fontSize: 11, fontFamily: F.mono, minWidth: 72, textAlign: 'right' },
+  fieldLabel: { width: 64, color: C.t2, fontSize: 14, ...font() },
+  fieldValue: { flex: 1, color: C.text, fontSize: 15, ...font() },
+  fieldDetail: { color: C.t3, fontSize: 13, fontFamily: F.mono },
+  fieldMono: { flex: 1, color: C.text, fontSize: 13, fontFamily: F.mono },
+  fieldInput: { flex: 1, height: '100%', color: C.text, fontSize: 15, ...font() },
+  chevron: { color: C.t3, fontSize: 16, width: 14, textAlign: 'center' },
+  choose: { color: C.text, fontSize: 13, ...font('500') },
+  dot: { width: 7, height: 7, borderRadius: 4, backgroundColor: C.acc },
   cardTitle: { color: C.text, fontSize: 17, ...font('600') },
   muted: { color: C.t3, fontSize: 12, lineHeight: 17, flexShrink: 1, ...font() },
-  status: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
-  input: { height: 44, paddingHorizontal: 14, borderRadius: R.ctl, borderWidth: 1, borderColor: C.line, backgroundColor: C.card2, color: C.text, fontSize: 15, ...font() },
+  sub: { color: C.t2, fontSize: 13, lineHeight: 19, ...font() },
+  monoSub: { color: C.t3, fontSize: 13, fontFamily: F.mono },
   sliderGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 6 },
   summary: { textAlign: 'center', color: C.t3, fontSize: 11, fontFamily: F.mono },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  statusDot: { width: 8, height: 8, borderRadius: 4 },
+  renderTitle: { color: C.text, fontSize: 24, lineHeight: 30, letterSpacing: -0.6, ...font('600') },
+  stages: { flexDirection: 'row', gap: 4 },
+  stageText: { color: C.t2, fontSize: 11, ...font() },
+  logPanel: { flex: 1, minHeight: 120, borderRadius: R.card, borderWidth: 1, borderColor: C.line, backgroundColor: C.card, overflow: 'hidden' },
+  logHead: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    height: 40,
+    paddingHorizontal: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: C.lineSoft,
+  },
+  logTime: { color: C.t3, fontSize: 12, lineHeight: 17, fontFamily: F.mono },
+  logText: { flex: 1, color: C.t2, fontSize: 12, lineHeight: 17, fontFamily: F.mono },
 });
