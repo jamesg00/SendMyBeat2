@@ -1,4 +1,5 @@
-"""YouTube-proxy tag demand/competition scoring (vidIQ-inspired composite scores)."""
+"""Tag scoring: search demand from YouTube autocomplete, competition from a few YouTube searches,
+and relevance to the query, combined into one 0-100 score per tag."""
 
 from __future__ import annotations
 
@@ -15,7 +16,14 @@ logger = logging.getLogger(__name__)
 
 TAG_MIN_PUBLISH_SCORE = int(os.environ.get("TAG_MIN_PUBLISH_SCORE", "58"))
 TAG_METRICS_MAX_LOOKUPS = int(os.environ.get("TAG_METRICS_MAX_LOOKUPS", "40"))
-TAG_METRICS_CACHE_TTL_SECONDS = int(os.environ.get("TAG_METRICS_CACHE_TTL_SECONDS", str(7 * 24 * 3600)))
+TAG_METRICS_CACHE_TTL_SECONDS = int(os.environ.get("TAG_METRICS_CACHE_TTL_SECONDS", str(14 * 24 * 3600)))
+# YouTube API units one tag generation may spend (artist lookup included). A search costs 100.
+TAG_QUOTA_BUDGET_UNITS = int(os.environ.get("TAG_QUOTA_BUDGET_UNITS", "300"))
+YOUTUBE_SEARCH_COST = 100
+# Competition for tags we never searched: neither rewarded nor ruled out.
+UNKNOWN_COMPETITION = 50.0
+# Demand for tags autocomplete couldn't tell us about (same value as tag_autocomplete.UNKNOWN_DEMAND).
+UNKNOWN_DEMAND = 45.0
 TAG_SCORE_DEMAND_WEIGHT = float(os.environ.get("TAG_SCORE_DEMAND_WEIGHT", "0.45"))
 TAG_SCORE_COMPETITION_WEIGHT = float(os.environ.get("TAG_SCORE_COMPETITION_WEIGHT", "0.25"))
 TAG_SCORE_RELEVANCE_WEIGHT = float(os.environ.get("TAG_SCORE_RELEVANCE_WEIGHT", "0.30"))
@@ -82,8 +90,8 @@ def normalize_competition_score(total_results: int) -> float:
     return 48.0
 
 
-def fetch_tag_youtube_metrics(youtube: Any, tag: str) -> dict[str, Any]:
-    """Sync YouTube search + view stats for one tag query."""
+def fetch_tag_youtube_metrics(youtube: Any, tag: str, include_views: bool = True) -> dict[str, Any]:
+    """Sync YouTube search (100 units) for one tag query, plus view stats (1 unit) if asked."""
     clean_tag = str(tag or "").strip()
     empty: dict[str, Any] = {
         "tag": clean_tag,
@@ -118,8 +126,11 @@ def fetch_tag_youtube_metrics(youtube: Any, tag: str) -> dict[str, Any]:
         if title:
             top_titles.append(title)
 
+    phrase = normalize_tag_key(clean_tag)
+    exact_title_matches = sum(1 for title in top_titles if phrase and phrase in normalize_tag_key(title))
+
     view_counts: list[int] = []
-    if video_ids:
+    if video_ids and include_views:
         try:
             stats_payload = (
                 youtube.videos()
@@ -144,7 +155,22 @@ def fetch_tag_youtube_metrics(youtube: Any, tag: str) -> dict[str, Any]:
         "avg_views": avg_views,
         "top_titles": top_titles[:5],
         "video_count_sampled": len(view_counts),
+        "exact_title_matches": exact_title_matches,
+        "searched": True,
     }
+
+
+def competition_from_metrics(metrics: dict[str, Any] | None) -> float | None:
+    """0-100, higher = easier to rank. None when this tag was never searched on YouTube."""
+    if not metrics or not (metrics.get("searched") or int(metrics.get("total_results") or 0) > 0):
+        return None
+    score = normalize_competition_score(int(metrics.get("total_results") or 0))
+    titles = metrics.get("top_titles") or []
+    if titles:
+        # Top results that already use the exact phrase in their title are harder to beat.
+        share = int(metrics.get("exact_title_matches") or 0) / len(titles)
+        score *= 1 - 0.35 * share
+    return max(5.0, min(100.0, score))
 
 
 def compute_composite_tag_score(
@@ -152,9 +178,19 @@ def compute_composite_tag_score(
     metrics: dict[str, Any],
     relevance_score: float,
     relevance_reason: str = "",
+    demand: float | None = None,
+    demand_known: bool = True,
 ) -> dict[str, Any]:
-    demand_norm = normalize_demand_score(int(metrics.get("median_views") or 0))
-    competition_norm = normalize_competition_score(int(metrics.get("total_results") or 0))
+    """With `demand` (autocomplete, 0-100) it drives the score and unsearched tags get neutral
+    competition; without it, the older view-count proxy is used. `demand_known=False` marks a
+    neutral placeholder demand (autocomplete unavailable)."""
+    if demand is not None:
+        demand_norm = max(0.0, min(100.0, float(demand)))
+        competition = competition_from_metrics(metrics)
+        competition_norm = UNKNOWN_COMPETITION if competition is None else competition
+    else:
+        demand_norm = normalize_demand_score(int(metrics.get("median_views") or 0))
+        competition_norm = normalize_competition_score(int(metrics.get("total_results") or 0))
     relevance_norm = max(0.0, min(100.0, float(relevance_score)))
 
     raw = (
@@ -166,7 +202,16 @@ def compute_composite_tag_score(
 
     med = int(metrics.get("median_views") or 0)
     total = int(metrics.get("total_results") or 0)
-    if composite >= 60:
+    if demand is not None:
+        if not demand_known:
+            reason = relevance_reason or "Search demand unknown; scored on relevance."
+        elif demand_norm >= 55:
+            reason = "Suggested by YouTube search after only part of it is typed, so people search it often."
+        elif demand_norm >= 20:
+            reason = "A real YouTube search, but a smaller one."
+        else:
+            reason = "YouTube search doesn't suggest this phrase, so few people search it."
+    elif composite >= 60:
         reason = (
             f"Strong YouTube demand proxy ({med:,} median views on top results) "
             f"with workable competition ({total:,} matching videos)."
@@ -186,6 +231,7 @@ def compute_composite_tag_score(
         "reason": reason,
         "monthly_search_proxy": med,
         "total_results": total,
+        "demand_source": ("autocomplete" if demand_known else "unknown") if demand is not None else "views",
     }
 
 
@@ -247,6 +293,7 @@ def build_scored_tag_entry(
         "competition": composite.get("competition"),
         "relevance": composite.get("relevance"),
         "monthly_search_proxy": composite.get("monthly_search_proxy"),
+        "demand_source": composite.get("demand_source"),
         "total_results": composite.get("total_results"),
         "median_views": metrics.get("median_views"),
         "avg_views": metrics.get("avg_views"),
@@ -335,104 +382,104 @@ async def score_tags_with_youtube_proxy(
     min_score: int | None = None,
     max_lookups: int | None = None,
     cache_ttl_seconds: int | None = None,
+    quota_budget: list[int] | None = None,
+    demand_lookup: Callable[..., Any] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """
-    Score candidates via YouTube metrics + relevance. Returns all scored entries (sorted desc).
-    Stats dict includes cache_hits, api_calls, etc.
+    Score every candidate. Returns all scored entries (best first) and a stats dict.
+
+    1. Demand for every tag from YouTube autocomplete (`demand_lookup`, no API quota).
+    2. Competition from cached YouTube searches; the best few uncached tags are searched while
+       `quota_budget` (remaining API units, shared with the caller) allows.
+    3. Relevance from `relevance_scorer`.
     """
     min_score = TAG_MIN_PUBLISH_SCORE if min_score is None else int(min_score)
     max_lookups = TAG_METRICS_MAX_LOOKUPS if max_lookups is None else int(max_lookups)
     cache_ttl = TAG_METRICS_CACHE_TTL_SECONDS if cache_ttl_seconds is None else int(cache_ttl_seconds)
+    budget = quota_budget if quota_budget is not None else [TAG_QUOTA_BUDGET_UNITS]
     kept_counts = kept_counts or {}
     removed_counts = removed_counts or {}
     source_map = source_map or {}
 
     ordered = prioritize_tags_for_lookup(tags_with_sources, artist_name=artist_name)
-    api_calls = [0]
+
+    demand_by_key: dict[str, tuple[float | None, dict[str, Any]]] = {}
+    demand_stats: dict[str, Any] = {"enabled": demand_lookup is not None}
+    if demand_lookup is not None and ordered:
+        try:
+            demand_by_key, lookup_stats = await demand_lookup(db, [tag for tag, _ in ordered])
+            demand_stats.update(lookup_stats)
+        except Exception as exc:
+            logger.warning("Autocomplete demand lookup failed: %s", exc)
+            demand_stats["error"] = str(exc)
+
+    relevance_by_key: dict[str, dict[str, Any]] = {}
+    metrics_by_key: dict[str, dict[str, Any]] = {}
     cache_hits = 0
-    scored_by_key: dict[str, dict[str, Any]] = {}
-
     for tag, source in ordered:
-        if api_calls[0] >= max_lookups and normalize_tag_key(tag) not in scored_by_key:
-            break
-
         tag_key = normalize_tag_key(tag)
-        if tag_key in scored_by_key:
-            continue
-
-        cached_before = await get_cached_tag_metrics(db, tag_key, cache_ttl)
-        if cached_before is not None:
+        relevance_by_key[tag_key] = relevance_scorer(
+            tag=tag,
+            query=query,
+            artist_name=artist_name,
+            beat_tokens=beat_tokens,
+            source=source_map.get(tag_key, source),
+            kept_count=kept_counts.get(tag_key, 0),
+            removed_count=removed_counts.get(tag_key, 0),
+        )
+        cached = await get_cached_tag_metrics(db, tag_key, cache_ttl)
+        if cached is not None:
             cache_hits += 1
-            metrics = cached_before
-        else:
-            if api_calls[0] >= max_lookups:
-                continue
-            metrics = await resolve_tag_metrics(
-                youtube=youtube,
-                db=db,
-                tag=tag,
-                ttl_seconds=cache_ttl,
-                api_calls_counter=api_calls,
+            metrics_by_key[tag_key] = cached
+
+    def demand_of(tag_key: str) -> tuple[float, bool]:
+        value, _ = demand_by_key.get(tag_key, (None, {}))
+        return (UNKNOWN_DEMAND, False) if value is None else (float(value), True)
+
+    # Spend the remaining YouTube budget on the most promising tags we have no competition data for.
+    api_calls = 0
+    if youtube is not None:
+        unsearched = [(tag, source) for tag, source in ordered if normalize_tag_key(tag) not in metrics_by_key]
+        unsearched.sort(
+            key=lambda item: -(
+                demand_of(normalize_tag_key(item[0]))[0]
+                + float(relevance_by_key[normalize_tag_key(item[0])].get("score") or 0)
             )
+        )
+        for tag, _source in unsearched:
+            if api_calls >= max_lookups or budget[0] < YOUTUBE_SEARCH_COST:
+                break
+            metrics = await asyncio.to_thread(fetch_tag_youtube_metrics, youtube, tag, False)
+            budget[0] -= YOUTUBE_SEARCH_COST
+            api_calls += 1
+            if metrics.get("searched"):
+                metrics_by_key[normalize_tag_key(tag)] = metrics
+                await set_cached_tag_metrics(db, normalize_tag_key(tag), metrics)
 
-        relevance_entry = relevance_scorer(
-            tag=tag,
-            query=query,
-            artist_name=artist_name,
-            beat_tokens=beat_tokens,
-            source=source_map.get(tag_key, source),
-            kept_count=kept_counts.get(tag_key, 0),
-            removed_count=removed_counts.get(tag_key, 0),
-        )
-        relevance_score = float(relevance_entry.get("score") or 0)
-        composite = compute_composite_tag_score(
-            metrics=metrics,
-            relevance_score=relevance_score,
-            relevance_reason=str(relevance_entry.get("reason") or ""),
-        )
-        scored_by_key[tag_key] = build_scored_tag_entry(
-            tag=tag,
-            source=source_map.get(tag_key, source),
-            metrics=metrics,
-            composite=composite,
-            relevance_entry=relevance_entry,
-        )
-
-    # Tags beyond lookup cap: relevance-only fallback (lower confidence, usually filtered out)
+    scored_by_key: dict[str, dict[str, Any]] = {}
     for tag, source in ordered:
         tag_key = normalize_tag_key(tag)
         if tag_key in scored_by_key:
             continue
-        relevance_entry = relevance_scorer(
-            tag=tag,
-            query=query,
-            artist_name=artist_name,
-            beat_tokens=beat_tokens,
-            source=source_map.get(tag_key, source),
-            kept_count=kept_counts.get(tag_key, 0),
-            removed_count=removed_counts.get(tag_key, 0),
-        )
-        relevance_score = float(relevance_entry.get("score") or 0)
-        empty_metrics = {
-            "tag": tag,
-            "total_results": 0,
-            "median_views": 0,
-            "avg_views": 0,
-            "top_titles": [],
-            "video_count_sampled": 0,
-        }
+        relevance_entry = relevance_by_key[tag_key]
+        metrics = metrics_by_key.get(tag_key) or {"tag": tag, "total_results": 0, "median_views": 0}
+        demand, known = demand_of(tag_key)
         composite = compute_composite_tag_score(
-            metrics=empty_metrics,
-            relevance_score=relevance_score * 0.65,
-            relevance_reason="YouTube metrics not fetched (lookup cap); relevance-only estimate.",
+            metrics=metrics,
+            relevance_score=float(relevance_entry.get("score") or 0),
+            relevance_reason=str(relevance_entry.get("reason") or ""),
+            demand=demand,
+            demand_known=known,
         )
-        scored_by_key[tag_key] = build_scored_tag_entry(
+        entry = build_scored_tag_entry(
             tag=tag,
             source=source_map.get(tag_key, source),
-            metrics=empty_metrics,
+            metrics=metrics,
             composite=composite,
             relevance_entry=relevance_entry,
         )
+        entry["breakdown"]["autocomplete"] = demand_by_key.get(tag_key, (None, {}))[1]
+        scored_by_key[tag_key] = entry
 
     scored_list = sorted(
         scored_by_key.values(),
@@ -441,10 +488,12 @@ async def score_tags_with_youtube_proxy(
     stats = {
         "min_publish_score": min_score,
         "max_lookups": max_lookups,
-        "api_calls": api_calls[0],
+        "api_calls": api_calls,
+        "quota_units_left": budget[0],
         "cache_hits": cache_hits,
         "candidates_considered": len(ordered),
         "candidates_scored": len(scored_by_key),
+        "autocomplete": demand_stats,
     }
     return scored_list, stats
 
