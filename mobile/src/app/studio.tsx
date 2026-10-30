@@ -14,7 +14,7 @@ import { DescriptionEditor, TagEditor } from '@/components/editors';
 import { Button, Card, ListGroup, ListRow, Meter, Segmented, styles as ui } from '@/components/ui';
 import { useDraft } from '@/state/draft';
 import { useStudio, type FileSlot, type Phase } from '@/state/studio';
-import { C, F, R, font } from '@/theme';
+import { C, F, R, display, font } from '@/theme';
 
 type Tool = 'details' | 'look';
 type Privacy = YouTubeUploadOptions['privacy'];
@@ -525,7 +525,7 @@ const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg, paddingHorizontal: 20, gap: 14 },
   topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', height: 44 },
   topAction: { color: C.t2, fontSize: 16, width: 90, ...font() },
-  topTitle: { color: C.text, fontSize: 16, ...font('600') },
+  topTitle: { color: C.text, fontSize: 17, ...display },
   topStatus: { color: C.t3, fontSize: 12, width: 90, textAlign: 'right', ...font() },
   preview: {
     aspectRatio: 16 / 9,

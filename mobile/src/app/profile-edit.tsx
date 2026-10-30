@@ -9,7 +9,7 @@ import * as api from '@/api/endpoints';
 import type { Producer, TopBeat as TopBeatData } from '@/api/endpoints';
 import { Avatar, markProfileEdited, pickProfileImage, rememberProducers, TopBeat, topBeatOf } from '@/components/producer';
 import { Button, Segmented, styles as ui } from '@/components/ui';
-import { C, F, R, font } from '@/theme';
+import { C, F, R, display, font } from '@/theme';
 
 const LINKS = [
   { key: 'youtube', label: 'YouTube', placeholder: 'youtube.com/@yourchannel' },
@@ -303,7 +303,7 @@ const s = StyleSheet.create({
   center: { alignItems: 'center', justifyContent: 'center' },
   topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 12 },
   topAction: { color: C.t2, fontSize: 16, width: 80, ...font() },
-  topTitle: { color: C.text, fontSize: 16, ...font('600') },
+  topTitle: { color: C.text, fontSize: 17, ...display },
   banner: { height: 120, backgroundColor: '#111111', borderTopWidth: 1, borderBottomWidth: 1, borderColor: C.lineSoft },
   bannerHint: {
     position: 'absolute',

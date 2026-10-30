@@ -11,7 +11,7 @@ import { useRequest } from '@/api/use-request';
 import { Avatar, followerCount, FollowButton, isVerified, knownProducer, LikeButton, markProfileEdited, openWebLink, pickProfileImage, rememberProducers, TopBeat, topBeatOf, VerifiedBadge } from '@/components/producer';
 import { Button, styles as ui } from '@/components/ui';
 import { loadSocial, useSocial } from '@/state/social';
-import { C, F, R, font } from '@/theme';
+import { C, F, R, display, font } from '@/theme';
 
 const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
 const SOCIAL_LABELS: Record<string, string> = {
@@ -297,7 +297,7 @@ const s = StyleSheet.create({
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   change: { color: C.t2, fontSize: 13, ...font('500') },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  name: { color: C.text, fontSize: 22, letterSpacing: -0.4, ...font('600') },
+  name: { color: C.text, fontSize: 22, letterSpacing: -0.2, ...display },
   role: { color: C.t2, fontSize: 12, fontFamily: F.mono },
   sub: { color: C.t2, fontSize: 14, lineHeight: 20, ...font() },
   muted: { color: C.t3, fontSize: 13, ...font() },

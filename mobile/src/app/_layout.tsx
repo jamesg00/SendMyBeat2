@@ -1,4 +1,3 @@
-import { Geist_400Regular, Geist_500Medium, Geist_600SemiBold, Geist_700Bold } from '@expo-google-fonts/geist';
 import { GeistMono_400Regular, GeistMono_500Medium } from '@expo-google-fonts/geist-mono';
 import { useFonts } from 'expo-font';
 import { DarkTheme, Stack, ThemeProvider } from 'expo-router';
@@ -33,10 +32,10 @@ export default function RootLayout() {
 function RootStack() {
   const [fontsLoaded] = useFonts({
     [F.brand]: require('@/assets/fonts/karmatic-arcade.ttf'),
-    Geist_400Regular,
-    Geist_500Medium,
-    Geist_600SemiBold,
-    Geist_700Bold,
+    [F.regular]: require('@/assets/fonts/Satoshi-Regular.otf'),
+    [F.medium]: require('@/assets/fonts/Satoshi-Medium.otf'),
+    [F.bold]: require('@/assets/fonts/Satoshi-Bold.otf'),
+    [F.display]: require('@/assets/fonts/ClashGrotesk-Semibold.otf'),
     GeistMono_400Regular,
     GeistMono_500Medium,
   });

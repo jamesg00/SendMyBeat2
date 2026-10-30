@@ -1,6 +1,6 @@
 import type { TextStyle } from 'react-native';
 
-// v3 "Console" look: true black, hairline borders, Geist type, white primary actions.
+// v3 "Console" look: true black, hairline borders, Satoshi type (Clash Grotesk titles), white primary actions.
 // Mint (acc) is reserved for status: done, uploaded, progress, positive change.
 // See the "SendMyBeat App Redesign Plan" doc, section "Second pass: v3 Console".
 export const C = {
@@ -27,13 +27,14 @@ export const C = {
 
 export const R = { card: 12, ctl: 10, thumb: 7, chip: 6 } as const;
 
-// Each Geist weight is its own font family, so pick the family instead of fontWeight
-// (Android ignores fontWeight on custom fonts).
+// Each weight is its own font family, so pick the family instead of fontWeight
+// (Android ignores fontWeight on custom fonts). Satoshi has no semibold, so 600 uses bold.
+// The Fontshare files are fetched on npm install (scripts/fetch-fonts.mjs).
 export const F = {
-  regular: 'Geist_400Regular',
-  medium: 'Geist_500Medium',
-  semibold: 'Geist_600SemiBold',
-  bold: 'Geist_700Bold',
+  regular: 'Satoshi-Regular',
+  medium: 'Satoshi-Medium',
+  bold: 'Satoshi-Bold',
+  display: 'ClashGrotesk-Semibold',
   mono: 'GeistMono_400Regular',
   monoMedium: 'GeistMono_500Medium',
   brand: 'KarmaticArcade',
@@ -43,13 +44,16 @@ const WEIGHTS: Record<string, string> = {
   '400': F.regular,
   normal: F.regular,
   '500': F.medium,
-  '600': F.semibold,
+  '600': F.bold,
   '700': F.bold,
   '800': F.bold,
   bold: F.bold,
 };
 
-/** Geist at a given weight, e.g. `...font('600')`. */
+/** Satoshi at a given weight, e.g. `...font('600')`. */
 export const font = (weight: TextStyle['fontWeight'] = '400'): TextStyle => ({
   fontFamily: WEIGHTS[String(weight)] ?? F.regular,
 });
+
+/** Clash Grotesk, for large titles and producer names. */
+export const display: TextStyle = { fontFamily: F.display };
