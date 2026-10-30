@@ -461,6 +461,7 @@ SPOTLIGHT_REFRESH_INTERVAL_SECONDS = int(os.environ.get("SPOTLIGHT_REFRESH_INTER
 METADATA_CACHE_TTL_SECONDS = int(os.environ.get("METADATA_CACHE_TTL_SECONDS", "86400"))
 IMAGE_SEARCH_CACHE_TTL_SECONDS = int(os.environ.get("IMAGE_SEARCH_CACHE_TTL_SECONDS", "21600"))
 CHANNEL_ANALYTICS_CACHE_TTL_SECONDS = int(os.environ.get("CHANNEL_ANALYTICS_CACHE_TTL_SECONDS", "21600"))
+CHANNEL_ANALYTICS_RECENT_VIDEOS = 10
 OPS_DEFAULT_MAX_QUEUED_JOBS = int(os.environ.get("OPS_DEFAULT_MAX_QUEUED_JOBS", "60"))
 OPS_DEFAULT_MAX_PROCESSING_JOBS = int(os.environ.get("OPS_DEFAULT_MAX_PROCESSING_JOBS", "8"))
 OPS_DEFAULT_MAX_USER_ACTIVE_JOBS = int(os.environ.get("OPS_DEFAULT_MAX_USER_ACTIVE_JOBS", "4"))
@@ -3884,7 +3885,7 @@ async def _build_channel_analytics_job_payload(current_user: dict) -> dict[str, 
     cache_key = _build_ai_cache_key(
         namespace="channel_analytics",
         user_id=current_user["id"],
-        payload={"kind": "youtube_channel_overview_v1"},
+        payload={"kind": "youtube_channel_overview_v2"},
     )
 
     return {
@@ -3928,7 +3929,9 @@ async def _execute_channel_analytics_job(job: dict) -> dict:
     channel_snippet = channel['snippet']
 
     uploads_playlist_id = channel.get('contentDetails', {}).get('relatedPlaylists', {}).get('uploads', '')
-    video_ids = _recent_upload_ids(youtube, uploads_playlist_id, 6)
+    # Only the latest uploads, and mostly their titles: fast to fetch, fast for the model, and it is
+    # where a producer can still change something (retitle, re-angle the next upload).
+    video_ids = _recent_upload_ids(youtube, uploads_playlist_id, CHANNEL_ANALYTICS_RECENT_VIDEOS)
 
     recent_videos = []
     if video_ids:
@@ -3936,93 +3939,63 @@ async def _execute_channel_analytics_job(job: dict) -> dict:
         for video in videos_response.get('items', []):
             video_stats = video['statistics']
             recent_videos.append({
+                'id': video['id'],
                 'title': str(video['snippet']['title'])[:120],
                 'views': int(video_stats.get('viewCount', 0)),
                 'likes': int(video_stats.get('likeCount', 0)),
                 'comments': int(video_stats.get('commentCount', 0)),
                 'published_at': video['snippet']['publishedAt']
             })
+    recent_videos.sort(key=lambda v: v['published_at'], reverse=True)
 
     total_views = sum(v['views'] for v in recent_videos)
     total_likes = sum(v['likes'] for v in recent_videos)
     avg_views = total_views / len(recent_videos) if recent_videos else 0
     engagement_rate = (total_likes / total_views * 100) if total_views > 0 else 0
     video_summary_lines = [
-        f"- {video['title']} | {video['views']} views | {video['likes']} likes | {video['comments']} comments | {video['published_at'][:10]}"
-        for video in recent_videos[:6]
+        f"{i}. \"{video['title']}\" | {video['views']} views | {video['likes']} likes | {video['published_at'][:10]}"
+        for i, video in enumerate(recent_videos, start=1)
     ]
     recent_video_summary = "\n".join(video_summary_lines) if video_summary_lines else "- No recent uploads found"
 
-    analysis_prompt = f"""You are a YouTube SEO expert and growth strategist for beat producers. Analyze this channel and give actionable advice fast.
+    analysis_prompt = f"""Review a beat producer's latest {len(recent_videos)} YouTube uploads, newest first, and explain what in the TITLES is winning or losing attention.
 
-CHANNEL DATA:
-- Subscribers: {channel_stats.get('subscriberCount', '0')}
-- Total Views: {channel_stats.get('viewCount', '0')}
-- Total Videos: {channel_stats.get('videoCount', '0')}
-- Average Views per Video (last {len(recent_videos) or 0}): {avg_views:.0f}
-- Engagement Rate: {engagement_rate:.2f}%
+CHANNEL: {channel_stats.get('subscriberCount', '0')} subscribers, {channel_stats.get('videoCount', '0')} videos.
+Average views across these uploads: {avg_views:.0f}. Like rate: {engagement_rate:.2f}%.
 
-RECENT VIDEOS PERFORMANCE:
+LATEST UPLOADS:
 {recent_video_summary}
 
-YOUR MISSION: Help this producer grow from where they are now. Keep advice specific, practical, and concise.
+Compare titles of the uploads above average with those below it: artist names used, "type beat" wording, year, mood words, length, formatting.
 
-CRITICAL: You MUST respond with ONLY valid JSON. No markdown, no code blocks, no explanation before or after. Just pure JSON.
-
-Provide your analysis in this EXACT JSON format:
+Respond with ONLY valid JSON, no markdown, in this exact shape. Keep every string under 20 words.
 {{
-  "channel_health_score": "X/100 - Brief explanation of why",
-  "what_works": [
-    "Specific strength 1",
-    "Specific strength 2", 
-    "Specific strength 3"
+  "channel_health_score": "X/100 - one short reason",
+  "title_patterns": {{
+    "winning": "What the best performing titles have in common",
+    "losing": "What the weakest titles have in common"
+  }},
+  "video_reviews": [
+    {{"index": 1, "verdict": "strong or weak", "reason": "Why this title did or did not get views", "fix": "What to change, empty if strong", "better_title": "A rewritten title, empty if strong"}}
   ],
-  "critical_issues": [
-    "Critical problem 1",
-    "Critical problem 2",
-    "Critical problem 3"
-  ],
-  "seo_optimization": [
-    "Title strategy",
-    "Description strategy",
-    "Tag strategy",
-    "Thumbnail strategy"
-  ],
-  "content_strategy": [
-    "Video format recommendation",
-    "Upload frequency",
-    "Niche positioning",
-    "Series idea"
-  ],
-  "immediate_actions": [
-    "Action 1",
-    "Action 2",
-    "Action 3",
-    "Action 4"
-  ],
-  "discoverability_tactics": [
-    "Tactic 1",
-    "Tactic 2",
-    "Tactic 3",
-    "Tactic 4"
-  ],
-  "growth_roadmap": "A concise roadmap with next milestones and what to track weekly.",
-  "internet_money_lessons": [
-    "Lesson 1",
-    "Lesson 2",
-    "Lesson 3"
-  ]
+  "what_works": ["Strength 1", "Strength 2"],
+  "critical_issues": ["Problem 1", "Problem 2"],
+  "immediate_actions": ["Action 1", "Action 2", "Action 3"],
+  "seo_optimization": ["Title tip", "Tag tip"],
+  "content_strategy": ["Next upload idea", "Upload frequency"],
+  "discoverability_tactics": ["Tactic 1", "Tactic 2"],
+  "growth_roadmap": "Two sentences: the next milestone and what to track weekly.",
+  "internet_money_lessons": ["Lesson 1"]
 }}
 
-- Be specific and concise.
-- Prioritize the highest-impact advice.
-- Focus on discoverability, packaging, and upload consistency.
+Include one video_reviews entry per upload listed, using its number as index. Be specific to these titles, not generic.
 """
 
     await _update_upload_job(job["id"], progress=55, message="Generating AI channel insights...")
     response = await llm_chat(
-        system_message="You are a top YouTube growth consultant who has helped music producers grow from 0 to 1M+ subscribers. You specialize in beat producer channels and understand YouTube's algorithm deeply. You give specific, tactical advice like a mentor. You reference successful producers like Internet Money, Nick Mira, Kyle Beats as examples. You're encouraging but brutally honest about what needs to change.",
+        system_message="You are a YouTube growth consultant for beat producers. You judge video titles against their view counts and give short, specific, honest fixes.",
         user_message=analysis_prompt,
+        temperature=0.4,
     )
 
     try:

@@ -20,16 +20,30 @@ export type TagRun = { id: string; query: string; tags: string[]; created_at?: s
 export type Description = { id: string; title: string; content: string; is_ai_generated?: boolean };
 export type YouTubeStatus = { connected: boolean; email?: string | null; name?: string | null };
 
+export type ChannelVideo = {
+  id?: string;
+  title?: string;
+  views?: number;
+  likes?: number;
+  comments?: number;
+  published_at?: string;
+};
+/** One AI review per recent upload; index 1 is the newest upload. */
+export type VideoReview = { index: number; verdict?: string; reason?: string; fix?: string; better_title?: string };
 export type ChannelAnalytics = {
   channel_name: string;
   subscriber_count: number;
   total_views: number;
   total_videos: number;
-  recent_videos: { title?: string; views?: number; likes?: number; comments?: number }[];
+  /** Newest first. */
+  recent_videos: ChannelVideo[];
   insights: {
+    channel_health_score?: string;
+    title_patterns?: { winning?: string; losing?: string };
+    video_reviews?: VideoReview[];
     what_works?: string[];
-    needs_improvement?: string[];
-    recommendations?: string[];
+    critical_issues?: string[];
+    immediate_actions?: string[];
     [key: string]: unknown;
   };
 };
