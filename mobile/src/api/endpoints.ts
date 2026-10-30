@@ -227,3 +227,57 @@ export async function startYouTubeUpload(o: YouTubeUploadOptions) {
 export const uploadJob = (id: string) => api<{ job?: UploadJob }>(`/youtube/upload-jobs/${id}`);
 /** Stop one of your jobs: queued ones cancel at once, running ones at their next step. */
 export const cancelJob = (id: string) => api<{ cancelled: boolean; job?: UploadJob }>(`/jobs/${id}/cancel`, { method: 'POST' });
+
+// ---- Pros: producers who made it on YouTube, and plans to copy their moves
+export type ProCard = {
+  id: string;
+  name: string;
+  group: string;
+  tagline: string;
+  sound: string[];
+  photo?: string | null;
+  banner?: string | null;
+  subscribers?: number | null;
+  channel_url: string;
+  channel_title?: string | null;
+};
+export type TitlePatterns = {
+  uploads: number;
+  lead_artist_pct: number | null;
+  quotes_pct: number | null;
+  year_pct: number | null;
+  pair_pct: number | null;
+  per_week: number | null;
+  weekdays: number[];
+};
+export type ProUpload = { video_id: string; title: string; published_at?: string; thumbnail?: string; views?: number };
+export type ProDetail = ProCard & {
+  story: string[];
+  notable: { year: string; text: string }[];
+  moves: { id: string; title: string; body: string; steps: string[] }[];
+  sources: { label: string; url: string }[];
+  total_views?: number | null;
+  latest_uploads: ProUpload[];
+  patterns: TitlePatterns;
+};
+export type PlanStep = {
+  id: string;
+  kind: 'manual' | 'uploads' | 'title_formula' | 'title_pair';
+  text: string;
+  move: string;
+  done: boolean;
+  target?: number;
+  count?: number;
+  link?: 'descriptions';
+};
+export type StylePlan = { pro_id: string; pro_name: string; created_at: string; steps: PlanStep[]; done: number; total: number; next: PlanStep | null };
+
+export const pros = () => api<{ pros: ProCard[] }>('/pros');
+export const pro = (id: string) => api<ProDetail>(`/pros/${id}`);
+export const analyzePro = (id: string) => api<{ them: TitlePatterns; you: TitlePatterns }>(`/pros/${id}/analyze`);
+export const stylePlan = () => api<{ plan: StylePlan | null }>('/pros/plan');
+export const createStylePlan = (id: string, moves: string[]) =>
+  api<{ plan: StylePlan }>(`/pros/${id}/plan`, { method: 'POST', body: { moves } });
+export const tickPlanStep = (stepId: string, done: boolean) =>
+  api<{ plan: StylePlan }>(`/pros/plan/steps/${stepId}`, { method: 'PATCH', body: { done } });
+export const endStylePlan = () => api<{ plan: null }>('/pros/plan', { method: 'DELETE' });

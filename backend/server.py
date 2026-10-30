@@ -52,6 +52,7 @@ try:
     from backend.services import tag_autocomplete as tag_autocomplete_service  # noqa: F401
     from backend.services import tag_outcomes as tag_outcomes_service  # noqa: F401
     from backend.services import tag_titles as tag_titles_service  # noqa: F401
+    from backend.services import pros as pros_service  # noqa: F401
     from backend.models_spotlight import (
         ProducerProfile,
         ProducerProfileUpdate,
@@ -67,6 +68,7 @@ except ImportError:
     from services import tag_autocomplete as tag_autocomplete_service
     from services import tag_outcomes as tag_outcomes_service
     from services import tag_titles as tag_titles_service
+    from services import pros as pros_service
     from models_spotlight import (
         ProducerProfile,
         ProducerProfileUpdate,
@@ -9185,6 +9187,112 @@ async def list_youtube_upload_jobs(limit: int = 10, current_user: dict = Depends
     }
 
 
+# ---- Pros: producers who made it on YouTube, and plans to copy their moves -------------------
+
+
+class StylePlanRequest(BaseModel):
+    moves: List[str] = Field(default_factory=list, max_length=12)
+
+
+class StylePlanStepUpdate(BaseModel):
+    done: bool
+
+
+async def _my_uploads(user_id: str) -> list[dict]:
+    """Your finished SendMyBeat uploads (title + when), newest first; no YouTube quota."""
+    jobs = await db.upload_jobs.find(
+        {"user_id": user_id, "type": "youtube_upload", "status": "succeeded"},
+        {"_id": 0, "payload.title": 1, "completed_at": 1, "created_at": 1},
+    ).sort("created_at", -1).to_list(50)
+    return [
+        {"title": (job.get("payload") or {}).get("title") or "", "published_at": job.get("completed_at") or job.get("created_at")}
+        for job in jobs
+    ]
+
+
+async def _pro_channels() -> dict[str, dict]:
+    """Channel data for every pro. The first visit fills it; after that it refreshes in the background daily."""
+    channels = await pros_service.channels_by_pro(db)
+    if len(channels) < len(pros_service.PROS):
+        await pros_service.refresh_channels(db, _outcome_youtube_client())
+        return await pros_service.channels_by_pro(db)
+    if any(pros_service.is_stale(channel) for channel in channels.values()):
+        asyncio.create_task(pros_service.refresh_channels(db, _outcome_youtube_client()))
+    return channels
+
+
+async def _plan_with_progress(user_id: str) -> Optional[dict]:
+    plan = await db[pros_service.PLANS].find_one({"user_id": user_id}, {"_id": 0})
+    if not plan:
+        return None
+    return _serialize_for_cache(pros_service.plan_progress(plan, await _my_uploads(user_id)))
+
+
+@api_router.get("/pros")
+async def list_pros(current_user: dict = Depends(get_current_user)):
+    channels = await _pro_channels()
+    return {"pros": [pros_service.card(pro, channels.get(pro["id"])) for pro in pros_service.PROS]}
+
+
+@api_router.get("/pros/plan")
+async def get_style_plan(current_user: dict = Depends(get_current_user)):
+    return {"plan": await _plan_with_progress(current_user["id"])}
+
+
+@api_router.patch("/pros/plan/steps/{step_id}")
+async def update_style_plan_step(step_id: str, request: StylePlanStepUpdate, current_user: dict = Depends(get_current_user)):
+    result = await db[pros_service.PLANS].update_one(
+        {"user_id": current_user["id"], "steps": {"$elemMatch": {"id": step_id, "kind": "manual"}}},
+        {"$set": {"steps.$.done": request.done}},
+    )
+    if not getattr(result, "matched_count", 0):
+        raise HTTPException(status_code=404, detail="That step isn't in your plan, or it ticks itself from your uploads.")
+    return {"plan": await _plan_with_progress(current_user["id"])}
+
+
+@api_router.delete("/pros/plan")
+async def end_style_plan(current_user: dict = Depends(get_current_user)):
+    await db[pros_service.PLANS].delete_many({"user_id": current_user["id"]})
+    return {"plan": None}
+
+
+@api_router.get("/pros/{pro_id}")
+async def get_pro(pro_id: str, current_user: dict = Depends(get_current_user)):
+    pro = pros_service.BY_ID.get(pro_id)
+    if not pro:
+        raise HTTPException(status_code=404, detail="Producer not found")
+    channels = await _pro_channels()
+    return pros_service.detail(pro, channels.get(pro_id))
+
+
+@api_router.get("/pros/{pro_id}/analyze")
+async def analyze_pro(pro_id: str, current_user: dict = Depends(get_current_user)):
+    """Their title and upload patterns (latest 50 uploads) beside yours (your SendMyBeat uploads)."""
+    if pro_id not in pros_service.BY_ID:
+        raise HTTPException(status_code=404, detail="Producer not found")
+    channel = (await _pro_channels()).get(pro_id) or {}
+    return {
+        "them": pros_service.title_patterns(channel.get("uploads") or []),
+        "you": pros_service.title_patterns(await _my_uploads(current_user["id"])),
+    }
+
+
+@api_router.post("/pros/{pro_id}/plan")
+async def create_style_plan(pro_id: str, request: StylePlanRequest, current_user: dict = Depends(get_current_user)):
+    """Start a plan from the moves you picked; it replaces any plan you had."""
+    if pro_id not in pros_service.BY_ID:
+        raise HTTPException(status_code=404, detail="Producer not found")
+    _enforce_action_rate_limit(
+        f"style_plan:{current_user['id']}",
+        limit=10,
+        window_seconds=600,
+        detail_message="Too many new plans. Please wait a few minutes.",
+    )
+    plan = pros_service.build_plan(pro_id, request.moves, user_id=current_user["id"])
+    await db[pros_service.PLANS].replace_one({"user_id": current_user["id"]}, plan, upsert=True)
+    return {"plan": await _plan_with_progress(current_user["id"])}
+
+
 @api_router.get("/jobs/{job_id}")
 async def get_background_job(job_id: str, current_user: dict = Depends(get_current_user)):
     job = await db.upload_jobs.find_one({"id": job_id, "user_id": current_user["id"]}, {"_id": 0})
@@ -9744,6 +9852,8 @@ async def _ensure_indexes() -> None:
         (db.tag_outcomes, [("video_id", 1)], {"unique": True}),
         (db.tag_outcomes, [("uploaded_at", 1)], {}),
         (db.tag_performance, [("tag_key", 1)], {"unique": True}),
+        (db.style_plans, [("user_id", 1)], {"unique": True}),
+        (db.pro_channel_cache, [("pro_id", 1)], {"unique": True}),
     ]
     for collection, keys, options in specs:
         try:
