@@ -65,6 +65,67 @@ export default function StudioScreen() {
   );
 }
 
+// "MOONWALK_142bpm.mp3" -> "MOONWALK": the beat's name for its title.
+function beatNameOf(fileName?: string) {
+  if (!fileName) return '';
+  let name = fileName.replace(/\.[a-z0-9]{2,4}$/i, '');
+  try {
+    name = decodeURIComponent(name);
+  } catch {
+    // keep it as it is
+  }
+  return name
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\d{2,3}\s?bpm\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Title ideas from the chosen tag run's best keywords; tap one to use it.
+function TitleIdeas({ runId, beatName, onPick }: { runId: string; beatName: string; onPick: (title: string) => void }) {
+  const s = useStyles();
+  const ui = useUiStyles();
+  const [ideas, setIdeas] = useState<api.TitleIdea[] | null>(null);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    api.titleIdeas(runId, beatName).then(
+      (r) => {
+        if (!alive) return;
+        setIdeas(r.titles);
+        setError(false);
+      },
+      () => alive && setError(true),
+    );
+    return () => {
+      alive = false;
+    };
+  }, [runId, beatName]);
+
+  if (error || !ideas?.length) return null;
+  return (
+    <View style={{ gap: 8 }}>
+      <Text style={ui.sectionLabel}>Title ideas · tap to use</Text>
+      <View style={s.panel}>
+        {ideas.map((idea, i) => (
+          <Pressable
+            key={idea.title}
+            onPress={() => onPick(idea.title)}
+            style={({ pressed }) => [s.idea, i < ideas.length - 1 && s.ideaDivider, pressed && { opacity: 0.6 }]}
+            accessibilityRole="button"
+            accessibilityHint="Uses this as the video title">
+            <Text style={s.ideaTitle}>{idea.title}</Text>
+            <Text style={s.ideaMeta}>
+              {idea.keywords.length} keyword{idea.keywords.length === 1 ? '' : 's'} · {idea.length}/100
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 function Editor() {
   const C = useColors();
   const s = useStyles();
@@ -190,6 +251,8 @@ function DetailsForm() {
         />
         <Field label="Privacy" value={cap(studio.privacy)} onPress={nextPrivacy} cycle last />
       </View>
+
+      {run ? <TitleIdeas runId={run.id} beatName={beatNameOf(studio.audio?.name)} onPick={(title) => studio.set({ title })} /> : null}
 
       {open === 'desc' && (
         <DescriptionEditor
@@ -545,6 +608,10 @@ const useStyles = makeStyles((C) => ({
   topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', height: 44 },
   topAction: { color: C.t2, fontSize: 16, width: 90, ...font() },
   topTitle: { color: C.text, fontSize: 17, ...display },
+  idea: { paddingHorizontal: 14, paddingVertical: 12, gap: 4 },
+  ideaDivider: { borderBottomWidth: 1, borderBottomColor: C.lineSoft },
+  ideaTitle: { color: C.text, fontSize: 14.5, lineHeight: 20, ...font() },
+  ideaMeta: { color: C.t3, fontSize: 11.5, fontFamily: F.mono },
   topStatus: { color: C.t3, fontSize: 12, width: 90, textAlign: 'right', ...font() },
   preview: {
     aspectRatio: 16 / 9,

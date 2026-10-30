@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Animated as RNAnimated,
   PanResponder,
@@ -36,21 +36,29 @@ export function Screen({
   const C = useColors();
   const styles = useUiStyles();
   const insets = useSafeAreaInsets();
+  // The scroll view starts below the status bar so the pull-to-refresh spinner shows under it,
+  // not hidden behind the clock.
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: C.bg }}
-      contentContainerStyle={[styles.screen, { paddingTop: insets.top + 12 }]}
-      showsVerticalScrollIndicator={false}
-      refreshControl={onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={C.t2} colors={[C.t2]} /> : undefined}>
-      {header}
-      <View style={styles.titleRow}>
-        <Text style={styles.largeTitle} accessibilityRole="header">
-          {title}
-        </Text>
-        {accessory}
-      </View>
-      {children}
-    </ScrollView>
+    <View style={{ flex: 1, backgroundColor: C.bg, paddingTop: insets.top }}>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={[styles.screen, { paddingTop: 12 }]}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          onRefresh ? (
+            <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={C.text} colors={[C.acc]} progressBackgroundColor={C.card2} />
+          ) : undefined
+        }>
+        {header}
+        <View style={styles.titleRow}>
+          <Text style={styles.largeTitle} accessibilityRole="header">
+            {title}
+          </Text>
+          {accessory}
+        </View>
+        {children}
+      </ScrollView>
+    </View>
   );
 }
 
@@ -320,37 +328,71 @@ export function JobProgress({
   );
 }
 
-const SWIPE_DELETE_AT = 96;
+const SWIPE_ACTION_W = 96;
 
-/** Swipe right to reveal Delete; letting go past the line calls onDelete (which should confirm). */
+/** Swipe left to show a Delete button (tap it), or swipe all the way to delete straight away.
+ *  onDelete should confirm. Swipe back or tap the card to close it. */
 export function SwipeToDelete({ children, onDelete, label }: { children: ReactNode; onDelete: () => void; label: string }) {
   const styles = useUiStyles();
   const [x] = useState(() => new RNAnimated.Value(0));
-  // Rebuilt when onDelete changes; it keeps no state between events, so that's safe mid-swipe.
+  const [open, setOpen] = useState(false);
+
+  const snap = useCallback(
+    (to: 'open' | 'closed') => {
+      setOpen(to === 'open');
+      RNAnimated.spring(x, { toValue: to === 'open' ? -SWIPE_ACTION_W : 0, useNativeDriver: true, bounciness: 4, speed: 18 }).start();
+    },
+    [x],
+  );
+  const remove = useCallback(() => {
+    snap('closed');
+    onDelete();
+  }, [onDelete, snap]);
+
   const pan = useMemo(() => {
-    const settle = () => RNAnimated.spring(x, { toValue: 0, useNativeDriver: true, bounciness: 6 }).start();
+    const base = open ? -SWIPE_ACTION_W : 0;
+    // Any mostly-sideways drag counts; it doesn't have to be a straight line.
+    const sideways = (g: { dx: number; dy: number }) => Math.abs(g.dx) > 6 && Math.abs(g.dx) > Math.abs(g.dy);
     return PanResponder.create({
-      // Only clear horizontal drags, so the screen still scrolls normally.
-      onMoveShouldSetPanResponder: (_, g) => g.dx > 8 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
-      onPanResponderMove: (_, g) => x.setValue(Math.max(0, g.dx)),
-      onPanResponderRelease: (_, g) => {
-        settle();
-        if (g.dx > SWIPE_DELETE_AT) onDelete();
+      onMoveShouldSetPanResponder: (_, g) => sideways(g),
+      onMoveShouldSetPanResponderCapture: (_, g) => sideways(g),
+      // Once swiping, the page doesn't take the gesture back.
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderMove: (_, g) => {
+        const next = base + g.dx;
+        // Past the button it keeps following, with some resistance; it never moves right of closed.
+        x.setValue(next < -SWIPE_ACTION_W ? -SWIPE_ACTION_W + (next + SWIPE_ACTION_W) * 0.6 : Math.min(0, next));
       },
-      onPanResponderTerminate: settle,
+      onPanResponderRelease: (_, g) => {
+        const end = base + g.dx;
+        if (end < -SWIPE_ACTION_W * 2.2) remove();
+        else if (end < -SWIPE_ACTION_W / 2 || g.vx < -0.4) snap('open');
+        else snap('closed');
+      },
+      onPanResponderTerminate: () => snap(open ? 'open' : 'closed'),
     });
-  }, [onDelete, x]);
-  const reveal = x.interpolate({ inputRange: [0, SWIPE_DELETE_AT], outputRange: [0, 1], extrapolate: 'clamp' });
+  }, [open, remove, snap, x]);
+  const reveal = x.interpolate({ inputRange: [-SWIPE_ACTION_W, -8, 0], outputRange: [1, 0.2, 0], extrapolate: 'clamp' });
 
   return (
     <View
       accessibilityActions={[{ name: 'delete', label }]}
       onAccessibilityAction={(e) => e.nativeEvent.actionName === 'delete' && onDelete()}>
-      <RNAnimated.View style={[styles.swipeBehind, { opacity: reveal }]} importantForAccessibility="no-hide-descendants">
-        <Text style={styles.swipeLabel}>{label}</Text>
+      <RNAnimated.View style={[styles.swipeBehind, { opacity: reveal }]}>
+        <Pressable onPress={remove} style={styles.swipeAction} accessibilityRole="button" accessibilityLabel={label}>
+          <Text style={styles.swipeLabel}>{label}</Text>
+        </Pressable>
       </RNAnimated.View>
       <RNAnimated.View style={{ transform: [{ translateX: x }] }} {...pan.panHandlers}>
         {children}
+        {open ? (
+          <Pressable
+            onPress={() => snap('closed')}
+            style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }}
+            accessibilityRole="button"
+            accessibilityLabel="Close"
+          />
+        ) : null}
       </RNAnimated.View>
     </View>
   );
@@ -392,9 +434,10 @@ export const useUiStyles = makeStyles((C) => ({
     backgroundColor: C.dangerSoft,
     borderWidth: 1,
     borderColor: C.dangerLine,
-    justifyContent: 'center',
-    paddingHorizontal: 18,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
   },
+  swipeAction: { width: SWIPE_ACTION_W, alignItems: 'center', justifyContent: 'center' },
   swipeLabel: { color: C.danger, fontSize: 15, ...font('600') },
   screen: { paddingHorizontal: 20, paddingBottom: 140, gap: 20, backgroundColor: C.bg },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

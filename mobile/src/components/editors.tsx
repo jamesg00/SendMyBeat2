@@ -1,6 +1,6 @@
 import * as Clipboard from 'expo-clipboard';
 import { useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
 import * as api from '@/api/endpoints';
 import type { Description, ScoredTag, TagLevel, TagRun } from '@/api/endpoints';
@@ -379,44 +379,60 @@ export function TagEditor({ run, onSaved }: { run: TagRun; onSaved: (r: TagRun) 
   );
 }
 
-// Every tag best to worst: rank, score bar and what the score is made of.
+const RANK_ROW_H = 68;
+const RANK_VISIBLE = 10;
+
+// Every tag best to worst: rank, score bar and what the score is made of. Shows 10 at a time in its
+// own scroll area; scroll inside it for the rest.
 function Ranking({ tags, scores }: { tags: string[]; scores: Map<string, ScoredTag> }) {
   const C = useColors();
   const s = useStyles();
   const rows = tags
     .map((tag) => ({ tag, entry: scores.get(keyOf(tag)) }))
     .sort((a, b) => (b.entry?.score ?? -1) - (a.entry?.score ?? -1));
+  const scrolls = rows.length > RANK_VISIBLE;
   return (
-    <View>
-      {rows.map(({ tag, entry }, i) => (
-        <View
-          key={tag}
-          style={[s.rankRow, i === rows.length - 1 && s.rankLast]}
-          accessible
-          accessibilityLabel={entry ? `Number ${i + 1}, ${tag}, score ${entry.score}. ${levels(entry)}` : `${tag}, not scored yet`}>
-          <Text style={s.rankNum}>{entry ? i + 1 : '–'}</Text>
-          <View style={{ flex: 1, gap: 6 }}>
-            <View style={s.meterHead}>
-              <Text style={s.rankTag} numberOfLines={1}>
-                {tag}
+    <View style={{ gap: 8 }}>
+      {scrolls ? (
+        <Text style={s.muted}>
+          {rows.length} tags · top {RANK_VISIBLE} shown, scroll for the rest
+        </Text>
+      ) : null}
+      <ScrollView
+        style={[s.rankBox, scrolls && { height: RANK_ROW_H * RANK_VISIBLE }]}
+        scrollEnabled={scrolls}
+        nestedScrollEnabled
+        showsVerticalScrollIndicator={scrolls}>
+        {rows.map(({ tag, entry }, i) => (
+          <View
+            key={tag}
+            style={[s.rankRow, i === 0 && { borderTopWidth: 0 }]}
+            accessible
+            accessibilityLabel={entry ? `Number ${i + 1}, ${tag}, score ${entry.score}. ${levels(entry)}` : `${tag}, not scored yet`}>
+            <Text style={s.rankNum}>{entry ? i + 1 : '–'}</Text>
+            <View style={{ flex: 1, gap: 5 }}>
+              <View style={s.meterHead}>
+                <Text style={s.rankTag} numberOfLines={1}>
+                  {tag}
+                </Text>
+                <Text style={s.rankScore}>{entry ? entry.score : '–'}</Text>
+              </View>
+              {entry ? <Meter value={entry.score / 100} color={entry.signals?.demand === 'high' ? C.acc : C.text} /> : null}
+              <Text style={s.muted} numberOfLines={1}>
+                {entry ? levels(entry) || 'Scored on relevance' : 'Save to score this tag'}
               </Text>
-              <Text style={s.rankScore}>{entry ? entry.score : '–'}</Text>
             </View>
-            {entry ? <Meter value={entry.score / 100} color={entry.signals?.demand === 'high' ? C.acc : C.text} /> : null}
-            <Text style={s.muted} numberOfLines={1}>
-              {entry ? levels(entry) || 'Scored on relevance' : 'Save to score this tag'}
-            </Text>
           </View>
-        </View>
-      ))}
+        ))}
+      </ScrollView>
     </View>
   );
 }
 
 const useStyles = makeStyles((C) => ({
-  rankRow: { flexDirection: 'row', gap: 12, paddingVertical: 12, borderTopWidth: 1, borderTopColor: C.lineSoft },
-  rankLast: { borderBottomWidth: 1, borderBottomColor: C.lineSoft },
-  rankNum: { width: 22, color: C.t2, fontSize: 13, fontFamily: F.monoMedium, paddingTop: 1 },
+  rankBox: { borderTopWidth: 1, borderBottomWidth: 1, borderColor: C.lineSoft },
+  rankRow: { height: RANK_ROW_H, flexDirection: 'row', alignItems: 'center', gap: 12, borderTopWidth: 1, borderTopColor: C.lineSoft },
+  rankNum: { width: 22, color: C.t2, fontSize: 13, fontFamily: F.monoMedium },
   rankTag: { flex: 1, color: C.text, fontSize: 13.5, fontFamily: F.mono },
   rankScore: { color: C.text, fontSize: 13.5, fontFamily: F.monoMedium },
   header: { flexDirection: 'row', alignItems: 'center', gap: 10 },

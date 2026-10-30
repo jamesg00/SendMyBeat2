@@ -113,6 +113,10 @@ export const me = () => api<User>('/auth/me');
 
 export const subscriptionStatus = () => api<SubscriptionStatus>('/subscription/status');
 export const tagHistory = () => api<TagRun[]>('/tags/history');
+export type TitleIdea = { title: string; keywords: string[]; coverage: number; length: number };
+/** Video titles built from a run's best keywords (no credit used). */
+export const titleIdeas = (runId: string, beatName: string) =>
+  api<{ titles: TitleIdea[] }>(`/tags/history/${runId}/titles?beat_name=${encodeURIComponent(beatName)}`);
 // Starts tag generation; returns either the finished run or a job to follow with pollJob.
 export const startTagGeneration = (query: string) =>
   api<{ job?: { id: string } } & Partial<TagRun>>('/tags/generate', { body: { query, custom_tags: [] } });
