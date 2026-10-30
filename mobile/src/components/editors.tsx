@@ -11,8 +11,11 @@ import { C, F, R, font } from '@/theme';
 
 // The description and tag editors, shared by Workflow and Upload Studio.
 
-// YouTube rejects tag lists longer than this (tags joined with commas).
+// YouTube rejects tag lists longer than this. It joins tags with commas and wraps a tag that
+// has a space in quotes, which count too (the server counts the same way).
 export const TAG_CHAR_LIMIT = 500;
+const tagCost = (t: string) => t.length + (t.includes(' ') ? 2 : 0);
+export const tagChars = (tags: string[]) => (tags.length ? tags.reduce((n, t) => n + tagCost(t), 0) + tags.length - 1 : 0);
 
 type Editing = { id?: string; title: string; content: string };
 
@@ -159,26 +162,43 @@ export function TagEditor({ run, onSaved }: { run: TagRun; onSaved: (r: TagRun) 
   const removed = run.tags.filter((t) => !current.has(keyOf(t)));
   const added = tags.filter((t) => !original.has(keyOf(t)));
   const dirty = removed.length > 0 || added.length > 0;
-  const chars = tags.join(',').length;
+  const chars = tagChars(tags);
+  const over = chars > TAG_CHAR_LIMIT;
   const visible = showAll ? tags : tags.slice(0, 24);
 
+  // Tags that would push the list past YouTube's limit aren't added.
   const add = () => {
     const next = [...tags];
     const seen = new Set(next.map(keyOf));
+    let used = tagChars(next);
+    const skipped: string[] = [];
     for (const part of input.split(',')) {
       const t = part.trim();
-      if (t && !seen.has(keyOf(t))) {
-        next.push(t);
-        seen.add(keyOf(t));
+      if (!t || seen.has(keyOf(t))) continue;
+      const cost = tagCost(t) + (next.length ? 1 : 0);
+      if (used + cost > TAG_CHAR_LIMIT) {
+        skipped.push(t);
+        continue;
       }
+      next.push(t);
+      seen.add(keyOf(t));
+      used += cost;
     }
     setTags(next);
-    setInput('');
-    setNote(null);
+    setInput(skipped.join(', '));
+    setNote(
+      skipped.length
+        ? { text: `${skipped.length === 1 ? 'That tag doesn’t' : `${skipped.length} tags don’t`} fit in YouTube’s ${TAG_CHAR_LIMIT} characters. Remove some first.`, error: true }
+        : null,
+    );
   };
 
   const save = async () => {
     if (!dirty || saving || tags.length === 0) return;
+    if (over) {
+      setNote({ text: `Remove tags until you’re under ${TAG_CHAR_LIMIT} characters, then save.`, error: true });
+      return;
+    }
     setSaving(true);
     setNote(null);
     try {
@@ -216,12 +236,12 @@ export function TagEditor({ run, onSaved }: { run: TagRun; onSaved: (r: TagRun) 
       </View>
 
       <View style={{ gap: 6 }}>
-        <Meter value={Math.min(1, chars / TAG_CHAR_LIMIT)} color={chars > TAG_CHAR_LIMIT ? C.warn : C.text} />
+        <Meter value={Math.min(1, chars / TAG_CHAR_LIMIT)} color={over ? C.warn : C.text} />
         <View style={s.meterHead}>
-          <Text style={[s.muted, chars > TAG_CHAR_LIMIT && { color: C.warn }]}>
-            {chars > TAG_CHAR_LIMIT ? 'Over the YouTube limit. Tap tags to remove some.' : 'YouTube tag limit'}
+          <Text style={[s.muted, over && { color: C.warn }]}>
+            {over ? 'Over the YouTube limit. Tap tags to remove some.' : 'YouTube tag limit'}
           </Text>
-          <Text style={[s.mono, chars > TAG_CHAR_LIMIT && { color: C.warn }]}>
+          <Text style={[s.mono, over && { color: C.warn }]}>
             {chars} / {TAG_CHAR_LIMIT}
           </Text>
         </View>
@@ -272,7 +292,7 @@ export function TagEditor({ run, onSaved }: { run: TagRun; onSaved: (r: TagRun) 
         <Button title="Undo" variant="secondary" size="md" style={{ flex: 1 }} onPress={dirty ? () => setTags(run.tags) : undefined} />
         <Button
           title={saving ? 'Saving…' : 'Save tags'}
-          variant={dirty ? 'primary' : 'secondary'}
+          variant={dirty && !over ? 'primary' : 'secondary'}
           size="md"
           style={{ flex: 2 }}
           onPress={dirty && !saving ? save : undefined}
