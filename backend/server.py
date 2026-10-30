@@ -50,6 +50,7 @@ try:
     from backend.services.spotlight_service import SpotlightService
     from backend.services import tag_metrics as tag_metrics_service  # noqa: F401
     from backend.services import tag_autocomplete as tag_autocomplete_service  # noqa: F401
+    from backend.services import tag_outcomes as tag_outcomes_service  # noqa: F401
     from backend.models_spotlight import (
         ProducerProfile,
         ProducerProfileUpdate,
@@ -63,6 +64,7 @@ except ImportError:
     from services.spotlight_service import SpotlightService
     from services import tag_metrics as tag_metrics_service
     from services import tag_autocomplete as tag_autocomplete_service
+    from services import tag_outcomes as tag_outcomes_service
     from models_spotlight import (
         ProducerProfile,
         ProducerProfileUpdate,
@@ -421,6 +423,7 @@ _llm_config = None
 _upload_job_worker_task: asyncio.Task | None = None
 _job_watchdog_task: asyncio.Task | None = None
 _spotlight_refresh_task: asyncio.Task | None = None
+_tag_outcome_task: asyncio.Task | None = None
 UPLOAD_JOB_POLL_INTERVAL_SECONDS = int(os.environ.get("UPLOAD_JOB_POLL_INTERVAL_SECONDS", "2"))
 UPLOAD_JOB_STALE_AFTER_SECONDS = int(os.environ.get("UPLOAD_JOB_STALE_AFTER_SECONDS", "1800"))
 JOB_WATCHDOG_INTERVAL_SECONDS = int(os.environ.get("JOB_WATCHDOG_INTERVAL_SECONDS", "60"))
@@ -2354,6 +2357,7 @@ async def _rescore_tags(
                 kept_counts=kept_counts,
                 removed_counts=removed_counts,
                 demand_lookup=tag_autocomplete_service.autocomplete_demand,
+                track_record=await tag_outcomes_service.load_track_record(db, new_tags),
             )
         except Exception as exc:
             logging.warning(f"Rescoring tags failed, using relevance only: {exc}")
@@ -3892,6 +3896,7 @@ async def _execute_youtube_upload_job(job: dict) -> dict:
 
         video_url = f"https://www.youtube.com/watch?v={video_id}"
         await consume_upload_credit(user_id)
+        await _record_upload_outcome(user_id=user_id, video_id=video_id, payload=payload)
         media_debug = {
             **media_debug,
             "youtube_upload_duration_seconds": round(youtube_upload_duration_seconds, 3),
@@ -3926,6 +3931,26 @@ async def _execute_youtube_upload_job(job: dict) -> dict:
             rendered_video_path.unlink(missing_ok=True)
         except Exception:
             pass
+
+
+async def _record_upload_outcome(*, user_id: str, video_id: str, payload: dict) -> None:
+    """Remember which tags went out with this video, so their views can teach tag scoring."""
+    try:
+        tags = [tag for tag in (payload.get("tags") or []) if isinstance(tag, str)]
+        run_id = str(payload.get("tags_id") or "") or None
+        buckets: dict[str, str] = {}
+        if run_id:
+            run = await db.tag_generations.find_one({"id": run_id, "user_id": user_id}, {"_id": 0, "query": 1})
+            artist = _normalize_artist_query((run or {}).get("query", ""))
+            buckets = {" ".join(tag.lower().split()): tag_metrics_service.tag_bucket(tag, artist) for tag in tags}
+        await tag_outcomes_service.record_upload(db, user_id=user_id, video_id=video_id, tags=tags, run_id=run_id, buckets=buckets)
+    except Exception as exc:  # never fail an upload over this
+        logging.warning(f"Could not record upload outcome for {video_id}: {exc}")
+
+
+def _outcome_youtube_client():
+    key = os.environ.get("YOUTUBE_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+    return build("youtube", "v3", developerKey=key, cache_discovery=False) if key else None
 
 
 async def _process_youtube_upload_job(job: dict) -> None:
@@ -6756,6 +6781,7 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
             for tag in unique_candidate_pool
         ]
 
+        track_record = await tag_outcomes_service.load_track_record(db, [tag for tag, _ in tags_with_sources])
         pre_scored_all, tag_metrics_stats = await tag_metrics_service.score_tags_with_youtube_proxy(
             youtube=youtube,
             db=db,
@@ -6770,6 +6796,7 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
             min_score=min_publish_score,
             quota_budget=quota_budget,
             demand_lookup=tag_autocomplete_service.autocomplete_demand,
+            track_record=track_record,
         )
         qualified_tags, qualified_scored, effective_min_score = tag_metrics_service.filter_scored_tags_by_threshold(
             pre_scored_all,
@@ -6916,6 +6943,7 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
                 min_score=effective_min_score,
                 quota_budget=quota_budget,
                 demand_lookup=tag_autocomplete_service.autocomplete_demand,
+                track_record=await tag_outcomes_service.load_track_record(db, llm_clean),
             )
             tag_metrics_stats["api_calls"] = int(tag_metrics_stats.get("api_calls") or 0) + int(
                 llm_metrics_stats.get("api_calls") or 0
@@ -9694,6 +9722,9 @@ async def _ensure_indexes() -> None:
         (db.users, [("username", 1)], {"unique": True}),
         (db.tag_autocomplete_cache, [("prefix", 1)], {"unique": True}),
         (db.artist_context_cache, [("artist_key", 1)], {"unique": True}),
+        (db.tag_outcomes, [("video_id", 1)], {"unique": True}),
+        (db.tag_outcomes, [("uploaded_at", 1)], {}),
+        (db.tag_performance, [("tag_key", 1)], {"unique": True}),
     ]
     for collection, keys, options in specs:
         try:
@@ -9704,7 +9735,7 @@ async def _ensure_indexes() -> None:
 
 @app.on_event("startup")
 async def startup_background_tasks():
-    global _upload_job_worker_task, _job_watchdog_task, _spotlight_refresh_task
+    global _upload_job_worker_task, _job_watchdog_task, _spotlight_refresh_task, _tag_outcome_task
     _validate_security_configuration()
     await _ensure_indexes()
     await _log_admin_id_hint()
@@ -9719,10 +9750,13 @@ async def startup_background_tasks():
     if _spotlight_refresh_task is None:
         _spotlight_refresh_task = asyncio.create_task(_spotlight_refresh_loop())
         logger.info("Spotlight refresh loop started")
+    if _tag_outcome_task is None:
+        _tag_outcome_task = asyncio.create_task(tag_outcomes_service.collect_loop(db, _outcome_youtube_client))
+        logger.info("Upload outcome loop started")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
-    global _upload_job_worker_task, _job_watchdog_task, _spotlight_refresh_task
+    global _upload_job_worker_task, _job_watchdog_task, _spotlight_refresh_task, _tag_outcome_task
     if _upload_job_worker_task:
         _upload_job_worker_task.cancel()
         _upload_job_worker_task = None
@@ -9732,4 +9766,7 @@ async def shutdown_db_client():
     if _spotlight_refresh_task:
         _spotlight_refresh_task.cancel()
         _spotlight_refresh_task = None
+    if _tag_outcome_task:
+        _tag_outcome_task.cancel()
+        _tag_outcome_task = None
     client.close()

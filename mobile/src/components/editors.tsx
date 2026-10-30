@@ -161,8 +161,14 @@ function DemandDot({ level }: { level: TagLevel }) {
   return <View style={[s.dot, level === 'high' && { backgroundColor: C.acc }, level === 'medium' && { backgroundColor: C.t2 }, level === 'low' && s.dotLow]} />;
 }
 
+const record = (entry: ScoredTag) => {
+  const n = entry.signals?.record_videos ?? 0;
+  if (entry.signals?.record === 'proven') return `Proven on ${n} uploads`;
+  if (entry.signals?.record === 'weak') return `Underperforms on ${n} uploads`;
+  return '';
+};
 const levels = (entry: ScoredTag) =>
-  [DEMAND[entry.signals?.demand ?? 'unknown'], COMPETITION[entry.signals?.competition ?? 'unknown']].filter(Boolean).join(' · ');
+  [DEMAND[entry.signals?.demand ?? 'unknown'], COMPETITION[entry.signals?.competition ?? 'unknown'], record(entry)].filter(Boolean).join(' · ');
 
 // Remove tags with a tap, add your own, and save back to the run (the server learns from removals).
 export function TagEditor({ run, onSaved }: { run: TagRun; onSaved: (r: TagRun) => void }) {
