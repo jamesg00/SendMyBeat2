@@ -6967,8 +6967,12 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
 
         final_tags = sorted(final_tags, key=rank_final_tag)
         final_tags = final_tags[:max_publish_tags]
-        # Never hand back more than YouTube accepts: the best-ranked tags that fit in 500 characters.
-        final_tags = tag_metrics_service.fit_tags_to_char_limit(final_tags)
+        # Pick the set that best fills YouTube's 500 characters: the best tags first, then a mix of
+        # core, crossover, sound and long-tail tags without near-repeats. Never over the limit.
+        final_tags = tag_metrics_service.select_tag_set(
+            [{"tag": tag, "score": (scored_by_key.get(_tag_exact_key(tag)) or {}).get("score") or 0} for tag in final_tags],
+            artist_name=artist_name,
+        )
         kept_keys = {_tag_exact_key(tag) for tag in final_tags}
         selected_tags_debug = [entry for entry in selected_tags_debug if _tag_exact_key(entry.get("tag", "")) in kept_keys]
 
@@ -6998,7 +7002,7 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
         }
 
         scored_tags = [
-            scored_by_key[_tag_exact_key(tag)]
+            {**scored_by_key[_tag_exact_key(tag)], "bucket": tag_metrics_service.tag_bucket(tag, artist_name)}
             for tag in final_tags
             if _tag_exact_key(tag) in scored_by_key
         ]

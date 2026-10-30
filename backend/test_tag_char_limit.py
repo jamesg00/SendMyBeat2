@@ -61,3 +61,52 @@ async def test_saving_an_edited_list_over_the_limit_is_refused():
     assert err.value.status_code == 400
     assert '500' in err.value.detail
     db.tag_generations.update_one.assert_not_awaited()
+
+
+def _entries(pairs):
+    return [{'tag': tag, 'score': score} for tag, score in pairs]
+
+
+def test_buckets():
+    b = tag_metrics.tag_bucket
+    assert b('future type beat', 'future') == 'core'
+    assert b('future x young thug type beat', 'future') == 'crossover'
+    assert b('young thug type beat', 'future') == 'crossover'
+    assert b('dark trap', 'future') == 'sound'
+    assert b('future codeine crazy type beat dark', 'future') == 'long_tail'
+
+
+def test_selection_fits_keeps_the_best_and_is_sorted():
+    pool = _entries([(f'future song{i} type beat', 90 - i) for i in range(40)])
+    picked = tag_metrics.select_tag_set(pool, artist_name='future')
+    assert tag_metrics.youtube_tags_char_count(picked) <= 500
+    assert picked[0] == 'future song0 type beat'
+    scores = {e['tag']: e['score'] for e in pool}
+    assert [scores[t] for t in picked] == sorted((scores[t] for t in picked), reverse=True)
+
+
+def test_selection_mixes_kinds_instead_of_only_core_tags():
+    core = [(f'future song{i} type beat', 85 - i * 0.1) for i in range(30)]
+    other = [('young thug type beat', 70), ('future x gunna type beat', 70), ('dark trap', 68), ('melodic drill', 66)]
+    picked = tag_metrics.select_tag_set(_entries(core + other), artist_name='future')
+    kinds = {tag_metrics.tag_bucket(t, 'future') for t in picked}
+    assert {'crossover', 'sound'} <= kinds
+    # Plain top-score order leaves most of the other kinds out.
+    plain = tag_metrics.fit_tags_to_char_limit([t for t, _ in sorted(core + other, key=lambda x: -x[1])])
+    non_core = lambda tags: sum(tag_metrics.tag_bucket(t, 'future') != 'core' for t in tags)
+    assert non_core(picked) > non_core(plain)
+
+
+def test_near_repeats_lose_to_something_new():
+    pool = _entries([
+        ('future type beat', 90), ('future type beat hard', 80), ('future type beat dark', 80),
+        ('future type beat sad', 80), ('nardo wick type beat', 76),
+    ])
+    picked = tag_metrics.select_tag_set(pool, artist_name='future', limit=80)
+    assert 'nardo wick type beat' in picked
+
+
+def test_selection_never_exceeds_the_limit():
+    pool = _entries([(f'tag {i} ' + 'x' * (i % 23), 100 - i % 50) for i in range(120)])
+    for limit in (20, 100, 500):
+        assert tag_metrics.youtube_tags_char_count(tag_metrics.select_tag_set(pool, limit=limit)) <= limit

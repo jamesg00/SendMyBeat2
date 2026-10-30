@@ -45,6 +45,98 @@ def youtube_tags_char_count(tags: list[str]) -> int:
     return sum(len(tag) + (2 if " " in tag else 0) for tag in clean) + len(clean) - 1
 
 
+# Rough share of the 500 characters each kind of tag should get, so a list isn't all one kind.
+TAG_BUCKET_SHARE = {"core": 0.40, "crossover": 0.25, "sound": 0.20, "long_tail": 0.15}
+# Always keep this many of the best-scoring tags, whatever their kind.
+TAG_SET_ANCHORS = 1
+_FILLER_TOKENS = {"type", "beat", "beats", "instrumental", "x"}
+
+
+def tag_bucket(tag: str, artist_name: str = "") -> str:
+    """crossover: "a x b" or another artist's type beat. long_tail: five words or more.
+    core: the artist's own type-beat tags. sound: genre / mood tags without "type beat"."""
+    key = normalize_tag_key(tag)
+    artist_key = normalize_tag_key(artist_name)
+    words = key.split()
+    if " x " in f" {key} ":
+        return "crossover"
+    if len(words) >= 5:
+        return "long_tail"
+    if "type beat" in key:
+        return "core" if artist_key and artist_key in key else "crossover"
+    return "sound"
+
+
+def _tag_cost(tag: str, first: bool) -> int:
+    return len(tag) + (2 if " " in tag else 0) + (0 if first else 1)
+
+
+def _content_tokens(tag: str) -> set[str]:
+    return {token for token in normalize_tag_key(tag).split() if token not in _FILLER_TOKENS}
+
+
+def select_tag_set(
+    entries: list[dict[str, Any]],
+    *,
+    artist_name: str = "",
+    limit: int = YOUTUBE_TAGS_CHAR_LIMIT,
+) -> list[str]:
+    """Choose the set of tags that best fills YouTube's character limit.
+
+    The best tag always goes in. After that each pick weighs a tag's score (squared, so quality
+    leads), how much new it adds (word overlap with tags already chosen), whether its kind already
+    has its share of the space, and its length (mildly, so more good tags fit). Returned best first.
+    """
+    pool: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for entry in entries:
+        tag = str(entry.get("tag") or "").strip()
+        key = normalize_tag_key(tag)
+        if tag and key not in seen:
+            seen.add(key)
+            pool.append({"tag": tag, "score": float(entry.get("score") or 0), "bucket": tag_bucket(tag, artist_name)})
+    pool.sort(key=lambda item: -item["score"])
+
+    picked: list[dict[str, Any]] = []
+    used = 0
+    bucket_chars = {bucket: 0 for bucket in TAG_BUCKET_SHARE}
+
+    def take(item: dict[str, Any]) -> None:
+        nonlocal used
+        cost = _tag_cost(item["tag"], first=not picked)
+        picked.append(item)
+        used += cost
+        bucket_chars[item["bucket"]] += cost
+        pool.remove(item)
+
+    for item in list(pool[:TAG_SET_ANCHORS]):
+        if used + _tag_cost(item["tag"], first=not picked) <= limit:
+            take(item)
+
+    while pool:
+        best, best_value = None, 0.0
+        for item in pool:
+            cost = _tag_cost(item["tag"], first=not picked)
+            if used + cost > limit:
+                continue
+            over_share = bucket_chars[item["bucket"]] / limit - TAG_BUCKET_SHARE[item["bucket"]]
+            bucket_factor = 1.0 if over_share <= 0 else max(0.4, 1 - 2 * over_share)
+            tokens = _content_tokens(item["tag"])
+            overlap = max(
+                (len(tokens & _content_tokens(other["tag"])) / len(tokens | _content_tokens(other["tag"])) for other in picked),
+                default=0.0,
+            ) if tokens else 0.0
+            value = item["score"] ** 2 * bucket_factor * (1 - 0.5 * overlap) / cost ** 0.35
+            if value > best_value:
+                best, best_value = item, value
+        if best is None:
+            break
+        take(best)
+
+    picked.sort(key=lambda item: -item["score"])
+    return [item["tag"] for item in picked]
+
+
 def fit_tags_to_char_limit(tags: list[str], limit: int = YOUTUBE_TAGS_CHAR_LIMIT) -> list[str]:
     """Keep tags in order (best first) while they fit under YouTube's limit. A tag that doesn't fit
     is skipped rather than ending the list, so shorter tags further down can use the space left."""
