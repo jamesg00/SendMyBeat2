@@ -306,11 +306,26 @@ export const createStylePlan = (id: string, moves: string[]) =>
 export const tickPlanStep = (stepId: string, done: boolean) =>
   api<{ plan: StylePlan }>(`/pros/plan/steps/${stepId}`, { method: 'PATCH', body: { done } });
 export const endStylePlan = () => api<{ plan: null }>('/pros/plan', { method: 'DELETE' });
-/** What the plan agent drafted for a step; nothing is saved until you approve it. */
+/** What the plan agent did for a step. A description step is already saved (applied): your
+ * description now holds `content`, and `previous_content` is there to undo it. */
 export type PlanAssist =
   | { mode: 'titles'; step_id: string; summary: string; titles: string[] }
-  | { mode: 'description'; step_id: string; summary: string; title: string; content: string; replaces_description_id?: string }
+  | {
+      mode: 'description';
+      step_id: string;
+      summary: string;
+      title: string;
+      content: string;
+      applied?: boolean;
+      description_id?: string;
+      previous_content?: string;
+      created?: boolean;
+    }
   | { mode: 'help'; step_id: string; summary: string; content: string };
-/** Have the plan agent do a step (1 AI credit, refunded if it fails); follow the job with pollJob. */
-export const assistPlanStep = (stepId: string) =>
-  api<{ job: { id: string } }>(`/pros/plan/steps/${stepId}/assist`, { method: 'POST' });
+/** Have the plan agent do a step (1 AI credit, refunded if it fails); follow the job with pollJob.
+ * Pass the description Upload Studio is using so the agent changes that one. */
+export const assistPlanStep = (stepId: string, description?: { id?: string; content?: string }) =>
+  api<{ job: { id: string } }>(`/pros/plan/steps/${stepId}/assist`, {
+    method: 'POST',
+    body: { description_id: description?.id, description: description?.content },
+  });

@@ -35,13 +35,14 @@ export function useAgentRuns() {
 
 export const agentBusy = (run?: AgentRun) => !!run && !run.result && !run.error;
 
-/** Ask the agent to do a step; resolves when its draft is ready (or it failed). */
-export async function runAgent(stepId: string) {
+/** Ask the agent to do a step; resolves when it's done (or it failed). `description` is the one
+ * Upload Studio is using, so a description step changes that one. */
+export async function runAgent(stepId: string, description?: { id?: string; content?: string }) {
   if (agentBusy(runs[stepId])) return;
   const startedAt = Date.now();
   put(stepId, { startedAt, progress: 0, message: 'Starting the plan agent…' });
   try {
-    const { job } = await api.assistPlanStep(stepId);
+    const { job } = await api.assistPlanStep(stepId, description);
     const result = await pollJob<PlanAssist>(job.id, {
       intervalMs: 2000,
       onProgress: (progress, message) => put(stepId, { startedAt, progress, message }),

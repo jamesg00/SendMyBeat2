@@ -10,6 +10,7 @@ import Svg, { Path } from 'react-native-svg';
 import * as api from '@/api/endpoints';
 import type { TagRun, YouTubeUploadOptions } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
+import { Checklist } from '@/components/checklist';
 import { DescriptionEditor, TagEditor } from '@/components/editors';
 import { usePlan } from '@/components/pros';
 import { Button, Card, ListGroup, ListRow, Meter, PlayPauseIcon, Segmented, useUiStyles } from '@/components/ui';
@@ -142,6 +143,7 @@ function Editor() {
   const studio = useStudio();
   const [tool, setTool] = useState<Tool>('details');
   const { audio, image, format, fps, bg, scale, rotation, noWatermark, phase, missing, set } = studio;
+  const { run, description } = useDraft();
 
   return (
     <>
@@ -200,7 +202,16 @@ function Editor() {
         )}
       </ScrollView>
 
-      <View style={{ gap: 8 }}>
+      <View style={{ gap: 10 }}>
+        <Checklist
+          items={[
+            { label: 'Beat', done: audio?.status === 'ready', onPress: studio.pickAudio },
+            { label: 'Artwork', done: image?.status === 'ready', onPress: studio.pickImage },
+            { label: 'Title', done: !!studio.title.trim(), onPress: () => setTool('details') },
+            { label: 'Description', done: !!description.content.trim(), onPress: () => setTool('details') },
+            { label: 'Tags', done: !!run, optional: true, onPress: () => setTool('details') },
+          ]}
+        />
         {phase.kind === 'error' ? <Text style={[s.muted, { color: C.danger, textAlign: 'center' }]}>{phase.message}</Text> : null}
         <Button
           title={missing ?? (phase.kind === 'error' ? 'Try again' : 'Upload to YouTube')}
@@ -245,7 +256,7 @@ function DetailsForm() {
             value={studio.title}
             onChangeText={(t) => studio.set({ title: t })}
             style={s.fieldInput}
-            placeholder="Video title"
+            placeholder="Video title (required)"
             placeholderTextColor={C.t3}
             accessibilityLabel="Video title"
           />
