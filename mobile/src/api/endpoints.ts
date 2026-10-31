@@ -236,6 +236,8 @@ export type ProCard = {
   tagline: string;
   sound: string[];
   photo?: string | null;
+  /** Set when the photo is a press photo used with permission, not the YouTube channel picture. */
+  photo_credit?: string | null;
   banner?: string | null;
   subscribers?: number | null;
   channel_url: string;
@@ -253,6 +255,7 @@ export type TitlePatterns = {
 export type ProUpload = { video_id: string; title: string; published_at?: string; thumbnail?: string; views?: number };
 export type ProDetail = ProCard & {
   story: string[];
+  why?: string | null;
   notable: { year: string; text: string }[];
   moves: { id: string; title: string; body: string; steps: string[] }[];
   sources: { label: string; url: string }[];
