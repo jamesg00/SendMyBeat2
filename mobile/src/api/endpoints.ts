@@ -238,10 +238,17 @@ export type ProCard = {
   photo?: string | null;
   /** Set when the photo is a press photo used with permission, not the YouTube channel picture. */
   photo_credit?: string | null;
+  /** press: a press photo used with permission; youtube: their channel picture; video: the still from their top upload. */
+  photo_source?: 'press' | 'youtube' | 'video' | null;
+  /** The still from their most-viewed upload. */
+  cover?: string | null;
   banner?: string | null;
   subscribers?: number | null;
   channel_url: string;
   channel_title?: string | null;
+  why?: string | null;
+  /** How close your uploads are to theirs, 0-100; null until you've uploaded through SendMyBeat. */
+  match?: number | null;
 };
 export type TitlePatterns = {
   uploads: number;
@@ -251,17 +258,29 @@ export type TitlePatterns = {
   pair_pct: number | null;
   per_week: number | null;
   weekdays: number[];
+  /** [weekday][night, morning, afternoon, evening] in UTC. */
+  heatmap?: number[][];
 };
+export type ProBreakdown = {
+  views: number[];
+  breakout_index: number[];
+  top_share_pct: number | null;
+  median_views: number;
+  breakouts: { video_id: string; title: string; views: number; times_median: number | null }[];
+};
+export type StyleTrait = { id: string; label: string; you: number | null; them: number; you_pos: number; them_pos: number };
+export type StyleGap = { trait: string; label: string; move_id: string | null; move: string | null };
+export type StyleMatch = { them: TitlePatterns; you: TitlePatterns; match: number | null; traits: StyleTrait[]; gaps: StyleGap[] };
 export type ProUpload = { video_id: string; title: string; published_at?: string; thumbnail?: string; views?: number };
 export type ProDetail = ProCard & {
   story: string[];
-  why?: string | null;
   notable: { year: string; text: string }[];
-  moves: { id: string; title: string; body: string; steps: string[] }[];
+  moves: { id: string; title: string; body: string; steps: string[]; uploads: number }[];
   sources: { label: string; url: string }[];
   total_views?: number | null;
   latest_uploads: ProUpload[];
   patterns: TitlePatterns;
+  breakdown: ProBreakdown;
 };
 export type PlanStep = {
   id: string;
@@ -277,7 +296,10 @@ export type StylePlan = { pro_id: string; pro_name: string; created_at: string; 
 
 export const pros = () => api<{ pros: ProCard[] }>('/pros');
 export const pro = (id: string) => api<ProDetail>(`/pros/${id}`);
-export const analyzePro = (id: string) => api<{ them: TitlePatterns; you: TitlePatterns }>(`/pros/${id}/analyze`);
+export const analyzePro = (id: string) => api<StyleMatch>(`/pros/${id}/analyze`);
+/** Admin only: a press photo (used with permission) and credit, or a pinned channel id. Empty string clears. */
+export const updatePro = (id: string, body: { photo?: string; photo_credit?: string; channel_id?: string }) =>
+  api<ProCard>(`/admin/pros/${id}`, { method: 'PATCH', body });
 export const stylePlan = () => api<{ plan: StylePlan | null }>('/pros/plan');
 export const createStylePlan = (id: string, moves: string[]) =>
   api<{ plan: StylePlan }>(`/pros/${id}/plan`, { method: 'POST', body: { moves } });

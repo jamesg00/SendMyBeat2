@@ -1,29 +1,31 @@
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Line, Rect } from 'react-native-svg';
 
+import { useAuth } from '@/api/auth';
 import * as api from '@/api/endpoints';
-import type { TitlePatterns } from '@/api/endpoints';
+import type { ProBreakdown, ProDetail, StyleMatch, TitlePatterns } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
 import { openWebLink } from '@/components/producer';
-import { copyPro, ProPhoto, usePlan } from '@/components/pros';
+import { copyPro, ProHero, Ring, usePlan } from '@/components/pros';
 import { Button, Segmented, useUiStyles } from '@/components/ui';
 import { F, R, display, font, makeStyles, useColors } from '@/theme';
 
-// A pro producer's page: who they are, what they did, and how your channel compares.
+// A pro producer's page: why they blew up, how their channel works, and how close you are to their style.
 const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
+type Tab = 'story' | 'breakdown' | 'you';
 
 export default function ProScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const s = useStyles();
   const C = useColors();
-  const ui = useUiStyles();
   const insets = useSafeAreaInsets();
   const pro = useRequest(() => api.pro(id));
   const { plan } = usePlan();
-  const [tab, setTab] = useState<'about' | 'analyze'>('about');
+  const [tab, setTab] = useState<Tab>('story');
 
   if (!pro.data) {
     return (
@@ -36,15 +38,10 @@ export default function ProScreen() {
   const following = plan?.pro_id === p.id;
 
   return (
-    <ScrollView style={s.root} contentContainerStyle={{ paddingBottom: insets.bottom + 32 }} showsVerticalScrollIndicator={false}>
-      <ProPhoto pro={p} height={260} />
-      <Pressable onPress={() => router.back()} style={s.close} accessibilityRole="button" accessibilityLabel="Close">
-        <Text style={{ color: C.text, fontSize: 15, ...font('600') }}>✕</Text>
-      </Pressable>
-
-      <View style={s.body}>
-        <View style={{ gap: 4 }}>
-          <Text style={s.name} accessibilityRole="header">
+    <View style={s.root}>
+      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 110 }} showsVerticalScrollIndicator={false}>
+        <ProHero pro={p} height={380}>
+          <Text style={s.name} accessibilityRole="header" numberOfLines={1} adjustsFontSizeToFit>
             {p.name}
           </Text>
           <Text style={s.mono}>
@@ -52,160 +49,418 @@ export default function ProScreen() {
               .filter(Boolean)
               .join(' · ')}
           </Text>
-          <Text style={s.sub}>{p.tagline}</Text>
+        </ProHero>
+
+        <View style={s.body}>
+          <Segmented
+            value={tab}
+            onChange={setTab}
+            options={[
+              { value: 'story', label: 'Story' },
+              { value: 'breakdown', label: 'Breakdown' },
+              { value: 'you', label: 'You vs them' },
+            ]}
+          />
+          {tab === 'story' ? <Story p={p} /> : tab === 'breakdown' ? <Breakdown p={p} /> : <YouVsThem p={p} />}
+          <AdminPhoto p={p} onSaved={pro.reload} />
         </View>
+      </ScrollView>
 
-        <View style={{ flexDirection: 'row', gap: 10 }}>
-          <Button title={following ? 'Your plan is on' : 'Copy their style'} size="md" onPress={() => copyPro(p.id)} style={{ flex: 1 }} />
-          <Button title="YouTube ↗" variant="secondary" size="md" onPress={() => openWebLink(p.channel_url)} />
-        </View>
-
-        <Segmented
-          value={tab}
-          onChange={setTab}
-          options={[
-            { value: 'about', label: 'About' },
-            { value: 'analyze', label: 'Analyze' },
-          ]}
-        />
-
-        {tab === 'about' ? (
-          <>
-            {p.why ? (
-              <View style={s.why}>
-                <Text style={s.moveNum}>WHY THEY BLEW UP</Text>
-                <Text style={s.whyText}>{p.why}</Text>
-              </View>
-            ) : null}
-
-            <View style={{ gap: 8 }}>
-              <Text style={ui.sectionLabel}>About</Text>
-              {p.story.map((line) => (
-                <Text key={line} style={s.para}>
-                  {line}
-                </Text>
-              ))}
-            </View>
-
-            <View>
-              <Text style={[ui.sectionLabel, { paddingBottom: 8 }]}>Notable</Text>
-              {p.notable.map((n, i) => (
-                <View key={n.text} style={[s.row, i === p.notable.length - 1 && s.rowLast]}>
-                  <Text style={s.year}>{n.year || '–'}</Text>
-                  <Text style={s.rowText}>{n.text}</Text>
-                </View>
-              ))}
-            </View>
-
-            <View style={{ gap: 8 }}>
-              <Text style={ui.sectionLabel}>How they did it</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -20 }} contentContainerStyle={{ paddingHorizontal: 20, gap: 8 }}>
-                {p.moves.map((m, i) => (
-                  <View key={m.id} style={s.move}>
-                    <Text style={s.moveNum}>{String(i + 1).padStart(2, '0')}</Text>
-                    <Text style={s.moveTitle}>{m.title}</Text>
-                    <Text style={s.moveBody}>{m.body}</Text>
-                  </View>
-                ))}
-              </ScrollView>
-            </View>
-
-            {p.latest_uploads.length ? (
-              <View>
-                <Text style={[ui.sectionLabel, { paddingBottom: 8 }]}>Latest uploads</Text>
-                {p.latest_uploads.slice(0, 5).map((u, i) => (
-                  <Pressable
-                    key={u.video_id}
-                    onPress={() => openWebLink(`https://www.youtube.com/watch?v=${u.video_id}`)}
-                    style={[s.upload, i === 4 && s.rowLast]}
-                    accessibilityRole="link">
-                    {u.thumbnail ? <Image source={{ uri: u.thumbnail }} style={s.thumb} contentFit="cover" /> : <View style={s.thumb} />}
-                    <View style={{ flex: 1, gap: 2 }}>
-                      <Text style={s.rowText} numberOfLines={2}>
-                        {u.title}
-                      </Text>
-                      <Text style={s.mono}>{u.views != null ? `${compact.format(u.views)} views` : ''}</Text>
-                    </View>
-                  </Pressable>
-                ))}
-              </View>
-            ) : null}
-
-            <View style={{ gap: 6 }}>
-              <Text style={ui.sectionLabel}>Sources</Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 14 }}>
-                {p.sources.map((src) => (
-                  <Pressable key={src.url} onPress={() => openWebLink(src.url)} accessibilityRole="link" hitSlop={6}>
-                    <Text style={s.link}>{src.label} ↗</Text>
-                  </Pressable>
-                ))}
-              </View>
-              <Text style={s.fine}>Photo and stats from {p.name}’s YouTube channel.</Text>
-            </View>
-          </>
-        ) : (
-          <Analyze id={p.id} name={p.name} />
-        )}
+      <Pressable onPress={() => router.back()} style={[s.close, { top: 14 }]} accessibilityRole="button" accessibilityLabel="Close">
+        <Text style={{ color: C.text, fontSize: 15, ...font('600') }}>✕</Text>
+      </Pressable>
+      <View style={[s.dock, { paddingBottom: insets.bottom + 12 }]}>
+        <Button title={following ? 'Your plan is on' : `Copy ${p.name}’s style`} onPress={() => copyPro(p.id)} style={{ flex: 1 }} />
+        <Button title="YouTube ↗" variant="secondary" onPress={() => openWebLink(p.channel_url)} />
       </View>
-    </ScrollView>
+    </View>
   );
 }
 
-const pct = (v: number | null) => (v == null ? '–' : `${v}%`);
+// ---- Story: why they blew up, then how it happened.
 
-// Their last 50 uploads beside yours (your SendMyBeat uploads).
-function Analyze({ id, name }: { id: string; name: string }) {
+function Story({ p }: { p: ProDetail }) {
   const s = useStyles();
   const C = useColors();
   const ui = useUiStyles();
-  const res = useRequest(() => api.analyzePro(id));
-  if (!res.data) return res.error ? <Text style={s.sub}>{res.error}</Text> : <ActivityIndicator color={C.t2} style={{ alignSelf: 'flex-start' }} />;
-  const { them, you } = res.data;
-  const rows: [string, (p: TitlePatterns) => string][] = [
-    ['Uploads a week', (p) => (p.per_week == null ? '–' : String(p.per_week))],
-    ['Lead with the artist', (p) => pct(p.lead_artist_pct)],
-    ['Beat name in quotes', (p) => pct(p.quotes_pct)],
-    ['Year in the title', (p) => pct(p.year_pct)],
-    ['Two artists ("A x B")', (p) => pct(p.pair_pct)],
+  return (
+    <>
+      {p.why ? (
+        <View style={s.quote}>
+          <Text style={s.kicker}>WHY THEY BLEW UP</Text>
+          <Text style={s.quoteText}>{p.why}</Text>
+        </View>
+      ) : null}
+
+      <View>
+        <Text style={[ui.sectionLabel, { paddingBottom: 10 }]}>How it happened</Text>
+        {p.story.map((line, i) => {
+          const last = i === p.story.length - 1;
+          return (
+            <View key={line} style={{ flexDirection: 'row', gap: 12 }}>
+              <View style={{ alignItems: 'center', width: 14 }}>
+                <View style={[s.node, last && { backgroundColor: C.acc, borderColor: C.acc }]} />
+                {!last ? <View style={s.spine} /> : null}
+              </View>
+              <Text style={[s.para, { flex: 1, paddingBottom: last ? 0 : 16 }]}>{line}</Text>
+            </View>
+          );
+        })}
+      </View>
+
+      <View>
+        <Text style={[ui.sectionLabel, { paddingBottom: 8 }]}>Notable</Text>
+        {p.notable.map((n, i) => (
+          <View key={n.text} style={[s.row, i === p.notable.length - 1 && s.rowLast]}>
+            <Text style={s.year}>{n.year || '–'}</Text>
+            <Text style={s.rowText}>{n.text}</Text>
+          </View>
+        ))}
+      </View>
+
+      <View style={{ gap: 8 }}>
+        <Text style={ui.sectionLabel}>Their moves</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -20 }} contentContainerStyle={{ paddingHorizontal: 20, gap: 8 }}>
+          {p.moves.map((m, i) => (
+            <Pressable key={m.id} onPress={() => copyPro(p.id, [m.id])} style={s.move} accessibilityRole="button" accessibilityHint="Starts a plan with this move">
+              <Text style={s.kicker}>{String(i + 1).padStart(2, '0')}</Text>
+              <Text style={s.moveTitle}>{m.title}</Text>
+              <Text style={s.moveBody}>{m.body}</Text>
+              <Text style={[s.kicker, { marginTop: 'auto' }]}>COPY →</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      </View>
+
+      {p.latest_uploads.length ? (
+        <View>
+          <Text style={[ui.sectionLabel, { paddingBottom: 8 }]}>Latest uploads</Text>
+          {p.latest_uploads.slice(0, 5).map((u, i, all) => (
+            <Pressable
+              key={u.video_id}
+              onPress={() => openWebLink(`https://www.youtube.com/watch?v=${u.video_id}`)}
+              style={[s.upload, i === all.length - 1 && s.rowLast]}
+              accessibilityRole="link">
+              {u.thumbnail ? <Image source={{ uri: u.thumbnail }} style={s.thumb} contentFit="cover" /> : <View style={s.thumb} />}
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text style={s.rowText} numberOfLines={2}>
+                  {u.title}
+                </Text>
+                <Text style={s.mono}>{u.views != null ? `${compact.format(u.views)} views` : ''}</Text>
+              </View>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+
+      <View style={{ gap: 6 }}>
+        <Text style={ui.sectionLabel}>Sources</Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 14 }}>
+          {p.sources.map((src) => (
+            <Pressable key={src.url} onPress={() => openWebLink(src.url)} accessibilityRole="link" hitSlop={6}>
+              <Text style={s.link}>{src.label} ↗</Text>
+            </Pressable>
+          ))}
+        </View>
+        <Text style={s.fine}>
+          {p.photo_source === 'press' ? `Photo: ${p.photo_credit ?? 'press photo, used with permission'}. ` : ''}
+          Stats and uploads from {p.name}’s YouTube channel.
+        </Text>
+      </View>
+    </>
+  );
+}
+
+// ---- Breakdown: how their channel works, from their last 50 uploads.
+
+// Split a type-beat title into the parts the formula is made of.
+function anatomy(title: string): { text: string; kind: 'artist' | 'formula' | 'name' | 'rest' }[] {
+  const m = title.match(/^(.*?)\s+(type\s+beat)\b(.*)$/i);
+  if (!m) return [{ text: title, kind: 'rest' }];
+  const parts: { text: string; kind: 'artist' | 'formula' | 'name' | 'rest' }[] = [];
+  m[1].split(/\s+(x|X|×|&)\s+/).forEach((chunk) => {
+    if (!chunk.trim()) return;
+    parts.push({ text: chunk.trim(), kind: /^(x|×|&)$/i.test(chunk.trim()) ? 'rest' : 'artist' });
+  });
+  parts.push({ text: m[2], kind: 'formula' });
+  const tail = m[3].trim();
+  const quoted = tail.match(/["“](.+?)["”]/);
+  if (quoted) parts.push({ text: `"${quoted[1]}"`, kind: 'name' });
+  else if (tail) parts.push({ text: tail.replace(/^[-–|]\s*/, ''), kind: 'rest' });
+  return parts;
+}
+
+function Breakdown({ p }: { p: ProDetail }) {
+  const s = useStyles();
+  const C = useColors();
+  const ui = useUiStyles();
+  const b = p.breakdown;
+  const t = p.patterns;
+  if (!t.uploads) return <Text style={s.sub}>Their uploads haven’t loaded from YouTube yet. Check back soon.</Text>;
+  const example = b.breakouts[0]?.title ?? p.latest_uploads[0]?.title ?? '';
+  const chip = { artist: [C.accSoft, C.acc], formula: [C.card2, C.text], name: [C.card2, C.t2], rest: ['transparent', C.t3] } as const;
+  const bars: [string, number | null][] = [
+    ['Artist named first', t.lead_artist_pct],
+    ['Two artists paired', t.pair_pct],
+    ['Beat name in quotes', t.quotes_pct],
+    ['Year in the title', t.year_pct],
   ];
-  const most = Math.max(1, ...them.weekdays);
 
   return (
     <>
-      <View>
-        <View style={[s.compare, { paddingBottom: 8 }]}>
-          <Text style={[ui.sectionLabel, { flex: 1.4 }]}>You vs {name}</Text>
-          <Text style={s.compareHead}>You</Text>
-          <Text style={s.compareHead}>Them</Text>
-        </View>
-        {rows.map(([label, read], i) => (
-          <View key={label} style={[s.compare, s.row, i === rows.length - 1 && s.rowLast]}>
-            <Text style={[s.rowText, { flex: 1.4 }]}>{label}</Text>
-            <Text style={s.compareVal}>{read(you)}</Text>
-            <Text style={s.compareVal}>{read(them)}</Text>
+      <View style={s.panel}>
+        <Text style={s.panelLabel}>Title anatomy</Text>
+        {example ? (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
+            {anatomy(example).map((part, i) => (
+              <Text key={i} style={[s.part, { backgroundColor: chip[part.kind][0], color: chip[part.kind][1] }]}>
+                {part.text}
+              </Text>
+            ))}
           </View>
+        ) : null}
+        <View style={{ gap: 10 }}>
+          {bars.map(([label, value]) => (
+            <View key={label} style={{ gap: 4 }}>
+              <View style={s.rowBetween}>
+                <Text style={s.barLabel}>{label}</Text>
+                <Text style={s.barValue}>{value == null ? '–' : `${value}%`}</Text>
+              </View>
+              <View style={s.track}>
+                <View style={{ width: `${value ?? 0}%`, height: 4, borderRadius: 2, backgroundColor: C.acc }} />
+              </View>
+            </View>
+          ))}
+        </View>
+      </View>
+
+      <View style={s.panel}>
+        <View style={s.rowBetween}>
+          <Text style={s.panelLabel}>Views per upload</Text>
+          {b.top_share_pct != null ? (
+            <Text style={s.callout}>
+              {b.breakouts.length} uploads = {b.top_share_pct}% of views
+            </Text>
+          ) : null}
+        </View>
+        <ViewsChart b={b} />
+        {b.breakouts.map((u) => (
+          <Pressable
+            key={u.video_id}
+            onPress={() => openWebLink(`https://www.youtube.com/watch?v=${u.video_id}`)}
+            style={s.breakout}
+            accessibilityRole="link">
+            <Text style={[s.rowText, { fontSize: 13 }]} numberOfLines={1}>
+              {u.title}
+            </Text>
+            <Text style={s.barValue}>
+              {compact.format(u.views)}
+              {u.times_median ? ` · ${u.times_median}×` : ''}
+            </Text>
+          </Pressable>
         ))}
-        <Text style={[s.fine, { paddingTop: 8 }]}>
-          Them: their last {them.uploads} uploads. You: your {you.uploads} uploads through SendMyBeat.
+        <Text style={s.fine}>
+          × = times their typical upload ({compact.format(b.median_views)} views). Their hits are what to study.
         </Text>
       </View>
 
-      {them.uploads ? (
-        <View style={{ gap: 8 }}>
+      <View style={{ gap: 8 }}>
+        <View style={s.rowBetween}>
           <Text style={ui.sectionLabel}>When they upload</Text>
-          <View style={s.week}>
-            {them.weekdays.map((n, i) => (
-              <View key={i} style={{ flex: 1, alignItems: 'center', gap: 6 }}>
-                <View style={{ height: 56, width: '100%', justifyContent: 'flex-end' }}>
-                  <View style={{ height: `${Math.max(6, (n / most) * 100)}%`, backgroundColor: n === most ? C.text : C.wave, borderRadius: 3 }} />
-                </View>
-                <Text style={s.mono}>{'MTWTFSS'.charAt(i)}</Text>
-              </View>
-            ))}
-          </View>
+          <Text style={s.mono}>{t.per_week != null ? `${t.per_week} a week` : ''}</Text>
         </View>
+        <Heatmap t={t} />
+        <Text style={s.fine}>Night · morning · afternoon · evening, UTC.</Text>
+      </View>
+    </>
+  );
+}
+
+function ViewsChart({ b }: { b: ProBreakdown }) {
+  const C = useColors();
+  const { width } = useWindowDimensions();
+  const w = width - 40 - 32;
+  const h = 110;
+  const n = Math.max(1, b.views.length);
+  const top = Math.max(1, ...b.views);
+  const slot = w / n;
+  const breakouts = new Set(b.breakout_index);
+  return (
+    <Svg width={w} height={h} accessibilityLabel="Views per upload; the brightest bars are their breakout uploads">
+      <Line x1={0} y1={h - 1} x2={w} y2={h - 1} stroke={C.lineSoft} />
+      {b.views.map((v, i) => {
+        const bh = Math.max(3, (v / top) * (h - 6));
+        return (
+          <Rect
+            key={i}
+            x={i * slot + slot * 0.15}
+            y={h - 1 - bh}
+            width={Math.max(2, slot * 0.7)}
+            height={bh}
+            rx={Math.min(2, slot * 0.3)}
+            fill={breakouts.has(i) ? C.acc : C.wave}
+          />
+        );
+      })}
+    </Svg>
+  );
+}
+
+function Heatmap({ t }: { t: TitlePatterns }) {
+  const s = useStyles();
+  const C = useColors();
+  const grid = t.heatmap ?? [];
+  const most = Math.max(1, ...grid.flat());
+  return (
+    <View style={{ gap: 4 }}>
+      {grid.map((row, d) => (
+        <View key={d} style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+          <Text style={[s.mono, { width: 16 }]}>{'MTWTFSS'.charAt(d)}</Text>
+          {row.map((n, i) => (
+            <View key={i} style={{ flex: 1, height: 16, borderRadius: 4, backgroundColor: n ? C.acc : C.card2, opacity: n ? 0.25 + 0.75 * (n / most) : 1 }} />
+          ))}
+        </View>
+      ))}
+    </View>
+  );
+}
+
+// ---- You vs them: your style match and the gaps worth closing.
+
+function YouVsThem({ p }: { p: ProDetail }) {
+  const s = useStyles();
+  const C = useColors();
+  const ui = useUiStyles();
+  const res = useRequest(() => api.analyzePro(p.id));
+  if (!res.data) return res.error ? <Text style={s.sub}>{res.error}</Text> : <ActivityIndicator color={C.t2} style={{ alignSelf: 'flex-start' }} />;
+  const r: StyleMatch = res.data;
+
+  return (
+    <>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 18 }}>
+        <Ring value={(r.match ?? 0) / 100} size={112} stroke={10} label={r.match != null ? `${r.match}%` : '–'} sub="match" />
+        <View style={{ flex: 1, gap: 4 }}>
+          <Text style={s.verdict}>
+            {r.match == null
+              ? 'Upload through SendMyBeat to see your match'
+              : r.match >= 85
+                ? `You already upload like ${p.name}`
+                : r.match >= 60
+                  ? `You’re close to ${p.name}’s style`
+                  : r.match >= 35
+                    ? `You’re halfway to ${p.name}’s style`
+                    : `${p.name} works very differently`}
+          </Text>
+          <Text style={s.fine}>
+            Your {r.you.uploads} SendMyBeat uploads vs their last {r.them.uploads}.
+          </Text>
+        </View>
+      </View>
+
+      <View style={{ gap: 16 }}>
+        <View style={{ flexDirection: 'row', gap: 16 }}>
+          <Legend color={C.text} label="You" />
+          <Legend color={C.acc} label={p.name} />
+        </View>
+        {r.traits.map((t) => (
+          <View key={t.id} style={{ gap: 8 }}>
+            <View style={s.rowBetween}>
+              <Text style={s.barLabel}>{t.label}</Text>
+              <Text style={s.barValue}>
+                {fmt(t.id, t.you)} vs {fmt(t.id, t.them)}
+              </Text>
+            </View>
+            <View style={[s.track, { height: 6 }]}>
+              <View style={[s.dotMark, { left: `${t.them_pos * 100}%`, backgroundColor: C.acc }]} />
+              <View style={[s.dotMark, { left: `${t.you_pos * 100}%`, backgroundColor: C.text, borderColor: C.bg, borderWidth: 2 }]} />
+            </View>
+          </View>
+        ))}
+      </View>
+
+      {r.gaps.length ? (
+        <View style={s.panel}>
+          <Text style={s.kicker}>BIGGEST GAPS</Text>
+          {r.gaps.map((g) => (
+            <View key={g.trait} style={[s.rowBetween, { minHeight: 44 }]}>
+              <Text style={[s.rowText, { flex: 1 }]}>{gapText(g.trait, p.name)}</Text>
+              {g.move_id ? (
+                <Pressable onPress={() => copyPro(p.id, [g.move_id as string])} style={s.copyPill} accessibilityRole="button" accessibilityLabel={`Copy: ${g.move}`}>
+                  <Text style={s.copyPillText}>Copy</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          ))}
+        </View>
+      ) : r.match != null ? (
+        <Text style={ui.sectionLabel}>No big gaps. Keep going.</Text>
       ) : null}
     </>
+  );
+}
+
+const fmt = (id: string, v: number | null) => (v == null ? '–' : id === 'per_week' ? `${v}/wk` : `${v}%`);
+const gapText = (trait: string, name: string) =>
+  ({
+    per_week: `Upload as often as ${name}`,
+    lead_artist: 'Put the artist’s name first',
+    pair: 'Pair two artists in the title',
+    quotes: 'Put the beat name in quotes',
+  })[trait] ?? trait;
+
+function Legend({ color, label }: { color: string; label: string }) {
+  const s = useStyles();
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+      <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }} />
+      <Text style={s.fine}>{label}</Text>
+    </View>
+  );
+}
+
+// ---- Admins: set a press photo (with the producer's permission) or pin their channel.
+
+function AdminPhoto({ p, onSaved }: { p: ProDetail; onSaved: () => void }) {
+  const s = useStyles();
+  const C = useColors();
+  const { user } = useAuth();
+  const [open, setOpen] = useState(false);
+  const [photo, setPhoto] = useState('');
+  const [credit, setCredit] = useState('');
+  const [channel, setChannel] = useState('');
+  const [msg, setMsg] = useState<string | null>(null);
+  if (!user?.is_admin) return null;
+  if (!open) {
+    return (
+      <Pressable onPress={() => setOpen(true)} style={{ minHeight: 44, justifyContent: 'center' }} accessibilityRole="button">
+        <Text style={s.fine}>Admin · set photo or channel</Text>
+      </Pressable>
+    );
+  }
+  const save = async () => {
+    setMsg(null);
+    try {
+      const body: { photo?: string; photo_credit?: string; channel_id?: string } = {};
+      if (photo.trim()) body.photo = photo.trim();
+      if (credit.trim()) body.photo_credit = credit.trim();
+      if (channel.trim()) body.channel_id = channel.trim();
+      await api.updatePro(p.id, body);
+      setMsg('Saved.');
+      onSaved();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Could not save.');
+    }
+  };
+  return (
+    <View style={s.panel}>
+      <Text style={s.kicker}>ADMIN · {p.name.toUpperCase()}</Text>
+      <TextInput style={s.input} value={photo} onChangeText={setPhoto} placeholder="Press photo https:// link" placeholderTextColor={C.t3} autoCapitalize="none" />
+      <TextInput style={s.input} value={credit} onChangeText={setCredit} placeholder="Credit, e.g. Photo: Jane Doe" placeholderTextColor={C.t3} />
+      <TextInput style={s.input} value={channel} onChangeText={setChannel} placeholder="YouTube channel id (UC…)" placeholderTextColor={C.t3} autoCapitalize="none" />
+      <Text style={s.fine}>Only use a photo the producer or their team gave permission for.</Text>
+      {msg ? <Text style={s.fine}>{msg}</Text> : null}
+      <Button title="Save" size="md" onPress={() => void save()} />
+    </View>
   );
 }
 
@@ -215,37 +470,72 @@ const useStyles = makeStyles((C) => ({
   close: {
     position: 'absolute',
     right: 16,
-    top: 14,
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: C.card2,
+    backgroundColor: C.bg,
+    opacity: 0.9,
     borderWidth: 1,
     borderColor: C.line,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  body: { paddingHorizontal: 20, paddingTop: 16, gap: 20 },
-  name: { color: C.text, fontSize: 32, lineHeight: 36, letterSpacing: -0.6, ...display },
+  dock: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    backgroundColor: C.bg,
+    borderTopWidth: 1,
+    borderTopColor: C.lineSoft,
+  },
+  body: { paddingHorizontal: 20, paddingTop: 8, gap: 22 },
+  name: { color: C.text, fontSize: 46, lineHeight: 50, letterSpacing: -1.5, ...display },
   sub: { color: C.t2, fontSize: 14.5, lineHeight: 21, ...font() },
   para: { color: C.text, fontSize: 14.5, lineHeight: 21, ...font() },
-  mono: { color: C.t3, fontSize: 12, fontFamily: F.mono },
-  fine: { color: C.t3, fontSize: 12, ...font() },
+  mono: { color: C.t2, fontSize: 12, fontFamily: F.mono },
+  fine: { color: C.t3, fontSize: 12, lineHeight: 17, ...font() },
   link: { color: C.text, fontSize: 13.5, ...font('500') },
+  kicker: { color: C.acc, fontSize: 11, letterSpacing: 0.4, fontFamily: F.monoMedium },
+  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
+  quote: { padding: 16, gap: 8, borderRadius: 16, borderWidth: 1, borderColor: C.accLine, backgroundColor: C.accSoft },
+  quoteText: { color: C.text, fontSize: 21, lineHeight: 27, letterSpacing: -0.3, ...display },
+  node: { width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: C.line, backgroundColor: C.bg, marginTop: 4 },
+  spine: { flex: 1, width: 2, backgroundColor: C.lineSoft, marginTop: 2 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 46, borderTopWidth: 1, borderTopColor: C.lineSoft },
   rowLast: { borderBottomWidth: 1, borderBottomColor: C.lineSoft },
   rowText: { flex: 1, color: C.text, fontSize: 14, lineHeight: 19, ...font() },
   year: { width: 40, color: C.t3, fontSize: 12, fontFamily: F.monoMedium },
-  move: { width: 168, padding: 12, gap: 6, borderRadius: R.card, borderWidth: 1, borderColor: C.line, backgroundColor: C.card },
-  why: { padding: 14, gap: 6, borderRadius: R.card, borderWidth: 1, borderColor: C.line, backgroundColor: C.card },
-  whyText: { color: C.text, fontSize: 18, lineHeight: 24, letterSpacing: -0.2, ...display },
-  moveNum: { color: C.acc, fontSize: 11, fontFamily: F.monoMedium },
-  moveTitle: { color: C.text, fontSize: 14, ...font('600') },
+  move: { width: 176, minHeight: 150, padding: 14, gap: 6, borderRadius: 16, borderWidth: 1, borderColor: C.line, backgroundColor: C.card },
+  moveTitle: { color: C.text, fontSize: 15, ...display },
   moveBody: { color: C.t2, fontSize: 12.5, lineHeight: 17, ...font() },
   upload: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, borderTopWidth: 1, borderTopColor: C.lineSoft },
   thumb: { width: 96, height: 54, borderRadius: 6, backgroundColor: C.card2 },
-  compare: { flexDirection: 'row', alignItems: 'center' },
-  compareHead: { flex: 1, textAlign: 'right', color: C.t2, fontSize: 12, ...font() },
-  compareVal: { flex: 1, textAlign: 'right', color: C.text, fontSize: 14, fontFamily: F.mono },
-  week: { flexDirection: 'row', gap: 6 },
+  panel: { padding: 16, gap: 12, borderRadius: 16, borderWidth: 1, borderColor: C.line, backgroundColor: C.card },
+  panelLabel: { color: C.t2, fontSize: 13, ...font('500') },
+  part: { paddingHorizontal: 7, paddingVertical: 4, borderRadius: 6, fontSize: 13, fontFamily: F.monoMedium, overflow: 'hidden' },
+  barLabel: { color: C.t2, fontSize: 13, ...font() },
+  barValue: { color: C.text, fontSize: 12.5, fontFamily: F.monoMedium },
+  track: { height: 4, borderRadius: 3, backgroundColor: C.lineSoft, justifyContent: 'center' },
+  callout: { color: C.acc, fontSize: 14, ...display },
+  breakout: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 32 },
+  verdict: { color: C.text, fontSize: 20, lineHeight: 25, letterSpacing: -0.3, ...display },
+  dotMark: { position: 'absolute', width: 16, height: 16, marginLeft: -8, borderRadius: 8 },
+  copyPill: { minHeight: 34, paddingHorizontal: 14, borderRadius: 17, justifyContent: 'center', borderWidth: 1, borderColor: C.accLine, backgroundColor: C.accSoft },
+  copyPillText: { color: C.acc, fontSize: 13, ...font('600') },
+  input: {
+    minHeight: 44,
+    paddingHorizontal: 12,
+    borderRadius: R.ctl,
+    borderWidth: 1,
+    borderColor: C.line,
+    backgroundColor: C.bg,
+    color: C.text,
+    fontSize: 14,
+    ...font(),
+  },
 }));

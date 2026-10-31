@@ -9198,6 +9198,13 @@ class StylePlanStepUpdate(BaseModel):
     done: bool
 
 
+class ProOverrideUpdate(BaseModel):
+    """Admin only. Empty string clears a field; a field left out is kept."""
+    photo: Optional[str] = Field(default=None, max_length=1000)
+    photo_credit: Optional[str] = Field(default=None, max_length=120)
+    channel_id: Optional[str] = Field(default=None, max_length=40)
+
+
 async def _my_uploads(user_id: str) -> list[dict]:
     """Your finished SendMyBeat uploads (title + when), newest first; no YouTube quota."""
     jobs = await db.upload_jobs.find(
@@ -9231,7 +9238,18 @@ async def _plan_with_progress(user_id: str) -> Optional[dict]:
 @api_router.get("/pros")
 async def list_pros(current_user: dict = Depends(get_current_user)):
     channels = await _pro_channels()
-    return {"pros": [pros_service.card(pro, channels.get(pro["id"])) for pro in pros_service.PROS]}
+    overrides = await pros_service.overrides_by_pro(db)
+    you = pros_service.title_patterns(await _my_uploads(current_user["id"]))
+    cards = []
+    for pro in pros_service.PROS:
+        channel = channels.get(pro["id"]) or {}
+        them = pros_service.title_patterns(channel.get("uploads") or [])
+        cards.append({
+            **pros_service.card(pro, channel, overrides.get(pro["id"])),
+            "why": pro.get("why"),
+            "match": pros_service.style_match(pro, them, you)["match"],
+        })
+    return {"pros": cards}
 
 
 @api_router.get("/pros/plan")
@@ -9262,7 +9280,8 @@ async def get_pro(pro_id: str, current_user: dict = Depends(get_current_user)):
     if not pro:
         raise HTTPException(status_code=404, detail="Producer not found")
     channels = await _pro_channels()
-    return pros_service.detail(pro, channels.get(pro_id))
+    override = await db[pros_service.OVERRIDES].find_one({"pro_id": pro_id}, {"_id": 0})
+    return pros_service.detail(pro, channels.get(pro_id), override)
 
 
 @api_router.get("/pros/{pro_id}/analyze")
@@ -9271,10 +9290,41 @@ async def analyze_pro(pro_id: str, current_user: dict = Depends(get_current_user
     if pro_id not in pros_service.BY_ID:
         raise HTTPException(status_code=404, detail="Producer not found")
     channel = (await _pro_channels()).get(pro_id) or {}
-    return {
-        "them": pros_service.title_patterns(channel.get("uploads") or []),
-        "you": pros_service.title_patterns(await _my_uploads(current_user["id"])),
-    }
+    them = pros_service.title_patterns(channel.get("uploads") or [])
+    you = pros_service.title_patterns(await _my_uploads(current_user["id"]))
+    return {"them": them, "you": you, **pros_service.style_match(pros_service.BY_ID[pro_id], them, you)}
+
+
+_CHANNEL_ID = re.compile(r"^UC[\w-]{22}$")
+
+
+@api_router.patch("/admin/pros/{pro_id}")
+async def update_pro_override(pro_id: str, request: ProOverrideUpdate, current_user: dict = Depends(get_current_user)):
+    """Set a producer's press photo (used with permission) and credit, or pin their YouTube channel."""
+    if not _is_admin_user(current_user):
+        raise HTTPException(status_code=403, detail="Only admins can edit producers.")
+    if pro_id not in pros_service.BY_ID:
+        raise HTTPException(status_code=404, detail="Producer not found")
+    changes: dict = {}
+    if request.photo is not None:
+        photo = request.photo.strip()
+        if photo and urlparse(photo).scheme != "https":
+            raise HTTPException(status_code=400, detail="The photo needs an https:// link.")
+        changes["photo"] = photo or None
+    if request.photo_credit is not None:
+        changes["photo_credit"] = request.photo_credit.strip() or None
+    if request.channel_id is not None:
+        channel_id = request.channel_id.strip()
+        if channel_id and not _CHANNEL_ID.match(channel_id):
+            raise HTTPException(status_code=400, detail="A channel id starts with UC and has 24 characters.")
+        changes["channel_id"] = channel_id or None
+    if changes:
+        await db[pros_service.OVERRIDES].update_one({"pro_id": pro_id}, {"$set": {"pro_id": pro_id, **changes}}, upsert=True)
+    if "channel_id" in changes:
+        await pros_service.refresh_channels(db, _outcome_youtube_client(), force=True, only=pro_id)
+    channels = await pros_service.channels_by_pro(db)
+    override = await db[pros_service.OVERRIDES].find_one({"pro_id": pro_id}, {"_id": 0})
+    return pros_service.card(pros_service.BY_ID[pro_id], channels.get(pro_id), override)
 
 
 @api_router.post("/pros/{pro_id}/plan")

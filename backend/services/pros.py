@@ -19,6 +19,8 @@ logger = logging.getLogger(__name__)
 
 CHANNEL_CACHE = "pro_channel_cache"
 PLANS = "style_plans"
+# Admin-set per producer: a press photo (with permission) + credit, and/or a pinned channel id.
+OVERRIDES = "pro_overrides"
 CHANNEL_TTL = timedelta(hours=24)
 UPLOADS_KEPT = 50
 
@@ -160,34 +162,34 @@ PROS: list[dict[str, Any]] = [
         ],
     },
     {
-        "id": "youngkio",
-        "name": "YoungKio",
-        "group": "Dutch producer",
-        "handles": ["@youngkio", "@YoungKioBeats"],
-        "search": "YoungKio producer",
-        "tagline": "Sold the \"Old Town Road\" beat on BeatStars for about $30.",
-        "why": "A cheap lease anyone could buy put his beat in front of an unknown artist who went viral.",
-        "sound": ["samples", "standing out", "leases"],
+        "id": "guala",
+        "name": "Guala Beatz",
+        "group": "YouTube producer",
+        "handles": ["@GualaBeatz", "@gualabeatz", "@Guala"],
+        "search": "Guala Beatz producer",
+        "tagline": "Started posting beats on YouTube in 2018 and grew past 100K subscribers.",
+        "why": "He kept posting beats and production videos on YouTube, and the channel grew past 100K subscribers.",
+        "sound": ["chill rap", "steady uploads", "production videos"],
         "story": [
-            "Kiowa Roukema, a Dutch producer born in 1999.",
-            "Built \"Old Town Road\" from a chopped, sped-up Nine Inch Nails sample with trap drums; Lil Nas X leased it for about $30 in 2018.",
-            "The sample wasn't cleared at first; Trent Reznor later approved it and Nine Inch Nails share the writing credit.",
+            "Started posting beats and production content on YouTube as Guala Beatz in March 2018.",
+            "Kept posting beats and remixes until the channel passed 100,000 subscribers.",
+            "Artists credit him on their songs as \"prod. Guala Beatz\".",
         ],
         "notable": [
-            {"year": "2018", "text": "Lil Nas X, \"Old Town Road\""},
-            {"year": "2019", "text": "Sample approved by Trent Reznor"},
+            {"year": "2018", "text": "First beats on YouTube as Guala Beatz"},
+            {"year": "", "text": "100K+ YouTube subscribers"},
         ],
         "moves": [
-            {"id": "stand-out", "title": "Be unique", "body": "An unexpected sample made trap stood out in a store of look-alikes.",
-             "steps": [{"kind": "manual", "text": "Make one beat around a sample from outside hip-hop"}]},
-            {"id": "spread", "title": "Cheap leases spread far", "body": "One buyer can be the hit.",
-             "steps": [{"kind": "uploads", "text": "Upload 3 beats in 14 days", "target": 3, "days": 14}]},
-            {"id": "clear", "title": "Know your samples", "body": "A hit turns an uncleared sample into a legal problem.",
-             "steps": [{"kind": "manual", "text": "Write down the source of every sample you use"}]},
+            {"id": "steady", "title": "Show up every week", "body": "A steady stream of beats keeps you in front of the same artists.",
+             "steps": [{"kind": "uploads", "text": "Upload 4 beats in 14 days", "target": 4, "days": 14}]},
+            {"id": "show-process", "title": "Show how you make it", "body": "Production videos give viewers a reason to subscribe, not just buy.",
+             "steps": [{"kind": "manual", "text": "Post one video showing how you made a beat"}]},
+            {"id": "artist-titles", "title": "Name the artist", "body": "Lead the title with the artist your beat is for, so the right buyers find it.",
+             "steps": [{"kind": "title_formula", "text": "Lead 2 titles with \"<Artist> Type Beat\"", "target": 2}]},
         ],
         "sources": [
-            {"label": "ABC News", "url": "https://abcnews.com/Entertainment/lil-nas-bought-town-road-beat-30-story/story?id=64511949"},
-            {"label": "Splice", "url": "https://splice.com/blog/youngkio-q-and-a/"},
+            {"label": "Famous Birthdays", "url": "https://www.famousbirthdays.com/people/guala.html"},
+            {"label": "SoundCloud credit", "url": "https://m.soundcloud.com/ghentley/overnight-prod-guala-beatz"},
         ],
     },
 ]
@@ -227,8 +229,11 @@ def title_patterns(uploads: list[dict[str, Any]]) -> dict[str, Any]:
     n = len(titles)
     share = lambda hits: round(100 * hits / n) if n else None  # noqa: E731
     weekdays = [0] * 7
+    # heatmap[weekday][part of day, UTC]: night 0-6, morning 6-12, afternoon 12-18, evening 18-24.
+    heatmap = [[0] * 4 for _ in range(7)]
     for d in dates:
         weekdays[d.weekday()] += 1
+        heatmap[d.weekday()][d.hour // 6] += 1
     span_weeks = max(1.0, (dates[-1] - dates[0]).days / 7) if len(dates) > 1 else None
     return {
         "uploads": n,
@@ -238,7 +243,68 @@ def title_patterns(uploads: list[dict[str, Any]]) -> dict[str, Any]:
         "pair_pct": share(sum(pairs_artists(t) for t in titles)),
         "per_week": round(len(dates) / span_weeks, 1) if span_weeks else None,
         "weekdays": weekdays,
+        "heatmap": heatmap,
     }
+
+
+def _video_still(video_id: str) -> str:
+    return f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
+
+
+def breakdown(uploads: list[dict[str, Any]]) -> dict[str, Any]:
+    """Views per upload (oldest first), and the few uploads that carried the channel."""
+    ordered = sorted(uploads, key=lambda u: _when(u.get("published_at")) or datetime.min.replace(tzinfo=timezone.utc))
+    views = [int(u.get("views") or 0) for u in ordered]
+    total = sum(views)
+    top = sorted(ordered, key=lambda u: int(u.get("views") or 0), reverse=True)[:3]
+    top_ids = {u.get("video_id") for u in top}
+    middle = sorted(views)[len(views) // 2] if views else 0
+    return {
+        "views": views,
+        "breakout_index": [i for i, u in enumerate(ordered) if u.get("video_id") in top_ids],
+        "top_share_pct": round(100 * sum(int(u.get("views") or 0) for u in top) / total) if total else None,
+        "median_views": middle,
+        "breakouts": [
+            {"video_id": u["video_id"], "title": u.get("title") or "", "views": int(u.get("views") or 0),
+             "times_median": round(int(u.get("views") or 0) / middle, 1) if middle else None}
+            for u in top if u.get("video_id")
+        ],
+    }
+
+
+# trait id -> (label, read from title_patterns, top of the scale, plan step kind that closes the gap)
+TRAITS: list[tuple[str, str, str, float, Optional[str]]] = [
+    ("per_week", "Uploads a week", "per_week", 7.0, "uploads"),
+    ("lead_artist", "Artist named first", "lead_artist_pct", 100.0, "title_formula"),
+    ("pair", "Two artists paired", "pair_pct", 100.0, "title_pair"),
+    ("quotes", "Beat name in quotes", "quotes_pct", 100.0, None),
+]
+
+
+def style_match(pro: dict[str, Any], them: dict[str, Any], you: dict[str, Any]) -> dict[str, Any]:
+    """How close your uploads are to theirs, trait by trait (0..1 on a shared scale), and your biggest gaps."""
+    traits = []
+    for trait_id, label, key, top, kind in TRAITS:
+        a, b = you.get(key), them.get(key)
+        if b is None:
+            continue
+        traits.append({
+            "id": trait_id, "label": label, "you": a, "them": b,
+            "you_pos": min(1.0, (a or 0) / top), "them_pos": min(1.0, b / top), "kind": kind,
+        })
+    if not traits or not you.get("uploads"):
+        match = None
+    else:
+        match = round(100 * (1 - sum(abs(t["you_pos"] - t["them_pos"]) for t in traits) / len(traits)))
+    gaps = []
+    for t in sorted(traits, key=lambda t: t["them_pos"] - t["you_pos"], reverse=True):
+        if t["them_pos"] - t["you_pos"] < 0.15:
+            break
+        move = next((m for m in pro["moves"] if any(st["kind"] == t["kind"] for st in m["steps"])), None) if t["kind"] else None
+        gaps.append({"trait": t["id"], "label": t["label"], "move_id": move["id"] if move else None, "move": move["title"] if move else None})
+    for t in traits:
+        t.pop("kind")
+    return {"match": match, "traits": traits, "gaps": gaps[:3]}
 
 
 # ---- plans
@@ -357,7 +423,9 @@ def is_stale(channel: dict[str, Any] | None, now: datetime | None = None) -> boo
 _refreshing = asyncio.Lock()
 
 
-async def refresh_channels(db: Any, youtube: Any, *, force: bool = False, now: datetime | None = None) -> dict[str, int]:
+async def refresh_channels(
+    db: Any, youtube: Any, *, force: bool = False, only: str | None = None, now: datetime | None = None
+) -> dict[str, int]:
     """Bring every pro's channel data up to date (once a day). Never raises."""
     now = now or datetime.now(timezone.utc)
     stats = {"refreshed": 0, "units": 0}
@@ -365,11 +433,15 @@ async def refresh_channels(db: Any, youtube: Any, *, force: bool = False, now: d
         return stats
     async with _refreshing:
         for pro in PROS:
+            if only and pro["id"] != only:
+                continue
             cached = await db[CHANNEL_CACHE].find_one({"pro_id": pro["id"]}, {"_id": 0}) or {}
             if not force and not is_stale(cached, now):
                 continue
             try:
-                channel_id = cached.get("channel_id") or pro.get("channel_id")
+                override = await db[OVERRIDES].find_one({"pro_id": pro["id"]}, {"_id": 0}) or {}
+                # An admin-pinned id, then the one in PROS, then the one we found by handle or search.
+                channel_id = override.get("channel_id") or pro.get("channel_id") or cached.get("channel_id")
                 if not channel_id:
                     channel_id, units = await asyncio.to_thread(_resolve_channel_id, youtube, pro)
                     stats["units"] += units
@@ -393,17 +465,39 @@ async def channels_by_pro(db: Any) -> dict[str, dict[str, Any]]:
     return {doc["pro_id"]: doc for doc in docs if doc.get("pro_id")}
 
 
-def card(pro: dict[str, Any], channel: dict[str, Any] | None) -> dict[str, Any]:
+async def overrides_by_pro(db: Any) -> dict[str, dict[str, Any]]:
+    docs = await db[OVERRIDES].find({}, {"_id": 0}).to_list(len(PROS) * 2)
+    return {doc["pro_id"]: doc for doc in docs if doc.get("pro_id")}
+
+
+def _picture(pro: dict[str, Any], channel: dict[str, Any], override: dict[str, Any]) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    """(photo, credit, source): a press photo used with permission, else their YouTube channel picture,
+    else the still from their most-viewed upload, so every card has a picture once the channel is found."""
+    for src in (override, pro):
+        if src.get("photo"):
+            return src["photo"], src.get("photo_credit"), "press"
+    if channel.get("photo"):
+        return channel["photo"], None, "youtube"
+    top = max(channel.get("uploads") or [], key=lambda u: int(u.get("views") or 0), default=None)
+    if top and top.get("video_id"):
+        return _video_still(top["video_id"]), None, "video"
+    return None, None, None
+
+
+def card(pro: dict[str, Any], channel: dict[str, Any] | None, override: dict[str, Any] | None = None) -> dict[str, Any]:
     channel = channel or {}
+    photo, credit, source = _picture(pro, channel, override or {})
+    top = max(channel.get("uploads") or [], key=lambda u: int(u.get("views") or 0), default=None)
     return {
         "id": pro["id"],
         "name": pro["name"],
         "group": pro["group"],
         "tagline": pro["tagline"],
         "sound": pro["sound"],
-        # A press photo used with permission wins over the YouTube channel picture.
-        "photo": pro.get("photo") or channel.get("photo"),
-        "photo_credit": pro.get("photo_credit") if pro.get("photo") else None,
+        "photo": photo,
+        "photo_credit": credit,
+        "photo_source": source,
+        "cover": _video_still(top["video_id"]) if top and top.get("video_id") else None,
         "banner": channel.get("banner"),
         "subscribers": channel.get("subscribers"),
         "channel_url": channel.get("channel_url") or f"https://www.youtube.com/{(pro.get('handles') or [''])[0]}",
@@ -411,17 +505,30 @@ def card(pro: dict[str, Any], channel: dict[str, Any] | None) -> dict[str, Any]:
     }
 
 
-def detail(pro: dict[str, Any], channel: dict[str, Any] | None) -> dict[str, Any]:
+def _uploads_in_14_days(move: dict[str, Any]) -> int:
+    """How many uploads the move asks for over two weeks (title steps count as uploads too)."""
+    n = 0
+    for st in move["steps"]:
+        if st["kind"] == "uploads":
+            n = max(n, round(st["target"] * 14 / int(st.get("days") or 14)))
+        elif st["kind"] in ("title_formula", "title_pair"):
+            n = max(n, int(st["target"]))
+    return n
+
+
+def detail(pro: dict[str, Any], channel: dict[str, Any] | None, override: dict[str, Any] | None = None) -> dict[str, Any]:
     channel = channel or {}
     uploads = channel.get("uploads") or []
     return {
-        **card(pro, channel),
+        **card(pro, channel, override),
         "story": pro["story"],
         "why": pro.get("why"),
         "notable": pro["notable"],
-        "moves": [{**{k: m[k] for k in ("id", "title", "body")}, "steps": [st["text"] for st in m["steps"]]} for m in pro["moves"]],
+        "moves": [{**{k: m[k] for k in ("id", "title", "body")}, "steps": [st["text"] for st in m["steps"]],
+                   "uploads": _uploads_in_14_days(m)} for m in pro["moves"]],
         "sources": pro["sources"],
         "total_views": channel.get("total_views"),
         "latest_uploads": uploads[:10],
         "patterns": title_patterns(uploads),
+        "breakdown": breakdown(uploads),
     }
