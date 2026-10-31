@@ -329,7 +329,7 @@ function BuildStep({
           <Text style={s.muted}>Your generated tag sets will show up here.</Text>
         ) : (
           runs.slice(0, 8).map((r, i, arr) => (
-            <SwipeToDelete key={r.id} onDelete={() => askToDeleteRun(r)} label="Delete">
+            <SwipeToDelete key={r.id} onDelete={() => askToDeleteRun(r)} label="Delete" radius={0}>
               <Pressable
                 onPress={() => onOpen(r)}
                 accessibilityRole="button"

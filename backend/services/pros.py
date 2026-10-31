@@ -2,7 +2,7 @@
 
 Profile text (story, notable work, moves) is written by us from press sources and lives here.
 Photos, banners, subscriber counts and latest uploads come from each producer's own YouTube
-channel through the API (refreshed daily, about 11 quota units for all five), linked back to the
+channel through the API (refreshed daily, about 22 quota units for all ten), linked back to the
 channel. A plan is the moves a user picked, as steps; steps about uploads tick themselves off
 from the user's SendMyBeat uploads.
 """
@@ -201,6 +201,171 @@ PROS: list[dict[str, Any]] = [
             {"label": "His YouTube channel", "url": "https://www.youtube.com/@GualaBeatz/about"},
             {"label": "Famous Birthdays", "url": "https://www.famousbirthdays.com/people/guala.html"},
             {"label": "SoundCloud credit", "url": "https://m.soundcloud.com/ghentley/overnight-prod-guala-beatz"},
+        ],
+    },
+    {
+        "id": "menace",
+        "name": "Menace",
+        "group": "YouTube producer",
+        "channel_id": "UC4QdZB8sNx2K3EJfUTsymoA",
+        "handles": ["@BeatMenace"],
+        "search": "BeatMenace producer",
+        "tagline": "A type beat on YouTube became Desiigner's \"Panda\", a Billboard number one.",
+        "why": "He titled a beat for the artists it sounded like, and the right rapper found it by searching YouTube.",
+        "sound": ["dark trap", "artist-named titles", "UK producer"],
+        "story": [
+            "A producer from Rochdale, England, he uploaded the beat to YouTube as a \"Meek Mill / Ace Hood Type Beat\".",
+            "Desiigner found it on YouTube and made \"Panda\" (2015), which hit number one on the Billboard Hot 100 in May 2016.",
+            "Kanye West sampled \"Panda\" for \"Pt. 2\" on The Life of Pablo (2016).",
+        ],
+        "notable": [
+            {"year": "2015", "text": "Desiigner \"Panda\", from his YouTube type beat"},
+            {"year": "2016", "text": "\"Panda\" reaches number one on the Billboard Hot 100"},
+            {"year": "2016", "text": "Sampled by Kanye West on The Life of Pablo"},
+        ],
+        "moves": [
+            {"id": "search-titles", "title": "Title it the way artists search", "body": "Artists search for the sound they want; name the artists your beat sounds like.",
+             "steps": [{"kind": "title_formula", "text": "Lead 3 titles with \"<Artist> Type Beat\"", "target": 3}]},
+            {"id": "two-artists", "title": "Name two artists", "body": "\"A x B Type Beat\" shows up in searches for either artist.",
+             "steps": [{"kind": "title_pair", "text": "Title 2 beats \"<Artist> x <Artist> Type Beat\"", "target": 2}]},
+            {"id": "keep-posting", "title": "Keep the catalog growing", "body": "One upload can be found years later; the more beats are up, the more chances.",
+             "steps": [{"kind": "uploads", "text": "Upload 3 beats in 14 days", "target": 3, "days": 14}]},
+        ],
+        "sources": [
+            {"label": "Vice: type beat producers, with Menace", "url": "https://www.vice.com/en/article/type-beat-producers-interview-menace"},
+            {"label": "Wikipedia: Panda (Desiigner song)", "url": "https://en.wikipedia.org/wiki/Panda_(Desiigner_song)"},
+        ],
+    },
+    {
+        "id": "murda-beatz",
+        "name": "Murda Beatz",
+        "group": "YouTube producer",
+        "channel_id": "UCWz4zK-Oal6uIiVxVuRWh8A",
+        "handles": ["@MurdaBeatz"],
+        "search": "Murda Beatz",
+        "tagline": "Promoted his beats on YouTube as a teenager, then made hits for Migos and Drake.",
+        "why": "He used YouTube to get his beats to rising rappers, then moved to where they were and kept working with them.",
+        "sound": ["trap", "Migos", "producer tag"],
+        "story": [
+            "Shane Lindstrom, from Fort Erie, Ontario, started making beats in FL Studio at 17 and picked the name Murda Beatz to promote them on YouTube.",
+            "At 18 he moved to Chicago to work with Chief Keef and Lil Durk, then moved in with Migos and produced their music.",
+            "He produced Migos' \"MotorSport\" and Travis Scott's \"Butterfly Effect\" (2017), and Drake's \"Nice for What\" (2018), a Hot 100 number one.",
+        ],
+        "notable": [
+            {"year": "2017", "text": "Travis Scott \"Butterfly Effect\" and Migos \"MotorSport\""},
+            {"year": "2018", "text": "Drake \"Nice for What\", Billboard Hot 100 number one"},
+            {"year": "2018", "text": "6ix9ine \"Fefe\" with Nicki Minaj, Hot 100 number three"},
+        ],
+        "moves": [
+            {"id": "tag", "title": "Make your name stick", "body": "A short, memorable producer tag tells every listener who made the beat.",
+             "steps": [{"kind": "manual", "text": "Record a producer tag and put it on your next beat"}]},
+            {"id": "rising-artists", "title": "Aim at rising artists", "body": "Title beats for artists who are coming up now; they're the ones searching.",
+             "steps": [{"kind": "title_formula", "text": "Lead 3 titles with a rising artist's \"<Artist> Type Beat\"", "target": 3}]},
+            {"id": "volume", "title": "Make a lot of beats", "body": "He made beats constantly as a teenager; volume is how you find your sound.",
+             "steps": [{"kind": "uploads", "text": "Upload 4 beats in 14 days", "target": 4, "days": 14}]},
+        ],
+        "sources": [
+            {"label": "Wikipedia: Murda Beatz", "url": "https://en.wikipedia.org/wiki/Murda_Beatz"},
+            {"label": "DJBooth: Murda Beatz and type beats", "url": "https://djbooth.net/features/2018-08-24-murda-beatz-type-beat-producer/"},
+        ],
+    },
+    {
+        "id": "kenny-beats",
+        "name": "Kenny Beats",
+        "group": "The Cave",
+        "channel_id": "UCApPPpJ4d3ueW38lArwiWoA",
+        "handles": ["@KennyBeats"],
+        "search": "Kenny Beats The Cave",
+        "tagline": "Turned making beats into a YouTube show, The Cave, and built a following on it.",
+        "why": "He filmed himself making beats with rappers in his studio, so people came for the show, not just the beats.",
+        "sound": ["hip-hop", "punk", "video series"],
+        "story": [
+            "Kenneth Blume studied at Berklee and made EDM in the duo Loudpvck before switching to hip-hop production.",
+            "In March 2019 he launched The Cave on YouTube: guests come to his studio, he makes a beat, they freestyle on it.",
+            "He has produced albums for Rico Nasty, Vince Staples, Freddie Gibbs and IDLES.",
+        ],
+        "notable": [
+            {"year": "2018", "text": "Vince Staples FM! and Freddie Gibbs Freddie"},
+            {"year": "2019", "text": "Launched The Cave on YouTube; Rico Nasty Anger Management"},
+            {"year": "2021", "text": "IDLES Crawler"},
+        ],
+        "moves": [
+            {"id": "series", "title": "Make it a series", "body": "A repeating video format with one name gives people a reason to come back.",
+             "steps": [{"kind": "manual", "text": "Post a beat video with a series name and an episode number"}]},
+            {"id": "film-sessions", "title": "Film the session", "body": "Making a beat on camera, with an artist if you can, is content on its own.",
+             "steps": [{"kind": "manual", "text": "Film yourself making a beat from scratch and post it"}]},
+            {"id": "schedule", "title": "Post on a schedule", "body": "The Cave came out on a set schedule; viewers knew when to look.",
+             "steps": [{"kind": "uploads", "text": "Upload 2 beats in 14 days", "target": 2, "days": 14}]},
+        ],
+        "sources": [
+            {"label": "Wikipedia: Kenny Beats", "url": "https://en.wikipedia.org/wiki/Kenny_Beats"},
+            {"label": "The Fader: Kenny Beats", "url": "https://www.thefader.com/2019/12/17/how-kenny-beats-became-a-go-to-for-hip-hops-new-generation"},
+        ],
+    },
+    {
+        "id": "kyle-beats",
+        "name": "Kyle Beats",
+        "group": "YouTube producer",
+        "channel_id": "UCfYEdvKQekP7RiemXC0o92w",
+        "handles": ["@KyleBeats_"],
+        "search": "Kyle Beats producer",
+        "tagline": "Grew a beat channel past a million subscribers by making videos for other producers.",
+        "why": "His channel shows how he makes beats and works with artists, so producers subscribe to learn, not just to buy.",
+        "sound": ["melodic rap", "FL Studio", "producer videos"],
+        "story": [
+            "Started his YouTube channel in 2014, after teaching himself piano from online tutorials and making beats in FL Studio.",
+            "His videos follow how he makes beats and works with artists; the channel passed one million subscribers.",
+            "He has worked with independent artists including Russ, Nic D and Powfu, and says he never chased major labels.",
+        ],
+        "notable": [
+            {"year": "2014", "text": "Started his YouTube channel"},
+            {"year": "", "text": "1M+ YouTube subscribers"},
+            {"year": "", "text": "Worked with Russ, Nic D and Powfu"},
+        ],
+        "moves": [
+            {"id": "teach", "title": "Teach what you know", "body": "Videos for other producers bring subscribers who stick around.",
+             "steps": [{"kind": "manual", "text": "Post one video explaining how you made a beat"}]},
+            {"id": "independents", "title": "Work with independent artists", "body": "Independent artists can say yes fast, and you can film the work.",
+             "steps": [{"kind": "manual", "text": "Send a beat to one independent artist you'd like to work with"}]},
+            {"id": "consistency", "title": "Keep the channel moving", "body": "Regular uploads keep you in viewers' feeds.",
+             "steps": [{"kind": "uploads", "text": "Upload 3 beats in 14 days", "target": 3, "days": 14}]},
+        ],
+        "sources": [
+            {"label": "Image-Line: Kyle Beats", "url": "https://www.image-line.com/artists/kyle-beats"},
+            {"label": "His YouTube channel", "url": "https://www.youtube.com/@KyleBeats_/about"},
+        ],
+    },
+    {
+        "id": "chuki-beats",
+        "name": "Chuki Beats",
+        "group": "YouTube producer",
+        "channel_id": "UCSyBSyLk4ZvXd2Fj-tLojag",
+        "handles": ["@ChukiBeatz"],
+        "search": "Chuki Beats producer",
+        "tagline": "Uploaded beats to YouTube from Belgium, topped BeatStars, then started a label.",
+        "why": "His YouTube beats sold well on BeatStars, and a second channel of producer videos grew his name further.",
+        "sound": ["afro", "drill", "BeatStars"],
+        "story": [
+            "Grew up in a small town in Belgium and started by uploading his beats to YouTube (the channel dates to 2013).",
+            "His beats became top sellers on BeatStars, and his videos passed 100 million views.",
+            "He co-founded the label 32WORLDWIDE and has gold and platinum records with Belgian artists.",
+        ],
+        "notable": [
+            {"year": "2013", "text": "Started his YouTube beat channel"},
+            {"year": "", "text": "Top seller on BeatStars; 100M+ video views"},
+            {"year": "", "text": "Co-founded the label 32WORLDWIDE"},
+        ],
+        "moves": [
+            {"id": "store", "title": "Sell from every video", "body": "Put your beat store link and lease options in every description.",
+             "steps": [{"kind": "manual", "text": "Add your beat store link and lease prices to your description", "link": "descriptions"}]},
+            {"id": "second-channel", "title": "Talk to producers too", "body": "Producer-focused videos reach a second audience and keep your name around.",
+             "steps": [{"kind": "manual", "text": "Post one video for producers: a tip, a breakdown or a cook-up"}]},
+            {"id": "artist-titles", "title": "Name the artist", "body": "Lead the title with the artist your beat is for, so the right buyers find it.",
+             "steps": [{"kind": "title_formula", "text": "Lead 2 titles with \"<Artist> Type Beat\"", "target": 2}]},
+        ],
+        "sources": [
+            {"label": "Live Nation: Chuki Beats", "url": "https://agency.livenation.be/roster/chuki-beats"},
+            {"label": "His YouTube channel", "url": "https://www.youtube.com/@ChukiBeatz/about"},
         ],
     },
 ]
@@ -519,6 +684,10 @@ def card(pro: dict[str, Any], channel: dict[str, Any] | None, override: dict[str
         "subscribers": channel.get("subscribers"),
         "channel_url": channel.get("channel_url") or f"https://www.youtube.com/{(pro.get('handles') or [''])[0]}",
         "channel_title": channel.get("channel_title"),
+        # Verified: SendMyBeat confirmed which YouTube channel is theirs (pinned by channel ID).
+        "verified": bool(pro.get("channel_id") or (override or {}).get("channel_id")),
+        # Their SendMyBeat user id, once they claimed this profile and an admin approved it.
+        "claimed_by": (override or {}).get("claimed_by"),
     }
 
 

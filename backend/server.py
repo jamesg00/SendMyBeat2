@@ -8927,6 +8927,7 @@ async def apply_for_verification(
             "main_platform_url": (request.main_platform_url or "").strip(),
             "notable_work": (request.notable_work or "").strip(),
             "reason": reason,
+            "pro_id": request.pro_id if request.pro_id in pros_service.BY_ID else None,
             "submitted_at": now,
         },
     }
@@ -8979,8 +8980,37 @@ async def review_verification_application(
         update_fields["verified_at"] = now
 
     await db.producer_profiles.update_one({"user_id": request.user_id}, {"$set": update_fields})
+    # Approving a claim links the Pros profile to this producer's SendMyBeat profile.
+    pro_id = (profile.get("verification_application") or {}).get("pro_id")
+    if action == "approve" and pro_id in pros_service.BY_ID:
+        await db[pros_service.OVERRIDES].update_one(
+            {"pro_id": pro_id},
+            {"$set": {"pro_id": pro_id, "claimed_by": request.user_id, "updated_at": now}},
+            upsert=True,
+        )
     updated = await db.producer_profiles.find_one({"user_id": request.user_id})
     return await _profile_with_role_tag(updated)
+
+
+@api_router.get("/producers/verification/pending")
+async def list_verification_applications(current_user: dict = Depends(get_current_user)):
+    """Admin-only: verification requests waiting for review, oldest first."""
+    if not _is_admin_user(current_user):
+        raise HTTPException(status_code=403, detail="Only admins can review verification applications.")
+    docs = await db.producer_profiles.find(
+        {"verification_status": "pending"},
+        {"_id": 0, "user_id": 1, "username": 1, "avatar_url": 1, "verification_applied_at": 1, "verification_application": 1},
+    ).sort("verification_applied_at", 1).to_list(100)
+    for doc in docs:
+        for key in ("verification_applied_at",):
+            if isinstance(doc.get(key), datetime):
+                doc[key] = doc[key].isoformat()
+        application = doc.get("verification_application") or {}
+        if isinstance(application.get("submitted_at"), datetime):
+            application["submitted_at"] = application["submitted_at"].isoformat()
+        pro = pros_service.BY_ID.get(application.get("pro_id"))
+        doc["pro_name"] = pro["name"] if pro else None
+    return {"applications": docs}
 
 # ============ Beat Fixes Route ============
 @api_router.post("/beat/fix")

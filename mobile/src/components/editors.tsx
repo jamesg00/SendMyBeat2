@@ -145,7 +145,7 @@ export function DescriptionEditor({
             />
           );
           return o.saved ? (
-            <SwipeToDelete key={o.id} onDelete={() => askToDelete(o)} label="Delete">
+            <SwipeToDelete key={o.id} onDelete={() => askToDelete(o)} label="Delete" radius={0}>
               <View style={{ backgroundColor: C.card }}>{row}</View>
             </SwipeToDelete>
           ) : (

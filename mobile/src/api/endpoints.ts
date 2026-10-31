@@ -82,6 +82,8 @@ export type Producer = {
   top_beat?: TopBeat | null;
   social_links?: Record<string, string | null | undefined>;
   verification_status?: string;
+  /** Why a request was approved or rejected (shown to you on your own profile). */
+  verification_note?: string | null;
   spotlight_tier?: string;
   spotlight_score?: number;
   current_streak?: number;
@@ -131,6 +133,19 @@ export const analyzeChannel = (onProgress?: JobProgress) => runJob<ChannelAnalyt
 export const spotlight = () => api<Spotlight>('/producers/spotlight');
 export const producerStats = (userId: string) => api<ProducerStats>(`/producers/${userId}/stats`);
 export const myProducer = () => api<Producer>('/producers/me');
+export type VerificationRequest = { stage_name?: string; main_platform_url?: string; notable_work?: string; reason: string; pro_id?: string };
+export const applyForVerification = (body: VerificationRequest) => api<Producer>('/producers/verification/apply', { body });
+export type VerificationApplication = {
+  user_id: string;
+  username?: string;
+  avatar_url?: string | null;
+  verification_applied_at?: string;
+  verification_application?: Partial<VerificationRequest> & { submitted_at?: string };
+  pro_name?: string | null;
+};
+export const pendingVerifications = () => api<{ applications: VerificationApplication[] }>('/producers/verification/pending');
+export const reviewVerification = (userId: string, action: 'approve' | 'reject', note?: string) =>
+  api<Producer>('/producers/verification/review', { body: { user_id: userId, action, note } });
 export type ProfileUpdate = { bio?: string; tags?: string[]; social_links?: Record<string, string> };
 export const updateMyProducer = (body: ProfileUpdate) => api<Producer>('/producers/me', { method: 'PUT', body });
 export const uploadAvatar = (f: PickedFile) => api<{ avatar_url: string }>('/producers/avatar', { body: fileForm(f) });
@@ -250,6 +265,10 @@ export type ProCard = {
   why?: string | null;
   /** How close your uploads are to theirs, 0-100; null until you've uploaded through SendMyBeat. */
   match?: number | null;
+  /** SendMyBeat confirmed which YouTube channel is theirs. */
+  verified?: boolean;
+  /** Their SendMyBeat user id, once they claimed the profile and it was approved. */
+  claimed_by?: string | null;
 };
 export type TitlePatterns = {
   uploads: number;

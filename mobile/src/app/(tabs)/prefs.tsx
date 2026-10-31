@@ -11,6 +11,8 @@ import { PlanCard, usePlan } from '@/components/pros';
 import { Button, ListGroup, ListRow, Meter, Screen, useUiStyles } from '@/components/ui';
 import { F, font, makeStyles, THEMES, useColors, useThemeId } from '@/theme';
 
+const VERIFICATION: Record<string, string> = { none: 'Get verified', pending: 'Under review', approved: 'Verified ✓', rejected: 'Try again' };
+
 const site = (path: string) => WebBrowser.openBrowserAsync(`https://www.sendmybeat.com${path}`);
 
 export default function ProfileScreen() {
@@ -66,12 +68,18 @@ export default function ProfileScreen() {
         <Text style={ui.sectionLabel}>App</Text>
         <ListGroup>
           <ListRow
+            title="Verification"
+            value={VERIFICATION[me.data?.verification_status ?? 'none'] ?? 'Get verified'}
+            onPress={() => router.push('/verify')}
+          />
+          <ListRow
             title="Appearance"
             value={THEMES.find((t) => t.id === themeId)?.label}
             onPress={() => router.push('/appearance')}
             last={!user?.is_admin}
           />
-          {user?.is_admin ? <ListRow title="Admin · Pros photos and channels" onPress={() => router.push('/admin-pros')} last /> : null}
+          {user?.is_admin ? <ListRow title="Admin · Pros photos and channels" onPress={() => router.push('/admin-pros')} /> : null}
+          {user?.is_admin ? <ListRow title="Admin · Verification requests" onPress={() => router.push('/admin-verify')} last /> : null}
         </ListGroup>
       </View>
 

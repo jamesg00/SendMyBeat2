@@ -17,6 +17,7 @@ import { scheduleOnRN } from 'react-native-worklets';
 import * as api from '@/api/endpoints';
 import type { PlanStep, ProCard, StylePlan } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
+import { VerifiedBadge } from '@/components/producer';
 import { Button, Card, Meter, useUiStyles } from '@/components/ui';
 import { F, display, font, makeStyles, useColors } from '@/theme';
 
@@ -169,9 +170,12 @@ function DeckCard({ pro, width, index, step, x }: { pro: ProCard; width: number;
         accessibilityRole="button"
         accessibilityLabel={`${pro.name}. ${pro.why ?? pro.tagline}`}>
         <ProHero pro={pro} height={440}>
-          <Text style={s.deckName} numberOfLines={1} adjustsFontSizeToFit>
-            {pro.name}
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <Text style={[s.deckName, { flexShrink: 1 }]} numberOfLines={1} adjustsFontSizeToFit>
+              {pro.name}
+            </Text>
+            {pro.verified ? <VerifiedBadge size={22} /> : null}
+          </View>
           <Text style={s.deckWhy} numberOfLines={3}>
             {pro.why ?? pro.tagline}
           </Text>

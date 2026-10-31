@@ -346,7 +346,9 @@ export function confirmAction(title: string, message: string, action: string, on
   ]);
 }
 
-export function SwipeToDelete({ children, onDelete, label }: { children: ReactNode; onDelete: () => void; label: string }) {
+/** Swipe left to reveal a red delete action; swipe far to delete outright. `radius` matches the
+ * row's corners (cards are rounded, list rows are square). */
+export function SwipeToDelete({ children, onDelete, label, radius = R.card }: { children: ReactNode; onDelete: () => void; label: string; radius?: number }) {
   const styles = useUiStyles();
   const [x] = useState(() => new RNAnimated.Value(0));
   const [open, setOpen] = useState(false);
@@ -387,14 +389,20 @@ export function SwipeToDelete({ children, onDelete, label }: { children: ReactNo
     });
   }, [open, remove, snap, x]);
   const reveal = x.interpolate({ inputRange: [-SWIPE_ACTION_W, -8, 0], outputRange: [1, 0.2, 0], extrapolate: 'clamp' });
+  // The icon and label grow in as the row slides, then hold.
+  const grow = x.interpolate({ inputRange: [-SWIPE_ACTION_W, -24, 0], outputRange: [1, 0.6, 0.6], extrapolate: 'clamp' });
 
   return (
     <View
+      style={{ borderRadius: radius, overflow: 'hidden' }}
       accessibilityActions={[{ name: 'delete', label }]}
       onAccessibilityAction={(e) => e.nativeEvent.actionName === 'delete' && onDelete()}>
       <RNAnimated.View style={[styles.swipeBehind, { opacity: reveal }]}>
         <Pressable onPress={remove} style={styles.swipeAction} accessibilityRole="button" accessibilityLabel={label}>
-          <Text style={styles.swipeLabel}>{label}</Text>
+          <RNAnimated.View style={{ alignItems: 'center', gap: 3, transform: [{ scale: grow }] }}>
+            <TrashIcon />
+            <Text style={styles.swipeLabel}>{label}</Text>
+          </RNAnimated.View>
         </Pressable>
       </RNAnimated.View>
       <RNAnimated.View style={{ transform: [{ translateX: x }] }} {...pan.panHandlers}>
@@ -409,6 +417,14 @@ export function SwipeToDelete({ children, onDelete, label }: { children: ReactNo
         ) : null}
       </RNAnimated.View>
     </View>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" />
+    </Svg>
   );
 }
 
@@ -444,15 +460,12 @@ export const useUiStyles = makeStyles((C) => ({
     right: 0,
     bottom: 0,
     left: 0,
-    borderRadius: R.card,
-    backgroundColor: C.dangerSoft,
-    borderWidth: 1,
-    borderColor: C.dangerLine,
+    backgroundColor: C.danger,
     flexDirection: 'row',
     justifyContent: 'flex-end',
   },
   swipeAction: { width: SWIPE_ACTION_W, alignItems: 'center', justifyContent: 'center' },
-  swipeLabel: { color: C.danger, fontSize: 15, ...font('600') },
+  swipeLabel: { color: '#FFFFFF', fontSize: 12.5, ...font('600') },
   screen: { paddingHorizontal: 20, paddingBottom: 140, gap: 20, backgroundColor: C.bg },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   largeTitle: { color: C.text, fontSize: 30, lineHeight: 36, letterSpacing: -0.3, ...display },

@@ -8,7 +8,7 @@ import Svg, { Line, Rect } from 'react-native-svg';
 import * as api from '@/api/endpoints';
 import type { ProBreakdown, ProDetail, StyleMatch, TitlePatterns } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
-import { openWebLink } from '@/components/producer';
+import { openWebLink, VerifiedBadge } from '@/components/producer';
 import { copyPro, ProHero, Ring, usePlan } from '@/components/pros';
 import { Button, Segmented, useUiStyles } from '@/components/ui';
 import { F, R, display, font, makeStyles, useColors } from '@/theme';
@@ -40,9 +40,12 @@ export default function ProScreen() {
     <View style={s.root}>
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 110 }} showsVerticalScrollIndicator={false}>
         <ProHero pro={p} height={380}>
-          <Text style={s.name} accessibilityRole="header" numberOfLines={1} adjustsFontSizeToFit>
-            {p.name}
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <Text style={[s.name, { flexShrink: 1 }]} accessibilityRole="header" numberOfLines={1} adjustsFontSizeToFit>
+              {p.name}
+            </Text>
+            {p.verified ? <VerifiedBadge size={22} /> : null}
+          </View>
           <Text style={s.mono}>
             {[p.channel_title, p.subscribers ? `${compact.format(p.subscribers)} subscribers` : null, p.total_views ? `${compact.format(p.total_views)} views` : null]
               .filter(Boolean)
@@ -162,9 +165,25 @@ function Story({ p }: { p: ProDetail }) {
         </View>
         <Text style={s.fine}>
           {p.photo_source === 'press' ? `Photo: ${p.photo_credit ?? 'press photo, used with permission'}. ` : ''}
-          Stats and uploads from {p.name}’s YouTube channel.
+          Stats and uploads from {p.name}’s YouTube channel{p.verified ? ', confirmed by SendMyBeat' : ''}.
         </Text>
       </View>
+
+      {p.claimed_by ? (
+        <Pressable
+          onPress={() => router.push({ pathname: '/producer/[id]', params: { id: p.claimed_by! } })}
+          style={s.claim}
+          accessibilityRole="button">
+          <VerifiedBadge size={16} />
+          <Text style={[s.claimText, { flex: 1 }]}>{p.name} is on SendMyBeat</Text>
+          <Text style={s.claimText}>Profile ›</Text>
+        </Pressable>
+      ) : (
+        <Pressable onPress={() => router.push({ pathname: '/verify', params: { pro: p.id } })} style={s.claim} accessibilityRole="button">
+          <Text style={[s.claimText, { flex: 1 }]}>Are you {p.name}? Claim this profile</Text>
+          <Text style={s.claimText}>›</Text>
+        </Pressable>
+      )}
     </>
   );
 }
@@ -452,6 +471,8 @@ const useStyles = makeStyles((C) => ({
   mono: { color: C.t2, fontSize: 12, fontFamily: F.mono },
   fine: { color: C.t3, fontSize: 12, lineHeight: 17, ...font() },
   link: { color: C.text, fontSize: 13.5, ...font('500') },
+  claim: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14, borderRadius: R.card, borderWidth: 1, borderColor: C.line, backgroundColor: C.card },
+  claimText: { color: C.text, fontSize: 14, ...font('600') },
   kicker: { color: C.acc, fontSize: 11, letterSpacing: 0.4, fontFamily: F.monoMedium },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
   quote: { padding: 16, gap: 8, borderRadius: 16, borderWidth: 1, borderColor: C.accLine, backgroundColor: C.accSoft },
