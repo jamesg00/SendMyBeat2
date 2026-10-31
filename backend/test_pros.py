@@ -89,11 +89,13 @@ def youtube_fake(handle_hits=True):
     return yt
 
 
-def cache_db(existing=None):
+def cache_db(existing=None, override=None):
     coll = MagicMock()
     coll.find_one = AsyncMock(return_value=existing)
     coll.update_one = AsyncMock()
-    return {pros.CHANNEL_CACHE: coll}, coll
+    overrides = MagicMock()
+    overrides.find_one = AsyncMock(return_value=override)
+    return {pros.CHANNEL_CACHE: coll, pros.OVERRIDES: overrides}, coll
 
 
 @pytest.mark.asyncio
@@ -160,10 +162,77 @@ async def test_a_pinned_channel_skips_handle_lookup_and_search():
 def test_a_press_photo_wins_over_the_channel_picture_and_carries_its_credit():
     pro = {**pros.PROS[0], 'photo': 'https://cdn/press.jpg', 'photo_credit': 'Photo: Jane Doe'}
     c = pros.card(pro, {'photo': 'https://yt/photo.jpg'})
-    assert c['photo'] == 'https://cdn/press.jpg' and c['photo_credit'] == 'Photo: Jane Doe'
+    assert c['photo'] == 'https://cdn/press.jpg' and c['photo_credit'] == 'Photo: Jane Doe' and c['photo_source'] == 'press'
     c = pros.card(pros.PROS[0], {'photo': 'https://yt/photo.jpg'})
-    assert c['photo'] == 'https://yt/photo.jpg' and c['photo_credit'] is None
+    assert c['photo'] == 'https://yt/photo.jpg' and c['photo_credit'] is None and c['photo_source'] == 'youtube'
+    c = pros.card(pros.PROS[0], {'photo': 'https://yt/photo.jpg'}, {'photo': 'https://cdn/admin.jpg', 'photo_credit': 'Photo: Sam'})
+    assert c['photo'] == 'https://cdn/admin.jpg' and c['photo_credit'] == 'Photo: Sam'
+
+
+def test_with_no_channel_picture_the_top_upload_still_is_used():
+    uploads = [{'video_id': 'a', 'views': 10}, {'video_id': 'b', 'views': 900}]
+    c = pros.card(pros.PROS[0], {'uploads': uploads})
+    assert c['photo'] == 'https://i.ytimg.com/vi/b/hqdefault.jpg' and c['photo_source'] == 'video'
+    assert c['cover'] == 'https://i.ytimg.com/vi/b/hqdefault.jpg'
+    assert pros.card(pros.PROS[0], None)['photo'] is None
+
+
+def test_breakdown_finds_the_uploads_that_carried_the_channel():
+    uploads = [{'video_id': f'v{i}', 'title': f't{i}', 'views': v, 'published_at': (NOW - timedelta(days=10 - i)).isoformat()}
+               for i, v in enumerate([100, 100, 5000, 100, 100, 3000, 100, 2000, 100, 100])]
+    b = pros.breakdown(uploads)
+    assert b['views'][2] == 5000 and b['breakout_index'] == [2, 5, 7]
+    assert b['top_share_pct'] == round(100 * 10000 / 10700) and b['median_views'] == 100
+    assert b['breakouts'][0] == {'video_id': 'v2', 'title': 't2', 'views': 5000, 'times_median': 50.0}
+    assert pros.breakdown([])['top_share_pct'] is None
+
+
+def test_heatmap_counts_uploads_by_day_and_part_of_day():
+    monday_evening = datetime(2026, 10, 26, 20, tzinfo=timezone.utc)
+    p = pros.title_patterns([{'title': 'x', 'published_at': monday_evening.isoformat()}])
+    assert p['heatmap'][0] == [0, 0, 0, 1]
+
+
+def test_style_match_scores_you_against_them_and_names_the_gaps():
+    cash = pros.BY_ID['cashmoneyap']
+    them = {'uploads': 50, 'per_week': 7.0, 'lead_artist_pct': 100, 'pair_pct': 60, 'quotes_pct': 90}
+    same = pros.style_match(cash, them, them)
+    assert same['match'] == 100 and same['gaps'] == []
+    you = {'uploads': 4, 'per_week': 1.0, 'lead_artist_pct': 100, 'pair_pct': 0, 'quotes_pct': 90}
+    r = pros.style_match(cash, them, you)
+    assert 0 < r['match'] < 100
+    assert [g['trait'] for g in r['gaps']] == ['per_week', 'pair']
+    assert r['gaps'][0]['move_id'] == 'steady' and r['gaps'][1]['move_id'] == 'rising-artists'
+    assert pros.style_match(cash, them, {'uploads': 0, 'per_week': None})['match'] is None
+
+
+@pytest.mark.asyncio
+async def test_an_admin_pinned_channel_wins_over_the_cached_one():
+    db, coll = cache_db({'pro_id': 'x', 'channel_id': 'UCold', 'fetched_at': NOW - timedelta(days=2)}, {'channel_id': 'UCadmin'})
+    yt = youtube_fake()
+    with patch.object(pros, 'PROS', [pros.PROS[0]]):
+        await pros.refresh_channels(db, yt, now=NOW)
+    ids = [c.kwargs.get('id') for c in yt.channels.return_value.list.call_args_list]
+    assert ids == ['UCadmin']
+
+
+@pytest.mark.asyncio
+async def test_only_admins_can_set_a_producer_photo_and_links_must_be_https():
+    with patch.object(server, '_is_admin_user', return_value=False), pytest.raises(HTTPException) as err:
+        await server.update_pro_override('cashmoneyap', server.ProOverrideUpdate(photo='https://x/y.jpg'), current_user={'id': 'u1'})
+    assert err.value.status_code == 403
+    with patch.object(server, '_is_admin_user', return_value=True):
+        for bad in (server.ProOverrideUpdate(photo='http://x/y.jpg'), server.ProOverrideUpdate(photo='javascript:alert(1)'),
+                    server.ProOverrideUpdate(channel_id='not-a-channel')):
+            with pytest.raises(HTTPException) as err:
+                await server.update_pro_override('cashmoneyap', bad, current_user={'id': 'a1'})
+            assert err.value.status_code == 400
 
 
 def test_every_pro_says_why_they_blew_up():
     assert all(pros.detail(p, None)['why'] for p in pros.PROS)
+
+
+def test_each_move_says_how_many_uploads_it_asks_for_in_two_weeks():
+    moves = {m['id']: m for m in pros.detail(pros.BY_ID['cashmoneyap'], None)['moves']}
+    assert moves['steady']['uploads'] == 6 and moves['name-the-rapper']['uploads'] == 3 and moves['low-entry']['uploads'] == 0
