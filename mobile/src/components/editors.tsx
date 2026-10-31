@@ -4,7 +4,7 @@ import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
 import * as api from '@/api/endpoints';
 import type { Description, ScoredTag, TagLevel, TagRun } from '@/api/endpoints';
-import { Button, Card, ListGroup, ListRow, Meter, Segmented } from '@/components/ui';
+import { Button, Card, ListGroup, ListRow, Meter, Segmented, SwipeToDelete, confirmAction } from '@/components/ui';
 import { DESCRIPTION_TEMPLATES } from '@/data/templates';
 import { useDraft, type DraftDescription } from '@/state/draft';
 import { F, R, font, makeStyles, useColors } from '@/theme';
@@ -67,23 +67,27 @@ export function DescriptionEditor({
     }
   };
 
-  const remove = async () => {
-    if (!editing?.id) return;
+  const deleteSaved = async (id: string) => {
     setBusy(true);
     setError(null);
     try {
-      await api.deleteDescription(editing.id);
-      onDeleted(editing.id);
-      if (description.id === editing.id) {
+      await api.deleteDescription(id);
+      onDeleted(id);
+      if (description.id === id) {
         const t = DESCRIPTION_TEMPLATES[0];
         setDescription({ id: t.id, title: t.name, content: t.content, saved: false });
       }
-      setEditing(null);
+      if (editing?.id === id) setEditing(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not delete the description.');
     } finally {
       setBusy(false);
     }
+  };
+  const askToDelete = (d: { id?: string; title: string }) => {
+    const id = d.id;
+    if (!id) return;
+    confirmAction(`Delete “${d.title}”?`, 'This description is removed. Uploads that already used it keep their text.', 'Delete', () => void deleteSaved(id));
   };
 
   if (editing) {
@@ -115,7 +119,7 @@ export function DescriptionEditor({
         <View style={s.row}>
           <Button title="Cancel" variant="secondary" size="md" style={{ flex: 1 }} onPress={() => setEditing(null)} />
           {editing.id ? (
-            <Button title="Delete" variant="secondary" size="md" style={{ flex: 1 }} onPress={busy ? undefined : remove} />
+            <Button title="Delete" variant="secondary" size="md" style={{ flex: 1 }} onPress={busy ? undefined : () => askToDelete(editing)} />
           ) : null}
           <Button title={busy ? 'Saving…' : 'Save'} size="md" style={{ flex: 1 }} onPress={busy ? undefined : save} />
         </View>
@@ -130,17 +134,27 @@ export function DescriptionEditor({
         <Button title="+ New" variant="secondary" size="sm" onPress={() => setEditing({ title: '', content: '' })} />
       </View>
       <ListGroup>
-        {options.map((o, i) => (
-          <ListRow
-            key={o.id}
-            title={o.title}
-            subtitle={o.saved ? undefined : 'Template'}
-            last={i === options.length - 1}
-            onPress={() => setDescription(o)}
-            right={o.id === current.id ? <Text style={{ color: C.acc, fontSize: 16, ...font() }}>✓</Text> : <View />}
-          />
-        ))}
+        {options.map((o, i) => {
+          const row = (
+            <ListRow
+              title={o.title}
+              subtitle={o.saved ? undefined : 'Template'}
+              last={i === options.length - 1}
+              onPress={() => setDescription(o)}
+              right={o.id === current.id ? <Text style={{ color: C.acc, fontSize: 16, ...font() }}>✓</Text> : <View />}
+            />
+          );
+          return o.saved ? (
+            <SwipeToDelete key={o.id} onDelete={() => askToDelete(o)} label="Delete">
+              <View style={{ backgroundColor: C.card }}>{row}</View>
+            </SwipeToDelete>
+          ) : (
+            <View key={o.id}>{row}</View>
+          );
+        })}
       </ListGroup>
+      {saved.length ? <Text style={s.hint}>Swipe a saved description left to delete it</Text> : null}
+      {error ? <Text style={s.error}>{error}</Text> : null}
       <Text style={s.description} numberOfLines={6}>
         {current.content}
       </Text>
@@ -455,6 +469,7 @@ const useStyles = makeStyles((C) => ({
   cardTitle: { color: C.text, fontSize: 17, flexShrink: 1, ...font('600') },
   muted: { color: C.t3, fontSize: 12, lineHeight: 17, flexShrink: 1, ...font() },
   error: { color: C.danger, fontSize: 13, ...font() },
+  hint: { color: C.t3, fontSize: 11.5, fontFamily: F.mono },
   done: {
     flexDirection: 'row',
     alignItems: 'center',

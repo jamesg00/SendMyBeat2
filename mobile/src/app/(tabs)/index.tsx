@@ -1,14 +1,14 @@
 import * as Clipboard from 'expo-clipboard';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, Platform, Pressable, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
 
 import { useAuth } from '@/api/auth';
 import * as api from '@/api/endpoints';
 import type { Description, TagRun } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
 import { Checklist } from '@/components/checklist';
-import { Button, Card, IconTile, JobProgress, ListGroup, ListRow, Meter, Pill, PlayPauseIcon, Screen, SectionLabel, Segmented, SwipeToDelete, useUiStyles } from '@/components/ui';
+import { Button, Card, IconTile, JobProgress, ListGroup, ListRow, Meter, Pill, PlayPauseIcon, Screen, SectionLabel, Segmented, SwipeToDelete, confirmAction, useUiStyles } from '@/components/ui';
 import { DescriptionEditor, TagEditor } from '@/components/editors';
 import { Avatar } from '@/components/producer';
 import { PlanWorkflow } from '@/components/plan-agent';
@@ -124,6 +124,7 @@ export default function WorkflowScreen() {
           historyLoading={history.loading}
           onGenerate={generate}
           onOpen={openRun}
+          onRunDeleted={(id) => history.setData((cur) => (cur ?? []).filter((x) => x.id !== id))}
           descriptions={descriptions.data ?? []}
           onDescriptionSaved={(d) => descriptions.setData((cur) => upsert(cur, d))}
           onDescriptionDeleted={(id) => descriptions.setData((cur) => (cur ?? []).filter((d) => d.id !== id))}
@@ -143,18 +144,6 @@ export default function WorkflowScreen() {
 
 function planLabel(plan: api.SubscriptionStatus['plan']) {
   return plan.charAt(0).toUpperCase() + plan.slice(1);
-}
-
-// Alert.alert does nothing on web, so the web preview uses the browser's confirm.
-function confirmAction(title: string, message: string, action: string, onYes: () => void) {
-  if (Platform.OS === 'web') {
-    if (globalThis.confirm?.(`${title}\n\n${message}`)) onYes();
-    return;
-  }
-  Alert.alert(title, message, [
-    { text: 'Keep', style: 'cancel' },
-    { text: action, style: 'destructive', onPress: onYes },
-  ]);
 }
 
 function openStudio(open: () => void) {
@@ -236,6 +225,7 @@ function BuildStep({
   historyLoading,
   onGenerate,
   onOpen,
+  onRunDeleted,
   descriptions,
   onDescriptionSaved,
   onDescriptionDeleted,
@@ -245,6 +235,7 @@ function BuildStep({
   historyLoading: boolean;
   onGenerate: (query: string) => Promise<void>;
   onOpen: (r: TagRun) => void;
+  onRunDeleted: (id: string) => void;
   descriptions: Description[];
   onDescriptionSaved: (d: Description) => void;
   onDescriptionDeleted: (id: string) => void;
@@ -252,8 +243,21 @@ function BuildStep({
   const C = useColors();
   const s = useStyles();
   const ui = useUiStyles();
-  const { generation, generationError, lastGenerated, run } = useDraft();
+  const { generation, generationError, lastGenerated, run, setRun } = useDraft();
   const [query, setQuery] = useState('');
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const askToDeleteRun = (r: TagRun) =>
+    confirmAction(`Delete “${r.query}”?`, `Its ${r.tags.length} tags are removed from your history.`, 'Delete', async () => {
+      setDeleteError(null);
+      try {
+        await api.deleteTagRun(r.id);
+        onRunDeleted(r.id);
+        if (run?.id === r.id) setRun(null);
+      } catch (e) {
+        setDeleteError(e instanceof Error ? e.message : 'Could not delete it.');
+      }
+    });
 
   const generate = () => {
     if (!query.trim() || generation) return;
@@ -312,7 +316,11 @@ function BuildStep({
       <DescriptionEditor saved={descriptions} onSaved={onDescriptionSaved} onDeleted={onDescriptionDeleted} />
 
       <View>
-        <Text style={[ui.sectionLabel, { paddingBottom: 8 }]}>Recent runs</Text>
+        <View style={s.runsHead}>
+          <Text style={ui.sectionLabel}>Recent runs</Text>
+          {runs.length ? <Text style={s.swipeHint}>Swipe left to delete</Text> : null}
+        </View>
+        {deleteError ? <Text style={s.error}>{deleteError}</Text> : null}
         {historyLoading ? (
           <ActivityIndicator color={C.t2} style={{ alignSelf: 'flex-start' }} />
         ) : historyError ? (
@@ -321,17 +329,18 @@ function BuildStep({
           <Text style={s.muted}>Your generated tag sets will show up here.</Text>
         ) : (
           runs.slice(0, 8).map((r, i, arr) => (
-            <Pressable
-              key={r.id}
-              onPress={() => onOpen(r)}
-              accessibilityRole="button"
-              style={({ pressed }) => [s.hairRow, i === arr.length - 1 && s.hairLast, pressed && { backgroundColor: C.card }]}>
-              <Text style={s.hairTitle} numberOfLines={1}>
-                {r.query}
-              </Text>
-              <Text style={s.mono}>{r.tags.length} tags</Text>
-              <Text style={s.hairDate}>{shortDate(r.created_at)}</Text>
-            </Pressable>
+            <SwipeToDelete key={r.id} onDelete={() => askToDeleteRun(r)} label="Delete">
+              <Pressable
+                onPress={() => onOpen(r)}
+                accessibilityRole="button"
+                style={({ pressed }) => [s.hairRow, i === arr.length - 1 && s.hairLast, { backgroundColor: pressed ? C.card : C.bg }]}>
+                <Text style={s.hairTitle} numberOfLines={1}>
+                  {r.query}
+                </Text>
+                <Text style={s.mono}>{r.tags.length} tags</Text>
+                <Text style={s.hairDate}>{shortDate(r.created_at)}</Text>
+              </Pressable>
+            </SwipeToDelete>
           ))
         )}
       </View>
@@ -518,6 +527,7 @@ const useStyles = makeStyles((C) => ({
     borderTopColor: C.lineSoft,
   },
   hairLast: { borderBottomWidth: 1, borderBottomColor: C.lineSoft },
+  runsHead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingBottom: 8 },
   hairTitle: { flex: 1, color: C.text, fontSize: 15, ...font() },
   hairDate: { width: 64, textAlign: 'right', color: C.t3, fontSize: 13, ...font() },
   reviewHead: { flexDirection: 'row', alignItems: 'flex-end', gap: 12 },

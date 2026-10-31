@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
+  Alert,
   Animated as RNAnimated,
   PanResponder,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -332,6 +334,18 @@ const SWIPE_ACTION_W = 96;
 
 /** Swipe left to show a Delete button (tap it), or swipe all the way to delete straight away.
  *  onDelete should confirm. Swipe back or tap the card to close it. */
+// Alert.alert does nothing on web, so the web preview uses the browser's confirm.
+export function confirmAction(title: string, message: string, action: string, onYes: () => void) {
+  if (Platform.OS === 'web') {
+    if (globalThis.confirm?.(`${title}\n\n${message}`)) onYes();
+    return;
+  }
+  Alert.alert(title, message, [
+    { text: 'Keep', style: 'cancel' },
+    { text: action, style: 'destructive', onPress: onYes },
+  ]);
+}
+
 export function SwipeToDelete({ children, onDelete, label }: { children: ReactNode; onDelete: () => void; label: string }) {
   const styles = useUiStyles();
   const [x] = useState(() => new RNAnimated.Value(0));

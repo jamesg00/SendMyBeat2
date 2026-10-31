@@ -113,6 +113,7 @@ export const me = () => api<User>('/auth/me');
 
 export const subscriptionStatus = () => api<SubscriptionStatus>('/subscription/status');
 export const tagHistory = () => api<TagRun[]>('/tags/history');
+export const deleteTagRun = (id: string) => api<unknown>(`/tags/history/${id}`, { method: 'DELETE' });
 export type TitleIdea = { title: string; keywords: string[]; coverage: number; length: number };
 /** Video titles built from a run's best keywords (no credit used). */
 export const titleIdeas = (runId: string, beatName: string) =>
