@@ -7,6 +7,7 @@ import { useAuth } from '@/api/auth';
 import * as api from '@/api/endpoints';
 import type { Description, TagRun } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
+import { Checklist } from '@/components/checklist';
 import { Button, Card, IconTile, JobProgress, ListGroup, ListRow, Meter, Pill, PlayPauseIcon, Screen, SectionLabel, Segmented, SwipeToDelete, useUiStyles } from '@/components/ui';
 import { DescriptionEditor, TagEditor } from '@/components/editors';
 import { Avatar } from '@/components/producer';
@@ -135,7 +136,7 @@ export default function WorkflowScreen() {
           onTagsSaved={(r) => history.setData((cur) => (cur ?? []).map((x) => (x.id === r.id ? r : x)))}
         />
       )}
-      {step === 'upload' && <UploadStep run={draft.run} />}
+      {step === 'upload' && <UploadStep run={draft.run} onBuild={() => setStep('build')} />}
     </Screen>
   );
 }
@@ -400,14 +401,21 @@ function ReviewStep({
         <Button title={copied ? 'Copied ✓' : 'Copy description'} variant="secondary" size="md" onPress={copyDescription} />
       </Card>
 
+      <Checklist
+        title="BEFORE YOU UPLOAD"
+        items={[
+          { label: 'Tags', done: run.tags.length > 0 },
+          { label: 'Description', done: !!description.content.trim(), onPress: onBack },
+        ]}
+      />
       <Button title="Continue to upload" onPress={onDone} />
     </>
   );
 }
 
-function UploadStep({ run }: { run: TagRun | null }) {
+function UploadStep({ run, onBuild }: { run: TagRun | null; onBuild: () => void }) {
   const C = useColors();
-  const s = useStyles();
+  const { description } = useDraft();
   const yt = useRequest(api.youtubeStatus);
   const studio = useStudio();
   return (
@@ -427,12 +435,14 @@ function UploadStep({ run }: { run: TagRun | null }) {
         />
       </ListGroup>
 
-      <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12 }}>
-        <Text style={{ color: run ? C.acc : C.t3, fontSize: 16, ...font() }}>{run ? '✓' : '–'}</Text>
-        <Text style={[s.muted, { fontSize: 14, color: C.t2, flex: 1, ...font() }]}>
-          {run ? `${run.tags.length} tags from “${run.query}” ready to attach` : 'No tags selected yet'}
-        </Text>
-      </Card>
+      <Checklist
+        title="BEFORE YOU OPEN UPLOAD STUDIO"
+        items={[
+          { label: 'YouTube connected', done: !!yt.data?.connected },
+          { label: run ? `${run.tags.length} tags` : 'Tags', done: !!run, optional: true, onPress: onBuild },
+          { label: 'Description', done: !!description.content.trim(), onPress: onBuild },
+        ]}
+      />
 
       <Button title={studio.active ? 'Resume Upload Studio' : 'Open Upload Studio'} onPress={() => openStudio(studio.open)} />
     </>

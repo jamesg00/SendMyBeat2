@@ -9198,6 +9198,12 @@ class StylePlanStepUpdate(BaseModel):
     done: bool
 
 
+class PlanAssistRequest(BaseModel):
+    # The description Upload Studio is using: a saved one by id, or a starter template's text.
+    description_id: Optional[str] = Field(default=None, max_length=64)
+    description: Optional[str] = Field(default=None, max_length=5000)
+
+
 class ProOverrideUpdate(BaseModel):
     """Admin only. Empty string clears a field; a field left out is kept."""
     photo: Optional[str] = Field(default=None, max_length=1000)
@@ -9334,9 +9340,10 @@ async def update_pro_override(pro_id: str, request: ProOverrideUpdate, current_u
 
 
 @api_router.post("/pros/plan/steps/{step_id}/assist")
-async def assist_style_plan_step(step_id: str, current_user: dict = Depends(get_current_user)):
-    """Have the plan agent do a step: it drafts the description change, the titles, or the message,
-    as a background job (1 AI credit, refunded if it fails). Nothing is saved until you approve it."""
+async def assist_style_plan_step(step_id: str, request: Optional[PlanAssistRequest] = None, current_user: dict = Depends(get_current_user)):
+    """Have the plan agent do a step as a background job (1 AI credit, refunded if it fails). A
+    description step is applied for you (the old text comes back so you can undo it); titles and
+    messages come back as drafts."""
     plan = await db[pros_service.PLANS].find_one({"user_id": current_user["id"]}, {"_id": 0})
     step = next((s for s in (plan or {}).get("steps") or [] if s.get("id") == step_id), None)
     if not step:
@@ -9358,7 +9365,13 @@ async def assist_style_plan_step(step_id: str, current_user: dict = Depends(get_
     job_doc = await _queue_paid_job(
         current_user=current_user,
         job_type="plan_assist",
-        payload={"step_id": step_id, "mode": mode, "cache_key": cache_key},
+        payload={
+            "step_id": step_id,
+            "mode": mode,
+            "cache_key": cache_key,
+            "description_id": request.description_id if request else None,
+            "description": request.description if request else None,
+        },
         message="Queued the plan agent.",
         feature_name="plan help",
     )
@@ -9380,7 +9393,7 @@ async def _execute_plan_assist_job(job: dict) -> dict:
     their_titles = [u.get("title") or "" for u in (channel.get("uploads") or [])[:8]]
     your_titles = [u["title"] for u in await _my_uploads(user_id) if u.get("title")][:8]
     searches = await db.tag_generations.find({"user_id": user_id}, {"_id": 0, "query": 1}).sort("created_at", -1).to_list(6)
-    description_doc = await db.descriptions.find_one({"user_id": user_id}, {"_id": 0, "id": 1, "content": 1}, sort=[("created_at", -1)])
+    description_doc = await _plan_description(user_id, payload.get("description_id"))
 
     system, prompt = pros_service.assist_prompt(
         mode,
@@ -9389,15 +9402,54 @@ async def _execute_plan_assist_job(job: dict) -> dict:
         their_titles=their_titles,
         your_titles=your_titles,
         your_searches=[s.get("query") for s in searches if s.get("query")],
-        description=(description_doc or {}).get("content") or "",
+        description=(description_doc or {}).get("content") or payload.get("description") or "",
     )
     await _update_upload_job(job["id"], progress=55, message="The agent is drafting it...")
     raw = await llm_chat(system_message=system, user_message=prompt, temperature=0.6)
     result = pros_service.parse_assist(mode, _parse_llm_json_response(raw))
     result["step_id"] = step["id"]
-    if mode == "description" and description_doc:
-        result["replaces_description_id"] = description_doc.get("id")
+    if mode == "description":
+        await _update_upload_job(job["id"], progress=85, message="Saving it to your description...")
+        result.update(await _apply_plan_description(user_id, description_doc, result))
+        if step.get("kind") == "manual":
+            await db[pros_service.PLANS].update_one(
+                {"user_id": user_id, "steps": {"$elemMatch": {"id": step["id"], "kind": "manual"}}},
+                {"$set": {"steps.$.done": True}},
+            )
     return result
+
+
+async def _plan_description(user_id: str, description_id: Optional[str]) -> Optional[dict]:
+    """The description the agent should change: the one you picked, else your newest."""
+    fields = {"_id": 0, "id": 1, "title": 1, "content": 1}
+    if description_id:
+        doc = await db.descriptions.find_one({"id": description_id, "user_id": user_id}, fields)
+        if doc:
+            return doc
+    return await db.descriptions.find_one({"user_id": user_id}, fields, sort=[("created_at", -1)])
+
+
+async def _apply_plan_description(user_id: str, description_doc: Optional[dict], result: dict) -> dict:
+    """Write the agent's description so you don't have to: your description is updated in place
+    (its old text is returned for undo), or a new one is saved if you had none."""
+    now = _safe_iso_now()
+    if description_doc:
+        await db.descriptions.update_one(
+            {"id": description_doc["id"], "user_id": user_id},
+            {"$set": {"content": result["content"], "updated_at": now}},
+        )
+        return {
+            "applied": True,
+            "description_id": description_doc["id"],
+            "title": description_doc.get("title") or result["title"],
+            "previous_content": description_doc.get("content") or "",
+        }
+    description = Description(user_id=user_id, title=result["title"], content=result["content"], is_ai_generated=True)
+    doc = description.model_dump()
+    doc["created_at"] = doc["created_at"].isoformat()
+    doc["updated_at"] = doc["updated_at"].isoformat()
+    await db.descriptions.insert_one(doc)
+    return {"applied": True, "description_id": description.id, "created": True}
 
 
 async def _process_plan_assist_job(job: dict) -> None:

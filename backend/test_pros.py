@@ -98,10 +98,15 @@ def cache_db(existing=None, override=None):
     return {pros.CHANNEL_CACHE: coll, pros.OVERRIDES: overrides}, coll
 
 
+# Every pro's channel is pinned now; these tests check the lookup for one that isn't.
+UNPINNED = [{k: v for k, v in pro.items() if k != 'channel_id'} for pro in pros.PROS]
+
+
 @pytest.mark.asyncio
 async def test_channels_are_found_by_handle_and_cached_with_photo_and_uploads():
     db, coll = cache_db()
-    stats = await pros.refresh_channels(db, youtube_fake(), now=NOW)
+    with patch.object(pros, 'PROS', UNPINNED):
+        stats = await pros.refresh_channels(db, youtube_fake(), now=NOW)
     assert stats['refreshed'] == 5
     saved = coll.update_one.await_args_list[0].args[1]['$set']
     assert saved['photo'] == 'https://yt/photo.jpg' and saved['banner'] == 'https://yt/banner'
@@ -113,9 +118,10 @@ async def test_channels_are_found_by_handle_and_cached_with_photo_and_uploads():
 async def test_a_wrong_handle_falls_back_to_one_search():
     db, coll = cache_db()
     yt = youtube_fake(handle_hits=False)
-    stats = await pros.refresh_channels(db, yt, now=NOW)
-    assert yt.search.return_value.list.call_count == 3  # CashMoneyAP's and Nick Mira's channels are pinned, so no search for them
-    assert stats['units'] >= 300
+    with patch.object(pros, 'PROS', UNPINNED):
+        stats = await pros.refresh_channels(db, yt, now=NOW)
+    assert yt.search.return_value.list.call_count == 5
+    assert stats['units'] >= 500
     assert coll.update_one.await_args_list[0].args[1]['$set']['channel_id'] == 'UCsearch'
 
 

@@ -117,3 +117,50 @@ def test_a_cache_holding_another_channel_is_refetched():
     assert not pros.wrong_channel(nick, {'channel_id': nick['channel_id']})
     assert not pros.wrong_channel(nick, None)
     assert pros.wrong_channel(nick, {'channel_id': nick['channel_id']}, {'channel_id': 'UCadmin_pinned_xxxxxxxxx'})
+
+
+def description_job_db(description_doc):
+    db = MagicMock()
+    plans = MagicMock()
+    plans.find_one = AsyncMock(return_value={'pro_id': 'taz-taylor', 'steps': [
+        {'id': 's1', 'kind': 'manual', 'link': 'descriptions', 'text': 'Add lease terms', 'move': 'x'},
+    ]})
+    plans.update_one = AsyncMock()
+    db.__getitem__.return_value = plans
+    db.descriptions.find_one = AsyncMock(return_value=description_doc)
+    db.descriptions.update_one = AsyncMock()
+    db.descriptions.insert_one = AsyncMock()
+    searches = MagicMock()
+    searches.sort.return_value.to_list = AsyncMock(return_value=[])
+    db.tag_generations.find.return_value = searches
+    return db, plans
+
+
+async def run_description_job(db, payload=None):
+    job = {'id': 'j1', 'user_id': 'u1', 'payload': {'step_id': 's1', 'mode': 'description', **(payload or {})}}
+    with patch.object(server, 'db', db), \
+         patch.object(server, '_update_upload_job', AsyncMock()), \
+         patch.object(server.pros_service, 'channels_by_pro', AsyncMock(return_value={})), \
+         patch.object(server, '_my_uploads', AsyncMock(return_value=[])), \
+         patch.object(server, 'llm_chat', AsyncMock(return_value='{"summary": "s", "content": "New text"}')):
+        return await server._execute_plan_assist_job(job)
+
+
+@pytest.mark.asyncio
+async def test_the_agent_rewrites_your_description_and_ticks_the_step():
+    db, plans = description_job_db({'id': 'd1', 'title': 'Main', 'content': 'Old text'})
+    result = await run_description_job(db, {'description_id': 'd1'})
+    assert result['applied'] is True and result['description_id'] == 'd1'
+    assert result['previous_content'] == 'Old text' and result['title'] == 'Main'
+    filt, update = db.descriptions.update_one.await_args.args
+    assert filt == {'id': 'd1', 'user_id': 'u1'} and update['$set']['content'] == 'New text'
+    assert plans.update_one.await_args.args[1] == {'$set': {'steps.$.done': True}}
+
+
+@pytest.mark.asyncio
+async def test_without_a_saved_description_the_agent_saves_a_new_one():
+    db, _ = description_job_db(None)
+    result = await run_description_job(db, {'description': 'Starter template'})
+    assert result['created'] is True
+    saved = db.descriptions.insert_one.await_args.args[0]
+    assert saved['id'] == result['description_id'] and saved['content'] == 'New text' and saved['user_id'] == 'u1'

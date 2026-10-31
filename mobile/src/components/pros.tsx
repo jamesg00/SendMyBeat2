@@ -5,12 +5,14 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, useWindowDimensions, Vi
 import Animated, {
   Extrapolation,
   interpolate,
+  interpolateColor,
   type SharedValue,
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
 } from 'react-native-reanimated';
 import Svg, { Circle, Defs, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
+import { scheduleOnRN } from 'react-native-worklets';
 
 import * as api from '@/api/endpoints';
 import type { PlanStep, ProCard, StylePlan } from '@/api/endpoints';
@@ -51,8 +53,15 @@ export function ProsGallery() {
   const cardW = width - 40 - 24;
   const step = cardW + 12;
   const x = useSharedValue(0);
+  const shown = useSharedValue(0);
+  // The dots follow x frame by frame; the card's buttons switch as soon as a card is mostly in view.
   const onScroll = useAnimatedScrollHandler((e) => {
     x.value = e.contentOffset.x;
+    const i = Math.max(0, Math.round(e.contentOffset.x / step));
+    if (i !== shown.value) {
+      shown.value = i;
+      scheduleOnRN(setIndex, i);
+    }
   });
 
   if (list.loading) return <ActivityIndicator color={C.t2} style={{ alignSelf: 'flex-start' }} />;
@@ -85,15 +94,14 @@ export function ProsGallery() {
         onScroll={onScroll}
         scrollEventThrottle={16}
         style={{ marginHorizontal: -20 }}
-        contentContainerStyle={{ paddingHorizontal: 20, gap: 12, paddingVertical: 8 }}
-        onMomentumScrollEnd={(e) => setIndex(Math.max(0, Math.round(e.nativeEvent.contentOffset.x / step)))}>
+        contentContainerStyle={{ paddingHorizontal: 20, gap: 12, paddingVertical: 8 }}>
         {items.map((p, i) => (
           <DeckCard key={p.id} pro={p} width={cardW} index={i} step={step} x={x} />
         ))}
       </Animated.ScrollView>
       <View style={s.dots} accessibilityElementsHidden>
         {items.map((p, i) => (
-          <View key={p.id} style={[s.dot, i === index && s.dotOn]} />
+          <DeckDot key={p.id} index={i} step={step} x={x} />
         ))}
       </View>
       {current ? (
@@ -129,6 +137,17 @@ export function ProsGallery() {
 }
 
 // One card in the deck: the cards beside the one in view lean back and shrink a little.
+// One page dot: it stretches and darkens as its card slides into view, in step with your finger.
+function DeckDot({ index, step, x }: { index: number; step: number; x: SharedValue<number> }) {
+  const s = useStyles();
+  const C = useColors();
+  const style = useAnimatedStyle(() => {
+    const near = interpolate(Math.abs(x.value / step - index), [0, 1], [1, 0], Extrapolation.CLAMP);
+    return { width: 6 + near * 12, backgroundColor: interpolateColor(near, [0, 1], [C.wave, C.text]) };
+  });
+  return <Animated.View style={[s.dot, style]} />;
+}
+
 function DeckCard({ pro, width, index, step, x }: { pro: ProCard; width: number; index: number; step: number; x: SharedValue<number> }) {
   const s = useStyles();
   const C = useColors();
@@ -382,7 +401,6 @@ const useStyles = makeStyles((C) => ({
   matchPct: { width: 40, textAlign: 'right', color: C.text, fontSize: 13, fontFamily: F.monoMedium },
   dots: { flexDirection: 'row', justifyContent: 'center', gap: 6 },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: C.wave },
-  dotOn: { width: 18, backgroundColor: C.text },
   plan: { gap: 12, padding: 16, borderRadius: 16, borderWidth: 1, borderColor: C.accLine, backgroundColor: C.accSoft },
   planTitle: { color: C.text, fontSize: 17, lineHeight: 22, ...display },
   next: { color: C.t2, fontSize: 13.5, lineHeight: 19, ...font() },

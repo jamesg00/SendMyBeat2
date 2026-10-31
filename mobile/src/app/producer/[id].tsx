@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/api/auth';
@@ -25,7 +25,7 @@ const SOCIAL_LABELS: Record<string, string> = {
   spotify: 'Spotify',
 };
 
-// A producer's Spotlight profile, opened from the Community tab as a sheet.
+// A producer's Spotlight profile, opened from the Community tab as a sheet. Swipe down to close it.
 export default function ProducerScreen() {
   const C = useColors();
   const s = useStyles();
@@ -38,7 +38,6 @@ export default function ProducerScreen() {
   const mine = user?.id === id;
   const [editing, setEditing] = useState<'banner' | 'avatar' | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     void loadSocial();
@@ -52,12 +51,6 @@ export default function ProducerScreen() {
       if (mine) void refreshStats();
     }, [mine, refreshStats]),
   );
-
-  const pullToRefresh = async () => {
-    setRefreshing(true);
-    await refreshStats();
-    setRefreshing(false);
-  };
 
   // Your own profile: tap the banner or picture to change it right here.
   const changeImage = async (which: 'banner' | 'avatar') => {
@@ -101,7 +94,11 @@ export default function ProducerScreen() {
       style={s.root}
       contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
       showsVerticalScrollIndicator={false}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void pullToRefresh()} tintColor={C.t2} colors={[C.t2]} />}>
+      // Pulling down at the top closes the sheet (the system sheet gesture handles most swipes;
+      // this catches a fast pull that bounced the list instead).
+      onScrollEndDrag={(e) => {
+        if (e.nativeEvent.contentOffset.y < -70) router.back();
+      }}>
       <Pressable
         onPress={mine ? () => void changeImage('banner') : undefined}
         disabled={!mine}
@@ -114,8 +111,8 @@ export default function ProducerScreen() {
           </View>
         ) : null}
       </Pressable>
-      <Pressable onPress={() => router.back()} style={[s.back, { top: 14 }]} accessibilityRole="button" accessibilityLabel="Close profile">
-        <Text style={{ color: C.text, fontSize: 15, ...font('600') }}>✕</Text>
+      <Pressable onPress={() => router.back()} style={s.grabberHit} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close profile" accessibilityHint="Or swipe down">
+        <View style={s.grabber} />
       </Pressable>
 
       <View style={s.body}>
@@ -257,18 +254,8 @@ const useStyles = makeStyles((C) => ({
   root: { flex: 1, backgroundColor: C.bg },
   center: { alignItems: 'center', justifyContent: 'center' },
   banner: { height: 150, backgroundColor: C.card2, borderBottomWidth: 1, borderBottomColor: C.lineSoft },
-  back: {
-    position: 'absolute',
-    right: 16,
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    borderWidth: 1,
-    borderColor: C.line,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  grabberHit: { position: 'absolute', top: 0, left: 0, right: 0, height: 28, alignItems: 'center', justifyContent: 'center' },
+  grabber: { width: 40, height: 5, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.85)', shadowColor: '#000', shadowOpacity: 0.35, shadowRadius: 4, shadowOffset: { width: 0, height: 1 } },
   body: { paddingHorizontal: 20, gap: 18 },
   head: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginTop: -36 },
   avatarRing: { borderRadius: 42, borderWidth: 4, borderColor: C.bg },
