@@ -112,8 +112,8 @@ async def test_a_wrong_handle_falls_back_to_one_search():
     db, coll = cache_db()
     yt = youtube_fake(handle_hits=False)
     stats = await pros.refresh_channels(db, yt, now=NOW)
-    assert yt.search.return_value.list.call_count == 5
-    assert stats['units'] >= 500
+    assert yt.search.return_value.list.call_count == 4  # CashMoneyAP's channel is pinned, so no search for it
+    assert stats['units'] >= 400
     assert coll.update_one.await_args_list[0].args[1]['$set']['channel_id'] == 'UCsearch'
 
 
@@ -143,3 +143,27 @@ async def test_unknown_producers_404():
     with pytest.raises(HTTPException) as err:
         await server.create_style_plan('nobody', server.StylePlanRequest(moves=[]), current_user={'id': 'u1'})
     assert err.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_a_pinned_channel_skips_handle_lookup_and_search():
+    pinned = next(p for p in pros.PROS if p['id'] == 'cashmoneyap')
+    db, coll = cache_db()
+    yt = youtube_fake(handle_hits=False)
+    with patch.object(pros, 'PROS', [pinned]):
+        await pros.refresh_channels(db, yt, now=NOW)
+    yt.search.assert_not_called()
+    assert not any('forHandle' in c.kwargs for c in yt.channels.return_value.list.call_args_list)
+    assert coll.update_one.await_args_list[0].args[1]['$set']['channel_id'] == 'UCsVTRE0hRlbo6Obo-qkYxaw'
+
+
+def test_a_press_photo_wins_over_the_channel_picture_and_carries_its_credit():
+    pro = {**pros.PROS[0], 'photo': 'https://cdn/press.jpg', 'photo_credit': 'Photo: Jane Doe'}
+    c = pros.card(pro, {'photo': 'https://yt/photo.jpg'})
+    assert c['photo'] == 'https://cdn/press.jpg' and c['photo_credit'] == 'Photo: Jane Doe'
+    c = pros.card(pros.PROS[0], {'photo': 'https://yt/photo.jpg'})
+    assert c['photo'] == 'https://yt/photo.jpg' and c['photo_credit'] is None
+
+
+def test_every_pro_says_why_they_blew_up():
+    assert all(pros.detail(p, None)['why'] for p in pros.PROS)

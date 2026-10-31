@@ -71,6 +71,13 @@ export default function ProScreen() {
 
         {tab === 'about' ? (
           <>
+            {p.why ? (
+              <View style={s.why}>
+                <Text style={s.moveNum}>WHY THEY BLEW UP</Text>
+                <Text style={s.whyText}>{p.why}</Text>
+              </View>
+            ) : null}
+
             <View style={{ gap: 8 }}>
               <Text style={ui.sectionLabel}>About</Text>
               {p.story.map((line) => (
@@ -230,6 +237,8 @@ const useStyles = makeStyles((C) => ({
   rowText: { flex: 1, color: C.text, fontSize: 14, lineHeight: 19, ...font() },
   year: { width: 40, color: C.t3, fontSize: 12, fontFamily: F.monoMedium },
   move: { width: 168, padding: 12, gap: 6, borderRadius: R.card, borderWidth: 1, borderColor: C.line, backgroundColor: C.card },
+  why: { padding: 14, gap: 6, borderRadius: R.card, borderWidth: 1, borderColor: C.line, backgroundColor: C.card },
+  whyText: { color: C.text, fontSize: 18, lineHeight: 24, letterSpacing: -0.2, ...display },
   moveNum: { color: C.acc, fontSize: 11, fontFamily: F.monoMedium },
   moveTitle: { color: C.text, fontSize: 14, ...font('600') },
   moveBody: { color: C.t2, fontSize: 12.5, lineHeight: 17, ...font() },

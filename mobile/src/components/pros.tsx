@@ -125,11 +125,12 @@ export function ProPhoto({ pro, height }: { pro: ProCard; height: number }) {
           source={{ uri: pro.photo }}
           style={{ width: size, height: size, borderRadius: size / 2 }}
           contentFit="cover"
-          accessibilityLabel={`${pro.name}’s YouTube channel picture`}
+          accessibilityLabel={pro.photo_credit ? `${pro.name}, ${pro.photo_credit}` : `${pro.name}’s YouTube channel picture`}
         />
       ) : (
         <Text style={s.mono}>photo from YouTube</Text>
       )}
+      {pro.photo_credit ? <Text style={[s.mono, { position: 'absolute', right: 10, bottom: 8, fontSize: 10.5 }]}>{pro.photo_credit}</Text> : null}
       <Text style={s.group}>{pro.group}</Text>
     </View>
   );
