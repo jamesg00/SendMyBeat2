@@ -65,7 +65,13 @@ export default function ProfileScreen() {
       <View style={{ gap: 8 }}>
         <Text style={ui.sectionLabel}>App</Text>
         <ListGroup>
-          <ListRow title="Appearance" value={THEMES.find((t) => t.id === themeId)?.label} onPress={() => router.push('/appearance')} last />
+          <ListRow
+            title="Appearance"
+            value={THEMES.find((t) => t.id === themeId)?.label}
+            onPress={() => router.push('/appearance')}
+            last={!user?.is_admin}
+          />
+          {user?.is_admin ? <ListRow title="Admin · Pros photos and channels" onPress={() => router.push('/admin-pros')} last /> : null}
         </ListGroup>
       </View>
 

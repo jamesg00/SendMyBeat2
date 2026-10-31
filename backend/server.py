@@ -9223,6 +9223,12 @@ async def _pro_channels() -> dict[str, dict]:
     if len(channels) < len(pros_service.PROS):
         await pros_service.refresh_channels(db, _outcome_youtube_client())
         return await pros_service.channels_by_pro(db)
+    wrong = [pro["id"] for pro in pros_service.PROS if pros_service.wrong_channel(pro, channels.get(pro["id"]))]
+    if wrong:
+        # A channel was re-pinned since the cache filled (e.g. Nick Mira's own channel): show it now.
+        for pro_id in wrong:
+            await pros_service.refresh_channels(db, _outcome_youtube_client(), force=True, only=pro_id)
+        return await pros_service.channels_by_pro(db)
     if any(pros_service.is_stale(channel) for channel in channels.values()):
         asyncio.create_task(pros_service.refresh_channels(db, _outcome_youtube_client()))
     return channels
@@ -9325,6 +9331,85 @@ async def update_pro_override(pro_id: str, request: ProOverrideUpdate, current_u
     channels = await pros_service.channels_by_pro(db)
     override = await db[pros_service.OVERRIDES].find_one({"pro_id": pro_id}, {"_id": 0})
     return pros_service.card(pros_service.BY_ID[pro_id], channels.get(pro_id), override)
+
+
+@api_router.post("/pros/plan/steps/{step_id}/assist")
+async def assist_style_plan_step(step_id: str, current_user: dict = Depends(get_current_user)):
+    """Have the plan agent do a step: it drafts the description change, the titles, or the message,
+    as a background job (1 AI credit, refunded if it fails). Nothing is saved until you approve it."""
+    plan = await db[pros_service.PLANS].find_one({"user_id": current_user["id"]}, {"_id": 0})
+    step = next((s for s in (plan or {}).get("steps") or [] if s.get("id") == step_id), None)
+    if not step:
+        raise HTTPException(status_code=404, detail="That step isn't in your plan.")
+    mode = pros_service.assist_mode(step)
+    if not mode:
+        raise HTTPException(status_code=400, detail="This step ticks itself off from your uploads; there's nothing to draft.")
+    await _guard_heavy_feature(current_user=current_user, feature_key="plan_assist", job_type="plan_assist")
+    _enforce_action_rate_limit(
+        f"plan_assist:{current_user['id']}",
+        limit=10,
+        window_seconds=600,
+        detail_message="The plan agent needs a short break. Try again in a few minutes.",
+    )
+    cache_key = f"plan_assist:{current_user['id']}:{step_id}"
+    active = await _find_active_background_job(current_user=current_user, job_type="plan_assist", cache_key=cache_key)
+    if active:
+        return {"success": True, "queued": True, "job": _sanitize_upload_job_doc(active)}
+    job_doc = await _queue_paid_job(
+        current_user=current_user,
+        job_type="plan_assist",
+        payload={"step_id": step_id, "mode": mode, "cache_key": cache_key},
+        message="Queued the plan agent.",
+        feature_name="plan help",
+    )
+    return {"success": True, "queued": True, "job": _sanitize_upload_job_doc(job_doc)}
+
+
+async def _execute_plan_assist_job(job: dict) -> dict:
+    user_id = str(job.get("user_id") or "")
+    payload = job.get("payload") or {}
+    plan = await db[pros_service.PLANS].find_one({"user_id": user_id}, {"_id": 0})
+    step = next((s for s in (plan or {}).get("steps") or [] if s.get("id") == payload.get("step_id")), None)
+    pro = pros_service.BY_ID.get((plan or {}).get("pro_id"))
+    if not step or not pro:
+        raise ValueError("That plan step is gone. Start the plan again.")
+    mode = payload.get("mode") or pros_service.assist_mode(step) or "help"
+
+    await _update_upload_job(job["id"], progress=25, message=f"Reading {pro['name']}'s titles and yours...")
+    channel = (await pros_service.channels_by_pro(db)).get(pro["id"]) or {}
+    their_titles = [u.get("title") or "" for u in (channel.get("uploads") or [])[:8]]
+    your_titles = [u["title"] for u in await _my_uploads(user_id) if u.get("title")][:8]
+    searches = await db.tag_generations.find({"user_id": user_id}, {"_id": 0, "query": 1}).sort("created_at", -1).to_list(6)
+    description_doc = await db.descriptions.find_one({"user_id": user_id}, {"_id": 0, "id": 1, "content": 1}, sort=[("created_at", -1)])
+
+    system, prompt = pros_service.assist_prompt(
+        mode,
+        step,
+        pro,
+        their_titles=their_titles,
+        your_titles=your_titles,
+        your_searches=[s.get("query") for s in searches if s.get("query")],
+        description=(description_doc or {}).get("content") or "",
+    )
+    await _update_upload_job(job["id"], progress=55, message="The agent is drafting it...")
+    raw = await llm_chat(system_message=system, user_message=prompt, temperature=0.6)
+    result = pros_service.parse_assist(mode, _parse_llm_json_response(raw))
+    result["step_id"] = step["id"]
+    if mode == "description" and description_doc:
+        result["replaces_description_id"] = description_doc.get("id")
+    return result
+
+
+async def _process_plan_assist_job(job: dict) -> None:
+    job_id = job["id"]
+    try:
+        result = await _execute_plan_assist_job(job)
+        await _update_upload_job(job_id, status="succeeded", progress=100, message="Draft ready.", result=result, error=None, extra_updates={"completed_at": _safe_iso_now(), "worker_id": UPLOAD_JOB_WORKER_ID})
+    except Exception as exc:
+        await _refund_job_credit(job)
+        logging.error(f"Plan assist job {job_id} failed: {exc}")
+        error_message = str(exc) if isinstance(exc, ValueError) else "The plan agent couldn't finish. Your credit was returned."
+        await _update_upload_job(job_id, status="failed", progress=100, message="The plan agent failed.", error=error_message, extra_updates={"failed_at": _safe_iso_now(), "worker_id": UPLOAD_JOB_WORKER_ID})
 
 
 @api_router.post("/pros/{pro_id}/plan")
@@ -9874,6 +9959,7 @@ background_job_service.set_handlers(
         "beat_fix": _process_beat_fix_job,
         "tag_generation": _process_tag_generation_job,
         "tag_join": _process_tag_join_job,
+        "plan_assist": _process_plan_assist_job,
     }
 )
 spotlight_service = SpotlightService(

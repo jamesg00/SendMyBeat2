@@ -114,14 +114,15 @@ async def test_a_wrong_handle_falls_back_to_one_search():
     db, coll = cache_db()
     yt = youtube_fake(handle_hits=False)
     stats = await pros.refresh_channels(db, yt, now=NOW)
-    assert yt.search.return_value.list.call_count == 4  # CashMoneyAP's channel is pinned, so no search for it
-    assert stats['units'] >= 400
+    assert yt.search.return_value.list.call_count == 3  # CashMoneyAP's and Nick Mira's channels are pinned, so no search for them
+    assert stats['units'] >= 300
     assert coll.update_one.await_args_list[0].args[1]['$set']['channel_id'] == 'UCsearch'
 
 
 @pytest.mark.asyncio
 async def test_fresh_channels_are_not_fetched_again_and_no_key_means_no_calls():
-    db, coll = cache_db({'pro_id': 'x', 'channel_id': 'UC1', 'fetched_at': NOW - timedelta(hours=2)})
+    # No channel_id in the cache, so no pinned channel looks re-pinned; only freshness decides.
+    db, coll = cache_db({'pro_id': 'x', 'fetched_at': NOW - timedelta(hours=2)})
     yt = youtube_fake()
     assert (await pros.refresh_channels(db, yt, now=NOW))['refreshed'] == 0
     yt.channels.assert_not_called()

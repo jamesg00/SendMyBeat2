@@ -10,7 +10,8 @@ import { useRequest } from '@/api/use-request';
 import { Button, Card, IconTile, JobProgress, ListGroup, ListRow, Meter, Pill, PlayPauseIcon, Screen, SectionLabel, Segmented, SwipeToDelete, useUiStyles } from '@/components/ui';
 import { DescriptionEditor, TagEditor } from '@/components/editors';
 import { Avatar } from '@/components/producer';
-import { PlanCard, usePlan } from '@/components/pros';
+import { PlanWorkflow } from '@/components/plan-agent';
+import { usePlan } from '@/components/pros';
 import { useDraft } from '@/state/draft';
 import { useStudio } from '@/state/studio';
 import { F, R, font, makeStyles, useColors } from '@/theme';
@@ -114,7 +115,7 @@ export default function WorkflowScreen() {
         ]}
       />
 
-      {step === 'build' && plan ? <PlanCard plan={plan} onChange={setPlan} /> : null}
+      {step === 'build' && plan ? <PlanWorkflow plan={plan} onChange={setPlan} /> : null}
       {step === 'build' && (
         <BuildStep
           runs={runs}
