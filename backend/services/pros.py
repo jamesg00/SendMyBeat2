@@ -31,6 +31,8 @@ PROS: list[dict[str, Any]] = [
         "id": "taz-taylor",
         "name": "Taz Taylor",
         "group": "Internet Money",
+        # He has no personal channel; Internet Money's (@InternetMoneyRecords) is the one he founded.
+        "channel_id": "UCYj2GvOHcLTPvcyLpgw_PsQ",
         "handles": ["@internetmoney", "@InternetMoneyRecords"],
         "search": "Internet Money Taz Taylor",
         "tagline": "Turned type beats into a label: cheap leases, sold to many artists at once.",
@@ -101,6 +103,7 @@ PROS: list[dict[str, Any]] = [
         "id": "mjnichols",
         "name": "MjNichols",
         "group": "Type-beat YouTuber",
+        "channel_id": "UCVVUVArPU2zhTJzLWxEafSQ",
         "handles": ["@mjnichols", "@MjNicholsBeats"],
         "search": "mjNichols type beats",
         "tagline": "Uploads since 2012, titled for search; quit his day job by 2015.",
@@ -140,13 +143,16 @@ PROS: list[dict[str, Any]] = [
         "story": [
             "Alex Petit started in high school in Guadeloupe, remaking Waka Flocka beats with no local scene to sell to.",
             "Put type beats on YouTube and BeatStars, each title naming the rapper he hoped would use it, with beats from $50.",
-            "Lil Tjay and Polo G used his free beats on the way up; credits with Polo G, Migos, Chief Keef and Young Thug followed.",
+            "His beats reached rappers on the rise: Lil Tjay's \"None of Your Love\" and NLE Choppa's \"Jumpin\" with Polo G.",
+            "In 2020 he co-produced Pop Smoke's \"For the Night\", a Billboard Hot 100 top-ten hit, and \"Gangstas\".",
         ],
         "why": "He titled beats for rappers on the rise, so they found his beats before they were famous.",
         "notable": [
             {"year": "2018", "text": "Forbes profile: beats from $50 on YouTube and BeatStars"},
-            {"year": "", "text": "Early beats used by Lil Tjay and Polo G"},
-            {"year": "", "text": "Placements with Migos, Chief Keef, Young Thug and Lil Skies"},
+            {"year": "2020", "text": "Pop Smoke, \"For the Night\" (Hot 100 top ten)"},
+            {"year": "2020", "text": "Pop Smoke, \"Gangstas\""},
+            {"year": "2022", "text": "NLE Choppa, \"Slut Me Out\""},
+            {"year": "", "text": "Lil Tjay, \"None of Your Love\"; NLE Choppa feat. Polo G, \"Jumpin\""},
         ],
         "moves": [
             {"id": "name-the-rapper", "title": "Name the rapper", "body": "Put the artist you want on the beat at the front of the title.",
@@ -161,25 +167,27 @@ PROS: list[dict[str, Any]] = [
         "sources": [
             {"label": "Forbes", "url": "https://www.forbes.com/sites/ogdenpayne/2018/06/26/meet-cashmoneyap-hip-hops-newest-entrepreneurial-producer/"},
             {"label": "Producergrind", "url": "https://producergrind.com/blogs/blog/the-rise-of-a-young-legend-cashmoneyap-cash-gang-records"},
+            {"label": "Wikipedia", "url": "https://en.wikipedia.org/wiki/CashMoneyAP"},
         ],
     },
     {
         "id": "guala",
         "name": "Guala Beatz",
         "group": "YouTube producer",
+        "channel_id": "UCszZ1qpf2ZSVwQBNZXZrixw",
         "handles": ["@GualaBeatz", "@gualabeatz", "@Guala"],
         "search": "Guala Beatz producer",
         "tagline": "Started posting beats on YouTube in 2018 and grew past 100K subscribers.",
         "why": "He kept posting beats and production videos on YouTube, and the channel grew past 100K subscribers.",
         "sound": ["chill rap", "steady uploads", "production videos"],
         "story": [
-            "Started posting beats and production content on YouTube as Guala Beatz in March 2018.",
-            "Kept posting beats and remixes until the channel passed 100,000 subscribers.",
+            "His channel dates back to 2011; he started posting beats and production videos as Guala Beatz in March 2018.",
+            "Kept uploading until the channel passed 100,000 subscribers and 31 million views.",
             "Artists credit him on their songs as \"prod. Guala Beatz\".",
         ],
         "notable": [
             {"year": "2018", "text": "First beats on YouTube as Guala Beatz"},
-            {"year": "", "text": "100K+ YouTube subscribers"},
+            {"year": "", "text": "100K+ YouTube subscribers, 31M+ channel views"},
         ],
         "moves": [
             {"id": "steady", "title": "Show up every week", "body": "A steady stream of beats keeps you in front of the same artists.",
@@ -190,6 +198,7 @@ PROS: list[dict[str, Any]] = [
              "steps": [{"kind": "title_formula", "text": "Lead 2 titles with \"<Artist> Type Beat\"", "target": 2}]},
         ],
         "sources": [
+            {"label": "His YouTube channel", "url": "https://www.youtube.com/@GualaBeatz/about"},
             {"label": "Famous Birthdays", "url": "https://www.famousbirthdays.com/people/guala.html"},
             {"label": "SoundCloud credit", "url": "https://m.soundcloud.com/ghentley/overnight-prod-guala-beatz"},
         ],
