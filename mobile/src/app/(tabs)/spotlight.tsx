@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
@@ -156,7 +157,11 @@ function Featured({ producer: p, label }: { producer: Producer; label: string })
   return (
     <View style={s.featured}>
       <Pressable onPress={() => open(p)} accessibilityRole="button" accessibilityLabel={`Open ${p.username}`}>
-        <View style={s.banner} />
+        {p.banner_url ? (
+          <Image source={{ uri: p.banner_url }} style={s.banner} contentFit="cover" accessibilityIgnoresInvertColors />
+        ) : (
+          <View style={s.banner} />
+        )}
         <View style={s.featuredHead}>
           <View style={s.featuredAvatar}>
             <Avatar producer={p} size={56} />

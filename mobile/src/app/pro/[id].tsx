@@ -1,11 +1,10 @@
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Line, Rect } from 'react-native-svg';
 
-import { useAuth } from '@/api/auth';
 import * as api from '@/api/endpoints';
 import type { ProBreakdown, ProDetail, StyleMatch, TitlePatterns } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
@@ -62,7 +61,6 @@ export default function ProScreen() {
             ]}
           />
           {tab === 'story' ? <Story p={p} /> : tab === 'breakdown' ? <Breakdown p={p} /> : <YouVsThem p={p} />}
-          <AdminPhoto p={p} onSaved={pro.reload} />
         </View>
       </ScrollView>
 
@@ -414,52 +412,6 @@ function Legend({ color, label }: { color: string; label: string }) {
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
       <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }} />
       <Text style={s.fine}>{label}</Text>
-    </View>
-  );
-}
-
-// ---- Admins: set a press photo (with the producer's permission) or pin their channel.
-
-function AdminPhoto({ p, onSaved }: { p: ProDetail; onSaved: () => void }) {
-  const s = useStyles();
-  const C = useColors();
-  const { user } = useAuth();
-  const [open, setOpen] = useState(false);
-  const [photo, setPhoto] = useState('');
-  const [credit, setCredit] = useState('');
-  const [channel, setChannel] = useState('');
-  const [msg, setMsg] = useState<string | null>(null);
-  if (!user?.is_admin) return null;
-  if (!open) {
-    return (
-      <Pressable onPress={() => setOpen(true)} style={{ minHeight: 44, justifyContent: 'center' }} accessibilityRole="button">
-        <Text style={s.fine}>Admin · set photo or channel</Text>
-      </Pressable>
-    );
-  }
-  const save = async () => {
-    setMsg(null);
-    try {
-      const body: { photo?: string; photo_credit?: string; channel_id?: string } = {};
-      if (photo.trim()) body.photo = photo.trim();
-      if (credit.trim()) body.photo_credit = credit.trim();
-      if (channel.trim()) body.channel_id = channel.trim();
-      await api.updatePro(p.id, body);
-      setMsg('Saved.');
-      onSaved();
-    } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Could not save.');
-    }
-  };
-  return (
-    <View style={s.panel}>
-      <Text style={s.kicker}>ADMIN · {p.name.toUpperCase()}</Text>
-      <TextInput style={s.input} value={photo} onChangeText={setPhoto} placeholder="Press photo https:// link" placeholderTextColor={C.t3} autoCapitalize="none" />
-      <TextInput style={s.input} value={credit} onChangeText={setCredit} placeholder="Credit, e.g. Photo: Jane Doe" placeholderTextColor={C.t3} />
-      <TextInput style={s.input} value={channel} onChangeText={setChannel} placeholder="YouTube channel id (UC…)" placeholderTextColor={C.t3} autoCapitalize="none" />
-      <Text style={s.fine}>Only use a photo the producer or their team gave permission for.</Text>
-      {msg ? <Text style={s.fine}>{msg}</Text> : null}
-      <Button title="Save" size="md" onPress={() => void save()} />
     </View>
   );
 }

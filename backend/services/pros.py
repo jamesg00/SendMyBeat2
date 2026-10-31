@@ -65,6 +65,8 @@ PROS: list[dict[str, Any]] = [
         "id": "nick-mira",
         "name": "Nick Mira",
         "group": "Internet Money",
+        # His own channel (confirmed by James), not the shared Internet Money one.
+        "channel_id": "UC0__rMNmefKfxeB-82fuCWA",
         "handles": ["@nickmira", "@NickMiraBeats"],
         "search": "Nick Mira producer",
         "tagline": "Produced \"Lucid Dreams\" from a beat pack sent straight to Juice WRLD.",
@@ -420,6 +422,12 @@ def is_stale(channel: dict[str, Any] | None, now: datetime | None = None) -> boo
     return not fetched or (now or datetime.now(timezone.utc)) - fetched >= CHANNEL_TTL
 
 
+def wrong_channel(pro: dict[str, Any], cached: dict[str, Any] | None, override: dict[str, Any] | None = None) -> bool:
+    """The cache holds a different channel than the one pinned (in PROS or by an admin): refetch now."""
+    pinned = (override or {}).get("channel_id") or pro.get("channel_id")
+    return bool(pinned and cached and cached.get("channel_id") and cached.get("channel_id") != pinned)
+
+
 _refreshing = asyncio.Lock()
 
 
@@ -436,10 +444,10 @@ async def refresh_channels(
             if only and pro["id"] != only:
                 continue
             cached = await db[CHANNEL_CACHE].find_one({"pro_id": pro["id"]}, {"_id": 0}) or {}
-            if not force and not is_stale(cached, now):
-                continue
             try:
                 override = await db[OVERRIDES].find_one({"pro_id": pro["id"]}, {"_id": 0}) or {}
+                if not force and not is_stale(cached, now) and not wrong_channel(pro, cached, override):
+                    continue
                 # An admin-pinned id, then the one in PROS, then the one we found by handle or search.
                 channel_id = override.get("channel_id") or pro.get("channel_id") or cached.get("channel_id")
                 if not channel_id:
@@ -532,3 +540,90 @@ def detail(pro: dict[str, Any], channel: dict[str, Any] | None, override: dict[s
         "patterns": title_patterns(uploads),
         "breakdown": breakdown(uploads),
     }
+
+
+# ---- plan agent: does a plan step for you (drafts it, you approve it)
+
+ASSIST_MODES = ("description", "titles", "help")
+
+
+def assist_mode(step: dict[str, Any]) -> Optional[str]:
+    """What the agent can do for a step: rewrite your description, write titles, or draft the rest.
+    Upload steps have nothing to draft; they tick themselves off from your uploads."""
+    kind = step.get("kind")
+    if kind in ("title_formula", "title_pair"):
+        return "titles"
+    if kind == "uploads":
+        return None
+    if step.get("link") == "descriptions":
+        return "description"
+    return "help"
+
+
+def assist_prompt(
+    mode: str,
+    step: dict[str, Any],
+    pro: dict[str, Any],
+    *,
+    their_titles: list[str],
+    your_titles: list[str],
+    your_searches: list[str],
+    description: str,
+) -> tuple[str, str]:
+    """(system, user) messages for the agent. Everything it needs is in the prompt; it answers in JSON."""
+    move = next((m for m in pro["moves"] if m["title"] == step.get("move")), None)
+    lines = [
+        f"Producer to learn from: {pro['name']} ({pro.get('tagline') or ''}).",
+        f"The move: {step.get('move')}: {(move or {}).get('body') or ''}",
+        f"The step to do now: {step.get('text')}",
+    ]
+    if their_titles:
+        lines.append("Their recent YouTube titles:\n" + "\n".join(f"- {t}" for t in their_titles[:8]))
+    if your_titles:
+        lines.append("The user's recent upload titles:\n" + "\n".join(f"- {t}" for t in your_titles[:8]))
+    if your_searches:
+        lines.append("Artists/vibes the user makes beats for: " + ", ".join(your_searches[:6]))
+    if mode == "description":
+        lines.append("The user's current YouTube description template:\n<<<\n" + (description or "(empty)") + "\n>>>")
+        lines.append(
+            'Rewrite the template so it does the step, keeping everything else the user wrote. Use placeholders like '
+            '[YOUR STORE LINK] or [PRICE] for facts you don\'t know; never invent prices, links or contacts. '
+            'Answer JSON: {"summary": "<one sentence on what changed>", "title": "<short template name>", "content": "<the full new template>"}'
+        )
+    elif mode == "titles":
+        rule = "two artists paired" if step.get("kind") == "title_pair" else "one artist name first, then \"Type Beat\""
+        lines.append(
+            f"Write 5 YouTube titles for the user's next beats in the producer's style ({rule}). Use artists the user "
+            "already makes beats for. Under 70 characters each. "
+            'Answer JSON: {"summary": "<one sentence on the pattern>", "titles": ["...", "...", "...", "...", "..."]}'
+        )
+    else:
+        lines.append(
+            "Draft what the user needs to do this step themselves: a message to send, a short checklist, or a script. "
+            "Practical and specific to a beat producer, under 180 words. Use placeholders for names and links. "
+            'Answer JSON: {"summary": "<one sentence on what this is>", "content": "<the draft>"}'
+        )
+    system = (
+        "You help beat producers grow on YouTube by doing one step of a plan for them. "
+        "You only output valid JSON, with no markdown around it."
+    )
+    return system, "\n\n".join(lines)
+
+
+def parse_assist(mode: str, data: Any) -> dict[str, Any]:
+    """Keep only the fields the app shows, trimmed; raises ValueError if the answer is unusable."""
+    if not isinstance(data, dict):
+        raise ValueError("The agent's answer wasn't readable. Try again.")
+    summary = str(data.get("summary") or "").strip()[:240]
+    if mode == "titles":
+        titles = [str(t).strip()[:100] for t in data.get("titles") or [] if str(t).strip()][:5]
+        if not titles:
+            raise ValueError("The agent didn't write any titles. Try again.")
+        return {"mode": mode, "summary": summary, "titles": titles}
+    content = str(data.get("content") or "").strip()[:5000]
+    if not content:
+        raise ValueError("The agent's draft came back empty. Try again.")
+    result = {"mode": mode, "summary": summary, "content": content}
+    if mode == "description":
+        result["title"] = str(data.get("title") or "").strip()[:80] or "Plan description"
+    return result
