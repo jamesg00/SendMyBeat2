@@ -1,6 +1,6 @@
 import * as Clipboard from 'expo-clipboard';
 import { useState } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
 
 import * as api from '@/api/endpoints';
 import type { Description, ScoredTag, TagLevel, TagRun } from '@/api/endpoints';
@@ -396,28 +396,25 @@ export function TagEditor({ run, onSaved }: { run: TagRun; onSaved: (r: TagRun) 
 const RANK_ROW_H = 68;
 const RANK_VISIBLE = 10;
 
-// Every tag best to worst: rank, score bar and what the score is made of. Shows 10 at a time in its
-// own scroll area; scroll inside it for the rest.
+// Every tag best to worst: rank, score bar and what the score is made of. The top 10 first, then
+// "Show all" for the rest. They're part of the page, so scrolling never gets stuck in the list.
 function Ranking({ tags, scores }: { tags: string[]; scores: Map<string, ScoredTag> }) {
   const C = useColors();
   const s = useStyles();
+  const [all, setAll] = useState(false);
   const rows = tags
     .map((tag) => ({ tag, entry: scores.get(keyOf(tag)) }))
     .sort((a, b) => (b.entry?.score ?? -1) - (a.entry?.score ?? -1));
-  const scrolls = rows.length > RANK_VISIBLE;
+  const more = rows.length > RANK_VISIBLE;
   return (
     <View style={{ gap: 8 }}>
-      {scrolls ? (
+      {more ? (
         <Text style={s.muted}>
-          {rows.length} tags · top {RANK_VISIBLE} shown, scroll for the rest
+          {rows.length} tags · {all ? 'all shown' : `top ${RANK_VISIBLE} shown`}
         </Text>
       ) : null}
-      <ScrollView
-        style={[s.rankBox, scrolls && { height: RANK_ROW_H * RANK_VISIBLE }]}
-        scrollEnabled={scrolls}
-        nestedScrollEnabled
-        showsVerticalScrollIndicator={scrolls}>
-        {rows.map(({ tag, entry }, i) => (
+      <View style={s.rankBox}>
+        {(all ? rows : rows.slice(0, RANK_VISIBLE)).map(({ tag, entry }, i) => (
           <View
             key={tag}
             style={[s.rankRow, i === 0 && { borderTopWidth: 0 }]}
@@ -438,7 +435,12 @@ function Ranking({ tags, scores }: { tags: string[]; scores: Map<string, ScoredT
             </View>
           </View>
         ))}
-      </ScrollView>
+      </View>
+      {more ? (
+        <Pressable onPress={() => setAll((v) => !v)} hitSlop={6} style={s.rankMore} accessibilityRole="button">
+          <Text style={s.rankMoreText}>{all ? `Show top ${RANK_VISIBLE}` : `Show all ${rows.length} tags`}</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -446,6 +448,8 @@ function Ranking({ tags, scores }: { tags: string[]; scores: Map<string, ScoredT
 const useStyles = makeStyles((C) => ({
   rankBox: { borderTopWidth: 1, borderBottomWidth: 1, borderColor: C.lineSoft },
   rankRow: { height: RANK_ROW_H, flexDirection: 'row', alignItems: 'center', gap: 12, borderTopWidth: 1, borderTopColor: C.lineSoft },
+  rankMore: { alignSelf: 'center', paddingVertical: 6, paddingHorizontal: 12 },
+  rankMoreText: { color: C.t2, fontSize: 13.5, ...font('500') },
   rankNum: { width: 22, color: C.t2, fontSize: 13, fontFamily: F.monoMedium },
   rankTag: { flex: 1, color: C.text, fontSize: 13.5, fontFamily: F.mono },
   rankScore: { color: C.text, fontSize: 13.5, fontFamily: F.monoMedium },
