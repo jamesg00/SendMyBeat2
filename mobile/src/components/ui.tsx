@@ -404,8 +404,9 @@ export function SwipeToDelete({ children, onDelete, label, radius = R.card }: { 
     });
   }, [open, remove, snap, x]);
   const reveal = x.interpolate({ inputRange: [-SWIPE_ACTION_W, -8, 0], outputRange: [1, 0.2, 0], extrapolate: 'clamp' });
-  // The icon and label grow in as the row slides, then hold.
-  const grow = x.interpolate({ inputRange: [-SWIPE_ACTION_W, -24, 0], outputRange: [1, 0.6, 0.6], extrapolate: 'clamp' });
+  // The button grows in as the row slides, then holds; the row dims a little while it's open.
+  const grow = x.interpolate({ inputRange: [-SWIPE_ACTION_W, -24, 0], outputRange: [1, 0.7, 0.7], extrapolate: 'clamp' });
+  const dim = x.interpolate({ inputRange: [-SWIPE_ACTION_W, 0], outputRange: [0.55, 1], extrapolate: 'clamp' });
 
   return (
     <View
@@ -413,14 +414,20 @@ export function SwipeToDelete({ children, onDelete, label, radius = R.card }: { 
       accessibilityActions={[{ name: 'delete', label }]}
       onAccessibilityAction={(e) => e.nativeEvent.actionName === 'delete' && onDelete()}>
       <RNAnimated.View style={[styles.swipeBehind, { opacity: reveal }]}>
-        <Pressable onPress={remove} style={styles.swipeAction} accessibilityRole="button" accessibilityLabel={label}>
-          <RNAnimated.View style={{ alignItems: 'center', gap: 3, transform: [{ scale: grow }] }}>
+        <RNAnimated.View style={[styles.swipeAction, { transform: [{ scale: grow }] }]}>
+          <Pressable
+            onPress={remove}
+            style={({ pressed }) => [styles.swipeButton, pressed && { opacity: 0.8 }]}
+            accessibilityRole="button"
+            accessibilityLabel={label}>
             <TrashIcon />
-            <Text style={styles.swipeLabel}>{label}</Text>
-          </RNAnimated.View>
-        </Pressable>
+            <Text style={styles.swipeLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+              {label}
+            </Text>
+          </Pressable>
+        </RNAnimated.View>
       </RNAnimated.View>
-      <RNAnimated.View style={{ transform: [{ translateX: x }] }} {...pan.panHandlers}>
+      <RNAnimated.View style={{ transform: [{ translateX: x }], opacity: dim }} {...pan.panHandlers}>
         {children}
         {open ? (
           <Pressable
@@ -475,11 +482,12 @@ export const useUiStyles = makeStyles((C) => ({
     right: 0,
     bottom: 0,
     left: 0,
-    backgroundColor: C.danger,
     flexDirection: 'row',
     justifyContent: 'flex-end',
   },
-  swipeAction: { width: SWIPE_ACTION_W, alignItems: 'center', justifyContent: 'center' },
+  // A rounded button inside the row, clear of its dividers, rather than a flat red block.
+  swipeAction: { width: SWIPE_ACTION_W, paddingVertical: 8, paddingLeft: 10, paddingRight: 2 },
+  swipeButton: { flex: 1, borderRadius: 12, backgroundColor: C.danger, alignItems: 'center', justifyContent: 'center', gap: 3 },
   swipeLabel: { color: '#FFFFFF', fontSize: 12.5, ...font('600') },
   screen: { paddingHorizontal: 20, paddingBottom: 140, gap: 20, backgroundColor: C.bg },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
