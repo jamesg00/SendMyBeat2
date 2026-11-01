@@ -171,6 +171,28 @@ export type VerificationApplication = {
   verification_application?: Partial<VerificationRequest> & { submitted_at?: string };
   pro_name?: string | null;
 };
+export type FeedbackKind = 'bug' | 'idea';
+export type FeedbackStatus = 'new' | 'planned' | 'fixed' | 'closed';
+export type FeedbackItem = {
+  id: string;
+  kind: FeedbackKind;
+  message: string;
+  status: FeedbackStatus;
+  created_at?: string;
+  username?: string;
+  screen?: string | null;
+  app_version?: string | null;
+  platform?: string | null;
+  device?: string | null;
+};
+export const FEEDBACK_STATUS_LABEL: Record<FeedbackStatus, string> = { new: 'Sent', planned: 'Planned', fixed: 'Fixed', closed: 'Closed' };
+export const sendFeedback = (body: { kind: FeedbackKind; message: string; screen?: string; app_version?: string; platform?: string; device?: string }) =>
+  api<{ ok: true; id: string }>('/feedback', { body });
+export const myFeedback = () => api<{ items: FeedbackItem[] }>('/feedback/mine');
+export const allFeedback = () => api<{ items: FeedbackItem[] }>('/admin/feedback?status=all');
+export const updateFeedback = (id: string, status: FeedbackStatus) =>
+  api<{ ok: true }>(`/admin/feedback/${encodeURIComponent(id)}`, { method: 'PATCH', body: { status } });
+
 export const pendingVerifications = () => api<{ applications: VerificationApplication[] }>('/producers/verification/pending');
 export const reviewVerification = (userId: string, action: 'approve' | 'reject', note?: string) =>
   api<Producer>('/producers/verification/review', { body: { user_id: userId, action, note } });

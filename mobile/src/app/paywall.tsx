@@ -7,7 +7,7 @@ import Svg, { Path } from 'react-native-svg';
 
 import * as api from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
-import { Button } from '@/components/ui';
+import { AppIcon, Button } from '@/components/ui';
 import { dollars, markPaywallOpen, startPlan, useSubscription, type PaywallReason } from '@/state/billing';
 import { F, R, display, font, makeStyles, useColors } from '@/theme';
 
@@ -58,21 +58,15 @@ export default function PaywallScreen() {
   const name = pick === 'max' ? 'Pro' : 'Plus';
   const price = pick === 'max' ? pro.price_cents : plus.price_cents;
 
-  const benefits =
-    pick === 'max'
-      ? [
-          `${pro.generations} generations and ${pro.uploads} uploads a month`,
-          'Copy a pro producer’s style, with the plan agent',
-          'Pro breakdowns and You vs them',
-          'Channel analytics and title fixes',
-          'Run several jobs at once',
-        ]
-      : [
-          `${plus.generations} generations and ${plus.uploads} uploads a month`,
-          'Tags scored against real YouTube searches',
-          'Descriptions and Upload Studio',
-          'Upload straight to YouTube',
-        ];
+  // What each plan gets, side by side. A number, or true / false for a check or a dash.
+  const rows: { label: string; plus: string | boolean; pro: string | boolean }[] = [
+    { label: 'AI generations a month', plus: String(plus.generations), pro: String(pro.generations) },
+    { label: 'YouTube uploads a month', plus: String(plus.uploads), pro: String(pro.uploads) },
+    { label: 'Tags, descriptions, Upload Studio', plus: true, pro: true },
+    { label: 'Copy a pro’s style', plus: false, pro: true },
+    { label: 'Pro breakdowns and channel analytics', plus: false, pro: true },
+    { label: 'Several jobs at once', plus: false, pro: true },
+  ];
 
   const go = async () => {
     setBusy(true);
@@ -107,6 +101,7 @@ export default function PaywallScreen() {
     <View style={s.root}>
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         <View style={s.topBar}>
+          <AppIcon size={40} />
           <Pressable onPress={() => router.back()} hitSlop={12} style={s.close} accessibilityRole="button" accessibilityLabel="Close">
             <Svg width={12} height={12} viewBox="0 0 12 12">
               <Path d="M1 1l10 10M11 1L1 11" stroke={C.t2} strokeWidth={1.8} strokeLinecap="round" />
@@ -114,50 +109,45 @@ export default function PaywallScreen() {
           </Pressable>
         </View>
 
-        <View style={{ gap: 10 }}>
-          <Text style={s.kicker}>SENDMYBEAT {name.toUpperCase()}</Text>
+        <View style={{ gap: 8 }}>
           <Text style={s.title}>{head.title}</Text>
-          <Text style={s.sub}>{message || head.sub}</Text>
+          <Text style={s.sub}>
+            {message || (sub?.trial_available && reason === 'needs_plan' ? `Try everything free for ${trial.days} days. Cancel anytime in Profile.` : head.sub)}
+          </Text>
         </View>
 
-        <View style={{ gap: 12 }}>
-          {benefits.map((b, i) => (
-            <Animated.View key={`${pick}-${b}`} entering={FadeIn.delay(i * 40)} style={s.benefit}>
-              <View style={s.benefitIcon}>
-                <Check size={12} color={C.acc} />
-              </View>
-              <Text style={s.benefitText}>{b}</Text>
-            </Animated.View>
-          ))}
-        </View>
-
-        <View style={{ gap: 10 }} accessibilityRole="radiogroup">
-          <PlanRow
+        <View style={s.plans} accessibilityRole="radiogroup">
+          <PlanCard
             name="Plus"
-            detail={`${plus.generations} generations · ${plus.uploads} uploads`}
             price={dollars(plus.price_cents)}
             selected={pick === 'plus'}
-            tag={current === 'plus' ? 'Your plan' : sub?.trial_available ? `${trial.days} days free` : undefined}
+            badge={current === 'plus' ? 'YOUR PLAN' : sub?.trial_available ? `${trial.days} DAYS FREE` : undefined}
             onPress={() => setPick('plus')}
           />
-          <PlanRow
+          <PlanCard
             name="Pro"
-            detail={`${pro.generations} of each · pro styles · analytics`}
             price={dollars(pro.price_cents)}
             selected={pick === 'max'}
-            tag={current === 'max' ? 'Your plan' : 'Most popular'}
-            highlight={current !== 'max'}
+            badge={current === 'max' ? 'YOUR PLAN' : 'MOST POPULAR'}
+            solid={current !== 'max'}
             onPress={() => setPick('max')}
           />
         </View>
 
-        {canTrial ? (
-          <Animated.View entering={FadeIn} style={s.timeline}>
-            <Step title="Today" body={`Full access: ${trial.daily_generations} generations and ${trial.daily_uploads} uploads a day.`} active />
-            <Step title={`Day ${trial.days}`} body={`Your trial ends and Plus starts at ${dollars(plus.price_cents)}/month.`} />
-            <Step title="Anytime" body="Cancel from Profile before then and you won’t be charged." last />
-          </Animated.View>
-        ) : null}
+        <View accessible accessibilityLabel={rows.map((r) => `${r.label}: Plus ${say(r.plus)}, Pro ${say(r.pro)}`).join('. ')}>
+          <View style={s.tableHead}>
+            <Text style={[s.th, { flex: 1, textAlign: 'left' }]}>WHAT YOU GET</Text>
+            <Text style={[s.th, pick === 'plus' && { color: C.text }]}>PLUS</Text>
+            <Text style={[s.th, pick === 'max' && { color: C.text }]}>PRO</Text>
+          </View>
+          {rows.map((r, i) => (
+            <View key={r.label} style={[s.tr, i === rows.length - 1 && { borderBottomWidth: 1 }]}>
+              <Text style={s.td}>{r.label}</Text>
+              <Cell value={r.plus} />
+              <Cell value={r.pro} />
+            </View>
+          ))}
+        </View>
 
         {sub?.founding_spots_left ? (
           <Pressable onPress={() => router.push('/support')} accessibilityRole="link" style={s.founding}>
@@ -187,21 +177,31 @@ function Check({ size, color }: { size: number; color: string }) {
   );
 }
 
-function PlanRow({
+const say = (v: string | boolean) => (v === true ? 'included' : v === false ? 'not included' : v);
+
+function Cell({ value }: { value: string | boolean }) {
+  const s = useStyles();
+  const C = useColors();
+  return (
+    <View style={s.cell}>
+      {value === true ? <Check size={13} color={C.acc} /> : <Text style={value === false ? s.dash : s.num}>{value === false ? '–' : value}</Text>}
+    </View>
+  );
+}
+
+function PlanCard({
   name,
-  detail,
   price,
   selected,
-  tag,
-  highlight,
+  badge,
+  solid,
   onPress,
 }: {
   name: string;
-  detail: string;
   price: string;
   selected: boolean;
-  tag?: string;
-  highlight?: boolean;
+  badge?: string;
+  solid?: boolean;
   onPress: () => void;
 }) {
   const s = useStyles();
@@ -212,39 +212,14 @@ function PlanRow({
       style={({ pressed }) => [s.plan, selected && { borderColor: C.acc, backgroundColor: C.accSoft }, pressed && { opacity: 0.85 }]}
       accessibilityRole="radio"
       accessibilityState={{ checked: selected }}
-      accessibilityLabel={`${name}, ${price} a month. ${detail}`}>
-      <View style={[s.radio, selected && { borderColor: C.acc, backgroundColor: C.acc }]}>{selected ? <Check size={11} color={C.onAcc} /> : null}</View>
-      <View style={{ flex: 1, gap: 3 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Text style={s.planName}>{name}</Text>
-          {tag ? <Text style={[s.tag, highlight && { color: C.onAcc, backgroundColor: C.acc, borderColor: C.acc }]}>{tag}</Text> : null}
-        </View>
-        <Text style={s.planDetail} numberOfLines={1}>
-          {detail}
-        </Text>
-      </View>
-      <View style={{ alignItems: 'flex-end' }}>
-        <Text style={s.price}>{price}</Text>
-        <Text style={s.per}>/month</Text>
-      </View>
+      accessibilityLabel={`${name}, ${price} a month${badge ? `, ${badge.toLowerCase()}` : ''}`}>
+      {badge ? <Text style={[s.badge, solid && { color: C.onPrimary, backgroundColor: C.primary, borderColor: C.primary }]}>{badge}</Text> : <View style={{ height: 19 }} />}
+      <Text style={s.planName}>{name}</Text>
+      <Text style={s.price}>
+        {price}
+        <Text style={s.per}>/mo</Text>
+      </Text>
     </Pressable>
-  );
-}
-
-function Step({ title, body, active, last }: { title: string; body: string; active?: boolean; last?: boolean }) {
-  const s = useStyles();
-  const C = useColors();
-  return (
-    <View style={{ flexDirection: 'row', gap: 12 }}>
-      <View style={{ alignItems: 'center', width: 12 }}>
-        <View style={[s.stepDot, active && { backgroundColor: C.acc, borderColor: C.acc }]} />
-        {last ? null : <View style={s.stepLine} />}
-      </View>
-      <View style={{ flex: 1, gap: 2, paddingBottom: last ? 0 : 14 }}>
-        <Text style={s.stepTitle}>{title}</Text>
-        <Text style={s.stepBody}>{body}</Text>
-      </View>
-    </View>
   );
 }
 
@@ -252,47 +227,35 @@ const useStyles = makeStyles((C) => ({
   root: { flex: 1, backgroundColor: C.bg },
   center: { alignItems: 'center', justifyContent: 'center', gap: 16 },
   scroll: { paddingHorizontal: 22, paddingTop: 14, paddingBottom: 24, gap: 24 },
-  topBar: { flexDirection: 'row', justifyContent: 'flex-end' },
-  close: { width: 30, height: 30, borderRadius: 15, backgroundColor: C.card2, alignItems: 'center', justifyContent: 'center' },
-  kicker: { color: C.acc, fontSize: 11, letterSpacing: 1.2, fontFamily: F.monoMedium },
-  title: { color: C.text, fontSize: 32, lineHeight: 36, ...display },
-  sub: { color: C.t2, fontSize: 15, lineHeight: 22, ...font() },
-  benefit: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  benefitIcon: { width: 22, height: 22, borderRadius: 11, backgroundColor: C.accSoft, alignItems: 'center', justifyContent: 'center' },
-  benefitText: { flex: 1, color: C.text, fontSize: 14.5, lineHeight: 20, ...font('500') },
-  plan: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 15,
-    borderRadius: R.card + 4,
-    borderWidth: 1.5,
-    borderColor: C.line,
-    backgroundColor: C.card,
-  },
-  radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: C.t3, alignItems: 'center', justifyContent: 'center' },
-  planName: { color: C.text, fontSize: 17, ...display },
-  planDetail: { color: C.t2, fontSize: 12.5, ...font() },
-  tag: {
-    color: C.t2,
+  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  plans: { flexDirection: 'row', gap: 10 },
+  plan: { flex: 1, gap: 6, padding: 14, borderRadius: R.card + 4, borderWidth: 1.5, borderColor: C.line, backgroundColor: C.card },
+  badge: {
+    alignSelf: 'flex-start',
+    color: C.acc,
     fontSize: 10,
-    letterSpacing: 0.3,
+    letterSpacing: 0.4,
     fontFamily: F.monoMedium,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: R.chip,
     borderWidth: 1,
-    borderColor: C.line,
+    borderColor: C.accLine,
     overflow: 'hidden',
   },
-  price: { color: C.text, fontSize: 18, ...font('700') },
-  per: { color: C.t3, fontSize: 11, ...font() },
-  timeline: { padding: 16, borderRadius: R.card + 4, backgroundColor: C.card, borderWidth: 1, borderColor: C.line },
-  stepDot: { width: 12, height: 12, borderRadius: 6, borderWidth: 1.5, borderColor: C.t3, marginTop: 3 },
-  stepLine: { flex: 1, width: 1.5, backgroundColor: C.line, marginTop: 3 },
-  stepTitle: { color: C.text, fontSize: 14, ...font('600') },
-  stepBody: { color: C.t2, fontSize: 13, lineHeight: 18, ...font() },
+  planName: { color: C.text, fontSize: 17, ...display },
+  price: { color: C.text, fontSize: 24, ...font('700') },
+  per: { color: C.t3, fontSize: 12, ...font() },
+  tableHead: { flexDirection: 'row', alignItems: 'center', paddingBottom: 8 },
+  th: { width: 56, textAlign: 'center', color: C.t3, fontSize: 11, letterSpacing: 0.6, fontFamily: F.monoMedium },
+  tr: { flexDirection: 'row', alignItems: 'center', paddingVertical: 11, borderTopWidth: 1, borderColor: C.lineSoft },
+  td: { flex: 1, color: C.text, fontSize: 13.5, ...font() },
+  cell: { width: 56, alignItems: 'center' },
+  num: { color: C.text, fontSize: 13.5, fontFamily: F.mono },
+  dash: { color: C.t3, fontSize: 13.5, ...font() },
+  close: { width: 30, height: 30, borderRadius: 15, backgroundColor: C.card2, alignItems: 'center', justifyContent: 'center' },
+  title: { color: C.text, fontSize: 32, lineHeight: 36, ...display },
+  sub: { color: C.t2, fontSize: 15, lineHeight: 22, ...font() },
   founding: { alignSelf: 'center', paddingVertical: 4, paddingHorizontal: 8 },
   foundingText: { color: C.t3, fontSize: 12.5, ...font('500') },
   footer: { paddingHorizontal: 22, paddingTop: 12, gap: 10, borderTopWidth: 1, borderTopColor: C.line, backgroundColor: C.bg },
