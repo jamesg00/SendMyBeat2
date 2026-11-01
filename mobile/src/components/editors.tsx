@@ -1,6 +1,7 @@
 import * as Clipboard from 'expo-clipboard';
 import { useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import * as api from '@/api/endpoints';
 import type { Description, ScoredTag, TagLevel, TagRun } from '@/api/endpoints';
@@ -316,22 +317,19 @@ export function TagEditor({ run, onSaved }: { run: TagRun; onSaved: (r: TagRun) 
               </Text>
             </View>
           ))}
-          <Text style={s.muted}>Hold a tag for details</Text>
+          <Text style={s.muted}>Hold a tag to see why</Text>
         </View>
       ) : null}
 
-      {view === 'tags' && detail ? (
-        <Pressable onPress={() => setDetail(null)} style={s.detail} accessibilityRole="button" accessibilityHint="Tap to close">
-          <View style={s.meterHead}>
-            <Text style={s.detailTag} numberOfLines={1}>
-              {detail.tag}
-            </Text>
-            <Text style={s.mono}>{detail.score}/100</Text>
-          </View>
-          {levels(detail) ? <Text style={s.detailLevels}>{levels(detail)}</Text> : null}
-          {detail.reason ? <Text style={s.muted}>{detail.reason}</Text> : null}
-        </Pressable>
-      ) : null}
+      <TagDetail
+        entry={detail}
+        rank={detail ? rankOf(tags, scores, detail.tag) : 0}
+        onClose={() => setDetail(null)}
+        onRemove={(tag) => {
+          setTags((cur) => cur.filter((t) => keyOf(t) !== keyOf(tag)));
+          setDetail(null);
+        }}
+      />
 
       <View style={[s.chips, view === 'ranking' && { display: 'none' }]}>
         {visible.map((tag) => {
@@ -393,6 +391,130 @@ export function TagEditor({ run, onSaved }: { run: TagRun; onSaved: (r: TagRun) 
   );
 }
 
+// Where a tag sits in the ranking (1 = best), counting only scored tags.
+const rankOf = (tags: string[], scores: Map<string, ScoredTag>, tag: string) =>
+  tags
+    .map((t) => scores.get(keyOf(t)))
+    .filter((e): e is ScoredTag => !!e)
+    .sort((a, b) => b.score - a.score)
+    .findIndex((e) => keyOf(e.tag) === keyOf(tag)) + 1;
+
+const verdict = (score: number) => (score >= 80 ? 'Strong tag' : score >= 60 ? 'Good tag' : score >= 40 ? 'Okay tag' : 'Weak tag');
+const LEVEL_WORD: Record<TagLevel, string> = { high: 'High', medium: 'Medium', low: 'Low', unknown: 'Not measured' };
+
+// Hold a tag on the Tags screen: a sheet with its score, what the score is made of, and why.
+function TagDetail({
+  entry,
+  rank,
+  onClose,
+  onRemove,
+}: {
+  entry: ScoredTag | null;
+  rank: number;
+  onClose: () => void;
+  onRemove: (tag: string) => void;
+}) {
+  const C = useColors();
+  const s = useStyles();
+  const insets = useSafeAreaInsets();
+  const [copied, setCopied] = useState(false);
+  const demand = entry?.signals?.demand ?? 'unknown';
+  const competition = entry?.signals?.competition ?? 'unknown';
+  const strong = (entry?.score ?? 0) >= 60;
+
+  const close = () => {
+    setCopied(false);
+    onClose();
+  };
+  const copy = async () => {
+    if (!entry) return;
+    await Clipboard.setStringAsync(entry.tag);
+    setCopied(true);
+  };
+
+  return (
+    <Modal visible={!!entry} transparent animationType="fade" onRequestClose={close} statusBarTranslucent>
+      <Pressable style={s.sheetBackdrop} onPress={close} accessibilityLabel="Close" accessibilityRole="button" />
+      {entry ? (
+        <View style={[s.sheet, { paddingBottom: insets.bottom + 16 }]} accessibilityViewIsModal>
+          <View style={s.grabber} />
+
+          <View style={{ gap: 6 }}>
+            <Text style={s.sheetKicker}>{rank ? `#${rank} IN THIS RUN` : 'TAG'}</Text>
+            <Text style={s.sheetTag} selectable>
+              {entry.tag}
+            </Text>
+          </View>
+
+          <View style={s.scoreRow}>
+            <Text style={[s.scoreBig, strong && { color: C.acc }]}>{entry.score}</Text>
+            <View style={{ flex: 1, gap: 8 }}>
+              <View style={s.meterHead}>
+                <Text style={s.verdict}>{verdict(entry.score)}</Text>
+                <Text style={s.mono}>/100</Text>
+              </View>
+              <Meter value={entry.score / 100} color={strong ? C.acc : C.text} height={4} />
+            </View>
+          </View>
+
+          <View style={s.signals}>
+            <Signal label="Search demand" value={LEVEL_WORD[demand]} good={demand === 'high'} bad={demand === 'low'} hint="How often people search it on YouTube" />
+            <Signal
+              label="Competition"
+              value={LEVEL_WORD[competition]}
+              good={competition === 'low'}
+              bad={competition === 'high'}
+              hint="How many videos already fight for it"
+            />
+            {entry.signals?.record ? (
+              <Signal
+                label="On real uploads"
+                value={record(entry)}
+                good={entry.signals.record === 'proven'}
+                bad={entry.signals.record === 'weak'}
+                hint="How videos with this tag did against their channel's normal"
+                last
+              />
+            ) : (
+              <Signal label="On real uploads" value="Not enough uploads yet" hint="Shows once videos with this tag have results" last />
+            )}
+          </View>
+
+          {entry.reason ? (
+            <View style={{ gap: 6 }}>
+              <Text style={s.sheetKicker}>WHY THIS SCORE</Text>
+              <Text style={s.reason}>{entry.reason}</Text>
+            </View>
+          ) : null}
+
+          <View style={s.row}>
+            <Button title={copied ? 'Copied' : 'Copy tag'} variant="secondary" size="md" style={{ flex: 1 }} onPress={() => void copy()} />
+            <Button title="Remove tag" variant="secondary" size="md" style={{ flex: 1 }} onPress={() => onRemove(entry.tag)} />
+          </View>
+          <Button title="Done" size="md" onPress={close} />
+        </View>
+      ) : null}
+    </Modal>
+  );
+}
+
+function Signal({ label, value, hint, good, bad, last }: { label: string; value: string; hint: string; good?: boolean; bad?: boolean; last?: boolean }) {
+  const C = useColors();
+  const s = useStyles();
+  return (
+    <View style={[s.signal, last && { borderBottomWidth: 0 }]} accessible accessibilityLabel={`${label}: ${value}. ${hint}`}>
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text style={s.signalLabel}>{label}</Text>
+        <Text style={s.muted}>{hint}</Text>
+      </View>
+      <View style={s.signalValue}>
+        <View style={[s.signalDot, good && { backgroundColor: C.acc }, bad && { backgroundColor: C.danger }]} />
+        <Text style={[s.signalText, good && { color: C.acc }]}>{value}</Text>
+      </View>
+    </View>
+  );
+}
+
 const RANK_ROW_H = 68;
 const RANK_VISIBLE = 10;
 
@@ -446,6 +568,35 @@ function Ranking({ tags, scores }: { tags: string[]; scores: Map<string, ScoredT
 }
 
 const useStyles = makeStyles((C) => ({
+  sheetBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)' },
+  sheet: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    gap: 18,
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    borderColor: C.line,
+    backgroundColor: C.card,
+  },
+  grabber: { alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: C.line, marginBottom: 2 },
+  sheetKicker: { color: C.t3, fontSize: 11, letterSpacing: 0.8, fontFamily: F.monoMedium },
+  sheetTag: { color: C.text, fontSize: 20, lineHeight: 26, fontFamily: F.mono },
+  scoreRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  scoreBig: { color: C.text, fontSize: 44, lineHeight: 48, fontFamily: F.monoMedium, minWidth: 64 },
+  verdict: { color: C.text, fontSize: 15, ...font('600') },
+  signals: { borderRadius: R.card, borderWidth: 1, borderColor: C.lineSoft, backgroundColor: C.card2, paddingHorizontal: 14 },
+  signal: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.lineSoft },
+  signalLabel: { color: C.text, fontSize: 14, ...font('500') },
+  signalValue: { flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: '45%' },
+  signalDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: C.t3 },
+  signalText: { color: C.t2, fontSize: 13, textAlign: 'right', flexShrink: 1, ...font('600') },
+  reason: { color: C.t2, fontSize: 14, lineHeight: 20, ...font() },
   rankBox: { borderTopWidth: 1, borderBottomWidth: 1, borderColor: C.lineSoft },
   rankRow: { height: RANK_ROW_H, flexDirection: 'row', alignItems: 'center', gap: 12, borderTopWidth: 1, borderTopColor: C.lineSoft },
   rankMore: { alignSelf: 'center', paddingVertical: 6, paddingHorizontal: 12 },
@@ -567,9 +718,6 @@ const useStyles = makeStyles((C) => ({
   dotLow: { borderWidth: 1, borderColor: C.t3 },
   legend: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 12, rowGap: 4 },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  detail: { gap: 4, padding: 12, borderRadius: R.ctl, borderWidth: 1, borderColor: C.line, backgroundColor: C.card2 },
-  detailTag: { flex: 1, color: C.text, fontFamily: F.mono, fontSize: 13 },
-  detailLevels: { color: C.text, fontSize: 13, ...font('500') },
   description: {
     padding: 14,
     borderRadius: R.ctl,

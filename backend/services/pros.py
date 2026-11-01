@@ -108,7 +108,7 @@ PROS: list[dict[str, Any]] = [
         "search": "mjNichols type beats",
         "tagline": "Uploads since 2012, titled for search; quit his day job by 2015.",
         "why": "Years of steady uploads, each titled the way buyers search.",
-        "sound": ["artist titles", "consistency", "beat store"],
+        "sound": ["type beats", "beat store", "artist titles"],
         "story": [
             "First upload in April 2012 was a Kendrick Lamar type beat; he kept naming beats after rising artists.",
             "Every description links to his beat store, so views turn into sales.",
@@ -139,7 +139,7 @@ PROS: list[dict[str, Any]] = [
         "handles": ["@CashMoneyAP"],
         "search": "CashMoneyAP type beat",
         "tagline": "Named every beat after the rapper he wanted on it. The rappers found them.",
-        "sound": ["rising-artist titles", "type beats", "trap"],
+        "sound": ["Pop Smoke", "trap", "rising-artist titles"],
         "story": [
             "Alex Petit started in high school in Guadeloupe, remaking Waka Flocka beats with no local scene to sell to.",
             "Put type beats on YouTube and BeatStars, each title naming the rapper he hoped would use it, with beats from $50.",
@@ -212,7 +212,7 @@ PROS: list[dict[str, Any]] = [
         "search": "BeatMenace producer",
         "tagline": "A type beat on YouTube became Desiigner's \"Panda\", a Billboard number one.",
         "why": "He titled a beat for the artists it sounded like, and the right rapper found it by searching YouTube.",
-        "sound": ["dark trap", "artist-named titles", "UK producer"],
+        "sound": ["dark trap", "UK producer", "artist-named titles"],
         "story": [
             "A producer from Rochdale, England, he uploaded the beat to YouTube as a \"Meek Mill / Ace Hood Type Beat\".",
             "Desiigner found it on YouTube and made \"Panda\" (2015), which hit number one on the Billboard Hot 100 in May 2016.",
