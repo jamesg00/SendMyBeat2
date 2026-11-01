@@ -14,11 +14,11 @@ export default function WebTabLayout() {
           <TabTrigger name="index" href="/" asChild>
             <TabButton>Workflow</TabButton>
           </TabTrigger>
-          <TabTrigger name="analytics" href="/analytics" asChild>
-            <TabButton>Analytics</TabButton>
-          </TabTrigger>
           <TabTrigger name="spotlight" href="/spotlight" asChild>
             <TabButton>Spotlight</TabButton>
+          </TabTrigger>
+          <TabTrigger name="analytics" href="/analytics" asChild>
+            <TabButton>Analytics</TabButton>
           </TabTrigger>
           <TabTrigger name="prefs" href="/prefs" asChild>
             <TabButton>Profile</TabButton>

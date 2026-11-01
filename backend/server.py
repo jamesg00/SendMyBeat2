@@ -9392,6 +9392,83 @@ async def list_verification_applications(current_user: dict = Depends(get_curren
         doc["pro_name"] = pro["name"] if pro else None
     return {"applications": docs}
 
+# ============ Feedback: bug reports and feature ideas ============
+
+class FeedbackRequest(BaseModel):
+    kind: Literal["bug", "idea"]
+    message: str = Field(min_length=5, max_length=4000)
+    # Where it happened, filled in by the app (a screen name, not a URL).
+    screen: Optional[str] = Field(default=None, max_length=80)
+    app_version: Optional[str] = Field(default=None, max_length=40)
+    platform: Optional[str] = Field(default=None, max_length=20)
+    device: Optional[str] = Field(default=None, max_length=120)
+
+
+class FeedbackUpdateRequest(BaseModel):
+    status: Literal["new", "planned", "fixed", "closed"]
+
+
+@api_router.post("/feedback")
+async def send_feedback(req: FeedbackRequest, current_user: dict = Depends(get_current_user)):
+    """Report a bug or suggest a feature. Admins read them in the app."""
+    _enforce_action_rate_limit(
+        f"feedback:{current_user['id']}", limit=10, window_seconds=3600,
+        detail_message="Thanks, that's plenty for now. Try again in a bit.",
+    )
+    doc = {
+        "id": str(uuid.uuid4()),
+        "user_id": current_user["id"],
+        "username": current_user.get("username"),
+        "kind": req.kind,
+        "message": req.message.strip(),
+        "screen": (req.screen or "").strip() or None,
+        "app_version": req.app_version,
+        "platform": req.platform,
+        "device": req.device,
+        "status": "new",
+        "created_at": _safe_iso_now(),
+    }
+    await db.feedback.insert_one(doc)
+    return {"ok": True, "id": doc["id"]}
+
+
+@api_router.get("/feedback/mine")
+async def my_feedback(current_user: dict = Depends(get_current_user)):
+    """What you've sent and where it stands."""
+    docs = await db.feedback.find(
+        {"user_id": current_user["id"]},
+        {"_id": 0, "id": 1, "kind": 1, "message": 1, "status": 1, "created_at": 1},
+    ).sort("created_at", -1).to_list(50)
+    return {"items": docs}
+
+
+@api_router.get("/admin/feedback")
+async def list_feedback(status: str = "open", current_user: dict = Depends(get_current_user)):
+    """Admins: bug reports and ideas, newest first. `open` means new or planned."""
+    if not _is_admin_user(current_user):
+        raise HTTPException(status_code=403, detail="Only admins can read feedback.")
+    query: dict[str, Any] = {}
+    if status == "open":
+        query["status"] = {"$in": ["new", "planned"]}
+    elif status in {"new", "planned", "fixed", "closed"}:
+        query["status"] = status
+    docs = await db.feedback.find(query, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return {"items": docs}
+
+
+@api_router.patch("/admin/feedback/{feedback_id}")
+async def update_feedback(feedback_id: str, req: FeedbackUpdateRequest, current_user: dict = Depends(get_current_user)):
+    if not _is_admin_user(current_user):
+        raise HTTPException(status_code=403, detail="Only admins can update feedback.")
+    result = await db.feedback.update_one(
+        {"id": feedback_id},
+        {"$set": {"status": req.status, "updated_at": _safe_iso_now(), "updated_by": current_user["id"]}},
+    )
+    if not getattr(result, "matched_count", 0):
+        raise HTTPException(status_code=404, detail="Feedback not found.")
+    return {"ok": True}
+
+
 # ============ Beat Fixes Route ============
 @api_router.post("/beat/fix")
 async def fix_beat(request: BeatFixRequest, current_user: dict = Depends(get_current_user)):

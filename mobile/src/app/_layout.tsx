@@ -95,6 +95,8 @@ function RootStack() {
           <Stack.Screen name="admin-verify" options={{ presentation: 'modal' }} />
           <Stack.Screen name="paywall" options={{ presentation: 'modal' }} />
           <Stack.Screen name="support" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="feedback" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="admin-feedback" options={{ presentation: 'modal' }} />
           <Stack.Screen name="billing" options={{ presentation: 'transparentModal', animation: 'fade' }} />
         </Stack.Protected>
         <Stack.Protected guard={!user}>

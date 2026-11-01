@@ -4,7 +4,7 @@ import { Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-na
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Polyline, Text as SvgText } from 'react-native-svg';
 
-import { Button, JobProgress, Meter, PlayPauseIcon, useUiStyles } from '@/components/ui';
+import { AppIcon, Button, JobProgress, Meter, PlayPauseIcon, useUiStyles } from '@/components/ui';
 import { F, R, display, font, makeStyles, useColors } from '@/theme';
 
 // The first screen before signing in: what SendMyBeat does, previews of each part of the app
@@ -64,9 +64,12 @@ export default function LandingScreen() {
       contentContainerStyle={[s.root, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 32 }]}
       showsVerticalScrollIndicator={false}>
       <View style={s.topBar}>
-        <Text style={s.logo} accessibilityRole="header">
-          SendMyBeat
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <AppIcon size={30} />
+          <Text style={s.logo} accessibilityRole="header">
+            SendMyBeat
+          </Text>
+        </View>
         <Pressable onPress={() => openAuth('login')} hitSlop={8} style={s.topLink} accessibilityRole="button">
           <Text style={s.topLinkText}>Log in</Text>
         </Pressable>

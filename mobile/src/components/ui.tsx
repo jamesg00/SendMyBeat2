@@ -15,12 +15,14 @@ import {
 } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Image } from 'expo-image';
 import Svg, { Path, Rect } from 'react-native-svg';
 
 import { F, R, display, font, makeStyles, useColors } from '@/theme';
 
 export function Screen({
   title,
+  icon,
   accessory,
   header,
   refreshing,
@@ -28,6 +30,8 @@ export function Screen({
   children,
 }: {
   title: string;
+  /** Shown before the title (the app icon on Profile). */
+  icon?: ReactNode;
   accessory?: ReactNode;
   header?: ReactNode;
   /** Pass both to enable pull to refresh. */
@@ -53,9 +57,12 @@ export function Screen({
         }>
         {header}
         <View style={styles.titleRow}>
-          <Text style={styles.largeTitle} accessibilityRole="header">
-            {title}
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1 }}>
+            {icon}
+            <Text style={styles.largeTitle} accessibilityRole="header">
+              {title}
+            </Text>
+          </View>
           {accessory}
         </View>
         {children}
@@ -359,6 +366,18 @@ export function confirmAction(title: string, message: string, action: string, on
     { text: 'Keep', style: 'cancel' },
     { text: action, style: 'destructive', onPress: onYes },
   ]);
+}
+
+/** The SendMyBeat app icon, with the same rounded corners as on the home screen. */
+export function AppIcon({ size = 32 }: { size?: number }) {
+  return (
+    <Image
+      source={require('@/assets/images/icon.png')}
+      style={{ width: size, height: size, borderRadius: size * 0.225 }}
+      accessibilityLabel="SendMyBeat"
+      accessibilityRole="image"
+    />
+  );
 }
 
 /** Swipe left to reveal a red delete action; swipe far to delete outright. `radius` matches the
