@@ -40,10 +40,17 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public status: number,
+    /** The server's reason, e.g. needs_plan / needs_pro when a plan is required. */
+    public code?: string,
   ) {
     super(message);
   }
 }
+
+const errorCode = (body: unknown) => {
+  const detail = (body as { detail?: { code?: unknown } } | null)?.detail;
+  return detail && typeof detail === 'object' && typeof detail.code === 'string' ? detail.code : undefined;
+};
 
 // Mirrors getApiErrorMessage in frontend/src/pages/Dashboard.js: FastAPI `detail` can be a string or {message}.
 function errorMessage(body: unknown, fallback: string): string {
@@ -57,6 +64,13 @@ function errorMessage(body: unknown, fallback: string): string {
 let onUnauthorized: (() => void) | null = null;
 export function setUnauthorizedHandler(fn: (() => void) | null) {
   onUnauthorized = fn;
+}
+
+// Anything that needs a plan answers 402 with a code; the app shows the paywall for it.
+const PAYWALL_CODES = new Set(['needs_plan', 'needs_pro', 'trial_limit']);
+let onPaywall: ((code: string, message: string) => void) | null = null;
+export function setPaywallHandler(fn: ((code: string, message: string) => void) | null) {
+  onPaywall = fn;
 }
 
 export async function api<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
@@ -87,7 +101,10 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
 
   if (!res.ok) {
     if (res.status === 401 && memoryToken) onUnauthorized?.();
-    throw new ApiError(errorMessage(body, `Request failed (${res.status})`), res.status);
+    const message = errorMessage(body, `Request failed (${res.status})`);
+    const code = errorCode(body);
+    if (code && PAYWALL_CODES.has(code) && (res.status === 402 || res.status === 429)) onPaywall?.(code, message);
+    throw new ApiError(message, res.status, code);
   }
   return body as T;
 }

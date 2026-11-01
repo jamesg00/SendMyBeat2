@@ -18,6 +18,7 @@ import * as api from '@/api/endpoints';
 import type { PlanStep, ProCard, StylePlan } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
 import { VerifiedBadge } from '@/components/producer';
+import { requirePro } from '@/state/billing';
 import { Button, Card, Meter, useUiStyles } from '@/components/ui';
 import { F, display, font, makeStyles, useColors } from '@/theme';
 
@@ -28,8 +29,11 @@ import { F, display, font, makeStyles, useColors } from '@/theme';
 const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
 export const openPro = (id: string) => router.push({ pathname: '/pro/[id]', params: { id } });
 /** Open Copy their style, optionally with some moves already picked. */
-export const copyPro = (id: string, moves?: string[]) =>
+/** Copy a pro's style (a Pro feature: without Pro this opens the plans instead). */
+export const copyPro = (id: string, moves?: string[]) => {
+  if (!requirePro()) return;
   router.push({ pathname: '/pro-plan/[id]', params: moves?.length ? { id, moves: moves.join(',') } : { id } });
+};
 
 /** Your active plan, refreshed whenever the screen comes into view. */
 export function usePlan() {

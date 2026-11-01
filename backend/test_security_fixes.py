@@ -58,14 +58,14 @@ def credit_db(modified):
 
 
 @pytest.mark.asyncio
-async def test_free_credit_is_taken_in_one_conditional_update():
+async def test_trial_credit_is_taken_in_one_conditional_update():
     db = credit_db(1)
-    status = {'plan': 'free'}
+    status = {'plan': 'plus', 'trial': True, 'counter': 'daily', 'credits_total': server.TRIAL_DAILY_AI_CREDITS}
     with patch.object(server, 'db', db), patch.object(server, 'get_user_subscription_status', AsyncMock(return_value=status)):
         assert await server._reserve_ai_credit('u1') is True
     query, update = db.users.update_one.await_args.args
     assert query['id'] == 'u1'
-    assert {'daily_usage_count': {'$lt': server.FREE_DAILY_AI_CREDITS}} in query['$or']
+    assert {'daily_usage_count': {'$lt': server.TRIAL_DAILY_AI_CREDITS}} in query['$or']
     assert update == {'$inc': {'daily_usage_count': 1}}
 
 

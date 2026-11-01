@@ -4,6 +4,7 @@ import { loadToken, saveToken, setUnauthorizedHandler } from './client';
 import * as endpoints from './endpoints';
 import type { User } from './endpoints';
 import { claimSavedWork, clearSavedWork } from '@/state/persist';
+import { resetSubscription } from '@/state/billing';
 import { resetAgent } from '@/state/plan-agent';
 import { resetSocial } from '@/state/social';
 
@@ -27,6 +28,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     resetSocial();
     resetAgent();
+    resetSubscription();
   }, []);
 
   useEffect(() => {

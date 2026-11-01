@@ -6,7 +6,9 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 
 import { AuthProvider, useAuth } from '@/api/auth';
+import { setPaywallHandler } from '@/api/client';
 import { ThemeTransition } from '@/components/theme-transition';
+import { openPaywall, type PaywallReason } from '@/state/billing';
 import { DraftProvider } from '@/state/draft';
 import { StudioProvider } from '@/state/studio';
 import { F, useColors } from '@/theme';
@@ -55,6 +57,12 @@ function RootStack() {
     if (loaded) SplashScreen.hideAsync();
   }, [loaded]);
 
+  // A 402 from anything that needs a plan opens the plans.
+  useEffect(() => {
+    setPaywallHandler((code, message) => openPaywall(code as PaywallReason, message));
+    return () => setPaywallHandler(null);
+  }, []);
+
   if (!loaded) return null;
 
   const base = C.dark ? DarkTheme : DefaultTheme;
@@ -76,6 +84,8 @@ function RootStack() {
           <Stack.Screen name="admin-pros" options={{ presentation: 'modal' }} />
           <Stack.Screen name="verify" options={{ presentation: 'modal' }} />
           <Stack.Screen name="admin-verify" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="paywall" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="support" options={{ presentation: 'modal' }} />
         </Stack.Protected>
         <Stack.Protected guard={!user}>
           <Stack.Screen name="login" />

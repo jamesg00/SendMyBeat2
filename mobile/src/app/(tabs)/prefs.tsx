@@ -8,6 +8,7 @@ import * as api from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
 import { Avatar } from '@/components/producer';
 import { PlanCard, usePlan } from '@/components/pros';
+import { manageBilling, openPaywall, planName } from '@/state/billing';
 import { Button, ListGroup, ListRow, Meter, Screen, useUiStyles } from '@/components/ui';
 import { F, font, makeStyles, THEMES, useColors, useThemeId } from '@/theme';
 
@@ -29,7 +30,8 @@ export default function ProfileScreen() {
   // Coming back from Edit profile shows the new picture and details.
   useFocusEffect(useCallback(() => reloadMe(), [reloadMe]));
 
-  const plan = sub.data ? sub.data.plan.charAt(0).toUpperCase() + sub.data.plan.slice(1) : '…';
+  const plan = planName(sub.data);
+  const openBilling = () => (sub.data?.is_subscribed ? void manageBilling().then(() => sub.reload()) : openPaywall('needs_plan'));
 
   return (
     <Screen title="Profile">
@@ -54,7 +56,7 @@ export default function ProfileScreen() {
 
       {sub.data ? (
         <View style={{ gap: 8 }}>
-          <Text style={ui.sectionLabel}>Usage today</Text>
+          <Text style={ui.sectionLabel}>{sub.data.is_subscribed && !sub.data.trial ? 'Usage this month' : 'Usage today'}</Text>
           <View style={s.panel}>
             <Usage label="AI credits" left={sub.data.daily_credits_remaining} total={sub.data.daily_credits_total} />
             <Usage label="Uploads" left={sub.data.upload_credits_remaining} total={sub.data.upload_credits_total} last />
@@ -72,6 +74,7 @@ export default function ProfileScreen() {
             value={VERIFICATION[me.data?.verification_status ?? 'none'] ?? 'Get verified'}
             onPress={() => router.push('/verify')}
           />
+          <ListRow title="Support SendMyBeat" onPress={() => router.push('/support')} />
           <ListRow
             title="Appearance"
             value={THEMES.find((t) => t.id === themeId)?.label}
@@ -103,7 +106,8 @@ export default function ProfileScreen() {
               onPress={() => router.push({ pathname: '/producer/[id]', params: { id: me.data!.user_id } })}
             />
           ) : null}
-          <ListRow title="Plan and billing" value={plan} onPress={() => site('/dashboard')} />
+          <ListRow title="Plan and billing" value={plan} onPress={openBilling} />
+          {sub.data && !sub.data.pro_access ? <ListRow title="See plans" value={sub.data.trial_available ? '3 days free' : undefined} onPress={() => openPaywall('needs_plan')} /> : null}
           <ListRow
             title="Descriptions"
             right={

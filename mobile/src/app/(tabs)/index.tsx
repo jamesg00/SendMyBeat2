@@ -8,6 +8,7 @@ import * as api from '@/api/endpoints';
 import type { Description, TagRun } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
 import { Checklist } from '@/components/checklist';
+import { planName, refreshSubscription } from '@/state/billing';
 import { Button, Card, IconTile, JobProgress, ListGroup, ListRow, Meter, Pill, PlayPauseIcon, Screen, SectionLabel, Segmented, SwipeToDelete, confirmAction, useUiStyles } from '@/components/ui';
 import { DescriptionEditor, TagEditor } from '@/components/editors';
 import { Avatar } from '@/components/producer';
@@ -68,6 +69,7 @@ export default function WorkflowScreen() {
     if (!r) return;
     history.setData((cur) => upsert(cur, r));
     void sub.reload();
+    void refreshSubscription();
   };
 
   return (
@@ -75,7 +77,7 @@ export default function WorkflowScreen() {
       title="Workflow"
       accessory={
         <View style={s.header}>
-          {sub.data ? <Pill label={planLabel(sub.data.plan)} tone="muted" /> : null}
+          {sub.data ? <Pill label={planName(sub.data)} tone="muted" /> : null}
           <Pressable
             onPress={openProfile}
             disabled={!openProfile}
@@ -140,10 +142,6 @@ export default function WorkflowScreen() {
       {step === 'upload' && <UploadStep run={draft.run} onBuild={() => setStep('build')} />}
     </Screen>
   );
-}
-
-function planLabel(plan: api.SubscriptionStatus['plan']) {
-  return plan.charAt(0).toUpperCase() + plan.slice(1);
 }
 
 function openStudio(open: () => void) {

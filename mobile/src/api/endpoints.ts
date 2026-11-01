@@ -8,12 +8,29 @@ export type TokenResponse = { access_token: string; token_type: string; user: Us
 
 export type SubscriptionStatus = {
   is_subscribed: boolean;
+  /** plus = $5/month, max = Pro ($10/month). */
   plan: 'free' | 'plus' | 'max' | 'pro';
   daily_credits_remaining: number;
   daily_credits_total: number;
   upload_credits_remaining: number;
   upload_credits_total: number;
   resets_at?: string | null;
+  /** In the free trial: credits are per day until trial_ends_at. */
+  trial?: boolean;
+  trial_available?: boolean;
+  trial_ends_at?: string | null;
+  /** Copying a pro's style, pro breakdowns, channel analytics and the job queue. */
+  pro_access?: boolean;
+  founding_member?: boolean;
+  founding_spots_left?: number | null;
+  plan_version?: number;
+};
+export type CheckoutPlan = 'plus' | 'max' | 'founding';
+export type BillingConfig = {
+  plans: { id: 'plus' | 'max'; name: string; price_cents: number; interval: string; generations: number; uploads: number }[];
+  trial: { days: number; daily_generations: number; daily_uploads: number };
+  founding: { price_cents: number; interval: string; limit: number };
+  tip_amounts_cents: number[];
 };
 
 export type TagLevel = 'high' | 'medium' | 'low' | 'unknown';
@@ -114,6 +131,14 @@ export const register = (username: string, password: string) =>
 export const me = () => api<User>('/auth/me');
 
 export const subscriptionStatus = () => api<SubscriptionStatus>('/subscription/status');
+export const syncSubscription = () => api<SubscriptionStatus>('/subscription/sync', { method: 'POST' });
+export const billingConfig = () => api<Partial<BillingConfig>>('/subscription/config');
+export const createCheckout = (body: { plan: CheckoutPlan; trial: boolean; success_url: string; cancel_url: string }) =>
+  api<{ checkout_url: string } | { switched: true }>('/subscription/create-checkout', { body });
+export const createTip = (body: { amount_cents: number; success_url: string; cancel_url: string }) =>
+  api<{ checkout_url: string }>('/support/tip', { body });
+export const billingPortal = (returnUrl: string) =>
+  api<{ url: string }>(`/subscription/portal?${new URLSearchParams({ return_url: returnUrl }).toString()}`, { method: 'POST' });
 export const tagHistory = () => api<TagRun[]>('/tags/history');
 export const deleteTagRun = (id: string) => api<unknown>(`/tags/history/${id}`, { method: 'DELETE' });
 export type TitleIdea = { title: string; keywords: string[]; coverage: number; length: number };
@@ -299,8 +324,10 @@ export type ProDetail = ProCard & {
   sources: { label: string; url: string }[];
   total_views?: number | null;
   latest_uploads: ProUpload[];
+  // Null (with locked: true) unless you have Pro; the story is free to read.
   patterns: TitlePatterns;
   breakdown: ProBreakdown;
+  locked?: boolean;
 };
 export type PlanStep = {
   id: string;
