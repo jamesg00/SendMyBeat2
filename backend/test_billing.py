@@ -74,10 +74,11 @@ async def test_plus_is_50_and_pro_is_100_a_month_and_only_pro_unlocks_pro_featur
 
 
 @pytest.mark.asyncio
-async def test_people_on_the_old_plans_keep_their_limits_and_features():
+async def test_people_on_the_old_5_dollar_plan_move_to_the_new_limits():
     legacy = await status_for(paid('plus', version=1))
-    assert legacy['credits_total'] == server.PLUS_MONTHLY_AI_CREDITS
-    assert legacy['pro_access'] is True
+    assert (legacy['credits_total'], legacy['upload_credits_total'], legacy['pro_access']) == (50, 50, False)
+    old_max = await status_for(paid('max', version=1))
+    assert (old_max['credits_total'], old_max['upload_credits_total'], old_max['pro_access']) == (100, 100, True)
 
 
 def checkout_mocks(user_doc):

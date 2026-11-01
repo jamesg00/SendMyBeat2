@@ -13,7 +13,7 @@ import {
   type TextStyle,
   type ViewStyle,
 } from 'react-native';
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path, Rect } from 'react-native-svg';
 
@@ -314,9 +314,13 @@ export function JobProgress({
         {lines.slice(0, current + 2).map((l) => (
           <View key={l.label} style={styles.logLine}>
             <Text style={styles.logTime}>{l.state === 'next' ? '--:--' : clock(l.at)}</Text>
-            <Text style={[styles.logMark, l.state === 'done' && { color: C.acc }, l.state === 'next' && { color: C.t3 }]}>
-              {l.state === 'done' ? '✓' : l.state === 'now' ? '●' : '○'}
-            </Text>
+            {l.state === 'now' ? (
+              <BlinkDot style={styles.logMark} />
+            ) : (
+              <Text style={[styles.logMark, l.state === 'done' && { color: C.acc }, l.state === 'next' && { color: C.t3 }]}>
+                {l.state === 'done' ? '✓' : '○'}
+              </Text>
+            )}
             <Text
               style={[styles.logText, l.state === 'now' && { color: C.text }, l.state === 'next' && { color: C.t3 }]}
               numberOfLines={1}>
@@ -328,6 +332,17 @@ export function JobProgress({
       <Text style={styles.jobTime}>{left > 1 ? `~${clock(left)} left` : `${clock(elapsed)} elapsed`}</Text>
     </View>
   );
+}
+
+/** The step that's running: a dot that blinks, like a terminal working away. */
+function BlinkDot({ style }: { style: TextStyle }) {
+  const opacity = useSharedValue(1);
+  useEffect(() => {
+    const ease = { duration: 520, easing: Easing.inOut(Easing.quad) };
+    opacity.value = withRepeat(withSequence(withTiming(0.15, ease), withTiming(1, ease)), -1);
+  }, [opacity]);
+  const animated = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  return <Animated.Text style={[style, animated]}>●</Animated.Text>;
 }
 
 const SWIPE_ACTION_W = 96;

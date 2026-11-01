@@ -132,6 +132,9 @@ export const me = () => api<User>('/auth/me');
 
 export const subscriptionStatus = () => api<SubscriptionStatus>('/subscription/status');
 export const syncSubscription = () => api<SubscriptionStatus>('/subscription/sync', { method: 'POST' });
+export const registerPushToken = (token: string, platform: string) =>
+  api<{ ok: true }>('/notifications/token', { body: { token, platform } });
+export const removePushToken = (token: string) => api<{ ok: true }>('/notifications/token', { method: 'DELETE', body: { token } });
 export const billingConfig = () => api<Partial<BillingConfig>>('/subscription/config');
 export const createCheckout = (body: { plan: CheckoutPlan; trial: boolean; success_url: string; cancel_url: string }) =>
   api<{ checkout_url: string } | { switched: true }>('/subscription/create-checkout', { body });

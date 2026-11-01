@@ -5,6 +5,7 @@ import * as endpoints from './endpoints';
 import type { User } from './endpoints';
 import { claimSavedWork, clearSavedWork } from '@/state/persist';
 import { resetSubscription } from '@/state/billing';
+import { unregisterPush } from '@/state/notifications';
 import { resetAgent } from '@/state/plan-agent';
 import { resetSocial } from '@/state/social';
 
@@ -23,6 +24,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
 
   const signOut = useCallback(async () => {
+    await unregisterPush();
     await saveToken(null);
     clearSavedWork();
     setUser(null);

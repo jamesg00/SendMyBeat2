@@ -8,7 +8,7 @@ import * as api from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
 import { Avatar } from '@/components/producer';
 import { PlanCard, usePlan } from '@/components/pros';
-import { manageBilling, openPaywall, planName } from '@/state/billing';
+import { manageBilling, openPaywall, planName, refreshSubscription, useSubscription } from '@/state/billing';
 import { Button, ListGroup, ListRow, Meter, Screen, useUiStyles } from '@/components/ui';
 import { F, font, makeStyles, THEMES, useColors, useThemeId } from '@/theme';
 
@@ -22,16 +22,21 @@ export default function ProfileScreen() {
   const themeId = useThemeId();
   const { plan: stylePlan, setPlan: setStylePlan } = usePlan();
   const { user, signOut } = useAuth();
-  const sub = useRequest(api.subscriptionStatus);
+  const sub = useSubscription();
   const yt = useRequest(api.youtubeStatus);
   const descriptions = useRequest(api.descriptions);
   const me = useRequest(api.myProducer);
   const reloadMe = me.reload;
   // Coming back from Edit profile shows the new picture and details.
-  useFocusEffect(useCallback(() => reloadMe(), [reloadMe]));
+  useFocusEffect(
+    useCallback(() => {
+      reloadMe();
+      void refreshSubscription();
+    }, [reloadMe]),
+  );
 
-  const plan = planName(sub.data);
-  const openBilling = () => (sub.data?.is_subscribed ? void manageBilling().then(() => sub.reload()) : openPaywall('needs_plan'));
+  const plan = planName(sub);
+  const openBilling = () => (sub?.is_subscribed ? void manageBilling() : openPaywall('needs_plan'));
 
   return (
     <Screen title="Profile">
@@ -54,13 +59,17 @@ export default function ProfileScreen() {
         <Button title="Edit profile" variant="secondary" size="sm" onPress={() => router.push('/profile-edit')} />
       </Pressable>
 
-      {sub.data ? (
+      {sub ? (
         <View style={{ gap: 8 }}>
-          <Text style={ui.sectionLabel}>{sub.data.is_subscribed && !sub.data.trial ? 'Usage this month' : 'Usage today'}</Text>
-          <View style={s.panel}>
-            <Usage label="AI credits" left={sub.data.daily_credits_remaining} total={sub.data.daily_credits_total} />
-            <Usage label="Uploads" left={sub.data.upload_credits_remaining} total={sub.data.upload_credits_total} last />
-          </View>
+          <Text style={ui.sectionLabel}>{sub.is_subscribed && !sub.trial ? 'Usage this month' : 'Usage today'}</Text>
+          {sub.is_subscribed ? (
+            <View style={s.panel}>
+              <Usage label="AI credits" left={sub.daily_credits_remaining} total={sub.daily_credits_total} />
+              <Usage label="Uploads" left={sub.upload_credits_remaining} total={sub.upload_credits_total} last />
+            </View>
+          ) : (
+            <Button title={sub.trial_available ? 'Start your 3-day free trial' : 'Choose a plan'} onPress={() => openPaywall('needs_plan')} />
+          )}
         </View>
       ) : null}
 
@@ -107,7 +116,7 @@ export default function ProfileScreen() {
             />
           ) : null}
           <ListRow title="Plan and billing" value={plan} onPress={openBilling} />
-          {sub.data && !sub.data.pro_access ? <ListRow title="See plans" value={sub.data.trial_available ? '3 days free' : undefined} onPress={() => openPaywall('needs_plan')} /> : null}
+          {sub && !sub.pro_access ? <ListRow title="See plans" value={sub.trial_available ? '3 days free' : undefined} onPress={() => openPaywall('needs_plan')} /> : null}
           <ListRow
             title="Descriptions"
             right={

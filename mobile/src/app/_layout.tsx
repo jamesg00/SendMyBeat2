@@ -8,8 +8,9 @@ import { useEffect } from 'react';
 import { AuthProvider, useAuth } from '@/api/auth';
 import { setPaywallHandler } from '@/api/client';
 import { ThemeTransition } from '@/components/theme-transition';
-import { openPaywall, type PaywallReason } from '@/state/billing';
+import { openPaywall, useFreePlanPrompt, type PaywallReason } from '@/state/billing';
 import { DraftProvider } from '@/state/draft';
+import { useJobNotifications } from '@/state/notifications';
 import { StudioProvider } from '@/state/studio';
 import { F, useColors } from '@/theme';
 
@@ -37,6 +38,13 @@ function Session() {
       </StudioProvider>
     </DraftProvider>
   );
+}
+
+// Signed in: the plans for free accounts, and job notifications for this phone.
+function SignedIn() {
+  useFreePlanPrompt();
+  useJobNotifications();
+  return null;
 }
 
 function RootStack() {
@@ -71,6 +79,7 @@ function RootStack() {
   return (
     <ThemeProvider value={theme}>
       <StatusBar style={C.dark ? 'light' : 'dark'} />
+      {user ? <SignedIn /> : null}
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.bg } }}>
         {/* Signed out, every app route lands on the landing screen (not the auth sheet). */}
         <Stack.Protected guard={!!user} redirectTo="/login">
@@ -86,6 +95,7 @@ function RootStack() {
           <Stack.Screen name="admin-verify" options={{ presentation: 'modal' }} />
           <Stack.Screen name="paywall" options={{ presentation: 'modal' }} />
           <Stack.Screen name="support" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="billing" options={{ presentation: 'transparentModal', animation: 'fade' }} />
         </Stack.Protected>
         <Stack.Protected guard={!user}>
           <Stack.Screen name="login" />
