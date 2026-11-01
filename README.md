@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/icon.png" width="128" alt="SendMyBeat icon: five mint equalizer bars forming a play arrow" />
+</p>
+
 # SendMyBeat
 
 **Tags, descriptions and YouTube uploads for beat producers.**

@@ -94,7 +94,7 @@ async def test_admins_get_pro_features_but_keep_their_plans_credits():
 def checkout_mocks(user_doc):
     db = users_db(user_doc)
     db.app_settings.find_one = AsyncMock(return_value={'value': 'price_saved'})
-    create = MagicMock(return_value=SimpleNamespace(url='https://checkout.stripe.com/x'))
+    create = MagicMock(return_value=SimpleNamespace(url='https://checkout.stripe.com/x', id='cs_new'))
     return db, create
 
 

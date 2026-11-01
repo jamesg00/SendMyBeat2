@@ -58,7 +58,7 @@ async def test_a_finished_job_notifies_every_device_and_forgets_dead_ones():
 
 
 @pytest.mark.asyncio
-async def test_no_devices_means_no_push_and_failures_say_why():
+async def test_no_devices_means_no_push_and_failures_hide_error_details():
     post = MagicMock()
     with patch.object(server, 'db', push_db([])), \
          patch.object(server, '_get_background_job', AsyncMock(return_value={'user_id': 'u1', 'type': 'tag_generation'})), \
@@ -66,7 +66,8 @@ async def test_no_devices_means_no_push_and_failures_say_why():
         await server._notify_job_finished('j1', 'failed')
     post.assert_not_called()
     title, body = server._job_notification({'type': 'tag_generation', 'error': 'YouTube quota hit'}, 'failed')
-    assert title == 'Tag generation failed' and body == 'YouTube quota hit'
+    # Error text can mention internals and shows on a lock screen, so it stays in the app.
+    assert title == 'Tag generation failed' and body == 'Tap to see what happened.'
 
 
 @pytest.mark.asyncio
