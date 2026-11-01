@@ -145,11 +145,11 @@ class SpotlightService:
         if not user_doc:
             raise ValueError("Producer profile not found.")
         growth = await self.db.growth_streaks.find_one({"user_id": user_id}, {"_id": 0})
-        youtube = await self.db.youtube_connections.find_one({"user_id": user_id}, {"_id": 0, "name": 1, "google_email": 1, "connected_at": 1})
+        youtube = await self.db.youtube_connections.find_one({"user_id": user_id}, {"_id": 0, "name": 1, "connected_at": 1})
 
         uploads = await self.db.uploads.find(
             {"user_id": user_id},
-            {"_id": 0, "file_type": 1, "uploaded_at": 1, "original_filename": 1},
+            {"_id": 0, "file_type": 1},
         ).to_list(2000)
         descriptions_count = await self.db.descriptions.count_documents({"user_id": user_id})
         tag_sets_count = await self.db.tag_history.count_documents({"user_id": user_id})
@@ -162,16 +162,7 @@ class SpotlightService:
         if profile.get("top_beat_url"):
             top_beats.append({"title": "Top Beat", "url": profile.get("top_beat_url")})
 
-        recent_audio = sorted(
-            [u for u in uploads if u.get("file_type") == "audio"],
-            key=lambda item: str(item.get("uploaded_at") or ""),
-            reverse=True,
-        )[:5]
-        for idx, upload in enumerate(recent_audio):
-            name = (upload.get("original_filename") or "").strip()
-            if not name:
-                continue
-            top_beats.append({"title": f"Beat {idx + 1}: {name}", "url": None})
+        # Uploaded files are private: count them, but never show their file names.
 
         youtube_url = ((profile.get("social_links") or {}).get("youtube") or "").strip()
         if not youtube_url and profile.get("youtube_channel_id"):
@@ -208,7 +199,6 @@ class SpotlightService:
             "channel": {
                 "connected": bool(youtube),
                 "name": (youtube or {}).get("name"),
-                "email": (youtube or {}).get("google_email"),
                 "connected_at": (youtube or {}).get("connected_at"),
                 "performance": channel_perf,
             },

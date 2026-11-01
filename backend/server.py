@@ -12,7 +12,7 @@ import asyncio
 import random
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict, field_validator
-from typing import List, Optional, Dict, Any, Literal
+from typing import Annotated, List, Optional, Dict, Any, Literal
 import uuid
 from datetime import datetime, timezone, timedelta
 import jwt
@@ -35,6 +35,7 @@ import threading
 from collections.abc import Callable
 import html
 import hashlib
+import secrets
 import time
 from urllib.parse import unquote, urlencode, urlparse, urljoin
 from itsdangerous import URLSafeSerializer, BadSignature
@@ -129,6 +130,9 @@ MAX_IMAGE_UPLOAD_BYTES = 12 * 1024 * 1024
 MAX_VIDEO_VISUAL_BYTES = 200 * 1024 * 1024  # baked visualizer WebM/MP4 loops
 AUTH_RATE_LIMIT_WINDOW_SECONDS = 300
 AUTH_RATE_LIMIT_ATTEMPTS = 10
+# Per account, whatever IP the attempts come from.
+AUTH_USER_RATE_LIMIT_ATTEMPTS = 20
+AUTH_USER_RATE_LIMIT_WINDOW_SECONDS = 900
 HEARTBEAT_INTERVAL_SECONDS = int(os.environ.get("JOB_HEARTBEAT_INTERVAL_SECONDS", "15"))
 JOB_WORKER_HEARTBEAT_DEAD_SECONDS = int(
     os.environ.get(
@@ -235,37 +239,30 @@ async def _check_rate_limit_persistent(bucket_key: str, limit: int, window_secon
     _check_rate_limit(bucket_key, limit, window_seconds)
     if not _is_production_like():
         return
+    from pymongo import ReturnDocument
+
     now = datetime.now(timezone.utc)
-    window_start = now - timedelta(seconds=window_seconds)
-    doc = await db.security_rate_limits.find_one({"key": bucket_key}, {"_id": 0, "count": 1, "window_started_at": 1})
-    if not doc:
-        await db.security_rate_limits.update_one(
-            {"key": bucket_key},
-            {"$set": {"key": bucket_key, "count": 1, "window_started_at": now.isoformat(), "updated_at": now.isoformat()}},
-            upsert=True,
-        )
-        return
-
-    started_at_raw = doc.get("window_started_at")
-    try:
-        started_at = datetime.fromisoformat(started_at_raw) if isinstance(started_at_raw, str) else now
-    except Exception:
-        started_at = now
-
-    if started_at < window_start:
-        await db.security_rate_limits.update_one(
-            {"key": bucket_key},
-            {"$set": {"count": 1, "window_started_at": now.isoformat(), "updated_at": now.isoformat()}},
-        )
-        return
-
-    count = int(doc.get("count") or 0) + 1
-    if count > limit:
-        raise HTTPException(status_code=429, detail="Too many requests. Please wait and try again.")
+    window_start = (now - timedelta(seconds=window_seconds)).isoformat()
+    # Start a fresh window when the stored one has run out (one conditional write, so racing
+    # requests can't both reset it)...
     await db.security_rate_limits.update_one(
-        {"key": bucket_key},
-        {"$set": {"count": count, "updated_at": now.isoformat()}},
+        {"key": bucket_key, "window_started_at": {"$lt": window_start}},
+        {"$set": {"count": 0, "window_started_at": now.isoformat()}},
     )
+    # ...then count this request atomically. Every caller gets its own number back.
+    doc = await db.security_rate_limits.find_one_and_update(
+        {"key": bucket_key},
+        {
+            "$inc": {"count": 1},
+            "$set": {"updated_at": now.isoformat()},
+            "$setOnInsert": {"key": bucket_key, "window_started_at": now.isoformat()},
+        },
+        upsert=True,
+        return_document=ReturnDocument.AFTER,
+        projection={"_id": 0, "count": 1},
+    )
+    if int((doc or {}).get("count") or 0) > limit:
+        raise HTTPException(status_code=429, detail="Too many requests. Please wait and try again.")
 
 
 def _is_production_like() -> bool:
@@ -303,6 +300,24 @@ def _validate_security_configuration() -> None:
         raise RuntimeError("APP_ENCRYPTION_KEY (or YOUTUBE_TOKEN_ENCRYPTION_KEY) is required in production-like environments.")
     if _is_production_like() and "*" in CORS_ORIGINS:
         raise RuntimeError("CORS_ORIGINS=* is not allowed when allow_credentials=True. Configure explicit frontend origins.")
+
+
+def _own_hosts() -> set[str]:
+    hosts = {urlparse(u).hostname for u in (FRONTEND_URL, BACKEND_URL, *CORS_ORIGINS) if u and u != "*"}
+    return {h.lower() for h in hosts if h}
+
+
+def _safe_return_url(url: Optional[str], fallback: str) -> str:
+    """A Stripe success/cancel/return URL: https on one of our own hosts (or localhost in dev)."""
+    parsed = urlparse((url or "").strip())
+    host = (parsed.hostname or "").lower()
+    if not url or len(url) > 2000 or any(c in url for c in "\r\n"):
+        return fallback
+    if parsed.scheme == "https" and host in _own_hosts():
+        return url
+    if not _is_production_like() and parsed.scheme in {"http", "https"} and host in {"localhost", "127.0.0.1"}:
+        return url
+    return fallback
 
 
 def _validate_public_url(target_url: str) -> str:
@@ -1474,33 +1489,38 @@ class Description(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
+# Size caps on what people send: AI and YouTube work scales with these.
+ShortText = Annotated[str, Field(max_length=120)]
+TagText = Annotated[str, Field(max_length=100)]
+
+
 class DescriptionCreate(BaseModel):
-    title: str
-    content: str
+    title: str = Field(max_length=200)
+    content: str = Field(max_length=10000)
     is_ai_generated: bool = False
 
 class DescriptionUpdate(BaseModel):
-    title: Optional[str] = None
-    content: Optional[str] = None
+    title: Optional[str] = Field(default=None, max_length=200)
+    content: Optional[str] = Field(default=None, max_length=10000)
 
 class TagGenerationRequest(BaseModel):
-    query: str
-    custom_tags: Optional[List[str]] = []  # User's custom tags
-    llm_provider: Optional[str] = None  # "openai" or "grok"
+    query: str = Field(max_length=120)
+    custom_tags: Optional[List[TagText]] = Field(default_factory=list, max_length=60)  # User's custom tags
+    llm_provider: Optional[str] = Field(default=None, max_length=20)  # "openai" or "grok"
 
 class TagHistorySaveRequest(BaseModel):
-    query: str
-    tags: List[str]
+    query: str = Field(max_length=120)
+    tags: List[TagText] = Field(max_length=300)
 
 class TagHistoryUpdateRequest(BaseModel):
-    tags: List[str]
-    excluded_tags: Optional[List[str]] = []
-    added_tags: Optional[List[str]] = []
+    tags: List[TagText] = Field(max_length=300)
+    excluded_tags: Optional[List[TagText]] = Field(default_factory=list, max_length=300)
+    added_tags: Optional[List[TagText]] = Field(default_factory=list, max_length=300)
 
 class TagJoinRequest(BaseModel):
-    queries: List[str]
-    candidate_tags: List[str]
-    max_tags: int = 120
+    queries: List[ShortText] = Field(max_length=3)
+    candidate_tags: List[TagText] = Field(max_length=600)
+    max_tags: int = Field(default=120, ge=1, le=120)
     llm_provider: Optional[str] = None  # "openai" or "grok"
     enrich_from_sources: bool = True
 
@@ -1672,8 +1692,8 @@ class TipRequest(BaseModel):
     cancel_url: str = Field(max_length=2000)
 
 class ThemeGenerateRequest(BaseModel):
-    prompt: str = ""
-    mode: str = "auto"  # "light" | "dark" | "auto"
+    prompt: str = Field(default="", max_length=500)
+    mode: str = Field(default="auto", max_length=10)  # "light" | "dark" | "auto"
 
 class ThemeGenerateResponse(BaseModel):
     theme_name: str
@@ -2688,6 +2708,14 @@ def _prune_action_bucket(bucket_key: str, *, window_seconds: int) -> list[float]
     return timestamps
 
 
+def _enforce_upload_rate_limit(user_id: str) -> None:
+    """File uploads take disk space: at most 30 every 10 minutes per account."""
+    _enforce_action_rate_limit(
+        f"file_upload:{user_id}", limit=30, window_seconds=600,
+        detail_message="Too many uploads. Please wait a few minutes.",
+    )
+
+
 def _enforce_action_rate_limit(bucket_key: str, *, limit: int, window_seconds: int, detail_message: str) -> None:
     timestamps = _prune_action_bucket(bucket_key, window_seconds=window_seconds)
     if len(timestamps) >= limit:
@@ -2988,9 +3016,8 @@ JOB_NOTIFICATIONS = {
 
 def _job_notification(job: dict, status: str) -> tuple[str, str]:
     done, failed = JOB_NOTIFICATIONS.get(job.get("type") or "", ("Your job is done", "Your job failed"))
-    if status == "succeeded":
-        return done, "Tap to open SendMyBeat."
-    return failed, str(job.get("error") or job.get("message") or "Tap to see what happened.")[:180]
+    # Error details can mention internals and show on a lock screen; keep them in the app.
+    return (done, "Tap to open SendMyBeat.") if status == "succeeded" else (failed, "Tap to see what happened.")
 
 
 async def _notify_job_finished(job_id: str, status: str) -> None:
@@ -5123,6 +5150,7 @@ async def register(user_data: UserRegister, request: Request):
 @api_router.post("/auth/login", response_model=TokenResponse)
 async def login(user_data: UserLogin, request: Request):
     await _check_rate_limit_persistent(f"auth:login:{_client_ip(request)}", AUTH_RATE_LIMIT_ATTEMPTS, AUTH_RATE_LIMIT_WINDOW_SECONDS)
+    await _check_rate_limit_persistent(f"auth:login-user:{user_data.username}", AUTH_USER_RATE_LIMIT_ATTEMPTS, AUTH_USER_RATE_LIMIT_WINDOW_SECONDS)
     # Find user
     user_doc = await db.users.find_one({"username": user_data.username, "deleted": {"$ne": True}})
     if not user_doc:
@@ -5169,6 +5197,10 @@ async def generate_theme(request: ThemeGenerateRequest, current_user: dict = Dep
             detail="AI Theme Generator is a Pro feature. Upgrade to Pro to generate custom AI themes."
         )
 
+    _enforce_action_rate_limit(
+        f"theme_generate:{current_user['id']}", limit=10, window_seconds=3600,
+        detail_message="You've made a lot of themes. Try again in a bit.",
+    )
     mode = (request.mode or "auto").strip().lower()
     if mode not in {"auto", "light", "dark"}:
         mode = "auto"
@@ -5233,6 +5265,37 @@ async def generate_theme(request: ThemeGenerateRequest, current_user: dict = Dep
 
 
 # ============ YouTube OAuth Routes ============
+YOUTUBE_OAUTH_STATE_TTL = timedelta(minutes=15)
+
+
+async def _new_youtube_oauth_state(user_id: str) -> str:
+    state = secrets.token_urlsafe(32)
+    await db.users.update_one(
+        {"id": user_id},
+        {"$set": {
+            "youtube_oauth_state_hash": hashlib.sha256(state.encode()).hexdigest(),
+            "youtube_oauth_state_expires": (datetime.now(timezone.utc) + YOUTUBE_OAUTH_STATE_TTL).isoformat(),
+        }},
+    )
+    return state
+
+
+async def _use_youtube_oauth_state(user_id: str, state: str) -> bool:
+    """True once for the state this user was given; it's cleared so it can't be replayed."""
+    if not state:
+        return False
+    doc = await db.users.find_one_and_update(
+        {
+            "id": user_id,
+            "youtube_oauth_state_hash": hashlib.sha256(state.encode()).hexdigest(),
+            "youtube_oauth_state_expires": {"$gt": datetime.now(timezone.utc).isoformat()},
+        },
+        {"$unset": {"youtube_oauth_state_hash": "", "youtube_oauth_state_expires": ""}},
+        projection={"_id": 0, "id": 1},
+    )
+    return bool(doc)
+
+
 @api_router.get("/youtube/auth-url")
 async def get_youtube_auth_url(current_user: dict = Depends(get_current_user)):
     """Get the Google OAuth URL for YouTube access"""
@@ -5250,18 +5313,25 @@ async def get_youtube_auth_url(current_user: dict = Depends(get_current_user)):
         'scope': 'https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/userinfo.email',
         'access_type': 'offline',
         'prompt': 'consent',
-        'state': current_user['id']
+        'state': await _new_youtube_oauth_state(current_user['id']),
     }
     
     auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
     return {"auth_url": auth_url}
 
 @api_router.post("/youtube/connect")
-async def connect_youtube(code: str = Form(...), current_user: dict = Depends(get_current_user), request: Request = None):
+async def connect_youtube(
+    code: str = Form(..., max_length=2000),
+    state: str = Form("", max_length=200),
+    current_user: dict = Depends(get_current_user),
+    request: Request = None,
+):
     """Exchange authorization code for tokens and store them"""
+    if request is not None:
+        await _check_rate_limit_persistent(f"youtube:connect:{current_user['id']}:{_client_ip(request)}", 12, 600)
+    if not await _use_youtube_oauth_state(current_user["id"], state):
+        raise HTTPException(status_code=400, detail="This YouTube link expired or wasn't started here. Try connecting again.")
     try:
-        if request is not None:
-            await _check_rate_limit_persistent(f"youtube:connect:{current_user['id']}:{_client_ip(request)}", 12, 600)
         # Exchange code for tokens manually to avoid scope validation issues
         token_url = "https://oauth2.googleapis.com/token"
         data = {
@@ -5272,7 +5342,7 @@ async def connect_youtube(code: str = Form(...), current_user: dict = Depends(ge
             "grant_type": "authorization_code"
         }
         
-        token_response = requests.post(token_url, data=data)
+        token_response = await asyncio.to_thread(requests.post, token_url, data=data, timeout=15)
         if token_response.status_code != 200:
             raise Exception(f"Token exchange failed: {token_response.text}")
         
@@ -5755,6 +5825,12 @@ async def create_checkout_session(request: CheckoutSessionRequest, current_user:
             await db.users.update_one({"id": current_user["id"]}, {"$set": _subscription_user_fields(updated)})
             return {"switched": True}
 
+        previous_session = user_doc.get("pending_checkout_session_id")
+        if previous_session:
+            try:
+                await asyncio.to_thread(stripe.checkout.Session.expire, previous_session)
+            except Exception:
+                pass  # Already finished or expired.
         trial = request.trial and plan == "plus" and not user_doc.get("trial_used")
         subscription_data: dict[str, Any] = {"metadata": {**metadata, "trial": "1" if trial else "0"}}
         if trial:
@@ -5767,10 +5843,13 @@ async def create_checkout_session(request: CheckoutSessionRequest, current_user:
             line_items=[{'price': price_id, 'quantity': 1}],
             mode='subscription',
             subscription_data=subscription_data,
-            success_url=request.success_url,
-            cancel_url=request.cancel_url,
+            success_url=_safe_return_url(request.success_url, f"{FRONTEND_URL}/dashboard?upgraded=true"),
+            cancel_url=_safe_return_url(request.cancel_url, f"{FRONTEND_URL}/dashboard"),
             metadata={**metadata, "trial": "1" if trial else "0"},
         )
+        # Only one open checkout at a time: two finished in parallel would leave two
+        # subscriptions billing (and could start the trial twice).
+        await db.users.update_one({"id": current_user["id"]}, {"$set": {"pending_checkout_session_id": checkout_session.id}})
         return {"checkout_url": checkout_session.url}
 
     except HTTPException:
@@ -5799,8 +5878,8 @@ async def create_tip_checkout(request: TipRequest, current_user: dict = Depends(
                 "price_data": {"currency": "usd", "unit_amount": request.amount_cents, "product_data": {"name": "Tip for SendMyBeat"}},
                 "quantity": 1,
             }],
-            success_url=request.success_url,
-            cancel_url=request.cancel_url,
+            success_url=_safe_return_url(request.success_url, f"{FRONTEND_URL}/dashboard"),
+            cancel_url=_safe_return_url(request.cancel_url, f"{FRONTEND_URL}/dashboard"),
             metadata={"kind": "tip", "user_id": current_user["id"]},
         )
         return {"checkout_url": session.url}
@@ -5873,6 +5952,11 @@ async def stripe_webhook(request: Request):
             if trial:
                 fields["trial_used"] = True
                 fields["trial_ends_at"] = (datetime.now(timezone.utc) + timedelta(days=TRIAL_DAYS)).isoformat()
+                if await _card_already_trialed(session.get('subscription'), user_id):
+                    # This card already had a trial on another account: start billing now.
+                    fields["subscription_status"] = "active"
+                    fields.pop("trial_ends_at", None)
+            fields["pending_checkout_session_id"] = None
             await db.users.update_one({"id": user_id}, {"$set": fields})
             logging.info(f"Subscription activated for user {user_id}")
 
@@ -5880,7 +5964,7 @@ async def stripe_webhook(request: Request):
         subscription = event['data']['object']
         customer_id = subscription['customer']
         user_doc = await db.users.find_one({"stripe_customer_id": customer_id})
-        if user_doc:
+        if user_doc and _is_current_subscription(user_doc, subscription):
             await db.users.update_one({"id": user_doc['id']}, {"$set": _subscription_user_fields(subscription)})
 
     elif event['type'] == 'customer.subscription.deleted':
@@ -5889,7 +5973,7 @@ async def stripe_webhook(request: Request):
         
         # Find user by customer ID
         user_doc = await db.users.find_one({"stripe_customer_id": customer_id})
-        if user_doc:
+        if user_doc and _is_current_subscription(user_doc, subscription):
             await db.users.update_one(
                 {"id": user_doc['id']},
                 {"$set": {
@@ -5900,6 +5984,38 @@ async def stripe_webhook(request: Request):
             )
     
     return {"status": "success"}
+
+def _is_current_subscription(user_doc: dict, subscription: dict) -> bool:
+    """Events for an old subscription (say, one replaced earlier) mustn't change the current plan."""
+    current = user_doc.get("stripe_subscription_id")
+    return not current or current == subscription.get("id")
+
+
+async def _card_already_trialed(subscription_id: Optional[str], user_id: str) -> bool:
+    """Remember which card started a trial. True if another account already used this card for
+    one; that subscription then skips the trial and bills now."""
+    if not subscription_id:
+        return False
+    try:
+        sub = await asyncio.to_thread(stripe.Subscription.retrieve, subscription_id, expand=["default_payment_method"])
+        fingerprint = (((sub.get("default_payment_method") or {}).get("card") or {}).get("fingerprint"))
+        if not fingerprint:
+            return False
+        claimed = await db.trial_cards.find_one_and_update(
+            {"fingerprint": fingerprint},
+            {"$setOnInsert": {"fingerprint": fingerprint, "user_id": user_id, "created_at": datetime.now(timezone.utc).isoformat()}},
+            upsert=True,
+            projection={"_id": 0, "user_id": 1},
+        )
+        if not claimed or claimed.get("user_id") == user_id:
+            return False
+        await asyncio.to_thread(stripe.Subscription.modify, subscription_id, trial_end="now")
+        logging.info(f"Trial skipped for user {user_id}: card already used for a trial")
+        return True
+    except Exception as exc:
+        logging.warning(f"Trial card check failed for {subscription_id}: {exc}")
+        return False
+
 
 @api_router.get("/subscription/config")
 async def get_subscription_config():
@@ -5932,8 +6048,7 @@ async def create_customer_portal_session(return_url: Optional[str] = None, curre
         # Create portal session (the app passes its /billing/return link to come back to it)
         portal_session = stripe.billing_portal.Session.create(
             customer=user_doc['stripe_customer_id'],
-            return_url=return_url if return_url and len(return_url) < 2000 and return_url.startswith("https://")
-            else f"{os.environ.get('FRONTEND_URL', 'http://localhost:3000')}/dashboard"
+            return_url=_safe_return_url(return_url, f"{FRONTEND_URL}/dashboard"),
         )
         
         return {"url": portal_session.url}
@@ -5951,11 +6066,19 @@ class PushTokenRequest(BaseModel):
 @api_router.post("/notifications/token")
 async def register_push_token(req: PushTokenRequest, current_user: dict = Depends(get_current_user)):
     """This device wants a notification when your jobs finish. A token belongs to one account."""
+    _enforce_action_rate_limit(
+        f"push_token:{current_user['id']}", limit=20, window_seconds=3600,
+        detail_message="Too many requests. Please wait a bit.",
+    )
     await db.push_tokens.update_one(
         {"token": req.token},
         {"$set": {"token": req.token, "user_id": current_user["id"], "platform": req.platform, "updated_at": _safe_iso_now()}},
         upsert=True,
     )
+    # Keep the 10 most recent devices per account.
+    stale = await db.push_tokens.find({"user_id": current_user["id"]}, {"_id": 0, "token": 1}).sort("updated_at", -1).skip(10).to_list(100)
+    if stale:
+        await db.push_tokens.delete_many({"token": {"$in": [d["token"] for d in stale]}})
     return {"ok": True}
 
 
@@ -7826,6 +7949,7 @@ async def delete_description(description_id: str, current_user: dict = Depends(g
 @api_router.post("/upload/audio")
 async def upload_audio(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
     """Upload audio file (MP3, WAV, etc.)"""
+    _enforce_upload_rate_limit(current_user["id"])
     try:
         if not file or not file.filename:
             raise HTTPException(status_code=400, detail="No audio file provided.")
@@ -7880,6 +8004,7 @@ async def upload_audio(file: UploadFile = File(...), current_user: dict = Depend
 @api_router.post("/upload/image")
 async def upload_image(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
     """Upload image or short visual file (JPG, PNG, WEBP, GIF, WEBM, MP4, MOV)."""
+    _enforce_upload_rate_limit(current_user["id"])
     try:
         if not file or not file.filename:
             raise HTTPException(status_code=400, detail="No image file provided.")
@@ -8564,13 +8689,17 @@ async def get_my_producer_profile(current_user: dict = Depends(get_current_user)
 
 
 @api_router.get("/producers/{user_id}/stats")
-async def get_producer_stats(user_id: str):
+async def get_producer_stats(user_id: str, request: Request):
     """Detailed spotlight card stats for modal view."""
+    _enforce_action_rate_limit(
+        f"producer_stats:{_client_ip(request)}", limit=120, window_seconds=600,
+        detail_message="Too many requests. Please wait a moment.",
+    )
     user_doc = await db.users.find_one({"id": user_id, "deleted": {"$ne": True}}, {"_id": 0, "id": 1})
     if not user_doc:
         raise HTTPException(status_code=404, detail="Producer profile not found.")
     cached = await db.producer_stats_cache.find_one({"user_id": user_id}, {"_id": 0, "payload": 1})
-    if cached and isinstance(cached.get("payload"), dict):
+    if cached and isinstance(cached.get("payload"), dict) and "email" not in ((cached["payload"].get("channel") or {})):
         return cached["payload"]
 
     await _ensure_producer_youtube_channel_id(user_id)

@@ -23,6 +23,8 @@ const YouTubeCallback = () => {
         try {
           const formData = new FormData();
           formData.append('code', code);
+          // The one-time state from /youtube/auth-url; the server checks it was issued to you.
+          formData.append('state', searchParams.get('state') || '');
           
           const response = await axios.post(`${API}/youtube/connect`, formData, {
             headers: { 'Content-Type': 'multipart/form-data' }
