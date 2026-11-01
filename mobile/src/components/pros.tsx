@@ -17,6 +17,8 @@ import { scheduleOnRN } from 'react-native-worklets';
 import * as api from '@/api/endpoints';
 import type { PlanStep, ProCard, StylePlan } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
+import { VerifiedBadge } from '@/components/producer';
+import { requirePro } from '@/state/billing';
 import { Button, Card, Meter, useUiStyles } from '@/components/ui';
 import { F, display, font, makeStyles, useColors } from '@/theme';
 
@@ -27,8 +29,11 @@ import { F, display, font, makeStyles, useColors } from '@/theme';
 const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
 export const openPro = (id: string) => router.push({ pathname: '/pro/[id]', params: { id } });
 /** Open Copy their style, optionally with some moves already picked. */
-export const copyPro = (id: string, moves?: string[]) =>
+/** Copy a pro's style (a Pro feature: without Pro this opens the plans instead). */
+export const copyPro = (id: string, moves?: string[]) => {
+  if (!requirePro()) return;
   router.push({ pathname: '/pro-plan/[id]', params: moves?.length ? { id, moves: moves.join(',') } : { id } });
+};
 
 /** Your active plan, refreshed whenever the screen comes into view. */
 export function usePlan() {
@@ -169,9 +174,12 @@ function DeckCard({ pro, width, index, step, x }: { pro: ProCard; width: number;
         accessibilityRole="button"
         accessibilityLabel={`${pro.name}. ${pro.why ?? pro.tagline}`}>
         <ProHero pro={pro} height={440}>
-          <Text style={s.deckName} numberOfLines={1} adjustsFontSizeToFit>
-            {pro.name}
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <Text style={[s.deckName, { flexShrink: 1 }]} numberOfLines={1} adjustsFontSizeToFit>
+              {pro.name}
+            </Text>
+            {pro.verified ? <VerifiedBadge size={22} /> : null}
+          </View>
           <Text style={s.deckWhy} numberOfLines={3}>
             {pro.why ?? pro.tagline}
           </Text>

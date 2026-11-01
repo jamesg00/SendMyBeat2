@@ -410,8 +410,27 @@ HOSTING_COST = float(os.environ.get("HOSTING_COST_USD", 12.00))
 # Grok-2 pricing (approximate): $2.00/M input, $10.00/M output
 GROK_INPUT_COST = 2.0 / 1_000_000
 GROK_OUTPUT_COST = 10.0 / 1_000_000
-FREE_DAILY_AI_CREDITS = int(os.environ.get("FREE_DAILY_AI_CREDITS", "2"))
-FREE_DAILY_UPLOAD_CREDITS = int(os.environ.get("FREE_DAILY_UPLOAD_CREDITS", "1"))
+# Free accounts browse; generating and uploading need the free trial or a plan.
+FREE_DAILY_AI_CREDITS = int(os.environ.get("FREE_DAILY_AI_CREDITS", "0"))
+FREE_DAILY_UPLOAD_CREDITS = int(os.environ.get("FREE_DAILY_UPLOAD_CREDITS", "0"))
+# The free trial: 3 days on Plus with 3 generations and 3 uploads a day, then $5/month.
+TRIAL_DAYS = int(os.environ.get("TRIAL_DAYS", "3"))
+TRIAL_DAILY_AI_CREDITS = int(os.environ.get("TRIAL_DAILY_AI_CREDITS", "3"))
+TRIAL_DAILY_UPLOAD_CREDITS = int(os.environ.get("TRIAL_DAILY_UPLOAD_CREDITS", "3"))
+# Plans from plan_version 2 on (Plus $5, Pro $10). People subscribed before keep their old limits.
+PLUS_V2_MONTHLY_AI_CREDITS = int(os.environ.get("PLUS_V2_MONTHLY_AI_CREDITS", "50"))
+PLUS_V2_MONTHLY_UPLOAD_CREDITS = int(os.environ.get("PLUS_V2_MONTHLY_UPLOAD_CREDITS", "50"))
+PRO_V2_MONTHLY_AI_CREDITS = int(os.environ.get("PRO_V2_MONTHLY_AI_CREDITS", "100"))
+PRO_V2_MONTHLY_UPLOAD_CREDITS = int(os.environ.get("PRO_V2_MONTHLY_UPLOAD_CREDITS", "100"))
+PLAN_VERSION = 2
+# Prices, used to create the Stripe prices when no STRIPE_PRICE_ID_*_V2 is set.
+PLUS_PRICE_CENTS = 500
+PRO_PRICE_CENTS = 1000
+FOUNDING_PRICE_CENTS = 4000  # Pro for a year
+FOUNDING_MEMBER_LIMIT = int(os.environ.get("FOUNDING_MEMBER_LIMIT", "50"))
+TIP_AMOUNTS_CENTS = (300, 500, 1000)
+# Plus runs one background job at a time; Pro gets the job queue.
+BASIC_MAX_ACTIVE_JOBS = 1
 PLUS_MONTHLY_AI_CREDITS = int(os.environ.get("PLUS_MONTHLY_AI_CREDITS", "150"))
 PLUS_MONTHLY_UPLOAD_CREDITS = int(os.environ.get("PLUS_MONTHLY_UPLOAD_CREDITS", "60"))
 PLUS_MONTHLY_LLM_COST_CAP_USD = float(os.environ.get("PLUS_MONTHLY_LLM_COST_CAP_USD", "2.50"))
@@ -1629,11 +1648,28 @@ class SubscriptionStatus(BaseModel):
     resets_at: Optional[str] = None
     monthly_llm_cost_usd: Optional[float] = None
     cost_guardrail_hit: Optional[bool] = None
+    # In the free trial: credits are daily (TRIAL_DAILY_*) until trial_ends_at.
+    trial: bool = False
+    trial_available: bool = False
+    trial_ends_at: Optional[str] = None
+    # Pro features: copying a pro's style, pro breakdowns, channel analytics, the job queue.
+    pro_access: bool = False
+    founding_member: bool = False
+    founding_spots_left: Optional[int] = None
+    plan_version: int = 1
 
 class CheckoutSessionRequest(BaseModel):
-    success_url: str
-    cancel_url: str
-    plan: Literal["plus", "max"] = "plus"
+    success_url: str = Field(max_length=2000)
+    cancel_url: str = Field(max_length=2000)
+    # plus = $5/month, max = Pro $10/month, founding = Pro for a year ($40, first 50 people).
+    plan: Literal["plus", "max", "founding"] = "plus"
+    # Start with the free trial (Plus only, once per account).
+    trial: bool = False
+
+class TipRequest(BaseModel):
+    amount_cents: int
+    success_url: str = Field(max_length=2000)
+    cancel_url: str = Field(max_length=2000)
 
 class ThemeGenerateRequest(BaseModel):
     prompt: str = ""
@@ -1818,8 +1854,16 @@ async def _get_user_monthly_llm_cost(user_id: str) -> float:
     return float(result[0].get("total_cost") or 0.0)
 
 
-def _get_paid_plan_limits(plan: str) -> dict[str, float | int] | None:
+def _get_paid_plan_limits(plan: str, version: int = 1) -> dict[str, float | int] | None:
     normalized = (plan or "").strip().lower()
+    if version >= PLAN_VERSION and normalized in {"plus", "max"}:
+        pro = normalized == "max"
+        return {
+            "ai_credits": PRO_V2_MONTHLY_AI_CREDITS if pro else PLUS_V2_MONTHLY_AI_CREDITS,
+            "upload_credits": PRO_V2_MONTHLY_UPLOAD_CREDITS if pro else PLUS_V2_MONTHLY_UPLOAD_CREDITS,
+            "llm_cost_cap_usd": MAX_MONTHLY_LLM_COST_CAP_USD if pro else PLUS_MONTHLY_LLM_COST_CAP_USD,
+            "estimated_net_revenue_usd": MAX_NET_REVENUE_USD if pro else PLUS_NET_REVENUE_USD,
+        }
     if normalized == "plus":
         return {
             "ai_credits": PLUS_MONTHLY_AI_CREDITS,
@@ -1845,11 +1889,44 @@ def _is_paid_subscription_status(status: str) -> bool:
 def _plan_from_price_ids(price_ids: set[str]) -> str:
     plus_price_id = (os.environ.get("STRIPE_PRICE_ID_PLUS") or os.environ.get("STRIPE_PRICE_ID") or "").strip()
     max_price_id = (os.environ.get("STRIPE_PRICE_ID_MAX") or "").strip()
-    if max_price_id and max_price_id in price_ids:
+    pro_ids = {(os.environ.get(k) or "").strip() for k in ("STRIPE_PRICE_ID_PRO_V2", "STRIPE_PRICE_ID_FOUNDING")} - {""}
+    if max_price_id and max_price_id in price_ids or pro_ids & price_ids:
         return "max"
     if plus_price_id and plus_price_id in price_ids:
         return "plus"
     return "plus"
+
+
+def _plan_from_subscription(subscription: dict) -> str:
+    """The plan a Stripe subscription is for: from its metadata (set at checkout), else its prices."""
+    meta_plan = str(((subscription.get("metadata") or {}).get("plan")) or "").strip().lower()
+    if meta_plan == "founding":
+        return "max"
+    if meta_plan in {"plus", "max"}:
+        return meta_plan
+    price_ids = {
+        str(((item.get("price") or {}).get("id")) or "").strip()
+        for item in (((subscription.get("items") or {}).get("data")) or [])
+    }
+    return _plan_from_price_ids(price_ids - {""})
+
+
+def _subscription_user_fields(subscription: dict) -> dict:
+    """What a Stripe subscription says about the user: plan, status, version, trial, founding."""
+    meta = subscription.get("metadata") or {}
+    fields: dict[str, Any] = {
+        "subscription_status": str(subscription.get("status") or "active").strip().lower(),
+        "subscription_plan": _plan_from_subscription(subscription),
+    }
+    if str(meta.get("plan_version") or "").isdigit():
+        fields["plan_version"] = int(meta["plan_version"])
+    if str(meta.get("plan") or "").lower() == "founding":
+        fields["founding_member"] = True
+    trial_end = subscription.get("trial_end")
+    if trial_end:
+        fields["trial_ends_at"] = datetime.fromtimestamp(int(trial_end), tz=timezone.utc).isoformat()
+        fields["trial_used"] = True
+    return fields
 
 
 def _resolve_subscription_plan(user_doc: dict) -> str:
@@ -1952,15 +2029,10 @@ async def _sync_user_subscription_from_stripe(user_doc: dict) -> dict:
 
     if best_subscription:
         best_status = str(best_subscription.get("status") or "").strip().lower()
-        price_ids = {
-            str(((item.get("price") or {}).get("id")) or "").strip()
-            for item in (((best_subscription.get("items") or {}).get("data")) or [])
-            if str(((item.get("price") or {}).get("id")) or "").strip()
-        }
         updates.update({
+            **_subscription_user_fields(best_subscription),
             "stripe_subscription_id": str(best_subscription.get("id") or "").strip() or None,
             "subscription_status": best_status or "active",
-            "subscription_plan": _plan_from_price_ids(price_ids),
         })
     elif customer_id:
         updates.update({
@@ -1995,122 +2067,156 @@ async def _ensure_plus_usage_month(user_id: str, user_doc: dict) -> dict:
     return user_doc
 
 
-async def get_user_subscription_status(user_id: str) -> dict:
-    """Get user's subscription and credit status"""
-    user_doc = await db.users.find_one({"id": user_id})
-    
-    if not user_doc:
-        return {
-            "is_subscribed": False, 
-            "credits_remaining": 0, 
-            "credits_total": FREE_DAILY_AI_CREDITS,
-            "upload_credits_remaining": 0,
-            "upload_credits_total": FREE_DAILY_UPLOAD_CREDITS,
-            "plan": "free",
-            "monthly_llm_cost_usd": 0.0,
-            "cost_guardrail_hit": False,
-        }
-    
-    plan = _resolve_subscription_plan(user_doc)
-
-    if plan in {"plus", "max"}:
-        user_doc = await _ensure_plus_usage_month(user_id, user_doc)
-        ai_used = int(user_doc.get("plus_monthly_ai_used") or 0)
-        upload_used = int(user_doc.get("plus_monthly_upload_used") or 0)
-        limits = _get_paid_plan_limits(plan) or {}
-        llm_cost = await _get_user_monthly_llm_cost(user_id)
-        cost_guardrail_hit = llm_cost >= float(limits.get("llm_cost_cap_usd") or 0.0)
-        ai_remaining = max(0, int(limits.get("ai_credits") or 0) - ai_used)
-        upload_remaining = max(0, int(limits.get("upload_credits") or 0) - upload_used)
-        return {
-            "is_subscribed": True,
-            "plan": plan,
-            "credits_remaining": ai_remaining,
-            "credits_total": int(limits.get("ai_credits") or 0),
-            "upload_credits_remaining": upload_remaining,
-            "upload_credits_total": int(limits.get("upload_credits") or 0),
-            "resets_at": None,
-            "monthly_llm_cost_usd": round(llm_cost, 4),
-            "cost_guardrail_hit": cost_guardrail_hit,
-        }
-    
-    # Free users get reduced daily credits
+async def _daily_usage(user_id: str, user_doc: dict) -> tuple[int, int, str]:
+    """Today's generations and uploads (reset at midnight UTC), and when they reset."""
     today = datetime.now(timezone.utc).date()
     usage_date = user_doc.get('daily_usage_date')
-    
-    # Parse usage date
     if usage_date:
         if isinstance(usage_date, str):
             usage_date = datetime.fromisoformat(usage_date).date()
         elif isinstance(usage_date, datetime):
             usage_date = usage_date.date()
-    
-    # Reset credits if it's a new day
     if not usage_date or usage_date < today:
         await db.users.update_one(
             {"id": user_id},
-            {"$set": {
-                "daily_usage_count": 0,
-                "daily_upload_count": 0,
-                "daily_usage_date": today.isoformat()
-            }}
+            {"$set": {"daily_usage_count": 0, "daily_upload_count": 0, "daily_usage_date": today.isoformat()}},
         )
-        credits_used = 0
-        uploads_used = 0
+        credits_used, uploads_used = 0, 0
     else:
-        credits_used = user_doc.get('daily_usage_count', 0)
-        uploads_used = user_doc.get('daily_upload_count', 0)
-    
-    credits_remaining = max(0, FREE_DAILY_AI_CREDITS - credits_used)
-    upload_credits_remaining = max(0, FREE_DAILY_UPLOAD_CREDITS - uploads_used)
-    
-    # Calculate reset time (midnight UTC)
+        credits_used = int(user_doc.get('daily_usage_count') or 0)
+        uploads_used = int(user_doc.get('daily_upload_count') or 0)
     tomorrow = today + timedelta(days=1)
     resets_at = datetime.combine(tomorrow, datetime.min.time(), tzinfo=timezone.utc).isoformat()
-    
+    return credits_used, uploads_used, resets_at
+
+
+async def get_user_subscription_status(user_id: str) -> dict:
+    """The user's plan and credits. `counter` says which usage fields their credits come from:
+    "monthly" for paid plans, "daily" for the free trial (and free accounts, which get none)."""
+    user_doc = await db.users.find_one({"id": user_id})
+
+    if not user_doc:
+        return {
+            "is_subscribed": False,
+            "credits_remaining": 0,
+            "credits_total": FREE_DAILY_AI_CREDITS,
+            "upload_credits_remaining": 0,
+            "upload_credits_total": FREE_DAILY_UPLOAD_CREDITS,
+            "plan": "free",
+            "counter": "daily",
+            "trial": False,
+            "trial_available": False,
+            "pro_access": False,
+            "monthly_llm_cost_usd": 0.0,
+            "cost_guardrail_hit": False,
+        }
+
+    plan = _resolve_subscription_plan(user_doc)
+    version = int(user_doc.get("plan_version") or 1)
+    trialing = plan in {"plus", "max"} and str(user_doc.get("subscription_status") or "").lower() == "trialing"
+    common = {
+        "plan_version": version,
+        "founding_member": bool(user_doc.get("founding_member")),
+        "trial_ends_at": user_doc.get("trial_ends_at") if trialing else None,
+        # Pro features (copying a pro's style, pro breakdowns, channel analytics, the job queue):
+        # the $10 plan, or a Plus plan from before the new pricing, which already had them.
+        "pro_access": plan == "max" or (plan == "plus" and version < PLAN_VERSION and not trialing),
+        "trial_available": plan == "free" and not user_doc.get("trial_used"),
+    }
+
+    if trialing:
+        credits_used, uploads_used, resets_at = await _daily_usage(user_id, user_doc)
+        return {
+            **common,
+            "is_subscribed": True,
+            "plan": plan,
+            "counter": "daily",
+            "trial": True,
+            "credits_remaining": max(0, TRIAL_DAILY_AI_CREDITS - credits_used),
+            "credits_total": TRIAL_DAILY_AI_CREDITS,
+            "upload_credits_remaining": max(0, TRIAL_DAILY_UPLOAD_CREDITS - uploads_used),
+            "upload_credits_total": TRIAL_DAILY_UPLOAD_CREDITS,
+            "resets_at": resets_at,
+            "monthly_llm_cost_usd": await _get_user_monthly_llm_cost(user_id),
+            "cost_guardrail_hit": False,
+        }
+
+    if plan in {"plus", "max"}:
+        user_doc = await _ensure_plus_usage_month(user_id, user_doc)
+        ai_used = int(user_doc.get("plus_monthly_ai_used") or 0)
+        upload_used = int(user_doc.get("plus_monthly_upload_used") or 0)
+        limits = _get_paid_plan_limits(plan, version) or {}
+        llm_cost = await _get_user_monthly_llm_cost(user_id)
+        cost_guardrail_hit = llm_cost >= float(limits.get("llm_cost_cap_usd") or 0.0)
+        return {
+            **common,
+            "is_subscribed": True,
+            "plan": plan,
+            "counter": "monthly",
+            "trial": False,
+            "credits_remaining": max(0, int(limits.get("ai_credits") or 0) - ai_used),
+            "credits_total": int(limits.get("ai_credits") or 0),
+            "upload_credits_remaining": max(0, int(limits.get("upload_credits") or 0) - upload_used),
+            "upload_credits_total": int(limits.get("upload_credits") or 0),
+            "resets_at": None,
+            "monthly_llm_cost_usd": round(llm_cost, 4),
+            "cost_guardrail_hit": cost_guardrail_hit,
+        }
+
+    credits_used, uploads_used, resets_at = await _daily_usage(user_id, user_doc)
     return {
+        **common,
         "is_subscribed": False,
         "plan": "free",
-        "credits_remaining": credits_remaining,
+        "counter": "daily",
+        "trial": False,
+        "credits_remaining": max(0, FREE_DAILY_AI_CREDITS - credits_used),
         "credits_total": FREE_DAILY_AI_CREDITS,
-        "upload_credits_remaining": upload_credits_remaining,
+        "upload_credits_remaining": max(0, FREE_DAILY_UPLOAD_CREDITS - uploads_used),
         "upload_credits_total": FREE_DAILY_UPLOAD_CREDITS,
         "resets_at": resets_at,
         "monthly_llm_cost_usd": await _get_user_monthly_llm_cost(user_id),
         "cost_guardrail_hit": False,
     }
 
+def _usage_fields(status: dict) -> tuple[str, str]:
+    """(AI field, upload field) a user's credits are counted in."""
+    counter = status.get("counter") or ("monthly" if status.get("plan") in {"plus", "max"} else "daily")
+    if counter == "monthly":
+        return "plus_monthly_ai_used", "plus_monthly_upload_used"
+    return "daily_usage_count", "daily_upload_count"
+
+
+def _paywall_detail(status: dict, what: str) -> dict:
+    """The 402 body when credits run out. `code` tells the apps which screen to show."""
+    if status.get("plan") == "free":
+        if status.get("trial_available"):
+            message = f"Start your {TRIAL_DAYS}-day free trial to use {what}."
+        else:
+            message = f"Pick a plan to use {what}."
+        return {"message": message, "code": "needs_plan"}
+    if status.get("trial"):
+        return {"message": f"You've used today's trial {what}. More tomorrow, or start your plan now.", "code": "trial_limit", "resets_at": status.get("resets_at")}
+    if status.get("cost_guardrail_hit"):
+        if status.get("plan") == "plus":
+            return {"message": "You've reached this month's fair-use limit on Plus. Pro has more room.", "code": "needs_pro"}
+        return {"message": "You've reached this month's fair-use limit. Contact support if you need more.", "code": "limit"}
+    if status.get("plan") == "plus":
+        return {"message": f"You've used this month's {what}. Pro has twice as many.", "code": "needs_pro"}
+    return {"message": f"You've used this month's {what}. They reset next month.", "code": "limit"}
+
+
 async def check_and_use_credit(user_id: str, consume: bool = True) -> bool:
     """Check if user has credits and optionally use one. Returns True if allowed."""
     status = await get_user_subscription_status(user_id)
-
-    if status['plan'] == "pro":
+    if status['plan'] == "pro":  # unlimited (set by hand)
         return True
-
-    if status['plan'] in {"plus", "max", "pro"}:
-        if status.get("cost_guardrail_hit"):
-            return False
-        if status['credits_remaining'] <= 0:
-            return False
-        if consume:
-            await db.users.update_one(
-                {"id": user_id},
-                {"$inc": {"plus_monthly_ai_used": 1}}
-            )
-        return True
-
-    # Free users need daily credits
-    if status['credits_remaining'] <= 0:
+    if status.get("cost_guardrail_hit") or status['credits_remaining'] <= 0:
         return False
-    
     if consume:
-        # Use one credit
-        await db.users.update_one(
-            {"id": user_id},
-            {"$inc": {"daily_usage_count": 1}}
-        )
-    
+        await db.users.update_one({"id": user_id}, {"$inc": {_usage_fields(status)[0]: 1}})
     return True
+
 
 async def consume_credit(user_id: str) -> None:
     """No-op, kept for existing callers: AI credits are now taken up front by ensure_has_credit
@@ -2122,15 +2228,14 @@ async def _reserve_ai_credit(user_id: str) -> bool:
     """Take one AI credit in a single conditional update, so parallel requests can't all pass
     a check and then spend credits that aren't there."""
     status = await get_user_subscription_status(user_id)  # also resets the daily/monthly counters
-    plan = status.get("plan")
-    if plan == "pro":
+    if status.get("plan") == "pro":
         return True
-    if plan in {"plus", "max"}:
-        if status.get("cost_guardrail_hit"):
-            return False
-        field, limit = "plus_monthly_ai_used", int(status.get("credits_total") or 0)
-    else:
-        field, limit = "daily_usage_count", FREE_DAILY_AI_CREDITS
+    if status.get("cost_guardrail_hit"):
+        return False
+    default_limit = FREE_DAILY_AI_CREDITS if status.get("plan") == "free" else 0
+    field, limit = _usage_fields(status)[0], int(status.get("credits_total", default_limit) or 0)
+    if limit <= 0:
+        return False
     result = await db.users.update_one(
         {"id": user_id, "$or": [{field: {"$lt": limit}}, {field: {"$exists": False}}]},
         {"$inc": {field: 1}},
@@ -2141,10 +2246,9 @@ async def _reserve_ai_credit(user_id: str) -> bool:
 async def refund_credit(user_id: str) -> None:
     """Give back a credit taken by ensure_has_credit when the work didn't happen."""
     status = await get_user_subscription_status(user_id)
-    plan = status.get("plan")
-    if plan == "pro":
+    if status.get("plan") == "pro":
         return
-    field = "plus_monthly_ai_used" if plan in {"plus", "max"} else "daily_usage_count"
+    field = _usage_fields(status)[0]
     await db.users.update_one({"id": user_id, field: {"$gt": 0}}, {"$inc": {field: -1}})
 
 
@@ -2173,80 +2277,33 @@ async def _queue_paid_job(*, current_user: dict, job_type: str, payload: dict, m
 async def check_and_use_upload_credit(user_id: str) -> bool:
     """Check if user has upload credits and use one. Returns True if successful."""
     status = await get_user_subscription_status(user_id)
-
     if status['plan'] == "pro":
         return True
-
-    if status['plan'] in {"plus", "max", "pro"}:
-        if status['upload_credits_remaining'] <= 0:
-            return False
-        await db.users.update_one(
-            {"id": user_id},
-            {"$inc": {"plus_monthly_upload_used": 1}}
-        )
-        return True
-
-    # Free users need daily upload credits
     if status['upload_credits_remaining'] <= 0:
         return False
-    
-    # Use one upload credit
-    await db.users.update_one(
-        {"id": user_id},
-        {"$inc": {"daily_upload_count": 1}}
-    )
-    
+    await db.users.update_one({"id": user_id}, {"$inc": {_usage_fields(status)[1]: 1}})
     return True
 
 async def ensure_has_upload_credit(user_id: str) -> None:
     status = await get_user_subscription_status(user_id)
     if status.get("upload_credits_remaining", 0) > 0:
         return
-    raise HTTPException(
-        status_code=402,
-        detail={
-            "message": "Daily upload limit reached. Upgrade your plan for more uploads.",
-            "resets_at": status.get("resets_at"),
-        },
-    )
+    raise HTTPException(status_code=402, detail=_paywall_detail(status, "uploads"))
 
 async def consume_upload_credit(user_id: str) -> None:
     status = await get_user_subscription_status(user_id)
     if status["plan"] == "pro":
         return
-    if status["plan"] in {"plus", "max", "pro"}:
-        await db.users.update_one(
-            {"id": user_id},
-            {"$inc": {"plus_monthly_upload_used": 1}}
-        )
-        return
-    await db.users.update_one(
-        {"id": user_id},
-        {"$inc": {"daily_upload_count": 1}}
-    )
+    await db.users.update_one({"id": user_id}, {"$inc": {_usage_fields(status)[1]: 1}})
 
 async def ensure_has_credit(user_id: str, feature_name: str = "generations") -> None:
     """
     Take one credit, or raise HTTPException(402) if none are left.
     The credit is spent now; call refund_credit() if the work then doesn't happen.
     """
-    has_credit = await _reserve_ai_credit(user_id)
-    if not has_credit:
+    if not await _reserve_ai_credit(user_id):
         status = await get_user_subscription_status(user_id)
-        guardrail_hit = bool(status.get("cost_guardrail_hit"))
-        message = f"Daily limit reached. Upgrade your plan for more {feature_name}."
-        if guardrail_hit:
-            if status.get("plan") == "plus":
-                message = "Your Plus monthly AI cost guardrail was reached. Upgrade to Max for more monthly capacity."
-            elif status.get("plan") == "max":
-                message = "Your Max monthly AI fair-use limit was reached. Contact support if you need a higher-volume plan."
-        raise HTTPException(
-            status_code=402,
-            detail={
-                "message": message,
-                "resets_at": status.get('resets_at')
-            }
-        )
+        raise HTTPException(status_code=402, detail=_paywall_detail(status, feature_name))
 
 
 # ============ Auth Helper Functions ============
@@ -2375,12 +2432,20 @@ async def _rescore_tags(
 
 
 async def _ensure_pro_user(current_user: dict, feature_name: str = "This feature") -> None:
+    """Any plan (including the free trial)."""
     sub_status = await get_user_subscription_status(current_user["id"])
     if sub_status.get("plan") not in {"plus", "max"}:
         raise HTTPException(
             status_code=402,
-            detail=f"{feature_name} requires a Plus or Max plan."
+            detail={"message": f"{feature_name} needs a plan. Start your free trial to try it.", "code": "needs_plan"},
         )
+
+
+async def _ensure_pro_access(current_user: dict, feature_name: str = "This feature") -> None:
+    """Pro features ($10 plan): copying a pro's style, pro breakdowns, channel analytics."""
+    sub_status = await get_user_subscription_status(current_user["id"])
+    if not sub_status.get("pro_access"):
+        raise HTTPException(status_code=402, detail={"message": f"{feature_name} is part of Pro.", "code": "needs_pro"})
 
 
 def _safe_iso_now() -> str:
@@ -2654,8 +2719,14 @@ async def _guard_heavy_feature(
             )
         except (AttributeError, TypeError):
             user_active_jobs = 0
-        if user_active_jobs >= int(controls.get("max_user_active_jobs") or OPS_DEFAULT_MAX_USER_ACTIVE_JOBS):
+        max_jobs = int(controls.get("max_user_active_jobs") or OPS_DEFAULT_MAX_USER_ACTIVE_JOBS)
+        if user_active_jobs >= max_jobs:
             raise HTTPException(status_code=429, detail={"message": "You already have too many active jobs running. Wait for one to finish.", "code": "too_many_active_jobs"})
+        if user_active_jobs >= BASIC_MAX_ACTIVE_JOBS and not (await get_user_subscription_status(current_user["id"])).get("pro_access"):
+            raise HTTPException(
+                status_code=429,
+                detail={"message": "One job runs at a time on your plan; Pro queues them. Wait for this one to finish.", "code": "needs_pro"},
+            )
 
     queue_too_busy = int(job_stats.get("queued") or 0) >= int(controls.get("max_queued_jobs") or OPS_DEFAULT_MAX_QUEUED_JOBS)
     processing_too_busy = int(job_stats.get("processing") or 0) >= int(controls.get("max_processing_jobs") or OPS_DEFAULT_MAX_PROCESSING_JOBS)
@@ -4027,7 +4098,7 @@ async def _process_youtube_upload_job(job: dict) -> None:
 
 
 async def _build_channel_analytics_job_payload(current_user: dict) -> dict[str, Any]:
-    await _ensure_pro_user(current_user, "Channel analysis")
+    await _ensure_pro_access(current_user, "Channel analytics")
 
     connection = await db.youtube_connections.find_one({"user_id": current_user['id']})
     if not connection:
@@ -5537,10 +5608,15 @@ async def get_growth_calendar(request: Request, current_user: dict = Depends(get
 
 
 # ============ Subscription Routes ============
-@api_router.get("/subscription/status", response_model=SubscriptionStatus)
-async def get_subscription_status(current_user: dict = Depends(get_current_user)):
-    """Get user's subscription and credit status"""
-    status = await get_user_subscription_status(current_user['id'])
+async def _founding_spots_left() -> int:
+    try:
+        taken = await db.users.count_documents({"founding_member": True})
+    except (AttributeError, TypeError):
+        taken = 0
+    return max(0, FOUNDING_MEMBER_LIMIT - int(taken or 0))
+
+
+async def _subscription_response(status: dict) -> SubscriptionStatus:
     return SubscriptionStatus(
         is_subscribed=status['is_subscribed'],
         plan=status['plan'],
@@ -5551,44 +5627,152 @@ async def get_subscription_status(current_user: dict = Depends(get_current_user)
         resets_at=status.get('resets_at'),
         monthly_llm_cost_usd=status.get("monthly_llm_cost_usd"),
         cost_guardrail_hit=status.get("cost_guardrail_hit"),
+        trial=bool(status.get("trial")),
+        trial_available=bool(status.get("trial_available")),
+        trial_ends_at=status.get("trial_ends_at"),
+        pro_access=bool(status.get("pro_access")),
+        founding_member=bool(status.get("founding_member")),
+        founding_spots_left=await _founding_spots_left(),
+        plan_version=int(status.get("plan_version") or 1),
     )
+
+
+# ============ Subscription Routes ============
+@api_router.get("/subscription/status", response_model=SubscriptionStatus)
+async def get_subscription_status(current_user: dict = Depends(get_current_user)):
+    """Get user's subscription and credit status"""
+    return await _subscription_response(await get_user_subscription_status(current_user['id']))
+
+
+_PRICE_SPECS = {
+    "plus": {"env": "STRIPE_PRICE_ID_PLUS_V2", "name": "SendMyBeat Plus", "cents": PLUS_PRICE_CENTS, "interval": "month"},
+    "max": {"env": "STRIPE_PRICE_ID_PRO_V2", "name": "SendMyBeat Pro", "cents": PRO_PRICE_CENTS, "interval": "month"},
+    "founding": {"env": "STRIPE_PRICE_ID_FOUNDING", "name": "SendMyBeat Pro, founding member (1 year)", "cents": FOUNDING_PRICE_CENTS, "interval": "year"},
+}
+
+
+async def _stripe_price_id(plan: str) -> str:
+    """The Stripe price for a plan: from env if set, else created once in Stripe and remembered."""
+    spec = _PRICE_SPECS[plan]
+    from_env = (os.environ.get(spec["env"]) or "").strip()
+    if from_env:
+        return from_env
+    key = f"stripe_price_{plan}_{spec['cents']}"
+    saved = await db.app_settings.find_one({"key": key})
+    if saved and saved.get("value"):
+        return str(saved["value"])
+    price = await asyncio.to_thread(
+        stripe.Price.create,
+        currency="usd",
+        unit_amount=spec["cents"],
+        recurring={"interval": spec["interval"]},
+        product_data={"name": spec["name"]},
+    )
+    await db.app_settings.update_one({"key": key}, {"$set": {"key": key, "value": price["id"]}}, upsert=True)
+    return str(price["id"])
+
 
 @api_router.post("/subscription/create-checkout")
 async def create_checkout_session(request: CheckoutSessionRequest, current_user: dict = Depends(get_current_user)):
-    """Create Stripe checkout session"""
-    try:
-        selected_plan = (request.plan or "plus").strip().lower()
-        if selected_plan not in {"plus", "max"}:
-            selected_plan = "plus"
-        plus_price_id = os.environ.get("STRIPE_PRICE_ID_PLUS") or os.environ.get("STRIPE_PRICE_ID")
-        max_price_id = os.environ.get("STRIPE_PRICE_ID_MAX")
-        if selected_plan == "max" and not max_price_id:
-            raise HTTPException(status_code=500, detail="Missing STRIPE_PRICE_ID_MAX")
-        chosen_price_id = max_price_id if selected_plan == "max" else plus_price_id
-        if not chosen_price_id:
-            raise HTTPException(status_code=500, detail="Missing Stripe price configuration")
+    """Start a plan: a Stripe Checkout page, or, if you already have a subscription, a switch of
+    that subscription to the new plan (no second subscription)."""
+    _enforce_action_rate_limit(
+        f"checkout:{current_user['id']}", limit=10, window_seconds=600,
+        detail_message="Too many checkout attempts. Please wait a few minutes.",
+    )
+    plan = request.plan
+    user_doc = await db.users.find_one({"id": current_user["id"]}) or {}
+    if plan == "founding" and not user_doc.get("founding_member") and await _founding_spots_left() <= 0:
+        raise HTTPException(status_code=409, detail={"message": "All founding member spots are taken.", "code": "founding_full"})
+    metadata = {"user_id": current_user["id"], "plan": plan, "plan_version": str(PLAN_VERSION)}
 
-        checkout_session = stripe.checkout.Session.create(
-            customer_email=current_user.get('email'),
+    try:
+        price_id = await _stripe_price_id(plan)
+        current = _resolve_subscription_plan(user_doc)
+        subscription_id = user_doc.get("stripe_subscription_id")
+        if current in {"plus", "max"} and subscription_id:
+            # Switch the plan they have. Moving up from the trial ends the trial and bills now.
+            subscription = await asyncio.to_thread(stripe.Subscription.retrieve, subscription_id)
+            item_id = subscription["items"]["data"][0]["id"]
+            changes: dict[str, Any] = {
+                "items": [{"id": item_id, "price": price_id}],
+                "metadata": metadata,
+                "proration_behavior": "create_prorations",
+            }
+            if subscription.get("status") == "trialing" and plan != "plus":
+                changes["trial_end"] = "now"
+            updated = await asyncio.to_thread(stripe.Subscription.modify, subscription_id, **changes)
+            await db.users.update_one({"id": current_user["id"]}, {"$set": _subscription_user_fields(updated)})
+            return {"switched": True}
+
+        trial = request.trial and plan == "plus" and not user_doc.get("trial_used")
+        subscription_data: dict[str, Any] = {"metadata": {**metadata, "trial": "1" if trial else "0"}}
+        if trial:
+            subscription_data["trial_period_days"] = TRIAL_DAYS
+        checkout_session = await asyncio.to_thread(
+            stripe.checkout.Session.create,
+            customer=user_doc.get("stripe_customer_id") or None,
+            customer_email=None if user_doc.get("stripe_customer_id") else current_user.get('email'),
             client_reference_id=current_user['id'],
-            line_items=[{
-                'price': chosen_price_id,
-                'quantity': 1,
-            }],
+            line_items=[{'price': price_id, 'quantity': 1}],
             mode='subscription',
+            subscription_data=subscription_data,
             success_url=request.success_url,
             cancel_url=request.cancel_url,
-            metadata={
-                'user_id': current_user['id'],
-                'plan': selected_plan,
-            }
+            metadata={**metadata, "trial": "1" if trial else "0"},
         )
-        
         return {"checkout_url": checkout_session.url}
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
         logging.error(f"Stripe checkout error: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to create checkout session. Please try again.")
+
+
+@api_router.post("/support/tip")
+async def create_tip_checkout(request: TipRequest, current_user: dict = Depends(get_current_user)):
+    """A one-time tip through Stripe Checkout. It doesn't change your plan."""
+    if request.amount_cents not in TIP_AMOUNTS_CENTS:
+        raise HTTPException(status_code=400, detail="Pick one of the tip amounts.")
+    _enforce_action_rate_limit(
+        f"tip:{current_user['id']}", limit=10, window_seconds=600,
+        detail_message="Too many attempts. Please wait a few minutes.",
+    )
+    try:
+        session = await asyncio.to_thread(
+            stripe.checkout.Session.create,
+            mode="payment",
+            customer_email=current_user.get("email"),
+            client_reference_id=current_user["id"],
+            line_items=[{
+                "price_data": {"currency": "usd", "unit_amount": request.amount_cents, "product_data": {"name": "Tip for SendMyBeat"}},
+                "quantity": 1,
+            }],
+            success_url=request.success_url,
+            cancel_url=request.cancel_url,
+            metadata={"kind": "tip", "user_id": current_user["id"]},
+        )
+        return {"checkout_url": session.url}
+    except Exception as e:
+        logging.error(f"Stripe tip checkout error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Couldn't open the tip page. Please try again.")
+
+
+# Where Stripe sends the app back after checkout: a redirect into the app, which closes the
+# in-app browser. Only the app's own link schemes are allowed, so this can't redirect elsewhere.
+_APP_RETURN_SCHEMES = ("sendmybeat://", "exp://", "exps://")
+
+
+@api_router.get("/billing/return")
+async def billing_return(to: str = "", status: str = "done"):
+    from fastapi.responses import RedirectResponse
+
+    if not to.startswith(_APP_RETURN_SCHEMES) or any(c in to for c in "\r\n"):
+        return RedirectResponse(os.environ.get("FRONTEND_URL", "https://www.sendmybeat.com"), status_code=302)
+    sep = "&" if "?" in to else "?"
+    return RedirectResponse(f"{to}{sep}{urlencode({'status': status[:20]})}", status_code=302)
+
 
 @api_router.post("/subscription/webhook")
 async def stripe_webhook(request: Request):
@@ -5610,50 +5794,45 @@ async def stripe_webhook(request: Request):
     # Handle the event
     if event['type'] == 'checkout.session.completed':
         session = event['data']['object']
-        user_id = session.get('client_reference_id') or session.get('metadata', {}).get('user_id')
-        plan = (session.get('metadata', {}).get('plan') or "plus").strip().lower()
-        if plan not in {"plus", "max"}:
-            plan = "plus"
-        
-        if user_id:
-            # Activate subscription
-            subscription_id = session.get('subscription')
-            await db.users.update_one(
-                {"id": user_id},
-                {"$set": {
-                    "stripe_customer_id": session.get('customer'),
-                    "stripe_subscription_id": subscription_id,
-                    "subscription_status": "active",
-                    "subscription_plan": plan,
-                    "subscribed_at": datetime.now(timezone.utc).isoformat()
-                }}
-            )
+        metadata = session.get('metadata') or {}
+        user_id = session.get('client_reference_id') or metadata.get('user_id')
+
+        if session.get('mode') == 'payment' or metadata.get('kind') == 'tip':
+            # A tip: say thanks in the logs and keep a record; plans are untouched.
+            await db.tips.insert_one({
+                "user_id": user_id,
+                "amount_cents": session.get('amount_total'),
+                "stripe_session_id": session.get('id'),
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+            logging.info(f"Tip received from user {user_id}")
+        elif user_id:
+            plan = (metadata.get('plan') or "plus").strip().lower()
+            trial = metadata.get('trial') == "1"
+            fields: dict[str, Any] = {
+                "stripe_customer_id": session.get('customer'),
+                "stripe_subscription_id": session.get('subscription'),
+                "subscription_status": "trialing" if trial else "active",
+                "subscription_plan": "max" if plan == "founding" else (plan if plan in {"plus", "max"} else "plus"),
+                "subscribed_at": datetime.now(timezone.utc).isoformat(),
+            }
+            if str(metadata.get('plan_version') or "").isdigit():
+                fields["plan_version"] = int(metadata['plan_version'])
+            if plan == "founding":
+                fields["founding_member"] = True
+            if trial:
+                fields["trial_used"] = True
+                fields["trial_ends_at"] = (datetime.now(timezone.utc) + timedelta(days=TRIAL_DAYS)).isoformat()
+            await db.users.update_one({"id": user_id}, {"$set": fields})
             logging.info(f"Subscription activated for user {user_id}")
-    
+
     elif event['type'] == 'customer.subscription.updated':
         subscription = event['data']['object']
         customer_id = subscription['customer']
-        items = (((subscription.get("items") or {}).get("data")) or [])
-        active_price_ids = {((it.get("price") or {}).get("id") or "").strip() for it in items}
-        plus_price_id = os.environ.get("STRIPE_PRICE_ID_PLUS") or os.environ.get("STRIPE_PRICE_ID", "")
-        max_price_id = os.environ.get("STRIPE_PRICE_ID_MAX", "")
-        plan = "plus"
-        if max_price_id and max_price_id in active_price_ids:
-            plan = "max"
-        elif plus_price_id and plus_price_id in active_price_ids:
-            plan = "plus"
-        
-        # Find user by customer ID
         user_doc = await db.users.find_one({"stripe_customer_id": customer_id})
         if user_doc:
-            await db.users.update_one(
-                {"id": user_doc['id']},
-                {"$set": {
-                    "subscription_status": subscription['status'],
-                    "subscription_plan": plan,
-                }}
-            )
-    
+            await db.users.update_one({"id": user_doc['id']}, {"$set": _subscription_user_fields(subscription)})
+
     elif event['type'] == 'customer.subscription.deleted':
         subscription = event['data']['object']
         customer_id = subscription['customer']
@@ -5679,21 +5858,32 @@ async def get_subscription_config():
         "publishable_key": os.environ.get('STRIPE_PUBLISHABLE_KEY'),
         "price_id_plus": os.environ.get("STRIPE_PRICE_ID_PLUS") or os.environ.get("STRIPE_PRICE_ID"),
         "price_id_max": os.environ.get("STRIPE_PRICE_ID_MAX"),
+        # What the apps show on the paywall.
+        "plans": [
+            {"id": "plus", "name": "Plus", "price_cents": PLUS_PRICE_CENTS, "interval": "month",
+             "generations": PLUS_V2_MONTHLY_AI_CREDITS, "uploads": PLUS_V2_MONTHLY_UPLOAD_CREDITS},
+            {"id": "max", "name": "Pro", "price_cents": PRO_PRICE_CENTS, "interval": "month",
+             "generations": PRO_V2_MONTHLY_AI_CREDITS, "uploads": PRO_V2_MONTHLY_UPLOAD_CREDITS},
+        ],
+        "trial": {"days": TRIAL_DAYS, "daily_generations": TRIAL_DAILY_AI_CREDITS, "daily_uploads": TRIAL_DAILY_UPLOAD_CREDITS},
+        "founding": {"price_cents": FOUNDING_PRICE_CENTS, "interval": "year", "limit": FOUNDING_MEMBER_LIMIT},
+        "tip_amounts_cents": list(TIP_AMOUNTS_CENTS),
     }
 
 @api_router.post("/subscription/portal")
-async def create_customer_portal_session(current_user: dict = Depends(get_current_user)):
+async def create_customer_portal_session(return_url: Optional[str] = None, current_user: dict = Depends(get_current_user)):
     """Create Stripe Customer Portal session for subscription management"""
     try:
         user_doc = await db.users.find_one({"id": current_user['id']})
-        
+
         if not user_doc or not user_doc.get('stripe_customer_id'):
             raise HTTPException(status_code=400, detail="No active subscription found")
-        
-        # Create portal session
+
+        # Create portal session (the app passes its /billing/return link to come back to it)
         portal_session = stripe.billing_portal.Session.create(
             customer=user_doc['stripe_customer_id'],
-            return_url=f"{os.environ.get('FRONTEND_URL', 'http://localhost:3000')}/dashboard"
+            return_url=return_url if return_url and len(return_url) < 2000 and return_url.startswith("https://")
+            else f"{os.environ.get('FRONTEND_URL', 'http://localhost:3000')}/dashboard"
         )
         
         return {"url": portal_session.url}
@@ -5712,18 +5902,7 @@ async def sync_subscription_status(current_user: dict = Depends(get_current_user
             raise HTTPException(status_code=404, detail="User not found")
 
         refreshed_user = await _sync_user_subscription_from_stripe(user_doc)
-        status = await get_user_subscription_status(refreshed_user["id"])
-        return SubscriptionStatus(
-            is_subscribed=status['is_subscribed'],
-            plan=status['plan'],
-            daily_credits_remaining=status['credits_remaining'],
-            daily_credits_total=status['credits_total'],
-            upload_credits_remaining=status['upload_credits_remaining'],
-            upload_credits_total=status['upload_credits_total'],
-            resets_at=status.get('resets_at'),
-            monthly_llm_cost_usd=status.get("monthly_llm_cost_usd"),
-            cost_guardrail_hit=status.get("cost_guardrail_hit"),
-        )
+        return await _subscription_response(await get_user_subscription_status(refreshed_user["id"]))
     except HTTPException:
         raise
     except Exception as exc:
@@ -8927,6 +9106,7 @@ async def apply_for_verification(
             "main_platform_url": (request.main_platform_url or "").strip(),
             "notable_work": (request.notable_work or "").strip(),
             "reason": reason,
+            "pro_id": request.pro_id if request.pro_id in pros_service.BY_ID else None,
             "submitted_at": now,
         },
     }
@@ -8979,8 +9159,37 @@ async def review_verification_application(
         update_fields["verified_at"] = now
 
     await db.producer_profiles.update_one({"user_id": request.user_id}, {"$set": update_fields})
+    # Approving a claim links the Pros profile to this producer's SendMyBeat profile.
+    pro_id = (profile.get("verification_application") or {}).get("pro_id")
+    if action == "approve" and pro_id in pros_service.BY_ID:
+        await db[pros_service.OVERRIDES].update_one(
+            {"pro_id": pro_id},
+            {"$set": {"pro_id": pro_id, "claimed_by": request.user_id, "updated_at": now}},
+            upsert=True,
+        )
     updated = await db.producer_profiles.find_one({"user_id": request.user_id})
     return await _profile_with_role_tag(updated)
+
+
+@api_router.get("/producers/verification/pending")
+async def list_verification_applications(current_user: dict = Depends(get_current_user)):
+    """Admin-only: verification requests waiting for review, oldest first."""
+    if not _is_admin_user(current_user):
+        raise HTTPException(status_code=403, detail="Only admins can review verification applications.")
+    docs = await db.producer_profiles.find(
+        {"verification_status": "pending"},
+        {"_id": 0, "user_id": 1, "username": 1, "avatar_url": 1, "verification_applied_at": 1, "verification_application": 1},
+    ).sort("verification_applied_at", 1).to_list(100)
+    for doc in docs:
+        for key in ("verification_applied_at",):
+            if isinstance(doc.get(key), datetime):
+                doc[key] = doc[key].isoformat()
+        application = doc.get("verification_application") or {}
+        if isinstance(application.get("submitted_at"), datetime):
+            application["submitted_at"] = application["submitted_at"].isoformat()
+        pro = pros_service.BY_ID.get(application.get("pro_id"))
+        doc["pro_name"] = pro["name"] if pro else None
+    return {"applications": docs}
 
 # ============ Beat Fixes Route ============
 @api_router.post("/beat/fix")
@@ -9293,7 +9502,11 @@ async def get_pro(pro_id: str, current_user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Producer not found")
     channels = await _pro_channels()
     override = await db[pros_service.OVERRIDES].find_one({"pro_id": pro_id}, {"_id": 0})
-    return pros_service.detail(pro, channels.get(pro_id), override)
+    result = pros_service.detail(pro, channels.get(pro_id), override)
+    # Everyone can read the story; the breakdown of how their channel works is part of Pro.
+    if not (await get_user_subscription_status(current_user["id"])).get("pro_access"):
+        result.update({"patterns": None, "breakdown": None, "locked": True})
+    return result
 
 
 @api_router.get("/pros/{pro_id}/analyze")
@@ -9301,6 +9514,7 @@ async def analyze_pro(pro_id: str, current_user: dict = Depends(get_current_user
     """Their title and upload patterns (latest 50 uploads) beside yours (your SendMyBeat uploads)."""
     if pro_id not in pros_service.BY_ID:
         raise HTTPException(status_code=404, detail="Producer not found")
+    await _ensure_pro_access(current_user, "Comparing your uploads with a pro's")
     channel = (await _pro_channels()).get(pro_id) or {}
     them = pros_service.title_patterns(channel.get("uploads") or [])
     you = pros_service.title_patterns(await _my_uploads(current_user["id"]))
@@ -9469,6 +9683,7 @@ async def create_style_plan(pro_id: str, request: StylePlanRequest, current_user
     """Start a plan from the moves you picked; it replaces any plan you had."""
     if pro_id not in pros_service.BY_ID:
         raise HTTPException(status_code=404, detail="Producer not found")
+    await _ensure_pro_access(current_user, "Copying a pro's style")
     _enforce_action_rate_limit(
         f"style_plan:{current_user['id']}",
         limit=10,

@@ -129,10 +129,12 @@ class ProducerProfileUpdate(BaseModel):
 
 
 class VerificationApplicationRequest(BaseModel):
-    stage_name: Optional[str] = None
-    main_platform_url: Optional[str] = None
-    notable_work: Optional[str] = None
-    reason: str
+    stage_name: Optional[str] = Field(default=None, max_length=80)
+    main_platform_url: Optional[str] = Field(default=None, max_length=300)
+    notable_work: Optional[str] = Field(default=None, max_length=1000)
+    reason: str = Field(max_length=2000)
+    # Set when a producer from the Pros list claims their profile.
+    pro_id: Optional[str] = Field(default=None, max_length=64)
 
 
 class VerificationReviewRequest(BaseModel):

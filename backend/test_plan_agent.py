@@ -164,3 +164,35 @@ async def test_without_a_saved_description_the_agent_saves_a_new_one():
     assert result['created'] is True
     saved = db.descriptions.insert_one.await_args.args[0]
     assert saved['id'] == result['description_id'] and saved['content'] == 'New text' and saved['user_id'] == 'u1'
+
+
+def test_pinned_pros_are_verified_and_show_who_claimed_them():
+    card = pros.card(TAZ, None)
+    assert card['verified'] is True and card['claimed_by'] is None
+    assert pros.card(TAZ, None, {'claimed_by': 'u-taz'})['claimed_by'] == 'u-taz'
+
+
+@pytest.mark.asyncio
+async def test_approving_a_claim_links_the_pro_profile():
+    profiles = MagicMock()
+    profiles.find_one = AsyncMock(return_value={'user_id': 'u-taz', 'verification_application': {'pro_id': 'taz-taylor'}})
+    profiles.update_one = AsyncMock()
+    overrides = MagicMock()
+    overrides.update_one = AsyncMock()
+    db = MagicMock()
+    db.producer_profiles = profiles
+    db.__getitem__.return_value = overrides
+    with patch.object(server, 'db', db), \
+         patch.object(server, '_is_admin_user', return_value=True), \
+         patch.object(server, '_profile_with_role_tag', AsyncMock(return_value={})):
+        await server.review_verification_application(
+            server.VerificationReviewRequest(user_id='u-taz', action='approve'), current_user={'id': 'admin'})
+    filt, update = overrides.update_one.await_args.args
+    assert filt == {'pro_id': 'taz-taylor'} and update['$set']['claimed_by'] == 'u-taz'
+
+
+@pytest.mark.asyncio
+async def test_only_admins_see_pending_verification_requests():
+    with patch.object(server, '_is_admin_user', return_value=False), pytest.raises(HTTPException) as err:
+        await server.list_verification_applications(current_user={'id': 'u1'})
+    assert err.value.status_code == 403

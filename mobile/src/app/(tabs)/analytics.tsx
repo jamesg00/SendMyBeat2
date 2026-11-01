@@ -6,7 +6,8 @@ import Svg, { Circle, Line, Polyline, Text as SvgText } from 'react-native-svg';
 import * as api from '@/api/endpoints';
 import type { ChannelAnalytics, ChannelVideo, VideoReview } from '@/api/endpoints';
 import { Button, Card, JobProgress, Screen, useUiStyles } from '@/components/ui';
-import { F, R, font, makeStyles, useColors } from '@/theme';
+import { openPaywall, useSubscription } from '@/state/billing';
+import { F, R, display, font, makeStyles, useColors } from '@/theme';
 
 const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
 const list = (x: unknown) => (Array.isArray(x) ? x.filter((s): s is string => typeof s === 'string' && s.trim() !== '') : []);
@@ -16,6 +17,28 @@ const day = (iso?: string) => (iso ? new Date(iso).toLocaleDateString('en', { mo
 type Upload = ChannelVideo & { views: number; review?: VideoReview; n: number };
 
 export default function AnalyticsScreen() {
+  const sub = useSubscription();
+  if (sub && !sub.pro_access) return <AnalyticsLocked trialAvailable={!!sub.trial_available} />;
+  return <Analytics />;
+}
+
+// Channel analytics are part of Pro.
+function AnalyticsLocked({ trialAvailable }: { trialAvailable: boolean }) {
+  const s = useStyles();
+  return (
+    <Screen title="Analytics">
+      <View style={{ gap: 12, paddingTop: 12 }}>
+        <Text style={s.lockTitle}>See what’s working on your channel</Text>
+        <Text style={s.lockBody}>
+          Pro reads your latest uploads: views against your average, which titles hold you back, and what to fix next.
+        </Text>
+        <Button title={trialAvailable ? 'Start with the free trial' : 'See Pro'} onPress={() => openPaywall(trialAvailable ? 'needs_plan' : 'needs_pro')} />
+      </View>
+    </Screen>
+  );
+}
+
+function Analytics() {
   const C = useColors();
   const s = useStyles();
   const ui = useUiStyles();
@@ -346,6 +369,8 @@ function Bullets({ title, color, items, numbered }: { title: string; color: stri
 }
 
 const useStyles = makeStyles((C) => ({
+  lockTitle: { color: C.text, fontSize: 22, lineHeight: 27, ...display },
+  lockBody: { color: C.t2, fontSize: 14.5, lineHeight: 21, ...font() },
   channel: { color: C.t2, fontSize: 13, marginTop: -14, ...font() },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 },
   trend: { fontSize: 12, fontFamily: F.monoMedium },

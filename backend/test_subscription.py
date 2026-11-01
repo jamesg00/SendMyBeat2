@@ -59,6 +59,9 @@ class TestSubscriptionStatus:
             assert status['credits_remaining'] == server._get_paid_plan_limits('plus')['ai_credits']
             assert status['upload_credits_remaining'] == server._get_paid_plan_limits('plus')['upload_credits']
 
+    # Free accounts get no credits now; these check the daily reset with the old free limits.
+    @patch('backend.server.FREE_DAILY_AI_CREDITS', 2)
+    @patch('backend.server.FREE_DAILY_UPLOAD_CREDITS', 1)
     async def test_free_user_new_day_reset(self):
         """Test free user credits reset on a new day."""
         # Current time: 2024-01-02 12:00:00 UTC
@@ -103,6 +106,9 @@ class TestSubscriptionStatus:
             expected_resets_at = "2024-01-03T00:00:00+00:00"
             assert status['resets_at'] == expected_resets_at
 
+    # Free accounts get no credits now; these check the daily reset with the old free limits.
+    @patch('backend.server.FREE_DAILY_AI_CREDITS', 2)
+    @patch('backend.server.FREE_DAILY_UPLOAD_CREDITS', 1)
     async def test_free_user_partial_usage_today(self):
         """Test free user with some usage today."""
         # Current time: 2024-01-02 12:00:00 UTC

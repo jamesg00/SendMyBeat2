@@ -166,7 +166,7 @@ function Featured({ producer: p, label }: { producer: Producer; label: string })
           <View style={s.featuredAvatar}>
             <Avatar producer={p} size={56} />
           </View>
-          <View style={{ flex: 1, gap: 2, paddingBottom: 2 }}>
+          <View style={s.featuredText}>
             <View style={s.nameRow}>
               <Text style={s.featuredName} numberOfLines={1}>
                 {p.username}
@@ -178,7 +178,9 @@ function Featured({ producer: p, label }: { producer: Producer; label: string })
               {p.spotlight_tier ? ` · ${p.spotlight_tier}` : ''}
             </Text>
           </View>
-          <LikeButton producer={p} />
+          <View style={{ paddingTop: 10 }}>
+            <LikeButton producer={p} />
+          </View>
         </View>
       </Pressable>
       <View style={{ gap: 10, paddingHorizontal: 14, paddingBottom: 14 }}>
@@ -243,8 +245,10 @@ const useStyles = makeStyles((C) => ({
   cardTitle: { color: C.text, fontSize: 17, ...font('600') },
   featured: { borderRadius: 14, borderWidth: 1, borderColor: C.line, backgroundColor: C.card, overflow: 'hidden' },
   banner: { height: 86, backgroundColor: C.card2, borderBottomWidth: 1, borderBottomColor: C.lineSoft },
-  featuredHead: { flexDirection: 'row', alignItems: 'flex-end', gap: 12, paddingHorizontal: 14, marginTop: -28, paddingBottom: 12 },
-  featuredAvatar: { borderRadius: 32, borderWidth: 3, borderColor: C.card },
+  // Only the avatar overlaps the banner; the name starts below it.
+  featuredHead: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingHorizontal: 14, paddingBottom: 12 },
+  featuredAvatar: { marginTop: -30, borderRadius: 32, borderWidth: 3, borderColor: C.card },
+  featuredText: { flex: 1, gap: 2, paddingTop: 12 },
   featuredName: { color: C.text, fontSize: 18, flexShrink: 1, ...display },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   chip: {

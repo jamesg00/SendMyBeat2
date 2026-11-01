@@ -8,9 +8,10 @@ import Svg, { Line, Rect } from 'react-native-svg';
 import * as api from '@/api/endpoints';
 import type { ProBreakdown, ProDetail, StyleMatch, TitlePatterns } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
-import { openWebLink } from '@/components/producer';
+import { openWebLink, VerifiedBadge } from '@/components/producer';
 import { copyPro, ProHero, Ring, usePlan } from '@/components/pros';
 import { Button, Segmented, useUiStyles } from '@/components/ui';
+import { openPaywall, useSubscription } from '@/state/billing';
 import { F, R, display, font, makeStyles, useColors } from '@/theme';
 
 // A pro producer's page: why they blew up, how their channel works, and how close you are to their style.
@@ -35,14 +36,18 @@ export default function ProScreen() {
   }
   const p = pro.data;
   const following = plan?.pro_id === p.id;
+  const locked = !!p.locked;
 
   return (
     <View style={s.root}>
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 110 }} showsVerticalScrollIndicator={false}>
         <ProHero pro={p} height={380}>
-          <Text style={s.name} accessibilityRole="header" numberOfLines={1} adjustsFontSizeToFit>
-            {p.name}
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <Text style={[s.name, { flexShrink: 1 }]} accessibilityRole="header" numberOfLines={1} adjustsFontSizeToFit>
+              {p.name}
+            </Text>
+            {p.verified ? <VerifiedBadge size={22} /> : null}
+          </View>
           <Text style={s.mono}>
             {[p.channel_title, p.subscribers ? `${compact.format(p.subscribers)} subscribers` : null, p.total_views ? `${compact.format(p.total_views)} views` : null]
               .filter(Boolean)
@@ -60,7 +65,15 @@ export default function ProScreen() {
               { value: 'you', label: 'You vs them' },
             ]}
           />
-          {tab === 'story' ? <Story p={p} /> : tab === 'breakdown' ? <Breakdown p={p} /> : <YouVsThem p={p} />}
+          {tab === 'story' ? (
+            <Story p={p} />
+          ) : locked ? (
+            <ProLock name={p.name} what={tab === 'breakdown' ? 'how their channel works' : 'how close you are to their style'} />
+          ) : tab === 'breakdown' ? (
+            <Breakdown p={p} />
+          ) : (
+            <YouVsThem p={p} />
+          )}
         </View>
       </ScrollView>
 
@@ -68,9 +81,33 @@ export default function ProScreen() {
         <Text style={{ color: C.text, fontSize: 15, ...font('600') }}>✕</Text>
       </Pressable>
       <View style={[s.dock, { paddingBottom: insets.bottom + 12 }]}>
-        <Button title={following ? 'Your plan is on' : `Copy ${p.name}’s style`} onPress={() => copyPro(p.id)} style={{ flex: 1 }} />
+        <Button
+          title={following ? 'Your plan is on' : `Copy ${p.name}’s style${locked ? ' · Pro' : ''}`}
+          onPress={() => copyPro(p.id)}
+          style={{ flex: 1 }}
+        />
         <Button title="YouTube ↗" variant="secondary" onPress={() => openWebLink(p.channel_url)} />
       </View>
+    </View>
+  );
+}
+
+// Breakdowns and You vs them are Pro; the story stays free to read.
+function ProLock({ name, what }: { name: string; what: string }) {
+  const s = useStyles();
+  const sub = useSubscription();
+  return (
+    <View style={s.lock}>
+      <Svg width={28} height={28} viewBox="0 0 24 24" accessibilityElementsHidden importantForAccessibility="no">
+        <Rect x={5} y={11} width={14} height={10} rx={2} fill="none" stroke={s.lockIcon.color} strokeWidth={1.8} />
+        <Line x1={8} y1={11} x2={8} y2={7.5} stroke={s.lockIcon.color} strokeWidth={1.8} strokeLinecap="round" />
+        <Line x1={16} y1={11} x2={16} y2={7.5} stroke={s.lockIcon.color} strokeWidth={1.8} strokeLinecap="round" />
+      </Svg>
+      <Text style={s.lockTitle}>See {what}</Text>
+      <Text style={[s.fine, { textAlign: 'center' }]}>
+        Pro shows {name}’s title formula, upload rhythm and best days, and compares your uploads with theirs.
+      </Text>
+      <Button title={sub?.trial_available ? 'Try it free, then see Pro' : 'See Pro'} onPress={() => openPaywall('needs_pro')} />
     </View>
   );
 }
@@ -162,9 +199,25 @@ function Story({ p }: { p: ProDetail }) {
         </View>
         <Text style={s.fine}>
           {p.photo_source === 'press' ? `Photo: ${p.photo_credit ?? 'press photo, used with permission'}. ` : ''}
-          Stats and uploads from {p.name}’s YouTube channel.
+          Stats and uploads from {p.name}’s YouTube channel{p.verified ? ', confirmed by SendMyBeat' : ''}.
         </Text>
       </View>
+
+      {p.claimed_by ? (
+        <Pressable
+          onPress={() => router.push({ pathname: '/producer/[id]', params: { id: p.claimed_by! } })}
+          style={s.claim}
+          accessibilityRole="button">
+          <VerifiedBadge size={16} />
+          <Text style={[s.claimText, { flex: 1 }]}>{p.name} is on SendMyBeat</Text>
+          <Text style={s.claimText}>Profile ›</Text>
+        </Pressable>
+      ) : (
+        <Pressable onPress={() => router.push({ pathname: '/verify', params: { pro: p.id } })} style={s.claim} accessibilityRole="button">
+          <Text style={[s.claimText, { flex: 1 }]}>Are you {p.name}? Claim this profile</Text>
+          <Text style={s.claimText}>›</Text>
+        </Pressable>
+      )}
     </>
   );
 }
@@ -452,6 +505,11 @@ const useStyles = makeStyles((C) => ({
   mono: { color: C.t2, fontSize: 12, fontFamily: F.mono },
   fine: { color: C.t3, fontSize: 12, lineHeight: 17, ...font() },
   link: { color: C.text, fontSize: 13.5, ...font('500') },
+  lock: { alignItems: 'center', gap: 10, padding: 22, borderRadius: R.card, borderWidth: 1, borderColor: C.line, backgroundColor: C.card },
+  lockIcon: { color: C.t2 },
+  lockTitle: { color: C.text, fontSize: 18, textAlign: 'center', ...display },
+  claim: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14, borderRadius: R.card, borderWidth: 1, borderColor: C.line, backgroundColor: C.card },
+  claimText: { color: C.text, fontSize: 14, ...font('600') },
   kicker: { color: C.acc, fontSize: 11, letterSpacing: 0.4, fontFamily: F.monoMedium },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
   quote: { padding: 16, gap: 8, borderRadius: 16, borderWidth: 1, borderColor: C.accLine, backgroundColor: C.accSoft },

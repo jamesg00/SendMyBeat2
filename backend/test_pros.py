@@ -33,7 +33,10 @@ def up(title, days_ago):
 
 
 def test_every_pro_has_the_profile_template_filled():
-    assert len(pros.PROS) == 5
+    assert len(pros.PROS) == 10
+    assert len(pros.BY_ID) == len(pros.PROS)
+    # Every channel is pinned, and no two pros share one.
+    assert len({pro['channel_id'] for pro in pros.PROS}) == len(pros.PROS)
     for pro in pros.PROS:
         for field in ('id', 'name', 'tagline', 'story', 'notable', 'moves', 'sources', 'handles', 'search'):
             assert pro[field], (pro['id'], field)
@@ -107,7 +110,7 @@ async def test_channels_are_found_by_handle_and_cached_with_photo_and_uploads():
     db, coll = cache_db()
     with patch.object(pros, 'PROS', UNPINNED):
         stats = await pros.refresh_channels(db, youtube_fake(), now=NOW)
-    assert stats['refreshed'] == 5
+    assert stats['refreshed'] == len(pros.PROS)
     saved = coll.update_one.await_args_list[0].args[1]['$set']
     assert saved['photo'] == 'https://yt/photo.jpg' and saved['banner'] == 'https://yt/banner'
     assert saved['subscribers'] == 1000 and saved['uploads'][0]['views'] == 321
@@ -120,8 +123,8 @@ async def test_a_wrong_handle_falls_back_to_one_search():
     yt = youtube_fake(handle_hits=False)
     with patch.object(pros, 'PROS', UNPINNED):
         stats = await pros.refresh_channels(db, yt, now=NOW)
-    assert yt.search.return_value.list.call_count == 5
-    assert stats['units'] >= 500
+    assert yt.search.return_value.list.call_count == len(pros.PROS)
+    assert stats['units'] >= 100 * len(pros.PROS)
     assert coll.update_one.await_args_list[0].args[1]['$set']['channel_id'] == 'UCsearch'
 
 
