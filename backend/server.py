@@ -2122,8 +2122,8 @@ async def get_user_subscription_status(user_id: str) -> dict:
         "founding_member": bool(user_doc.get("founding_member")),
         "trial_ends_at": user_doc.get("trial_ends_at") if trialing else None,
         # Pro features (copying a pro's style, pro breakdowns, channel analytics, the job queue):
-        # the $10 plan only.
-        "pro_access": plan == "max",
+        # the $10 plan, and admins (by user id) so they can test them. Credits still follow the plan.
+        "pro_access": plan == "max" or _is_admin_user(user_doc),
         "trial_available": plan == "free" and not user_doc.get("trial_used"),
     }
 

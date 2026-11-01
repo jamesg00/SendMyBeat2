@@ -81,6 +81,16 @@ async def test_people_on_the_old_5_dollar_plan_move_to_the_new_limits():
     assert (old_max['credits_total'], old_max['upload_credits_total'], old_max['pro_access']) == (100, 100, True)
 
 
+@pytest.mark.asyncio
+async def test_admins_get_pro_features_but_keep_their_plans_credits():
+    with patch.object(server, 'ADMIN_USER_IDS', {'u1'}):
+        admin_plus = await status_for(paid('plus'))
+        admin_free = await status_for({'id': 'u1', 'daily_usage_date': '2999-01-01'})
+    assert admin_plus['pro_access'] is True and admin_plus['credits_total'] == 50
+    assert admin_free['pro_access'] is True and admin_free['credits_total'] == 0
+    assert (await status_for(paid('plus')))['pro_access'] is False
+
+
 def checkout_mocks(user_doc):
     db = users_db(user_doc)
     db.app_settings.find_one = AsyncMock(return_value={'value': 'price_saved'})
