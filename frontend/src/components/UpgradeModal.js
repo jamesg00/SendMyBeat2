@@ -3,7 +3,10 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from "@/components/ui/button";
 import { Check, Crown, Sparkles } from "lucide-react";
 
-const PlanCard = ({ title, price, subtitle, bullets, cta, onClick, loading, featured = false }) => (
+// The plans, matching the app's paywall and backend/server.py (TRIAL_DAILY_*, PLUS_V2_* and PRO_V2_*).
+// Plus is "plus" and Pro is "max" to the server.
+
+const PlanCard = ({ title, price, subtitle, bullets, cta, onClick, loading, featured = false, current = false }) => (
   <div
     className={`rounded-xl border p-4 sm:p-5 space-y-3 ${
       featured ? "border-yellow-500/70 bg-yellow-500/10" : "border-[var(--border-color)] bg-[var(--bg-secondary)]"
@@ -25,20 +28,29 @@ const PlanCard = ({ title, price, subtitle, bullets, cta, onClick, loading, feat
         </div>
       ))}
     </div>
-    <Button onClick={onClick} disabled={loading} className="w-full">
-      {loading ? "Processing..." : cta}
+    <Button onClick={current ? undefined : onClick} disabled={loading || current} className="w-full">
+      {current ? "Your plan" : loading ? "Processing..." : cta}
     </Button>
   </div>
 );
 
-const UpgradeModal = ({ open, onClose, onUpgrade, loading }) => {
+const UpgradeModal = ({ open, onClose, onUpgrade, loading, subscription }) => {
+  const trialAvailable = Boolean(subscription?.trial_available);
+  const onTrial = Boolean(subscription?.trial);
+  const plan = subscription?.plan;
+  const currentPlan = onTrial ? null : plan === "max" || plan === "pro" ? "max" : plan === "plus" ? "plus" : null;
+  const subscribed = Boolean(subscription?.is_subscribed);
+  const verb = subscribed ? "Switch to" : "Get";
+
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-3xl" data-testid="upgrade-modal">
         <DialogHeader>
           <DialogTitle className="text-2xl text-center gradient-text">Choose Your Plan</DialogTitle>
           <DialogDescription className="text-center" style={{ color: "var(--text-secondary)" }}>
-            Plus is the cheap entry plan. Max gives you more monthly room without going fully unlimited.
+            {trialAvailable
+              ? "Try Plus free for 3 days: 3 generations and 3 uploads a day, then $5/month."
+              : "Plus covers producers uploading every week. Pro doubles that and adds the pro tools."}
           </DialogDescription>
         </DialogHeader>
 
@@ -46,30 +58,33 @@ const UpgradeModal = ({ open, onClose, onUpgrade, loading }) => {
           <PlanCard
             title="SendMyBeat Plus"
             price="$5/mo"
-            subtitle="Metered plan"
+            subtitle={trialAvailable ? "3 days free, then $5/month" : "For weekly uploads"}
             bullets={[
-              "150 AI generations per month",
-              "60 YouTube uploads per month",
-              "Paid channel analytics",
-              "Lower-cost publishing plan",
+              "50 AI generations per month",
+              "50 YouTube uploads per month",
+              "Tags, descriptions, and Upload Studio",
+              "No watermark",
             ]}
-            cta="Upgrade to Plus"
+            cta={trialAvailable ? "Start 3-day free trial" : `${verb} Plus`}
             loading={loading}
-            onClick={() => onUpgrade("plus")}
+            current={currentPlan === "plus"}
+            onClick={() => onUpgrade("plus", trialAvailable)}
           />
           <PlanCard
-            title="SendMyBeat Max"
-            price="$12/mo"
-            subtitle="Fair-use growth plan"
+            title="SendMyBeat Pro"
+            price="$10/mo"
+            subtitle="Most popular"
             bullets={[
-              "500 AI generations per month",
-              "150 YouTube uploads per month",
-              "Paid channel analytics",
-              "Higher monthly publishing room",
+              "100 AI generations per month",
+              "100 YouTube uploads per month",
+              "Copy a pro producer's style with the plan agent",
+              "Pro breakdowns and channel analytics",
+              "Run several jobs at once",
             ]}
-            cta="Upgrade to Max"
+            cta={onTrial ? "Switch to Pro (billed today)" : `${verb} Pro`}
             loading={loading}
-            onClick={() => onUpgrade("max")}
+            current={currentPlan === "max"}
+            onClick={() => onUpgrade("max", false)}
             featured
           />
         </div>
