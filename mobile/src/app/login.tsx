@@ -21,12 +21,35 @@ const TAG_STEPS = [
   'Scoring and ranking tags…',
 ];
 
-// Free limits are FREE_DAILY_* and paid limits PLUS_/MAX_MONTHLY_* in backend/server.py;
-// prices match the website's plans (frontend/src/pages/LandingPage.js). Billing happens on the site.
+// Limits are TRIAL_DAILY_*, PLUS_V2_MONTHLY_* and PRO_V2_MONTHLY_* in backend/server.py; the
+// website's plans (frontend/src/pages/LandingPage.js) say the same. Paying happens in the app.
 const PLANS = [
-  { name: 'Free', price: '$0', per: '', lines: ['2 AI generations a day', '1 YouTube upload a day', 'Uploads carry a small watermark'] },
-  { name: 'Plus', price: '$5', per: '/mo', lines: ['150 AI generations a month', '60 YouTube uploads a month', 'Channel analytics', 'No watermark'] },
-  { name: 'Max', price: '$12', per: '/mo', lines: ['500 AI generations a month', '150 YouTube uploads a month', 'Channel analytics', 'No watermark'] },
+  {
+    name: 'Free trial',
+    price: '$0',
+    per: '',
+    badge: '3 days',
+    lines: ['3 AI generations a day', '3 YouTube uploads a day', 'Then Plus at $5/mo. Cancel anytime'],
+  },
+  {
+    name: 'Plus',
+    price: '$5',
+    per: '/mo',
+    lines: ['50 AI generations a month', '50 YouTube uploads a month', 'Tags, descriptions and Upload Studio', 'No watermark'],
+  },
+  {
+    name: 'Pro',
+    price: '$10',
+    per: '/mo',
+    badge: 'Most popular',
+    lines: [
+      '100 AI generations a month',
+      '100 YouTube uploads a month',
+      'Copy a pro producer’s style with the plan agent',
+      'Pro breakdowns and channel analytics',
+      'Run several jobs at once',
+    ],
+  },
 ];
 
 export default function LandingScreen() {
@@ -60,7 +83,7 @@ export default function LandingScreen() {
       <View style={{ gap: 10 }}>
         <Button title="Get started" onPress={() => openAuth('register')} />
         <Button title="Log in" variant="secondary" onPress={() => openAuth('login')} />
-        <Text style={s.fine}>Free plan · no card needed</Text>
+        <Text style={s.fine}>3-day free trial · cancel anytime</Text>
       </View>
 
       <TagRunDemo />
@@ -76,7 +99,7 @@ export default function LandingScreen() {
         <StudioPreview />
       </Feature>
 
-      <Feature n="03" title="Analytics" body="Views per upload, plus which titles are working. Included with Plus and Max.">
+      <Feature n="03" title="Analytics" body="Views per upload, plus which titles are working. Included with Pro.">
         <ChartPreview />
       </Feature>
 
@@ -87,12 +110,15 @@ export default function LandingScreen() {
       <View style={{ gap: 12 }}>
         <View style={{ gap: 6 }}>
           <Text style={ui.sectionLabel}>Pricing</Text>
-          <Text style={s.h2}>Start free. Upgrade when you post more.</Text>
+          <Text style={s.h2}>Try it free for 3 days.</Text>
         </View>
         {PLANS.map((p) => (
           <View key={p.name} style={s.plan} accessible accessibilityLabel={`${p.name} plan, ${p.price}${p.per ? ' a month' : ''}. ${p.lines.join('. ')}.`}>
             <View style={s.planHead}>
-              <Text style={s.planName}>{p.name}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 }}>
+                <Text style={s.planName}>{p.name}</Text>
+                {p.badge ? <Text style={s.planBadge}>{p.badge}</Text> : null}
+              </View>
               <Text style={s.planPrice}>
                 {p.price}
                 <Text style={s.planPer}>{p.per}</Text>
@@ -106,7 +132,9 @@ export default function LandingScreen() {
             ))}
           </View>
         ))}
-        <Text style={s.note}>Everyone starts on Free. Upgrade any time from Plan and billing in your profile.</Text>
+        <Text style={s.note}>
+          Without a plan you can still browse Pros and Spotlight. Change or cancel any time from Plan and billing in your profile.
+        </Text>
       </View>
 
       <View style={s.closing}>
@@ -399,6 +427,18 @@ const useStyles = makeStyles((C) => ({
   plan: { borderRadius: R.card, borderWidth: 1, borderColor: C.line, backgroundColor: C.card, padding: 16, gap: 8 },
   planHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', paddingBottom: 4 },
   planName: { color: C.text, fontSize: 17, ...font('600') },
+  planBadge: {
+    color: C.acc,
+    fontSize: 10.5,
+    letterSpacing: 0.3,
+    fontFamily: F.mono,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: R.chip,
+    borderWidth: 1,
+    borderColor: C.accLine,
+    overflow: 'hidden',
+  },
   planPrice: { color: C.text, fontSize: 24, letterSpacing: -0.6, ...font('600') },
   planPer: { color: C.t3, fontSize: 13, fontFamily: F.mono, letterSpacing: 0 },
   planLine: { flexDirection: 'row', gap: 10 },

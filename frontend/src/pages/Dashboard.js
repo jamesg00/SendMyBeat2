@@ -381,7 +381,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
     syncSubscriptionStatus({ silent: true })
       .then((data) => {
         if (data?.is_subscribed) {
-          toast.success(`Your ${data.plan === "max" ? "Max" : "Plus"} plan is active`);
+          toast.success(data.trial ? "Your free trial is on" : `Your ${data.plan === "max" ? "Pro" : "Plus"} plan is active`);
         } else {
           toast.error("Payment return detected, but billing has not synced yet. Try Refresh Billing Status.");
         }
@@ -548,19 +548,29 @@ const Dashboard = ({ setIsAuthenticated }) => {
     }
   };
 
-  const handleUpgrade = async (plan = "plus") => {
+  const handleUpgrade = async (plan = "plus", trial = false) => {
     setUpgradingSubscription(true);
     try {
       const response = await axios.post(`${API}/subscription/create-checkout`, {
         success_url: `${window.location.origin}/dashboard?upgraded=true`,
         cancel_url: `${window.location.origin}/dashboard`,
         plan,
+        trial,
       });
 
+      // Already subscribed: the server switched the plan in place, no checkout page.
+      if (response.data?.switched) {
+        await syncSubscriptionStatus({ silent: true });
+        toast.success(`You're on ${plan === "max" ? "Pro" : "Plus"} now`);
+        setShowUpgradeModal(false);
+        setUpgradingSubscription(false);
+        return;
+      }
       // Redirect to Stripe checkout
       window.location.href = response.data.checkout_url;
     } catch (error) {
-      toast.error("Failed to start checkout");
+      const detail = error?.response?.data?.detail;
+      toast.error(typeof detail === "string" ? detail : detail?.message || "Failed to start checkout");
       setUpgradingSubscription(false);
     }
   };
@@ -1905,6 +1915,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
         onClose={() => setShowUpgradeModal(false)}
         onUpgrade={handleUpgrade}
         loading={upgradingSubscription}
+        subscription={subscriptionStatus}
       />
 
     </div>

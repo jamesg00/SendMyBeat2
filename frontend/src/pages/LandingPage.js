@@ -28,35 +28,39 @@ const workflowSteps = [
   },
 ];
 
+// Limits match TRIAL_DAILY_*, PLUS_V2_MONTHLY_* and PRO_V2_MONTHLY_* in backend/server.py.
 const planCards = [
   {
-    name: "Free",
-    price: "$0",
-    description: "Start testing the workflow without committing.",
+    name: "Free trial",
+    price: "3 days",
+    description: "Try the whole workflow before you pay.",
     bullets: [
-      "2 AI generations per day",
-      "1 YouTube upload per day",
-      "Tag, title, and upload flow",
+      "3 AI generations per day",
+      "3 YouTube uploads per day",
+      "Then Plus at $5/mo. Cancel anytime",
     ],
   },
   {
     name: "Plus",
     price: "$5/mo",
-    description: "For producers publishing consistently every month.",
+    description: "For producers uploading every week.",
     bullets: [
-      "150 AI generations per month",
-      "60 YouTube uploads per month",
-      "Paid channel analytics",
+      "50 AI generations per month",
+      "50 YouTube uploads per month",
+      "Tags, descriptions, and Upload Studio",
+      "No watermark",
     ],
   },
   {
-    name: "Max",
-    price: "$12/mo",
-    description: "Aggressive growth plan for producers with heavier output.",
+    name: "Pro",
+    price: "$10/mo",
+    description: "Double the uploads, plus the tools to grow like the pros.",
     bullets: [
-      "500 AI generations per month",
-      "150 YouTube uploads per month",
-      "Paid channel analytics",
+      "100 AI generations per month",
+      "100 YouTube uploads per month",
+      "Copy a pro producer's style with the plan agent",
+      "Pro breakdowns and channel analytics",
+      "Run several jobs at once",
     ],
   },
 ];
@@ -400,8 +404,8 @@ const LandingPage = ({ setIsAuthenticated }) => {
                 <h2 className="text-3xl font-bold md:text-4xl">Know what you get before you sign up.</h2>
               </div>
               <p className="landing-muted-2 max-w-xl text-sm leading-relaxed md:text-base">
-                Free gets you into the workflow immediately. Paid plans expand usage for producers posting
-                consistently.
+                Start with a 3-day free trial. Plus covers producers uploading every week; Pro doubles that and
+                adds the tools to copy what works for the biggest producers.
               </p>
             </div>
 
@@ -490,7 +494,7 @@ const LandingPage = ({ setIsAuthenticated }) => {
             <p className="landing-auth-copy text-center text-sm" style={{ color: "#d7e5dd", margin: 0 }}>
               {authMode === "login"
                 ? "Log in to manage your beat uploads and metadata."
-                : "Start with the free plan and test the workflow immediately."}
+                : "Start your 3-day free trial and try the whole workflow."}
             </p>
           </DialogHeader>
 
