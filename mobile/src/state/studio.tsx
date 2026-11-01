@@ -6,6 +6,7 @@ import { Platform } from 'react-native';
 
 import * as api from '@/api/endpoints';
 import type { PickedFile, TagRun, UploadJob, YouTubeUploadOptions } from '@/api/endpoints';
+import { requireCredit } from '@/state/billing';
 import { useDraft, type DraftDescription } from '@/state/draft';
 
 // Upload Studio lives here instead of in the screen, so closing the studio keeps the draft and
@@ -212,6 +213,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
 
   const publish = async () => {
     if (missing || !audio?.fileId || !image?.fileId) return;
+    if (!requireCredit('upload')) return;
     setPhase({ kind: 'sending' });
     try {
       // The upload endpoint needs a saved description; starter templates get saved on first use.

@@ -41,7 +41,8 @@
           "photosPermission": "SendMyBeat uses your photos to pick cover art for your beat videos."
         }
       ],
-      "expo-audio"
+      "expo-audio",
+      "expo-notifications"
     ],
     "experiments": {
       "typedRoutes": true,

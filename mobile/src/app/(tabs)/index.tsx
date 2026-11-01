@@ -8,7 +8,7 @@ import * as api from '@/api/endpoints';
 import type { Description, TagRun } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
 import { Checklist } from '@/components/checklist';
-import { planName, refreshSubscription } from '@/state/billing';
+import { openPaywall, planName, refreshSubscription, requireCredit, useSubscription } from '@/state/billing';
 import { Button, Card, IconTile, JobProgress, ListGroup, ListRow, Meter, Pill, PlayPauseIcon, Screen, SectionLabel, Segmented, SwipeToDelete, confirmAction, useUiStyles } from '@/components/ui';
 import { DescriptionEditor, TagEditor } from '@/components/editors';
 import { Avatar } from '@/components/producer';
@@ -39,7 +39,7 @@ export default function WorkflowScreen() {
   const { user } = useAuth();
   const [step, setStep] = useState<Step>('build');
   const draft = useDraft();
-  const sub = useRequest(api.subscriptionStatus);
+  const sub = useSubscription();
   const history = useRequest(api.tagHistory);
   const descriptions = useRequest(api.descriptions);
 
@@ -55,6 +55,7 @@ export default function WorkflowScreen() {
   useFocusEffect(
     useCallback(() => {
       void refreshMe();
+      void refreshSubscription();
     }, [refreshMe]),
   );
   const openProfile = me.data ? () => router.push({ pathname: '/producer/[id]', params: { id: me.data!.user_id } }) : undefined;
@@ -65,11 +66,11 @@ export default function WorkflowScreen() {
   };
 
   const generate = async (query: string) => {
+    if (!requireCredit('ai')) return;
     const r = await draft.generate(query);
+    void refreshSubscription();
     if (!r) return;
     history.setData((cur) => upsert(cur, r));
-    void sub.reload();
-    void refreshSubscription();
   };
 
   return (
@@ -77,7 +78,11 @@ export default function WorkflowScreen() {
       title="Workflow"
       accessory={
         <View style={s.header}>
-          {sub.data ? <Pill label={planName(sub.data)} tone="muted" /> : null}
+          {sub ? (
+            <Pressable onPress={() => openPaywall('needs_plan')} hitSlop={6} accessibilityRole="button" accessibilityLabel="Plans">
+              <Pill label={planName(sub)} tone="muted" />
+            </Pressable>
+          ) : null}
           <Pressable
             onPress={openProfile}
             disabled={!openProfile}
@@ -95,16 +100,20 @@ export default function WorkflowScreen() {
           </Pressable>
         </View>
       }>
-      <View style={s.usage}>
-        {sub.data ? (
-          <>
-            <UsageMeter label="AI credits left" left={sub.data.daily_credits_remaining} total={sub.data.daily_credits_total} />
-            <UsageMeter label="Uploads left" left={sub.data.upload_credits_remaining} total={sub.data.upload_credits_total} />
-          </>
-        ) : (
-          <Text style={s.muted}>{sub.error ?? 'Loading your plan…'}</Text>
-        )}
-      </View>
+      {sub && !sub.is_subscribed ? (
+        <FreePlanCard trialAvailable={!!sub.trial_available} />
+      ) : (
+        <Pressable onPress={() => openPaywall('needs_plan')} style={s.usage} accessibilityRole="button" accessibilityLabel="Credits and plans">
+          {sub ? (
+            <>
+              <UsageMeter label="AI credits left" left={sub.daily_credits_remaining} total={sub.daily_credits_total} />
+              <UsageMeter label="Uploads left" left={sub.upload_credits_remaining} total={sub.upload_credits_total} />
+            </>
+          ) : (
+            <Text style={s.muted}>Loading your plan…</Text>
+          )}
+        </Pressable>
+      )}
 
       <StudioBanner />
 
@@ -196,6 +205,24 @@ function StudioBanner() {
         )}
       </Card>
     </SwipeToDelete>
+  );
+}
+
+// Free accounts have no credits: the way in is the trial or a plan.
+function FreePlanCard({ trialAvailable }: { trialAvailable: boolean }) {
+  const s = useStyles();
+  return (
+    <Card>
+      <View style={{ gap: 6 }}>
+        <Text style={s.cardTitle}>{trialAvailable ? 'Try SendMyBeat free for 3 days' : 'Pick a plan to start'}</Text>
+        <Text style={s.muted}>
+          {trialAvailable
+            ? '3 generations and 3 uploads a day, then Plus at $5/month. Cancel any time.'
+            : 'Plus is 50 generations and 50 uploads a month for $5. Pro is 100 of each, plus pro styles and analytics, for $10.'}
+        </Text>
+      </View>
+      <Button title={trialAvailable ? 'Start free trial' : 'See plans'} onPress={() => openPaywall('needs_plan')} />
+    </Card>
   );
 }
 

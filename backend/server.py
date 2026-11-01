@@ -1854,7 +1854,10 @@ async def _get_user_monthly_llm_cost(user_id: str) -> float:
     return float(result[0].get("total_cost") or 0.0)
 
 
-def _get_paid_plan_limits(plan: str, version: int = 1) -> dict[str, float | int] | None:
+def _get_paid_plan_limits(plan: str, version: int = PLAN_VERSION) -> dict[str, float | int] | None:
+    # Every Plus and Pro subscriber is on the current limits, including people who subscribed
+    # before the new pricing (they keep the price they pay). `version` only matters for callers
+    # that ask for the old limits explicitly.
     normalized = (plan or "").strip().lower()
     if version >= PLAN_VERSION and normalized in {"plus", "max"}:
         pro = normalized == "max"
@@ -2119,8 +2122,8 @@ async def get_user_subscription_status(user_id: str) -> dict:
         "founding_member": bool(user_doc.get("founding_member")),
         "trial_ends_at": user_doc.get("trial_ends_at") if trialing else None,
         # Pro features (copying a pro's style, pro breakdowns, channel analytics, the job queue):
-        # the $10 plan, or a Plus plan from before the new pricing, which already had them.
-        "pro_access": plan == "max" or (plan == "plus" and version < PLAN_VERSION and not trialing),
+        # the $10 plan only.
+        "pro_access": plan == "max",
         "trial_available": plan == "free" and not user_doc.get("trial_used"),
     }
 
@@ -2145,7 +2148,7 @@ async def get_user_subscription_status(user_id: str) -> dict:
         user_doc = await _ensure_plus_usage_month(user_id, user_doc)
         ai_used = int(user_doc.get("plus_monthly_ai_used") or 0)
         upload_used = int(user_doc.get("plus_monthly_upload_used") or 0)
-        limits = _get_paid_plan_limits(plan, version) or {}
+        limits = _get_paid_plan_limits(plan) or {}
         llm_cost = await _get_user_monthly_llm_cost(user_id)
         cost_guardrail_hit = llm_cost >= float(limits.get("llm_cost_cap_usd") or 0.0)
         return {
@@ -2964,6 +2967,53 @@ async def _update_upload_job(
         error=error,
         extra_updates=extra_updates,
     )
+    if status in {"succeeded", "failed"}:
+        asyncio.create_task(_notify_job_finished(job_id, status))
+
+
+# Phone notifications when a job finishes, so you can leave the app while it works. Sent through
+# Expo's push service to every device you've signed in on; the app hides them while it's open.
+EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
+JOB_NOTIFICATIONS = {
+    "tag_generation": ("Your tags are ready", "Tag generation failed"),
+    "tag_join": ("Your tags are merged", "Merging tags failed"),
+    "youtube_upload": ("Your beat is on YouTube", "Your YouTube upload failed"),
+    "channel_analytics": ("Your channel analysis is ready", "Channel analysis failed"),
+    "beat_analysis": ("Your beat analysis is ready", "Beat analysis failed"),
+    "beat_fix": ("Your beat fixes are ready", "Beat fixes failed"),
+    "thumbnail_check": ("Your thumbnail check is ready", "Thumbnail check failed"),
+    "plan_assist": ("Your plan draft is ready", "The plan agent couldn't finish"),
+}
+
+
+def _job_notification(job: dict, status: str) -> tuple[str, str]:
+    done, failed = JOB_NOTIFICATIONS.get(job.get("type") or "", ("Your job is done", "Your job failed"))
+    if status == "succeeded":
+        return done, "Tap to open SendMyBeat."
+    return failed, str(job.get("error") or job.get("message") or "Tap to see what happened.")[:180]
+
+
+async def _notify_job_finished(job_id: str, status: str) -> None:
+    try:
+        job = await _get_background_job(job_id)
+        if not job or not job.get("user_id"):
+            return
+        tokens = [d["token"] async for d in db.push_tokens.find({"user_id": job["user_id"]}, {"token": 1})]
+        if not tokens:
+            return
+        title, body = _job_notification(job, status)
+        messages = [
+            {"to": t, "title": title, "body": body, "sound": "default",
+             "data": {"job_id": job_id, "type": job.get("type"), "status": status}}
+            for t in tokens
+        ]
+        res = await asyncio.to_thread(requests.post, EXPO_PUSH_URL, json=messages, timeout=10)
+        # Forget devices Expo says are gone (app deleted, notifications turned off for good).
+        for token, ticket in zip(tokens, (res.json() or {}).get("data") or []):
+            if (ticket.get("details") or {}).get("error") == "DeviceNotRegistered":
+                await db.push_tokens.delete_one({"token": token})
+    except Exception as exc:
+        logging.warning("Job notification failed for %s: %s", job_id, exc)
 
 
 class JobCancelledError(Exception):
@@ -5891,6 +5941,28 @@ async def create_customer_portal_session(return_url: Optional[str] = None, curre
     except Exception as e:
         logging.error(f"Portal session error: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to open billing portal. Please try again.")
+
+
+class PushTokenRequest(BaseModel):
+    token: str = Field(min_length=10, max_length=200, pattern=r"^(ExponentPushToken|ExpoPushToken)\[[^\]]+\]$")
+    platform: Optional[str] = Field(default=None, max_length=20)
+
+
+@api_router.post("/notifications/token")
+async def register_push_token(req: PushTokenRequest, current_user: dict = Depends(get_current_user)):
+    """This device wants a notification when your jobs finish. A token belongs to one account."""
+    await db.push_tokens.update_one(
+        {"token": req.token},
+        {"$set": {"token": req.token, "user_id": current_user["id"], "platform": req.platform, "updated_at": _safe_iso_now()}},
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+@api_router.delete("/notifications/token")
+async def remove_push_token(req: PushTokenRequest, current_user: dict = Depends(get_current_user)):
+    await db.push_tokens.delete_one({"token": req.token, "user_id": current_user["id"]})
+    return {"ok": True}
 
 
 @api_router.post("/subscription/sync", response_model=SubscriptionStatus)

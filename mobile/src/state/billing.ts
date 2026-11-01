@@ -40,6 +40,7 @@ export function useSubscription() {
 
 export function resetSubscription() {
   set(null);
+  promptedFree = false;
 }
 
 export const planName = (s: SubscriptionStatus | null) => {
@@ -50,7 +51,7 @@ export const planName = (s: SubscriptionStatus | null) => {
   return 'Free';
 };
 
-export type PaywallReason = 'needs_plan' | 'needs_pro' | 'trial_limit';
+export type PaywallReason = 'needs_plan' | 'needs_pro' | 'trial_limit' | 'out_of_credits';
 
 let paywallOpen = false;
 export const markPaywallOpen = (open: boolean) => {
@@ -68,6 +69,26 @@ export function requirePro() {
   if (!status || status.pro_access) return true;
   openPaywall('needs_pro');
   return false;
+}
+
+/** Before spending a credit: true if you have one, else opens the plans. (Unknown yet: let the server decide.) */
+export function requireCredit(kind: 'ai' | 'upload') {
+  if (!status || status.plan === 'pro') return true;
+  const left = kind === 'ai' ? status.daily_credits_remaining : status.upload_credits_remaining;
+  if (left > 0) return true;
+  openPaywall(!status.is_subscribed ? 'needs_plan' : status.trial ? 'trial_limit' : 'out_of_credits');
+  return false;
+}
+
+// Free accounts see the plans once each time the app opens.
+let promptedFree = false;
+export function useFreePlanPrompt() {
+  const s = useSubscription();
+  useEffect(() => {
+    if (!s || s.is_subscribed || promptedFree) return;
+    promptedFree = true;
+    openPaywall('needs_plan');
+  }, [s]);
 }
 
 const appLink = () => Linking.createURL('billing');
