@@ -29,7 +29,7 @@ const VisualizerSettings = ({
             size="sm"
             variant={visualizerEnabled ? "default" : "outline"}
             onClick={() => setVisualizerEnabled(!visualizerEnabled)}
-            className={visualizerEnabled ? "bg-purple-600 hover:bg-purple-700" : ""}
+            className={visualizerEnabled ? "smb-toggle-on" : ""}
           >
              {visualizerEnabled ? "Enabled" : "Disabled"}
           </Button>
@@ -277,7 +277,7 @@ const VisualizerSettings = ({
                         <Button
                           variant={visualizerSettings.spectrumRgb ? "default" : "outline"}
                           size="sm"
-                          className={`flex-1 text-xs ${visualizerSettings.spectrumRgb ? "bg-purple-600 hover:bg-purple-700" : ""}`}
+                          className={`flex-1 text-xs ${visualizerSettings.spectrumRgb ? "smb-toggle-on" : ""}`}
                           onClick={() => setVisualizerSettings(s => ({...s, spectrumRgb: !s.spectrumRgb, multiColorReactive: !s.spectrumRgb}))}
                         >
                           {visualizerSettings.spectrumRgb ? "RGB On" : "RGB Off"}
@@ -289,7 +289,7 @@ const VisualizerSettings = ({
                       <Button
                         variant={visualizerSettings.spectrumMirror !== false ? "default" : "outline"}
                         size="sm"
-                        className={`w-full ${visualizerSettings.spectrumMirror !== false ? "bg-purple-600 hover:bg-purple-700" : ""}`}
+                        className={`w-full ${visualizerSettings.spectrumMirror !== false ? "smb-toggle-on" : ""}`}
                         onClick={() => setVisualizerSettings(s => ({...s, spectrumMirror: !s.spectrumMirror}))}
                       >
                         {visualizerSettings.spectrumMirror !== false ? "Mirror On" : "Mirror Off"}
@@ -403,7 +403,7 @@ const VisualizerSettings = ({
                           type="button"
                           size="sm"
                           variant={visualizerSettings.monstercatParticleEnabled ? "default" : "outline"}
-                          className={visualizerSettings.monstercatParticleEnabled ? "bg-purple-600 hover:bg-purple-700" : ""}
+                          className={visualizerSettings.monstercatParticleEnabled ? "smb-toggle-on" : ""}
                           onClick={() => setVisualizerSettings(s => ({...s, monstercatParticleEnabled: !s.monstercatParticleEnabled}))}
                         >
                           {visualizerSettings.monstercatParticleEnabled ? "On" : "Off"}

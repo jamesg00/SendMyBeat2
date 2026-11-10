@@ -1,30 +1,31 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import axios from "axios";
 import { API } from "@/App";
 import { toast } from "sonner";
-import { ArrowRight, CheckCircle2, LineChart, LoaderCircle, Music, Upload, Youtube, Zap } from "lucide-react";
+import { ArrowRight, Check } from "lucide-react";
 import { setAuthToken } from "@/lib/auth";
 import "@/pages/LandingPage.css";
 
-const workflowSteps = [
+const steps = [
   {
-    title: "1. Drop in your beat",
-    description: "Start with a beat title and artwork. No editor timeline required.",
-    icon: Music,
+    label: "Step 1",
+    title: "Generate",
+    body: "Type an artist or a vibe. Get 60 to 80 ranked tags that fit YouTube's 500 characters.",
   },
   {
-    title: "2. Generate metadata",
-    description: "Get an SEO-ready title, description, and a focused tag set for YouTube.",
-    icon: Zap,
+    label: "Step 2",
+    title: "Review",
+    body: "Every tag has a score from real search demand and competition. Keep, cut or add your own.",
   },
   {
-    title: "3. Upload fast",
-    description: "Render the video and push it straight to YouTube from one screen.",
-    icon: Upload,
+    label: "Step 3",
+    title: "Upload",
+    body: "Your beat and artwork become a video and go straight to your channel with the tags and description.",
   },
 ];
 
@@ -65,81 +66,82 @@ const planCards = [
   },
 ];
 
-const liveExamplePrompt = "Future Type Beat";
 
-const liveExampleFrames = [
-  {
-    progress: 14,
-    stage: "Reading prompt",
-    status: "Waiting for producer input...",
-    typedLength: 6,
-    tags: [],
-    title: "",
-    description: "",
-    metrics: ["Prompt locked", "Context warmup", "No metadata yet"],
-  },
-  {
-    progress: 33,
-    stage: "Analyzing references",
-    status: "Checking artist lanes, search intent, and naming patterns...",
-    typedLength: liveExamplePrompt.length,
-    tags: ["future type beat", "future x metro type beat", "pluto trap beat"],
-    title: "",
-    description: "",
-    metrics: ["Intent match: high", "Trap lane found", "Title drafting"],
-  },
-  {
-    progress: 58,
-    stage: "Generating tags",
-    status: "Stacking searchable tags from the seed phrase...",
-    typedLength: liveExamplePrompt.length,
-    tags: [
-      "future type beat",
-      "ds2 type beat",
-      "dirty sprite 2 type beat",
-      "purple reign type beat",
-      "monster type beat",
-      "pluto trap type beat",
-    ],
-    title: "FREE Future Type Beat 2026 | Dark Melodic Trap Instrumental",
-    description: "",
-    metrics: ["62 tags ready", "Title scored", "Description writing"],
-  },
-  {
-    progress: 82,
-    stage: "Writing metadata",
-    status: "Building a title and description pack for YouTube...",
-    typedLength: liveExamplePrompt.length,
-    tags: [
-      "future type beat",
-      "ds2 type beat",
-      "dirty sprite 2 type beat",
-      "purple reign type beat",
-      "monster type beat",
-      "pluto trap type beat",
-    ],
-    title: "FREE Future Type Beat 2026 | Dark Melodic Trap Instrumental",
-    description: "Dark, spacey trap energy with room for hooks, verses, and late-night visuals.",
-    metrics: ["SEO title ready", "Description synced", "Upload handoff next"],
-  },
-  {
-    progress: 100,
-    stage: "Ready to upload",
-    status: "Everything is generated and queued for the upload studio.",
-    typedLength: liveExamplePrompt.length,
-    tags: [
-      "future type beat",
-      "ds2 type beat",
-      "dirty sprite 2 type beat",
-      "purple reign type beat",
-      "monster type beat",
-      "pluto trap type beat",
-    ],
-    title: "FREE Future Type Beat 2026 | Dark Melodic Trap Instrumental",
-    description: "Dark, spacey trap energy with room for hooks, verses, and late-night visuals.",
-    metrics: ["62 tags generated", "1 title + description", "Upload-ready"],
-  },
+// The hero demo: one generation, looping. Each row and chip appears once the bar passes its mark.
+const DEMO_ROWS = [
+  { at: 0, t: "0:00", label: "Reading your search" },
+  { at: 18, t: "0:04", label: "Searching YouTube for top type beats" },
+  { at: 45, t: "0:09", label: "Checking demand for 84 tags" },
+  { at: 80, t: "0:13", label: "Picking the best 500 characters" },
 ];
+const DEMO_CHIPS = [
+  { at: 62, label: "future type beat" },
+  { at: 70, label: "future codeine crazy type beat" },
+  { at: 76, label: "future mask off type beat" },
+  { at: 82, label: "dark trap type beat" },
+  { at: 88, label: "future x young thug" },
+  { at: 96, label: "+26 more", ghost: true },
+];
+const DEMO_RANK = [
+  { tag: "future type beat", score: 91, meta: "High demand · Low competition", acc: true },
+  { tag: "future codeine crazy type beat", score: 84, meta: "High demand · Medium competition", acc: true },
+  { tag: "future mask off type beat", score: 79, meta: "High demand · Medium competition", acc: true },
+  { tag: "dark trap type beat", score: 61, meta: "Some demand · Proven on 5 uploads", acc: false },
+];
+
+const prefersReducedMotion = () =>
+  typeof window !== "undefined" &&
+  typeof window.matchMedia === "function" &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+const useDemoProgress = () => {
+  const [pct, setPct] = useState(() => (prefersReducedMotion() ? 100 : 0));
+  useEffect(() => {
+    if (prefersReducedMotion()) return undefined;
+    let frame;
+    let start;
+    const RUN = 7000;
+    const HOLD = 2600;
+    const tick = (now) => {
+      if (start === undefined) start = now;
+      const elapsed = (now - start) % (RUN + HOLD);
+      const next = elapsed >= RUN ? 100 : Math.round((elapsed / RUN) * 100);
+      setPct((prev) => (prev === next ? prev : next));
+      frame = window.requestAnimationFrame(tick);
+    };
+    frame = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+  return pct;
+};
+
+// Adds .is-in to sections as they scroll into view, for the entrance animation.
+const useReveal = () => {
+  const ref = useRef(null);
+  useEffect(() => {
+    const root = ref.current;
+    if (!root) return undefined;
+    const targets = root.querySelectorAll("[data-reveal]");
+    if (prefersReducedMotion() || typeof IntersectionObserver === "undefined") {
+      targets.forEach((el) => el.classList.add("is-in"));
+      return undefined;
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("is-in");
+            io.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.15 },
+    );
+    targets.forEach((el) => io.observe(el));
+    return () => io.disconnect();
+  }, []);
+  return ref;
+};
 
 const LandingPage = ({ setIsAuthenticated }) => {
   const [isLoginOpen, setIsLoginOpen] = useState(false);
@@ -147,32 +149,12 @@ const LandingPage = ({ setIsAuthenticated }) => {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [liveFrameIndex, setLiveFrameIndex] = useState(0);
-  const [isMobileHero, setIsMobileHero] = useState(false);
+  const pct = useDemoProgress();
+  const pageRef = useReveal();
 
-  useEffect(() => {
-    const media = window.matchMedia("(max-width: 767px)");
-    const syncMobileHero = () => setIsMobileHero(media.matches);
-    syncMobileHero();
-
-    if (typeof media.addEventListener === "function") {
-      media.addEventListener("change", syncMobileHero);
-      return () => media.removeEventListener("change", syncMobileHero);
-    }
-
-    media.addListener(syncMobileHero);
-    return () => media.removeListener(syncMobileHero);
-  }, []);
-
-  useEffect(() => {
-    const interval = window.setInterval(() => {
-      setLiveFrameIndex((current) => (current + 1) % liveExampleFrames.length);
-    }, isMobileHero ? 2200 : 1600);
-
-    return () => window.clearInterval(interval);
-  }, [isMobileHero]);
-
-  const liveFrame = liveExampleFrames[liveFrameIndex];
+  const doneRows = DEMO_ROWS.filter((row) => pct >= row.at);
+  const currentRow = doneRows[doneRows.length - 1];
+  const tagChars = pct < 62 ? 0 : Math.min(463, Math.round(((pct - 62) / 38) * 463));
 
   const openAuth = (mode) => {
     setAuthMode(mode);
@@ -200,353 +182,229 @@ const LandingPage = ({ setIsAuthenticated }) => {
     }
   };
 
+  const scrollTo = (id) => (event) => {
+    event.preventDefault();
+    const el = document.getElementById(id);
+    if (el) el.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "start" });
+  };
+
   return (
-    <div className="landing-page selection:bg-green-500/30">
-      <nav className="landing-nav fixed z-50 w-full">
-        <div className="container mx-auto flex h-16 items-center justify-between px-4 sm:px-5 md:px-6">
-          <div className="flex items-center gap-3">
-            <div className="landing-brand-mark flex h-10 w-10 items-center justify-center rounded-xl">
-              <Music className="h-6 w-6 fill-current text-black" />
+    <div className="landing-page lp" ref={pageRef}>
+      <div className="lp-top">
+        <span className="lp-aura lp-aura--a" aria-hidden="true" />
+        <span className="lp-aura lp-aura--b" aria-hidden="true" />
+
+        <header className="lp-nav">
+          <a href="/" className="smb-wordmark lp-wordmark">SENDMYBEAT</a>
+          <nav className="lp-links" aria-label="Sections">
+            <a href="#how" onClick={scrollTo("how")}>How it works</a>
+            <a href="#pricing" onClick={scrollTo("pricing")}>Pricing</a>
+            <Link to="/spotlight">Spotlight</Link>
+          </nav>
+          <div className="lp-nav-right">
+            <button type="button" className="lp-login" onClick={() => openAuth("login")}>Log in</button>
+            <Button onClick={() => openAuth("register")} className="smb-btn smb-btn--pri smb-btn--sm" data-testid="landing-get-started">
+              Get started
+            </Button>
+          </div>
+        </header>
+
+        <section className="lp-hero">
+          <div className="lp-copy">
+            <p className="smb-eyebrow">For beat producers on YouTube</p>
+            <h1 className="lp-h1">Tags, descriptions and uploads for every beat.</h1>
+            <p className="lp-sub">
+              SendMyBeat finds the tags that rank, writes the description, renders the video and uploads it to your channel.
+            </p>
+            <div className="lp-ctas">
+              <Button onClick={() => openAuth("register")} className="smb-btn smb-btn--pri smb-btn--lg">
+                Get started
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+              <a href="#how" onClick={scrollTo("how")} className="smb-btn smb-btn--sec smb-btn--lg">
+                See how it works
+              </a>
             </div>
-            <span className="whitespace-nowrap text-lg font-bold tracking-tight sm:text-xl">SendMyBeat</span>
+            <p className="smb-eyebrow">3-day free trial · then $5/mo · cancel anytime</p>
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-3">
-            <Button
-              variant="ghost"
-              onClick={() => openAuth("login")}
-              className="landing-ghost-btn hidden whitespace-nowrap px-3 md:flex"
-            >
-              Log In
-            </Button>
-            <Button
-              onClick={() => openAuth("register")}
-              className="landing-primary-btn whitespace-nowrap rounded-full px-4 sm:px-5 font-semibold transition-all hover:scale-105"
-            >
-              Start Free
-            </Button>
+          <div className="lp-demo" aria-label="Example: generating tags for future type beat">
+            <div className="smb-card lp-demo-main">
+              <div className="smb-card-head">
+                <h2 className="smb-card-title">future type beat</h2>
+                <span className="smb-mono lp-pct">{pct}%</span>
+              </div>
+              <div className="smb-bar"><i className="lp-bar-fill smb-bar-fill--acc" style={{ width: `${pct}%` }} /></div>
+              <div className="lp-rows">
+                {DEMO_ROWS.map((row) => {
+                  const done = pct >= row.at && (row !== currentRow || pct >= 100);
+                  const now = row === currentRow && pct < 100;
+                  return (
+                    <div key={row.label} className={`lp-row ${now ? "is-now" : ""} ${done ? "is-done" : ""}`}>
+                      <span className="lp-row-time">{pct >= row.at ? row.t : "--:--"}</span>
+                      <span className="lp-row-state" aria-hidden="true">
+                        {done ? <Check className="lp-row-check" /> : now ? <i className="lp-dot" /> : <i className="lp-ring" />}
+                      </span>
+                      <span>{row.label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="smb-card">
+              <div className="lp-chips">
+                {DEMO_CHIPS.map((chip) => (
+                  <span
+                    key={chip.label}
+                    className={`lp-chip ${chip.ghost ? "lp-chip--ghost" : ""} ${pct >= chip.at ? "is-shown" : ""}`}
+                  >
+                    {chip.label}
+                  </span>
+                ))}
+              </div>
+              <div className="smb-meter">
+                <div className="smb-meter-row">
+                  <span className="smb-meter-label">YouTube tag limit</span>
+                  <span className="smb-meter-value">{tagChars}<span className="smb-t3">/500</span></span>
+                </div>
+                <div className="smb-bar"><i className="lp-bar-fill smb-bar-fill--acc" style={{ width: `${(tagChars / 500) * 100}%` }} /></div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <section className="lp-strip" id="how">
+        {steps.map((step) => (
+          <div key={step.title} data-reveal>
+            <span className="smb-eyebrow">{step.label}</span>
+            <h3>{step.title}</h3>
+            <p>{step.body}</p>
+          </div>
+        ))}
+      </section>
+
+      <section className="lp-proof">
+        <div className="lp-proof-copy" data-reveal>
+          <h2 className="lp-h2">See why every tag made the cut.</h2>
+          <p className="smb-t2">
+            Each tag gets a 0 to 100 score from YouTube&apos;s own search suggestions, how crowded the results are,
+            and how it did on uploads you&apos;ve already made.
+          </p>
+          <div className="lp-chips">
+            <span className="smb-pill smb-pill--ok">High demand</span>
+            <span className="smb-pill smb-pill--warn">Medium competition</span>
           </div>
         </div>
-      </nav>
-
-      <section className="relative overflow-hidden pb-16 pt-28 md:pb-24 md:pt-40">
-        <div className="landing-shell-glow-a absolute left-1/2 top-0 h-[520px] w-[980px] -translate-x-1/2 blur-[120px]" />
-        <div className="landing-shell-glow-b absolute right-0 top-32 h-[420px] w-[540px] blur-[100px]" />
-
-        <div className="container relative z-10 mx-auto px-6">
-          <div className="grid items-start gap-12 lg:grid-cols-[1.15fr_0.85fr]">
-            <div>
-              <div className="landing-chip mb-6 inline-flex items-center gap-2 rounded-full px-4 py-2">
-                <span className="landing-chip-dot h-2 w-2 rounded-full" />
-                <span className="text-sm font-medium">
-                  Built for producers uploading type beats to YouTube
-                </span>
+        <div className="smb-card lp-rank" data-reveal>
+          {DEMO_RANK.map((row, index) => (
+            <div key={row.tag} className="lp-rank-row">
+              <span className="lp-rank-n">{index + 1}</span>
+              <span className="lp-rank-tag">{row.tag}</span>
+              <span className="lp-rank-score">{row.score}</span>
+              <div className="smb-bar lp-rank-bar">
+                <i className={`smb-bar-fill ${row.acc ? "smb-bar-fill--acc" : ""}`} style={{ width: `${row.score}%`, animationDelay: `${index * 0.08}s` }} />
               </div>
+              <span className="lp-rank-meta">{row.meta}</span>
+            </div>
+          ))}
+        </div>
+      </section>
 
-              <h1 className="mb-6 max-w-4xl text-5xl font-bold leading-[0.95] tracking-tight md:text-7xl">
-                Upload beats to YouTube and generate the tags in{" "}
-                <span className="gradient-text">
-                  one app.
-                </span>
-              </h1>
-
-              <p className="landing-muted mb-8 max-w-2xl text-lg leading-relaxed md:text-xl">
-                SendMyBeat turns your beat, artwork, tags, and description into a YouTube-ready upload without
-                bouncing between tag tools, notes apps, and video editors.
-              </p>
-
-              <div className="mb-8 flex flex-col gap-3 sm:flex-row">
+      <section className="lp-plans" id="pricing">
+        <h2 className="lp-h2" data-reveal>Plans</h2>
+        <div className="lp-plan-grid">
+          {planCards.map((plan) => {
+            const recommended = plan.name === "Plus";
+            const [amount, per] = plan.price.includes("/") ? plan.price.split("/") : [plan.price, null];
+            return (
+              <div key={plan.name} className={`lp-plan ${recommended ? "lp-plan--rec" : ""}`} data-reveal>
+                <div className="lp-plan-top">
+                  <h3>{plan.name}</h3>
+                  {recommended ? <span className="smb-pill smb-pill--ok">Recommended</span> : null}
+                </div>
+                <div className="lp-price">
+                  {amount}
+                  {per ? <small>/{per}</small> : null}
+                </div>
+                <p className="smb-t2 lp-plan-desc">{plan.description}</p>
+                <ul>
+                  {plan.bullets.map((bullet) => (
+                    <li key={bullet}>
+                      <Check aria-hidden="true" />
+                      <span>{bullet}</span>
+                    </li>
+                  ))}
+                </ul>
                 <Button
-                  size="lg"
                   onClick={() => openAuth("register")}
-                  className="landing-cta-btn h-14 w-full rounded-full px-8 text-lg font-bold transition-all sm:w-auto"
+                  className={`smb-btn ${recommended ? "smb-btn--pri" : "smb-btn--sec"} smb-btn--full`}
                 >
-                  Start Free
-                  <ArrowRight className="ml-2 h-5 w-5" />
+                  {plan.name === "Free trial" ? "Start free trial" : `Get ${plan.name}`}
                 </Button>
               </div>
-
-              <div className="landing-muted grid gap-3 text-sm sm:grid-cols-3">
-                <div className="landing-info-card rounded-2xl px-4 py-4">
-                  <div className="landing-info-card-title mb-1 font-semibold">What it is</div>
-                  <div>AI metadata and upload workflow for beat producers.</div>
-                </div>
-                <div className="landing-info-card rounded-2xl px-4 py-4">
-                  <div className="landing-info-card-title mb-1 font-semibold">Who it is for</div>
-                  <div>Anyone publishing type beats and trying to grow on YouTube.</div>
-                </div>
-                <div className="landing-info-card rounded-2xl px-4 py-4">
-                  <div className="landing-info-card-title mb-1 font-semibold">What to click</div>
-                  <div>Create an account, generate metadata, then upload your beat.</div>
-                </div>
-              </div>
-            </div>
-
-            <div className="landing-panel landing-hero-panel rounded-[32px] p-5">
-              <div className="mb-4 flex items-center justify-between">
-                <div>
-                  <p className="landing-label text-xs uppercase tracking-[0.28em]">Live Example</p>
-                  <h2 className="landing-panel-title mt-1 text-2xl font-bold">From idea to upload-ready</h2>
-                </div>
-                <div className="landing-pill rounded-full px-3 py-1 text-xs font-semibold">
-                  1 workflow
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <div className="landing-input-shell rounded-2xl p-4">
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <div className="landing-muted-2 text-xs uppercase tracking-[0.2em]">Prompt</div>
-                    <div className="landing-example-status flex items-center gap-2 text-xs">
-                      <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-                      <span>{liveFrame.stage}</span>
-                    </div>
-                  </div>
-                  <div className="landing-example-prompt rounded-xl px-4 py-3 text-base font-medium">
-                    <span className="landing-example-code-label">prompt</span>
-                    <span className="landing-example-code-equals">=</span>
-                    <span className="landing-example-code-value">&quot;{liveExamplePrompt}&quot;</span>
-                    <span className="landing-example-caret" aria-hidden="true">|</span>
-                  </div>
-                  <div className="mt-3">
-                    <div className="landing-example-progress-track">
-                      <div
-                        className="landing-example-progress-fill"
-                        style={{ width: `${liveFrame.progress}%` }}
-                      />
-                    </div>
-                    <div className="mt-2 flex items-center justify-between text-[11px] uppercase tracking-[0.18em]">
-                      <span className="landing-muted-2">{liveFrame.status}</span>
-                      <span className="landing-accent-text">{liveFrame.progress}%</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="landing-output-shell rounded-2xl p-4">
-                  <div className="landing-output-label mb-3 text-xs uppercase tracking-[0.2em]">Generated Output</div>
-                  <div className="landing-example-console mb-4 rounded-2xl p-4">
-                    <div className="landing-example-console-line">
-                      <span className="landing-example-console-key">const seed</span>
-                      <span className="landing-example-console-value">&quot;{liveExamplePrompt}&quot;</span>
-                    </div>
-                    <div className="landing-example-console-line">
-                      <span className="landing-example-console-key">const tags</span>
-                      <span className="landing-example-console-value">{liveFrame.tags.length ? `${liveFrame.tags.length}+ suggestions` : "pending..."}</span>
-                    </div>
-                    <div className="landing-example-console-line">
-                      <span className="landing-example-console-key">const title</span>
-                      <span className="landing-example-console-value">{liveFrame.title || "drafting..."}</span>
-                    </div>
-                    <div className="landing-example-console-line">
-                      <span className="landing-example-console-key">const description</span>
-                      <span className="landing-example-console-value">{liveFrame.description || "drafting..."}</span>
-                    </div>
-                  </div>
-                  <div className="landing-tag-window mb-3 flex flex-wrap gap-2">
-                    {liveFrame.tags.map((tag) => (
-                      <span
-                        key={tag}
-                        className="landing-tag landing-tag-animated rounded-full px-3 py-1 text-xs"
-                      >
-                        {tag}
-                      </span>
-                    ))}
-                    {liveFrame.tags.length > 0 && (
-                      <span className="landing-tag-muted rounded-full px-3 py-1 text-xs">
-                        +{Math.max(0, 62 - liveFrame.tags.length)} more tags
-                      </span>
-                    )}
-                  </div>
-                  <div className="landing-muted space-y-2 text-sm">
-                    <div>
-                      <span className="landing-panel-title font-semibold">Title:</span>{" "}
-                      {liveFrame.title || "Drafting search-friendly title..."}
-                    </div>
-                    <div>
-                      <span className="landing-panel-title font-semibold">Description:</span>{" "}
-                      {liveFrame.description || "Building a description from tone, artist lane, and upload intent."}
-                    </div>
-                    <div className="landing-accent-text flex items-center gap-2 pt-1">
-                      <Youtube className="h-4 w-4" />
-                      {liveFrame.progress === 100 ? "Upload-ready in one screen" : "Preparing upload-ready metadata"}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <div className="landing-stat rounded-2xl p-4">
-                    <div className="landing-panel-title text-2xl font-bold">{liveFrame.progress}%</div>
-                    <div className="landing-muted-2 mt-1 text-xs uppercase tracking-[0.18em]">Generation progress</div>
-                  </div>
-                  <div className="landing-stat rounded-2xl p-4">
-                    <div className="landing-panel-title text-2xl font-bold">{liveFrame.tags.length || "--"}</div>
-                    <div className="landing-muted-2 mt-1 text-xs uppercase tracking-[0.18em]">Visible tags</div>
-                  </div>
-                  <div className="landing-stat rounded-2xl p-4">
-                    <div className="landing-panel-title text-sm font-bold leading-snug">{liveFrame.metrics[2]}</div>
-                    <div className="landing-muted-2 mt-1 text-xs uppercase tracking-[0.18em]">{liveFrame.metrics[0]}</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+            );
+          })}
         </div>
       </section>
 
-      <section className="pb-14">
-        <div className="container mx-auto px-6">
-          <div className="landing-plan-shell rounded-[28px] p-6 md:p-8">
-            <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-              <div>
-                <p className="landing-kicker mb-2 text-sm font-semibold uppercase tracking-[0.24em]">
-                  Start Here
-                </p>
-                <h2 className="text-3xl font-bold md:text-4xl">Know what you get before you sign up.</h2>
-              </div>
-              <p className="landing-muted-2 max-w-xl text-sm leading-relaxed md:text-base">
-                Start with a 3-day free trial. Plus covers producers uploading every week; Pro doubles that and
-                adds the tools to copy what works for the biggest producers.
-              </p>
-            </div>
-
-            <div className="grid gap-4 lg:grid-cols-3">
-              {planCards.map((plan) => (
-                <div key={plan.name} className="landing-plan-card rounded-3xl p-5">
-                  <div className="mb-4 flex items-start justify-between gap-4">
-                    <div>
-                      <div className="text-xl font-bold">{plan.name}</div>
-                      <div className="landing-muted-2 mt-1 text-sm">{plan.description}</div>
-                    </div>
-                    <div className="landing-plan-price text-2xl font-bold">{plan.price}</div>
-                  </div>
-                  <div className="space-y-2">
-                    {plan.bullets.map((bullet) => (
-                      <div key={bullet} className="landing-muted flex items-start gap-2 text-sm">
-                        <CheckCircle2 className="landing-accent-text mt-0.5 h-4 w-4 flex-shrink-0" />
-                        <span>{bullet}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="py-16 md:py-20">
-        <div className="container mx-auto px-6">
-          <div className="mb-12 text-center">
-            <h2 className="mb-4 text-3xl font-bold md:text-5xl">Everything you need before you publish.</h2>
-            <p className="landing-muted-2 mx-auto max-w-2xl text-lg">
-              Generate metadata, build the upload video, and keep YouTube publishing in the same place.
-            </p>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-3">
-            {workflowSteps.map(({ title, description, icon: Icon }) => (
-              <div
-                key={title}
-                className="landing-workflow-card rounded-3xl p-7"
-              >
-                <div className="landing-icon-box mb-5 flex h-12 w-12 items-center justify-center rounded-2xl">
-                  <Icon className="h-6 w-6" />
-                </div>
-                <h3 className="mb-3 text-2xl font-bold">{title}</h3>
-                <p className="landing-muted-2 leading-relaxed">{description}</p>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-8 grid gap-4 lg:grid-cols-[1.25fr_0.75fr]">
-            <div className="landing-upload-shell rounded-3xl p-8">
-              <div className="landing-icon-box-red mb-5 flex h-12 w-12 items-center justify-center rounded-2xl">
-                <Youtube className="h-6 w-6 fill-current" />
-              </div>
-              <h3 className="mb-3 text-3xl font-bold">Upload to YouTube from the same workspace</h3>
-              <p className="landing-muted-2 max-w-2xl text-lg leading-relaxed">
-                Add your beat and artwork, keep the generated tags and description attached, then publish the finished
-                video to YouTube without rebuilding the upload by hand.
-              </p>
-            </div>
-
-            <div className="landing-growth-shell rounded-3xl p-8">
-              <div className="landing-icon-box-gold mb-5 flex h-12 w-12 items-center justify-center rounded-2xl">
-                <LineChart className="h-6 w-6" />
-              </div>
-              <h3 className="mb-3 text-2xl font-bold">Use growth tools after the upload is ready</h3>
-              <p className="landing-muted-2">
-                Producer Spotlight, analytics, and customization are there when you need them, but the main workflow
-                stays focused on tags, descriptions, artwork, and YouTube publishing.
-              </p>
-            </div>
-          </div>
-
-        </div>
-      </section>
-
-        <Dialog open={isLoginOpen} onOpenChange={setIsLoginOpen}>
-          <DialogContent className="landing-auth-dialog sm:max-w-md" overlayClassName="landing-auth-overlay">
-          <DialogHeader>
-            <div className="landing-auth-title text-center text-2xl font-bold" style={{ color: "#eefaf2" }}>
-              {authMode === "login" ? "Welcome Back" : "Create Your Account"}
-            </div>
-            <p className="landing-auth-copy text-center text-sm" style={{ color: "#d7e5dd", margin: 0 }}>
+      <Dialog open={isLoginOpen} onOpenChange={setIsLoginOpen}>
+        <DialogContent className="lp-auth sm:max-w-md">
+          <DialogHeader className="text-left">
+            <span className="smb-wordmark lp-auth-mark">SENDMYBEAT</span>
+            <DialogTitle className="lp-auth-title">
+              {authMode === "login" ? "Welcome back" : "Create your account"}
+            </DialogTitle>
+            <DialogDescription className="smb-t2">
               {authMode === "login"
                 ? "Log in to manage your beat uploads and metadata."
                 : "Start your 3-day free trial and try the whole workflow."}
-            </p>
+            </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleAuth} className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label className="landing-auth-label" style={{ color: "#d7e5dd" }}>Username</Label>
+          <form onSubmit={handleAuth} className="lp-auth-form">
+            <div className="lp-field">
+              <Label htmlFor="auth-username">Username</Label>
               <Input
+                id="auth-username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="landing-auth-input"
                 placeholder="ProducerName"
+                autoComplete="username"
                 required
               />
             </div>
-            <div className="space-y-2">
-              <Label className="landing-auth-label" style={{ color: "#d7e5dd" }}>Password</Label>
+            <div className="lp-field">
+              <Label htmlFor="auth-password">Password</Label>
               <Input
+                id="auth-password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="landing-auth-input"
                 placeholder="Password"
+                autoComplete={authMode === "login" ? "current-password" : "new-password"}
                 required
               />
             </div>
 
-            <Button
-              type="submit"
-              className="landing-auth-submit h-11 w-full font-bold"
-              disabled={isLoading}
-            >
-              {isLoading ? "Processing..." : authMode === "login" ? "Log In" : "Create Account"}
+            <Button type="submit" className="smb-btn smb-btn--pri smb-btn--lg smb-btn--full" disabled={isLoading}>
+              {isLoading ? "One moment..." : authMode === "login" ? "Log in" : "Create account"}
             </Button>
           </form>
 
-          <div className="landing-muted-2 text-center text-sm" style={{ color: "#d7e5dd" }}>
+          <p className="lp-auth-switch">
             {authMode === "login" ? (
               <>
                 Don&apos;t have an account?{" "}
-                <button onClick={() => setAuthMode("register")} className="landing-auth-link-btn">
-                  Sign up
-                </button>
+                <button type="button" onClick={() => setAuthMode("register")}>Sign up</button>
               </>
             ) : (
               <>
                 Already have an account?{" "}
-                <button onClick={() => setAuthMode("login")} className="landing-auth-link-btn">
-                  Log in
-                </button>
+                <button type="button" onClick={() => setAuthMode("login")}>Log in</button>
               </>
             )}
-          </div>
+          </p>
         </DialogContent>
       </Dialog>
     </div>

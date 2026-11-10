@@ -127,7 +127,7 @@ const DescriptionsSection = ({
                         <Button
                           size="sm"
                           variant="ghost"
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          className="smb-danger hover:bg-[var(--c-dangersoft)]"
                           onClick={() => handleDeleteDescription(desc.id)}
                           data-testid={`delete-desc-${desc.id}`}
                         >
@@ -169,7 +169,7 @@ const DescriptionsSection = ({
       <CardHeader className="px-4 sm:px-6 py-4 sm:py-6">
         <div className="flex flex-col gap-3 sm:gap-4">
           <div className="flex items-center gap-2 text-base sm:text-lg md:text-xl">
-            <Save className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 flex-shrink-0" />
+            <Save className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
             <CardTitle className="text-base sm:text-lg md:text-xl">Template Descriptions</CardTitle>
           </div>
           <div className="grid grid-cols-2 gap-2">

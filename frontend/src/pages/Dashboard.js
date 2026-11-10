@@ -1,18 +1,16 @@
 ﻿import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import axios from "axios";
 import { API } from "@/App";
 import { toast } from "sonner";
-import { Sparkles, Save, LogOut, Copy, Trash2, Edit, Plus, Youtube, AlertCircle, Target, ChevronLeft, ChevronRight, DollarSign, Link, CircleAlert, CheckCircle2, Settings, Music } from "lucide-react";
+import { Sparkles, Youtube, AlertCircle, Link, CircleAlert, CheckCircle2, Music, BarChart3 } from "lucide-react";
 import SubscriptionBanner from "@/components/SubscriptionBanner";
+import AppShell, { planLabelFor } from "@/components/AppShell";
+import ThemePicker from "@/components/ThemePicker";
+import { useNavigate } from "react-router-dom";
 import UpgradeModal from "@/components/UpgradeModal";
 import AdBanner from "@/components/AdBanner";
 import ProgressBar from "@/components/ProgressBar";
@@ -228,6 +226,7 @@ const normalizeAnalyticsData = (raw) => {
   };
 
 const Dashboard = ({ setIsAuthenticated }) => {
+  const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [tagQuery, setTagQuery] = useState("");
   const [customTags, setCustomTags] = useState("");
@@ -240,7 +239,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [tagHistory, setTagHistory] = useState([]);
   const [selectedTagHistoryIds, setSelectedTagHistoryIds] = useState([]);
   const [activeTagHistoryId, setActiveTagHistoryId] = useState(null);
-  const [activeTab, setActiveTab] = useState("workflow");
+  const [activeTab, setActiveTab] = useState(() => {
+    const requested = new URLSearchParams(window.location.search).get("tab");
+    return ["workflow", "analytics", "settings"].includes(requested) ? requested : "workflow";
+  });
   const [descriptions, setDescriptions] = useState([]);
   const [loadingDescriptions, setLoadingDescriptions] = useState(false);
   const [newDescription, setNewDescription] = useState({ title: "", content: "" });
@@ -280,7 +282,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [joiningTagsLoading, setJoiningTagsLoading] = useState(false);
   const [joiningTagsProgress, setJoiningTagsProgress] = useState(0);
   const joinProgressIntervalRef = useRef(null);
-  const dashboardParallaxRef = useRef(null);
 
   const analyticsPlan = subscriptionStatus?.plan || "free";
   const hasPaidAnalyticsAccess = ["plus", "max"].includes(analyticsPlan);
@@ -289,8 +290,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const visibleTabs = DASHBOARD_TABS;
   const isAnalyticsLocked = !hasPaidAnalyticsAccess;
   const adEligibleTabs = ["workflow", "analytics"].includes(activeTab);
-  const activeTabIndex = Math.max(0, visibleTabs.findIndex((tab) => tab.value === activeTab));
-  const activeTabLabel = visibleTabs[activeTabIndex]?.label || "Workflow";
   const canShowAds = Boolean(
     subscriptionStatus &&
     !subscriptionStatus.is_subscribed &&
@@ -343,20 +342,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
       return `${x},${Math.max(4, Math.min(96, y))}`;
     }).join(" ")
     : "";
-  const goToPreviousTab = () => {
-    const previousIndex = (activeTabIndex - 1 + visibleTabs.length) % visibleTabs.length;
-    const previousTab = visibleTabs[previousIndex]?.value;
-    if (previousTab === "analytics" && isAnalyticsLocked) return;
-    setActiveTab(previousTab);
-  };
-
-  const goToNextTab = () => {
-    const nextIndex = (activeTabIndex + 1) % visibleTabs.length;
-    const nextTab = visibleTabs[nextIndex]?.value;
-    if (nextTab === "analytics" && isAnalyticsLocked) return;
-    setActiveTab(nextTab);
-  };
-
   const handleDashboardTabChange = (nextTab) => {
     if (nextTab === "analytics" && isAnalyticsLocked) {
       return;
@@ -405,40 +390,14 @@ const Dashboard = ({ setIsAuthenticated }) => {
   }, []);
 
   useEffect(() => {
-    let ticking = false;
-
-    const updateParallaxOffset = () => {
-      const scrollY = window.scrollY || window.pageYOffset || 0;
-      const offset = Math.min(260, scrollY * 0.24);
-      if (dashboardParallaxRef.current) {
-        dashboardParallaxRef.current.style.setProperty("--dashboard-grid-offset", `${offset}px`);
-      }
-      ticking = false;
-    };
-
-    const onScroll = () => {
-      if (!ticking) {
-        window.requestAnimationFrame(updateParallaxOffset);
-        ticking = true;
-      }
-    };
-
-    updateParallaxOffset();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll);
-
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
-    };
-  }, []);
-
-  useEffect(() => {
     const isUtilityView = activeTab === "settings";
     if (!isUtilityView && !visibleTabs.some((tab) => tab.value === activeTab)) {
       setActiveTab(visibleTabs[0]?.value || "workflow");
     }
-  }, [activeTab, visibleTabs]);
+    if (activeTab === "analytics" && subscriptionStatus && isAnalyticsLocked) {
+      setActiveTab("workflow");
+    }
+  }, [activeTab, visibleTabs, subscriptionStatus, isAnalyticsLocked]);
 
 
   const fetchUser = async () => {
@@ -1162,140 +1121,74 @@ const Dashboard = ({ setIsAuthenticated }) => {
     setActiveTab("settings");
   };
 
-  const closeSettingsView = () => {
-    setActiveTab(previousUtilityTab || "workflow");
+
+  const pageTitles = {
+    workflow: { title: "Workflow", crumb: "Tags, description and upload for one beat" },
+    analytics: { title: "Analytics", crumb: "How your channel is doing" },
+    settings: { title: "Settings", crumb: "Plan, Google account and theme" },
+  };
+  const currentPage = pageTitles[activeTab] || pageTitles.workflow;
+
+  const handleShellSelect = (id) => {
+    if (id === "spotlight") {
+      navigate("/spotlight");
+      return;
+    }
+    if (id === "settings") {
+      openSettingsView();
+      return;
+    }
+    if (id === "analytics" && isAnalyticsLocked) {
+      setShowUpgradeModal(true);
+      return;
+    }
+    setActiveTab(id);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  const creditsPanel = subscriptionStatus ? (
+    <SubscriptionBanner
+      creditsRemaining={subscriptionStatus.daily_credits_remaining}
+      uploadCreditsRemaining={subscriptionStatus.upload_credits_remaining}
+      creditsTotal={subscriptionStatus.daily_credits_total}
+      uploadsTotal={subscriptionStatus.upload_credits_total}
+      plan={subscriptionStatus.plan}
+      resetsAt={subscriptionStatus.resets_at}
+      isSubscribed={subscriptionStatus.is_subscribed}
+      onUpgrade={() => setShowUpgradeModal(true)}
+      API={API}
+      showManageButton={false}
+    />
+  ) : null;
+
   return (
-    <div
-      ref={dashboardParallaxRef}
-      className="min-h-screen dashboard-parallax-bg"
-      data-testid="dashboard"
-    >
-      <div className="dashboard-grid-layer" aria-hidden="true" />
+    <div className="min-h-screen dashboard-parallax-bg" data-testid="dashboard">
+      <AppShell
+        active={activeTab}
+        onSelect={handleShellSelect}
+        title={currentPage.title}
+        crumb={currentPage.crumb}
+        username={user?.username}
+        planLabel={planLabelFor(subscriptionStatus)}
+        analyticsLocked={isAnalyticsLocked}
+        isAdmin={isAdmin}
+        onAdmin={(path) => navigate(path)}
+        onLogout={handleLogout}
+        credits={creditsPanel}
+      >
+        {/* Credits sit in the sidebar on desktop; phones see them here. */}
+        {creditsPanel ? <div className="smb-ph-only">{creditsPanel}</div> : null}
 
-      {/* Header */}
-      <div className="terminal-topbar">
-        <div className="container mx-auto px-3 sm:px-4 md:px-6 py-3 sm:py-4 dashboard-shell">
-          <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 lg:gap-4">
-            <div className="flex flex-1 items-center gap-2 sm:gap-3 md:gap-4 min-w-0 max-w-full">
-              <div className="min-w-0 flex-1">
-                <h1 className="dashboard-brand-title text-lg sm:text-xl md:text-2xl font-bold">SENDMYBEAT</h1>
-                {user && (
-                  <p
-                    className="dashboard-brand-subtitle text-xs sm:text-sm truncate max-w-[180px] sm:max-w-[260px] md:max-w-[340px] lg:max-w-[420px]"
-                    style={{ color: "var(--text-secondary)" }}
-                    title={`Welcome back, ${user.username}`}
-                  >
-                    {user.username}
-                  </p>
-                )}
-              </div>
-            </div>
-            <div className="flex items-center gap-2 sm:gap-3 w-full lg:w-auto flex-wrap lg:flex-nowrap lg:justify-end self-stretch lg:self-auto">
-              {/* Show Upgrade button for free users */}
-              {subscriptionStatus && !subscriptionStatus.is_subscribed && (
-                <Button
-                  onClick={() => setShowUpgradeModal(true)}
-                  variant="outline"
-                  className="terminal-header-button text-xs sm:text-sm px-3 sm:px-4 py-2 whitespace-nowrap"
-                  data-testid="header-upgrade-btn"
-                >
-                  <Sparkles className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                  Plan
-                </Button>
-              )}
-
-              {/* Show Pro badge for subscribed users */}
-              {subscriptionStatus && subscriptionStatus.is_subscribed && (
-                <div className="terminal-plan-badge px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm whitespace-nowrap">
-                  {subscriptionStatus.plan === "max" ? "MAX" : "PLUS"}
-                </div>
-              )}
-              <Button
-                variant="outline"
-                onClick={() => window.location.href = '/spotlight'}
-                className="terminal-header-button gap-1 sm:gap-2 text-xs sm:text-sm px-3 sm:px-4 py-2"
-              >
-                <Target className="h-3 w-3 sm:h-4 sm:w-4" />
-                <span className="hidden xl:inline font-bold">Spotlight</span>
-              </Button>
-              {isAdmin && (
-                <Button
-                  variant="outline"
-                  onClick={() => window.location.href = '/admin/costs'}
-                  className="terminal-header-button gap-1 sm:gap-2 text-xs sm:text-sm px-3 sm:px-4 py-2"
-                  title="View Backend Costs"
-                >
-                  <DollarSign className="h-3 w-3 sm:h-4 sm:w-4" />
-                  <span className="hidden xl:inline">Costs</span>
-                </Button>
-              )}
-              <Button
-                variant="outline"
-                onClick={openSettingsView}
-                className="terminal-header-button gap-1 sm:gap-2 text-xs sm:text-sm px-3 sm:px-4 py-2"
-                data-testid="header-settings-btn"
-              >
-                <Settings className="h-3 w-3 sm:h-4 sm:w-4" />
-                <span className="hidden xl:inline">Prefs</span>
-                <span className="xl:hidden">Prefs</span>
-              </Button>
-              <Button
-                variant="outline"
-                onClick={handleLogout}
-                className="terminal-header-button gap-1 sm:gap-2 text-xs sm:text-sm px-3 sm:px-4 py-2"
-                data-testid="logout-btn"
-              >
-                <LogOut className="h-3 w-3 sm:h-4 sm:w-4" />
-                <span className="hidden xl:inline">Exit</span>
-                <span className="xl:hidden">Exit</span>
-              </Button>
-            </div>
+        {!youtubeConnected && (
+          <div className="smb-notice">
+            <Youtube className="smb-ico" aria-hidden="true" />
+            <p>Connect Google to upload to YouTube and verify your Spotlight profile.</p>
+            <Button onClick={connectYouTube} className="smb-btn smb-btn--sec smb-btn--sm">
+              Connect
+            </Button>
           </div>
-        </div>
-      </div>
-
-      {/* Main Content */}
-       <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-6 md:py-8 dashboard-shell space-y-6 sm:space-y-8">
-         {!youtubeConnected && (
-           <div className="rounded-3xl border border-yellow-400/40 bg-gradient-to-r from-yellow-500/12 via-orange-500/10 to-transparent px-4 py-4 sm:px-5 shadow-[0_0_34px_rgba(249,115,22,0.12)]">
-             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-               <div>
-                 <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                   Connect your Google account for uploads, channel tools, and a stronger Producer Spotlight profile.
-                 </p>
-                 <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
-                   Your spotlight profile can still show up without it, but connecting helps verify your identity and channel data.
-                 </p>
-               </div>
-               <Button
-                 onClick={connectYouTube}
-                 className="gap-2 self-start bg-gradient-to-r from-yellow-400 to-orange-500 font-semibold text-black hover:from-yellow-300 hover:to-orange-400 lg:self-center"
-               >
-                 <Youtube className="h-4 w-4" />
-                 Connect Google Account
-               </Button>
-             </div>
-           </div>
-         )}
-         {/* Subscription Banner */}
-         {subscriptionStatus && (
-           <SubscriptionBanner
-            creditsRemaining={subscriptionStatus.daily_credits_remaining}
-            uploadCreditsRemaining={subscriptionStatus.upload_credits_remaining}
-            creditsTotal={subscriptionStatus.daily_credits_total}
-            uploadsTotal={subscriptionStatus.upload_credits_total}
-            plan={subscriptionStatus.plan}
-            resetsAt={subscriptionStatus.resets_at}
-            isSubscribed={subscriptionStatus.is_subscribed}
-            onUpgrade={() => setShowUpgradeModal(true)}
-            API={API}
-            showManageButton={false}
-          />
         )}
 
-        {/* Progress Bar */}
         <ProgressBar
           isActive={progressActive}
           message={progressMessage}
@@ -1306,69 +1199,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
           }
         />
 
-        <Tabs value={activeTab} onValueChange={handleDashboardTabChange} className="space-y-4 sm:space-y-6">
-          {activeTab !== "settings" && (
-          <div className="sm:hidden w-full max-w-xs mx-auto flex items-center justify-between gap-2 dashboard-tabs px-2 py-1.5">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={goToPreviousTab}
-              className="h-8 w-8 rounded-md text-[var(--text-primary)] bg-[var(--bg-secondary)]/80 hover:bg-[var(--bg-tertiary)]"
-              aria-label="Previous tab"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <div
-              className="flex-1 text-center text-sm font-semibold truncate px-2 py-1 rounded-md"
-              style={{
-                color: "#ffffff",
-                background: "linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))",
-                boxShadow: "0 0 0 1px var(--border-color) inset",
-                textShadow: "0 1px 2px rgba(0,0,0,0.45)",
-              }}
-            >
-              {activeTabLabel}
-            </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={goToNextTab}
-              className="h-8 w-8 rounded-md text-[var(--text-primary)] bg-[var(--bg-secondary)]/80 hover:bg-[var(--bg-tertiary)]"
-              aria-label="Next tab"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-          )}
-
-          {activeTab !== "settings" && (
-          <TabsList
-            className="hidden sm:grid w-full max-w-3xl mx-auto gap-0.5 text-[10px] sm:text-[11px] dashboard-tabs dashboard-tabs-desktop relative overflow-hidden"
-            style={{ gridTemplateColumns: `repeat(${Math.max(visibleTabs.length, 1)}, minmax(0, 1fr))` }}
-          >
-            {visibleTabs.map((tab, index) => (
-                <TabsTrigger
-                  key={tab.value}
-                  value={tab.value}
-                  data-testid={`${tab.value}-tab`}
-                  disabled={tab.value === "analytics" && isAnalyticsLocked}
-                  className={`dashboard-tab-trigger relative z-10 flex min-h-[42px] items-center justify-center px-1.5 py-1 text-center leading-none whitespace-nowrap transition-colors data-[state=active]:bg-transparent data-[state=active]:text-white ${index > 0 ? "dashboard-tab-trigger--separated" : ""} ${tab.value === "analytics" && isAnalyticsLocked ? "dashboard-tab-trigger--locked" : ""}`}
-                >
-                  {tab.value === "analytics" && isAnalyticsLocked ? (
-                    <span className="dashboard-tab-lock-copy">
-                      <span>{tab.label}</span>
-                      <span className="dashboard-tab-lock-badge">Pro Only</span>
-                    </span>
-                  ) : (
-                    tab.label
-                  )}
-                </TabsTrigger>
-            ))}
-          </TabsList>
-          )}
-
+        <Tabs value={activeTab} onValueChange={handleDashboardTabChange} className="smb-tabs-root">
           {canShowAds && activeTab !== "workflow" && (
             <AdBanner
               isSubscribed={subscriptionStatus.is_subscribed}
@@ -1465,74 +1296,69 @@ const Dashboard = ({ setIsAuthenticated }) => {
           </TabsContent>
 
           {/* Settings Tab */}
-          <TabsContent value="settings" className="space-y-6 dashboard-section">
-            <div className="flex justify-start">
-              <Button variant="outline" onClick={closeSettingsView} className="gap-2">
-                <ChevronLeft className="h-4 w-4" />
-                Back
-              </Button>
-            </div>
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-              <Card className="dashboard-card">
-                <CardHeader>
-                  <CardTitle>Subscription</CardTitle>
-                  <CardDescription>
-                    Manage billing and plan changes without leaving settings.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="rounded-xl border p-4" style={{ borderColor: "var(--border-color)", backgroundColor: "var(--bg-secondary)" }}>
-                    <div className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                      Current plan: {(subscriptionStatus?.plan || "free").toUpperCase()}
-                    </div>
-                    <div className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
-                      {subscriptionStatus?.is_subscribed ? "Active paid subscription" : "Free plan active"}
-                    </div>
-                  </div>
-                  {subscriptionStatus?.is_subscribed ? (
-                    <Button onClick={handleManageSubscriptionPortal} variant="outline" className="w-full">
-                      Manage Subscription
+          <TabsContent value="settings" className="dashboard-section">
+            <div className="smb-grid2">
+              <section className="smb-card">
+                <div className="smb-card-head">
+                  <h2 className="smb-card-title">Plan</h2>
+                  <span className="smb-badge">{planLabelFor(subscriptionStatus) || "Free"}</span>
+                </div>
+                <p className="smb-t2">
+                  {subscriptionStatus?.is_subscribed
+                    ? subscriptionStatus?.trial
+                      ? "Your free trial is on. You can manage or cancel it in billing."
+                      : "Your paid plan is active."
+                    : "You're on the free plan."}
+                </p>
+                {subscriptionStatus?.is_subscribed ? (
+                  <Button onClick={handleManageSubscriptionPortal} className="smb-btn smb-btn--sec smb-btn--full">
+                    Manage billing
+                  </Button>
+                ) : (
+                  <div className="smb-row-2">
+                    <Button onClick={() => setShowUpgradeModal(true)} className="smb-btn smb-btn--pri">
+                      See plans
                     </Button>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <Button onClick={() => setShowUpgradeModal(true)} className="w-full">
-                        Upgrade Plan
-                      </Button>
-                      <Button onClick={() => syncSubscriptionStatus()} variant="outline" className="w-full" disabled={syncingSubscription}>
-                        {syncingSubscription ? "Refreshing..." : "Refresh Billing Status"}
-                      </Button>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+                    <Button onClick={() => syncSubscriptionStatus()} className="smb-btn smb-btn--sec" disabled={syncingSubscription}>
+                      {syncingSubscription ? "Refreshing..." : "Refresh billing"}
+                    </Button>
+                  </div>
+                )}
+              </section>
 
-              <Card className="dashboard-card">
-                <CardHeader>
-                  <CardTitle>Google Account</CardTitle>
-                  <CardDescription>
-                    Connect or disconnect the Google account used for YouTube uploads.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="rounded-xl border p-4" style={{ borderColor: "var(--border-color)", backgroundColor: "var(--bg-secondary)" }}>
-                    <div className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                      {youtubeConnected ? (youtubeName || youtubeEmail || "Google account connected") : "No Google account connected"}
-                    </div>
-                    <div className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
-                      {youtubeConnected ? "Disconnect to switch to another Google account." : "Connect a Google account to upload to YouTube."}
-                    </div>
-                  </div>
+              <section className="smb-card">
+                <div className="smb-card-head">
+                  <h2 className="smb-card-title">Google account</h2>
                   {youtubeConnected ? (
-                    <Button onClick={disconnectYouTube} variant="outline" className="w-full">
-                      Disconnect Google Account
-                    </Button>
+                    <span className="smb-pill smb-pill--ok"><span className="smb-pill-dot" />Connected</span>
                   ) : (
-                    <Button onClick={connectYouTube} className="w-full">
-                      Connect Google Account
-                    </Button>
+                    <span className="smb-pill smb-pill--warn">Not connected</span>
                   )}
-                </CardContent>
-              </Card>
+                </div>
+                <p className="smb-t2">
+                  {youtubeConnected
+                    ? `${youtubeName || youtubeEmail || "Your Google account"} is used for YouTube uploads.`
+                    : "Connect a Google account to upload to YouTube."}
+                </p>
+                {youtubeConnected ? (
+                  <Button onClick={disconnectYouTube} className="smb-btn smb-btn--sec smb-btn--full">
+                    Disconnect
+                  </Button>
+                ) : (
+                  <Button onClick={connectYouTube} className="smb-btn smb-btn--pri smb-btn--full">
+                    <Youtube className="h-4 w-4 mr-2" />
+                    Connect Google
+                  </Button>
+                )}
+              </section>
+
+              <section className="smb-card smb-span-2">
+                <div className="smb-card-head">
+                  <h2 className="smb-card-title">Theme</h2>
+                  <span className="smb-mono smb-t3">Same palettes as the app</span>
+                </div>
+                <ThemePicker />
+              </section>
             </div>
           </TabsContent>
 
@@ -1541,7 +1367,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
             <Card className="dashboard-card">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Sparkles className="h-6 w-6 text-purple-500" />
+                  <BarChart3 className="h-5 w-5" />
                   YouTube Channel Analytics
                 </CardTitle>
                 <CardDescription>
@@ -1555,7 +1381,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                   <Alert>
                     <AlertCircle className="h-4 w-4" />
                     <AlertDescription>
-                      Channel analytics is a paid feature. Upgrade to Plus or Max to unlock channel analysis.
+                      Channel analytics is a paid feature. Upgrade to Plus or Pro to unlock channel analysis.
                     </AlertDescription>
                   </Alert>
                 )}
@@ -1589,10 +1415,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
                   {analyticsData && (
                     <div className="space-y-6 mt-6">
                     {/* Channel Health Score */}
-                    <Card className="producer-card glass-card border-2 border-purple-500">
+                    <Card className="producer-card">
                       <CardContent className="p-6">
                         <div className="text-center">
-                          <p className="text-sm font-semibold text-purple-500 mb-2">CHANNEL HEALTH SCORE</p>
+                          <p className="smb-eyebrow mb-2">Channel health score</p>
                           <p className="text-4xl font-bold gradient-text mb-3">{analyticsData.insights?.channel_health_score?.split('-')[0] || 'N/A'}</p>
                           <p className="text-sm" style={{color: 'var(--text-secondary)'}}>{analyticsData.insights?.channel_health_score?.split('-').slice(1).join('-') || ''}</p>
                         </div>
@@ -1723,7 +1549,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                     <Card className="producer-card border-l-4 border-purple-500">
                       <CardHeader>
                         <CardTitle className="text-xl flex items-center gap-2">
-                          <Music className="h-6 w-6 text-purple-500" />
+                          <Music className="h-5 w-5" />
                           Your Growth Roadmap
                         </CardTitle>
                         <CardDescription>Your personalized path to YouTube success</CardDescription>
@@ -1737,7 +1563,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                     <Card className="producer-card border-l-4 border-green-500">
                       <CardHeader>
                         <CardTitle className="text-lg flex items-center gap-2">
-                          <CheckCircle2 className="h-5 w-5 text-green-500" />
+                          <CheckCircle2 className="h-5 w-5 smb-acc" />
                           What's Working Well
                         </CardTitle>
                       </CardHeader>
@@ -1745,7 +1571,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         <ul className="space-y-3">
                           {analyticsData.insights?.what_works?.map((point, idx) => (
                             <li key={idx} className="flex items-start gap-3 p-3 rounded-lg" style={{backgroundColor: 'var(--bg-secondary)'}}>
-                              <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0 mt-0.5" />
+                              <CheckCircle2 className="h-5 w-5 smb-acc shrink-0 mt-0.5" />
                               <span className="flex-1">{point}</span>
                             </li>
                           ))}
@@ -1757,7 +1583,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                     <Card className="producer-card border-l-4 border-red-500">
                       <CardHeader>
                         <CardTitle className="text-lg flex items-center gap-2">
-                          <AlertCircle className="h-5 w-5 text-red-500" />
+                          <AlertCircle className="h-5 w-5 smb-danger" />
                           Critical Issues Holding You Back
                         </CardTitle>
                       </CardHeader>
@@ -1765,7 +1591,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         <ul className="space-y-3">
                           {analyticsData.insights?.critical_issues?.map((issue, idx) => (
                             <li key={idx} className="flex items-start gap-3 p-3 rounded-lg" style={{backgroundColor: 'var(--bg-secondary)'}}>
-                              <CircleAlert className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
+                              <CircleAlert className="h-5 w-5 smb-danger shrink-0 mt-0.5" />
                               <span className="flex-1">{issue}</span>
                             </li>
                           ))}
@@ -1777,7 +1603,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                     <Card className="producer-card border-l-4 border-blue-500">
                       <CardHeader>
                         <CardTitle className="text-lg flex items-center gap-2">
-                          <Sparkles className="h-5 w-5 text-blue-500" />
+                          <Sparkles className="h-5 w-5 smb-t2" />
                           Immediate Action Steps
                         </CardTitle>
                         <CardDescription>Do these TODAY to start growing</CardDescription>
@@ -1798,7 +1624,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                     <Card className="producer-card border-l-4 border-yellow-500">
                       <CardHeader>
                         <CardTitle className="text-lg flex items-center gap-2">
-                          <Sparkles className="h-5 w-5 text-yellow-500" />
+                          <Sparkles className="h-5 w-5 smb-warn" />
                           SEO & Discoverability Strategy
                         </CardTitle>
                       </CardHeader>
@@ -1818,7 +1644,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                     <Card className="producer-card border-l-4 border-indigo-500">
                       <CardHeader>
                         <CardTitle className="text-lg flex items-center gap-2">
-                          <Youtube className="h-5 w-5 text-indigo-500" />
+                          <Youtube className="h-5 w-5 smb-t2" />
                           Content Strategy
                         </CardTitle>
                       </CardHeader>
@@ -1838,7 +1664,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                     <Card className="producer-card border-l-4 border-cyan-500">
                       <CardHeader>
                         <CardTitle className="text-lg flex items-center gap-2">
-                          <Link className="h-5 w-5 text-cyan-500" />
+                          <Link className="h-5 w-5 smb-t2" />
                           Discoverability Tactics
                         </CardTitle>
                         <CardDescription>Get more eyeballs on your beats</CardDescription>
@@ -1859,7 +1685,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                     <Card className="producer-card border-l-4 border-pink-500">
                       <CardHeader>
                         <CardTitle className="text-lg flex items-center gap-2">
-                          <Music className="h-5 w-5 text-pink-500" />
+                          <Music className="h-5 w-5 smb-t2" />
                           Learn From Internet Money
                         </CardTitle>
                         <CardDescription>Proven tactics from successful producers</CardDescription>
@@ -1906,10 +1732,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
             </Card>
           </TabsContent>
         </Tabs>
+      </AppShell>
 
-      </div>
-
-      {/* Upgrade Modal */}
       <UpgradeModal
         open={showUpgradeModal}
         onClose={() => setShowUpgradeModal(false)}
@@ -1917,7 +1741,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
         loading={upgradingSubscription}
         subscription={subscriptionStatus}
       />
-
     </div>
   );
 };

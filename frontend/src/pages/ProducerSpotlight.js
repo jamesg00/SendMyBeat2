@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogClose } from "@/components/ui/dialog";
-import { Trophy, Star, TrendingUp, Music, User, Globe, Youtube, ArrowLeft, Crown, BadgeCheck, Shield, Flame, Eye, BarChart3 } from "lucide-react";
+import { Trophy, Star, TrendingUp, Music, User, Globe, Youtube, Crown, BadgeCheck, Shield, Flame, Eye, BarChart3 } from "lucide-react";
 import { getAuthToken } from "@/lib/auth";
+import AppShell from "@/components/AppShell";
 import { toast } from "sonner";
 
 const createGlossyAvatarDataUrl = ({ rim, shell, glow, inner, highlight }) => {
@@ -60,11 +61,11 @@ const AVATAR_CHOICES = [
 const DEFAULT_AVATAR_URL = AVATAR_CHOICES[0].url;
 
 const TIER_CLASS_MAP = {
-  Bronze: "spotlight-tier-tag spotlight-tier-tag--bronze bg-amber-500/15 text-amber-200 border-amber-300/40",
-  Silver: "spotlight-tier-tag spotlight-tier-tag--silver bg-slate-300/15 text-slate-100 border-slate-200/45",
-  Gold: "spotlight-tier-tag spotlight-tier-tag--gold bg-yellow-400/15 text-yellow-100 border-yellow-300/45",
-  Platinum: "spotlight-tier-tag spotlight-tier-tag--platinum bg-cyan-400/15 text-cyan-100 border-cyan-300/45",
-  Diamond: "spotlight-tier-tag spotlight-tier-tag--diamond bg-fuchsia-400/15 text-fuchsia-100 border-fuchsia-300/45",
+  Bronze: "spotlight-tier-tag spotlight-tier-tag--bronze",
+  Silver: "spotlight-tier-tag spotlight-tier-tag--silver",
+  Gold: "spotlight-tier-tag spotlight-tier-tag--gold",
+  Platinum: "spotlight-tier-tag spotlight-tier-tag--platinum",
+  Diamond: "spotlight-tier-tag spotlight-tier-tag--diamond",
 };
 
 export default function ProducerSpotlight() {
@@ -320,10 +321,10 @@ export default function ProducerSpotlight() {
   };
 
   const getRoleTagClass = (roleTag) => {
-    if (roleTag === "Creator") return "spotlight-role-tag spotlight-role-tag--creator bg-yellow-400/20 text-yellow-100 border-yellow-300";
-    if (roleTag === "Verified") return "spotlight-role-tag spotlight-role-tag--verified bg-sky-500/20 text-sky-200 border-sky-400";
-    if (roleTag === "Pro") return "spotlight-role-tag spotlight-role-tag--pro bg-violet-500/20 text-violet-300 border-violet-400";
-    return "spotlight-role-tag spotlight-role-tag--newbie bg-zinc-500/20 text-zinc-300 border-zinc-500";
+    if (roleTag === "Creator") return "spotlight-role-tag spotlight-role-tag--creator";
+    if (roleTag === "Verified") return "spotlight-role-tag spotlight-role-tag--verified";
+    if (roleTag === "Pro") return "spotlight-role-tag spotlight-role-tag--pro";
+    return "spotlight-role-tag spotlight-role-tag--newbie";
   };
 
   const getRoleTagIcon = (roleTag) => {
@@ -382,7 +383,7 @@ export default function ProducerSpotlight() {
 
   const ProducerCard = ({ producer, badge }) => (
     <Card
-      className={`producer-card h-full cursor-pointer transition-all duration-200 hover:-translate-y-1 ${producer.featured ? "border-yellow-400/60 shadow-[0_0_24px_rgba(250,204,21,0.18)]" : ""}`}
+      className={`producer-card h-full cursor-pointer transition-all duration-200 hover:-translate-y-1 ${producer.featured ? "producer-card--featured" : ""}`}
       onClick={() => openProducerStats(producer)}
     >
       <CardContent className="p-4">
@@ -412,7 +413,7 @@ export default function ProducerSpotlight() {
                 <div className="flex flex-wrap items-center gap-2">
                   <h3 className="truncate text-base font-bold">{producer.username}</h3>
                   {producer.social_links?.youtube && (
-                    <a href={producer.social_links.youtube} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-red-600/90 text-white transition-transform hover:scale-105">
+                    <a href={producer.social_links.youtube} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="spotlight-yt-link inline-flex h-7 w-7 items-center justify-center rounded-full transition-transform hover:scale-105">
                       <Youtube className="h-3.5 w-3.5" />
                     </a>
                   )}
@@ -493,7 +494,7 @@ export default function ProducerSpotlight() {
       }}
     >
       <div className="flex items-center gap-2">
-        <div className="h-10 w-10 rounded-full overflow-hidden bg-slate-200 flex items-center justify-center">
+        <div className="h-10 w-10 rounded-full overflow-hidden bg-[var(--bg-tertiary)] flex items-center justify-center">
           <img src={producer.avatar_url || DEFAULT_AVATAR_URL} alt={producer.username} className="h-full w-full object-cover" loading="lazy" />
         </div>
         <div className="min-w-0">
@@ -506,29 +507,20 @@ export default function ProducerSpotlight() {
     </button>
   );
 
-  return (
-    <div className="min-h-screen dashboard-parallax-bg">
-      <div className="dashboard-grid-layer" aria-hidden="true" />
-      <div className="relative z-10 container mx-auto px-4 py-8 space-y-8 dashboard-shell text-[var(--text-primary)]">
-        <div className="flex items-center justify-between gap-3">
-          <Button
-            variant="outline"
-            className="gap-2"
-            onClick={() => navigate("/dashboard")}
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Dashboard
-          </Button>
-        </div>
+  const handleShellSelect = (id) => {
+    if (id === "spotlight") return;
+    navigate(`/dashboard?tab=${id}`);
+  };
 
+  const pageBody = (
+      <div className="space-y-8 text-[var(--text-primary)]">
       {/* Hero Section */}
-      <div className="dashboard-card rounded-3xl px-6 py-8 text-center space-y-5">
-        <div className="inline-flex items-center justify-center rounded-full border px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.18em]" style={{ borderColor: "var(--border-color)", color: "var(--text-secondary)", backgroundColor: "var(--bg-secondary)" }}>
-          SendMyBeat Network
-        </div>
-        <h1 className="text-4xl md:text-5xl font-bold gradient-text">Producer Spotlight</h1>
+      <div className="dashboard-card spotlight-hero px-6 py-8 text-center space-y-5">
+        <span className="spotlight-hero-glow" aria-hidden="true" />
+        <p className="smb-eyebrow">SendMyBeat network</p>
+        <h1 className="spotlight-hero-title">Producer Spotlight</h1>
         <p className="text-base md:text-lg max-w-2xl mx-auto" style={{ color: "var(--text-secondary)" }}>
-          Discover producers, track momentum, and open profile stats without leaving the main dashboard visual system.
+          Find producers, follow their streaks and open their stats.
         </p>
         {!isAuthenticated && (
           <div className="mx-auto max-w-2xl rounded-2xl border px-4 py-3 text-sm font-medium" style={{ borderColor: "var(--border-color)", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)" }}>
@@ -615,8 +607,8 @@ export default function ProducerSpotlight() {
                       onClick={() => setEditForm({ ...editForm, avatar_url: avatar.url })}
                       className={`rounded-xl border p-2 transition-all ${
                         editForm.avatar_url === avatar.url
-                          ? "border-emerald-500 ring-2 ring-emerald-500/30"
-                          : "border-[var(--border-color)] hover:border-emerald-400"
+                          ? "border-[var(--c-acc)] ring-2 ring-[var(--c-accsoft)]"
+                          : "border-[var(--border-color)] hover:border-[var(--c-t3)]"
                       } min-w-0 min-h-[96px] text-center flex flex-col items-center justify-center gap-1`}
                     >
                       <img
@@ -748,27 +740,17 @@ export default function ProducerSpotlight() {
         </Dialog>
 
         {(spotlightApiMissing || profileApiMissing) && (
-          <p className="text-sm text-red-500 max-w-3xl mx-auto">
+          <p className="text-sm smb-danger max-w-3xl mx-auto">
             Spotlight API returned 404. Backend is running an older version. Deploy/restart backend with latest `server.py` routes.
           </p>
         )}
         {isAuthenticated && !youtubeConnected && (
-          <div className="mx-auto max-w-5xl rounded-3xl border border-yellow-400/40 bg-gradient-to-r from-yellow-500/12 via-orange-500/12 to-transparent px-5 py-4 shadow-[0_0_35px_rgba(250,204,21,0.12)]">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div className="space-y-1">
-                <p className="text-sm font-semibold text-yellow-100">Connect your Google account to strengthen your Spotlight profile.</p>
-                <p className="text-sm text-yellow-50/80">
-                  You can still appear in Producer Spotlight now, but connecting Google helps verify your channel identity and unlock fuller spotlight data.
-                </p>
-              </div>
-              <Button
-                onClick={connectYouTube}
-                disabled={connectingYouTube}
-                className="animate-pulse bg-gradient-to-r from-yellow-500 to-orange-500 text-black hover:from-yellow-400 hover:to-orange-400"
-              >
-                {connectingYouTube ? "Connecting..." : "Connect Google"}
-              </Button>
-            </div>
+          <div className="smb-notice mx-auto max-w-3xl text-left">
+            <Youtube className="smb-ico" aria-hidden="true" />
+            <p>Connect Google to verify your channel and show fuller stats on your Spotlight card.</p>
+            <Button onClick={connectYouTube} disabled={connectingYouTube} className="smb-btn smb-btn--sec smb-btn--sm">
+              {connectingYouTube ? "Connecting..." : "Connect"}
+            </Button>
           </div>
         )}
       </div>
@@ -820,7 +802,7 @@ export default function ProducerSpotlight() {
       {spotlightData?.featured_producers.length > 0 && (
         <section>
           <div className="flex items-center gap-2 mb-6">
-            <Trophy className="h-6 w-6 text-yellow-500" />
+            <Trophy className="h-5 w-5" />
             <h2 className="text-2xl font-bold">Featured Producers</h2>
           </div>
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
@@ -883,7 +865,7 @@ export default function ProducerSpotlight() {
         <section>
           <div className="flex items-center justify-between gap-2 mb-6">
             <div className="flex items-center gap-2">
-              <Globe className="h-6 w-6 text-emerald-500" />
+              <Globe className="h-5 w-5" />
               <h2 className="text-2xl font-bold">Producer Network</h2>
             </div>
             <Button variant="outline" onClick={() => setShowAllOpen(true)}>Show All</Button>
@@ -895,7 +877,6 @@ export default function ProducerSpotlight() {
           </div>
         </section>
       )}
-      </div>
 
       <Dialog open={showAllOpen} onOpenChange={setShowAllOpen}>
         <DialogContent className="w-[calc(100vw-1rem)] max-w-4xl max-h-[85vh] overflow-y-auto bg-[var(--card-bg)] border border-[var(--border-color)] p-4 sm:p-6">
@@ -999,7 +980,7 @@ export default function ProducerSpotlight() {
                     href={/^https?:\/\//i.test(producerStats.top_song) ? producerStats.top_song : `https://${producerStats.top_song}`}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-sm text-blue-500 hover:underline break-all"
+                    className="text-sm underline underline-offset-2 break-all"
                   >
                     {producerStats.top_song}
                   </a>
@@ -1031,6 +1012,35 @@ export default function ProducerSpotlight() {
           </div>
         </DialogContent>
       </Dialog>
+      </div>
+  );
+
+  if (isAuthenticated) {
+    return (
+      <div className="min-h-screen dashboard-parallax-bg">
+        <AppShell
+          active="spotlight"
+          onSelect={handleShellSelect}
+          title="Spotlight"
+          crumb="Producers on SendMyBeat"
+          username={myProfile?.username}
+          onAdmin={(path) => navigate(path)}
+        >
+          {pageBody}
+        </AppShell>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen dashboard-parallax-bg">
+      <header className="spotlight-public-nav">
+        <a href="/" className="smb-wordmark">SENDMYBEAT</a>
+        <Button onClick={() => navigate("/")} className="smb-btn smb-btn--pri smb-btn--sm">
+          Log in
+        </Button>
+      </header>
+      <main className="spotlight-public-main">{pageBody}</main>
     </div>
   );
 }

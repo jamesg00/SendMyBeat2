@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import "@/App.css";
+import "@/styles/console.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import axios from "axios";
 import LandingPage from "@/pages/LandingPage";
@@ -91,15 +92,16 @@ function App() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="app-boot" role="status" aria-label="Loading">
+        <span className="app-boot-mark">SENDMYBEAT</span>
+        <span className="app-boot-bar"><i /></span>
       </div>
     );
   }
 
   return (
     <ThemeProvider>
-      <div className="App flex flex-col min-h-screen transition-colors duration-500">
+      <div className="App flex flex-col min-h-screen">
         <Toaster position="top-right" richColors />
         <BrowserRouter>
         <div className="flex-grow">

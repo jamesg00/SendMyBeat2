@@ -1,92 +1,111 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
+
+// Same storage key and shape as the mobile app's web build: { id }.
+export const THEME_STORAGE_KEY = "smb_theme";
+
+export const PALETTES = [
+  { id: "console", label: "Console", swatch: ["#000000", "#EDEDED", "#2EE59D"], dark: true },
+  { id: "auto", label: "Auto", swatch: ["#000000", "#F5F5F7", "#2EE59D"], dark: true },
+  { id: "light", label: "Light", swatch: ["#F5F5F7", "#1D1D1F", "#0066D6"], dark: false },
+  { id: "graphite", label: "Dark", swatch: ["#1C1C1E", "#F2F2F4", "#0A84FF"], dark: true },
+  { id: "noir", label: "Noir", swatch: ["#000000", "#FFFFFF", "#FFFFFF"], dark: true },
+  { id: "paper", label: "Paper", swatch: ["#FFFFFF", "#000000", "#000000"], dark: false },
+  { id: "mint", label: "Mint", swatch: ["#060D09", "#E7F2EC", "#2EE59D"], dark: true },
+  { id: "midnight", label: "Midnight", swatch: ["#0B0C15", "#F1E7D2", "#9EB1FF"], dark: true },
+  { id: "ocean", label: "Ocean", swatch: ["#081316", "#ECE5D8", "#62D6BD"], dark: true },
+  { id: "sunset", label: "Sunset", swatch: ["#1F1311", "#F6ECE8", "#FF9F6B"], dark: true },
+  { id: "rose", label: "Rose", swatch: ["#1F1218", "#F7EAF0", "#FF7EB6"], dark: true },
+];
+
+const PALETTE_IDS = new Set(PALETTES.map((p) => p.id));
+const LIGHT_IDS = new Set(PALETTES.filter((p) => !p.dark).map((p) => p.id));
 
 const ThemeContext = createContext();
-const AI_THEME_STORAGE_KEY = "app-theme-ai";
 
-const clearAiVariables = () => {
+const readStoredTheme = () => {
+  try {
+    const raw = localStorage.getItem(THEME_STORAGE_KEY);
+    const id = raw ? JSON.parse(raw)?.id : null;
+    return PALETTE_IDS.has(id) ? id : "console";
+  } catch {
+    return "console";
+  }
+};
+
+const prefersLight = () =>
+  typeof window !== "undefined" &&
+  typeof window.matchMedia === "function" &&
+  window.matchMedia("(prefers-color-scheme: light)").matches;
+
+const prefersReducedMotion = () =>
+  typeof window !== "undefined" &&
+  typeof window.matchMedia === "function" &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+export const resolvePalette = (id) => {
+  if (id === "auto") return prefersLight() ? "light" : "console";
+  return PALETTE_IDS.has(id) ? id : "console";
+};
+
+const applyPalette = (resolved) => {
   const root = window.document.documentElement;
   const body = window.document.body;
-  const targets = [root, body];
-  targets.forEach((target) => {
-    target.removeAttribute("data-ai-theme");
-    target.style.removeProperty("--bg-primary");
-    target.style.removeProperty("--bg-secondary");
-    target.style.removeProperty("--bg-tertiary");
-    target.style.removeProperty("--text-primary");
-    target.style.removeProperty("--text-secondary");
-    target.style.removeProperty("--accent-primary");
-    target.style.removeProperty("--accent-secondary");
-    target.style.removeProperty("--border-color");
-    target.style.removeProperty("--card-bg");
-    target.style.removeProperty("--shadow");
-    target.style.removeProperty("--glow");
-  });
+  const isDark = !LIGHT_IDS.has(resolved);
+  root.setAttribute("data-palette", resolved);
+  root.classList.toggle("dark", isDark);
+  body.classList.toggle("dark", isDark);
+  body.setAttribute("data-theme", isDark ? "dark" : "light");
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) {
+    const bg = getComputedStyle(root).getPropertyValue("--c-bg").trim();
+    if (bg) meta.setAttribute("content", bg);
+  }
 };
 
 export const ThemeProvider = ({ children }) => {
-  const [theme, setTheme] = useState("dark");
-  const [aiTheme, setAiTheme] = useState(() => {
-    try {
-      const raw = localStorage.getItem(AI_THEME_STORAGE_KEY);
-      return raw ? JSON.parse(raw) : null;
-    } catch {
-      return null;
+  const [theme, setThemeState] = useState(readStoredTheme);
+  const [resolvedTheme, setResolvedTheme] = useState(() => resolvePalette(readStoredTheme()));
+
+  // Cross-fade between palettes where the browser supports view transitions.
+  const setTheme = useCallback((nextId) => {
+    const id = PALETTE_IDS.has(nextId) ? nextId : "console";
+    const commit = () => {
+      const resolved = resolvePalette(id);
+      applyPalette(resolved);
+      setResolvedTheme(resolved);
+      setThemeState(id);
+    };
+    if (typeof document !== "undefined" && document.startViewTransition && !prefersReducedMotion()) {
+      document.startViewTransition(commit);
+    } else {
+      commit();
     }
-  });
+  }, []);
 
   useEffect(() => {
-    const resolvedTheme = "dark";
-    const root = window.document.documentElement;
-    const body = window.document.body;
-
-    // Remove old theme classes/attributes
-    body.removeAttribute("data-theme");
-    root.classList.remove("light");
-    body.classList.remove("light");
-
-    // Apply new theme
-    body.setAttribute("data-theme", resolvedTheme);
-    root.classList.add("dark");
-    body.classList.add("dark");
-    localStorage.setItem("app-theme", resolvedTheme);
-
-    // Disable old alternate theme effects now that the app is permanently dark
-    body.classList.remove("matrix-mode");
-
-    if (theme !== resolvedTheme) {
-      setTheme(resolvedTheme);
+    applyPalette(resolvePalette(theme));
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, JSON.stringify({ id: theme }));
+    } catch {
+      // storage can be unavailable in private windows
     }
   }, [theme]);
 
+  // Follow the system setting while "Auto" is picked.
   useEffect(() => {
-    if (aiTheme) {
-      localStorage.setItem(AI_THEME_STORAGE_KEY, JSON.stringify(aiTheme));
-    } else {
-      localStorage.removeItem(AI_THEME_STORAGE_KEY);
-    }
-  }, [aiTheme]);
-
-  useEffect(() => {
-    if (theme !== "ai" || !aiTheme?.variables) {
-      clearAiVariables();
-      return;
-    }
-
-    const root = window.document.documentElement;
-    const body = window.document.body;
-    const variables = aiTheme.variables || {};
-    [root, body].forEach((target) => {
-      target.setAttribute("data-ai-theme", "true");
-      Object.entries(variables).forEach(([key, value]) => {
-        if (typeof key === "string" && typeof value === "string") {
-          target.style.setProperty(key, value);
-        }
-      });
-    });
-  }, [theme, aiTheme]);
+    if (theme !== "auto" || typeof window.matchMedia !== "function") return undefined;
+    const media = window.matchMedia("(prefers-color-scheme: light)");
+    const onChange = () => {
+      const resolved = resolvePalette("auto");
+      applyPalette(resolved);
+      setResolvedTheme(resolved);
+    };
+    media.addEventListener?.("change", onChange);
+    return () => media.removeEventListener?.("change", onChange);
+  }, [theme]);
 
   return (
-    <ThemeContext.Provider value={{ theme, setTheme, aiTheme, setAiTheme }}>
+    <ThemeContext.Provider value={{ theme, setTheme, resolvedTheme, palettes: PALETTES }}>
       {children}
     </ThemeContext.Provider>
   );

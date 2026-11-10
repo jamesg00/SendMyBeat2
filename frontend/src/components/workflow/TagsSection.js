@@ -158,7 +158,7 @@ const TagsSection = ({
                       e.stopPropagation();
                       await handleRemoveGeneratedTag(index);
                     }}
-                    className="ml-2 text-red-500 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-700"
+                    className="ml-2 smb-danger opacity-0 group-hover:opacity-100 transition-opacity"
                     title="Delete tag"
                     aria-label="Delete tag"
                   >
@@ -271,7 +271,7 @@ const TagsSection = ({
       <CardHeader className="px-4 sm:px-6 py-4 sm:py-6">
         <div className="flex flex-col gap-3 sm:gap-4">
           <div className="flex items-center gap-2 text-base sm:text-lg md:text-xl">
-            <Sparkles className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 flex-shrink-0" />
+            <Sparkles className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
             <CardTitle className="text-base sm:text-lg md:text-xl">Generate YouTube Tags</CardTitle>
           </div>
           <div className="grid grid-cols-2 gap-2">
@@ -376,7 +376,7 @@ const TagsSection = ({
                             type="button"
                             variant="ghost"
                             size="sm"
-                            className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity text-red-500 hover:text-red-700 hover:bg-red-50 flex-shrink-0"
+                            className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity smb-danger hover:bg-[var(--c-dangersoft)] flex-shrink-0"
                             onClick={async (e) => {
                               e.stopPropagation();
                               await handleDeleteTagHistoryItem(item.id);
