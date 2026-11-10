@@ -622,8 +622,8 @@ html[data-palette="rose"] {
   --t-fast: 180ms;
   --t-med: 350ms;
   --t-slow: 450ms;
-  --font-sans: "Satoshi", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-display: "Clash Grotesk", "Satoshi", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --font-brand: "Karmatic Arcade", "Geist Mono", monospace;
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Space Grotesk", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-brand: "Karmatic Arcade", "IBM Plex Mono", monospace;
 }

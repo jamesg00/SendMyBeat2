@@ -191,10 +191,10 @@ for (const [id, p] of Object.entries(palettes)) {
 }
 css += `:root {\n  --radius: 0.625rem;\n  --r-card: 12px;\n  --r-control: 10px;\n  --r-thumb: 8px;\n  --r-chip: 6px;\n`;
 css += `  --ease: cubic-bezier(.2,.8,.2,1);\n  --t-fast: 180ms;\n  --t-med: 350ms;\n  --t-slow: 450ms;\n`;
-css += `  --font-sans: "Satoshi", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;\n`;
-css += `  --font-display: "Clash Grotesk", "Satoshi", ui-sans-serif, system-ui, sans-serif;\n`;
-css += `  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;\n`;
-css += `  --font-brand: "Karmatic Arcade", "Geist Mono", monospace;\n}\n`;
+css += `  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;\n`;
+css += `  --font-display: "Space Grotesk", "Inter", ui-sans-serif, system-ui, sans-serif;\n`;
+css += `  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;\n`;
+css += `  --font-brand: "Karmatic Arcade", "IBM Plex Mono", monospace;\n}\n`;
 
 fs.writeFileSync(path.join(__dirname, "..", "src", "styles", "tokens.css"), css);
 module.exports = { palettes };
