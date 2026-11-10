@@ -71,15 +71,21 @@ const PublishWorkflow = ({
           </div>
         </div>
 
-        <div className="workflow-metadata-heading">
-          <p className="workflow-section-kicker">Upload</p>
-          <p className="workflow-section-copy">
-            Once your metadata is ready, connect YouTube, upload your beat and artwork, preview it, and publish.
-          </p>
-        </div>
-
-        <div className="space-y-3">
-          <div className="flex items-stretch gap-2">
+        <div className="up-head">
+          <div className="min-w-0">
+            <p className="workflow-section-kicker">Upload</p>
+            <p className="smb-t2 text-sm">Pick your beat and artwork, preview the video, then publish it to your channel.</p>
+          </div>
+          <div className={`up-account ${youtubeConnected ? "is-connected" : ""}`}>
+            {youtubeConnected && youtubeProfilePicture ? (
+              <img src={youtubeProfilePicture} alt="" className="up-account-pic" />
+            ) : (
+              <span className="up-account-pic">{youtubeConnected ? <Youtube className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}</span>
+            )}
+            <span className="min-w-0">
+              <b className="block truncate text-sm">{youtubeConnected ? youtubeName || "YouTube connected" : "YouTube not connected"}</b>
+              <span className="block truncate smb-t3 text-xs">{youtubeConnected ? youtubeEmail || "Ready to publish to this channel" : "Needed to upload"}</span>
+            </span>
             {youtubeConnected ? (
               <Button variant="outline" onClick={onDisconnectYouTube} className="smb-btn smb-btn--sec smb-btn--sm whitespace-nowrap">
                 Switch Account
@@ -91,37 +97,9 @@ const PublishWorkflow = ({
               </Button>
             )}
           </div>
-
-          <div className={`workflow-status-card ${youtubeConnected ? "workflow-status-card--connected" : "workflow-status-card--warning"}`}>
-            <div className="flex items-center gap-3">
-              {youtubeConnected && youtubeProfilePicture ? (
-                <img
-                  src={youtubeProfilePicture}
-                  alt={youtubeName || youtubeEmail || "Connected YouTube account"}
-                  className="h-10 w-10 rounded-full border border-[var(--border-color)] object-cover"
-                />
-              ) : (
-                <div className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border-color)] bg-[var(--bg-tertiary)]">
-                  {youtubeConnected ? <Youtube className="h-5 w-5" /> : <AlertCircle className="h-5 w-5" />}
-                </div>
-              )}
-              <div className="min-w-0">
-                <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                  {youtubeConnected ? (youtubeName || "YouTube account connected") : "YouTube account required"}
-                </p>
-                <p className="text-xs sm:text-sm truncate" style={{ color: "var(--text-secondary)" }}>
-                  {youtubeConnected
-                    ? (youtubeEmail || "Ready to publish from this channel.")
-                    : "Connect YouTube to allow uploads, previews, and publishing on the right channel."}
-                </p>
-              </div>
-            </div>
-          </div>
         </div>
 
-        <div className="workflow-upload-shell">
-          <UploadStudio {...uploadStudioProps} />
-        </div>
+        <UploadStudio {...uploadStudioProps} />
       </div>
     </div>
   );

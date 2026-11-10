@@ -25,7 +25,7 @@ const TAG_LIMIT = 120;
 const TAG_HISTORY_LIMIT = 100;
 const DEFAULT_TAG_PROVIDER = "grok";
 const DASHBOARD_TABS = [
-  { value: "workflow", label: "Workflow" },
+  { value: "workflow", label: "Create" },
   { value: "analytics", label: "Analytics", proOnly: true },
 ];
 
@@ -1133,7 +1133,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
 
 
   const pageTitles = {
-    workflow: { title: "Workflow", crumb: "Tags, description and upload for one beat" },
+    workflow: { title: "Create", crumb: "Tags, description and upload for one beat" },
     analytics: { title: "Analytics", crumb: "How your channel is doing" },
     settings: { title: "Settings", crumb: "Plan, Google account and theme" },
   };

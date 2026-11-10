@@ -5,7 +5,7 @@ import { BarChart3, DollarSign, Layers, LogOut, Settings, Star, Users } from "lu
 // `active` is one of "workflow" | "analytics" | "spotlight" | "settings".
 
 export const NAV_ITEMS = [
-  { id: "workflow", label: "Workflow", short: "Studio", Icon: Layers },
+  { id: "workflow", label: "Create", short: "Create", Icon: Layers },
   { id: "analytics", label: "Analytics", short: "Analytics", Icon: BarChart3 },
   { id: "spotlight", label: "Spotlight", short: "Spotlight", Icon: Star },
   { id: "settings", label: "Settings", short: "Profile", Icon: Settings },

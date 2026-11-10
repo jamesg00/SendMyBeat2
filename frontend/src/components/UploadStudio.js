@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import axios from "axios";
 import { toast } from "sonner";
 import {
@@ -1532,8 +1533,10 @@ const UploadStudio = ({
   }
 
   // --- STUDIO OVERLAY (SPLIT VIEW) ---
-  return (
-    <div className={`fixed inset-0 z-50 bg-background/95 flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-300`}>
+  // The studio covers the whole window. It is rendered on <body> because the page's panels
+  // animate with transforms, and a transformed ancestor would trap a fixed overlay inside it.
+  return createPortal(
+    <div className={`fixed inset-0 z-50 bg-background flex flex-col animate-in fade-in duration-300`}>
       {audioPreviewUrl && <audio ref={audioPlayerRef} src={audioPreviewUrl} preload="metadata" />}
 
       {/* Header */}
@@ -1787,6 +1790,8 @@ const UploadStudio = ({
         </DialogContent>
       </Dialog>
     </div>
+    ,
+    document.body
   );
 };
 
