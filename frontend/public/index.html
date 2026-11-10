@@ -18,6 +18,9 @@
               var light = { light: 1, paper: 1 };
               if (id === "auto") id = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "console";
               if (!id) id = "console";
+              /* The landing page (signed out, at "/") is always the dark Console look. */
+              var signedIn = sessionStorage.getItem("token") || localStorage.getItem("token");
+              if (location.pathname === "/" && !signedIn) id = "console";
               document.documentElement.setAttribute("data-palette", id);
               document.documentElement.classList.toggle("dark", !light[id]);
             } catch (e) {
