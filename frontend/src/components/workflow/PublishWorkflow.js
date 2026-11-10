@@ -20,20 +20,26 @@ const PublishWorkflow = ({
   uploadStudioProps,
 }) => {
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-5">
       <div className="workflow-toolbar-strip">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="workflow-step-strip">
+          <span className="workflow-step-pill workflow-step-pill--done">1. Build Metadata</span>
+          <span className="workflow-step-pill">2. Review Outputs</span>
+          <span className="workflow-step-pill">3. Connect + Upload</span>
+        </div>
+        <div className="workflow-toolbar-actions">
           <Button
             variant="outline"
             onClick={onOpenAnalytics}
-            className={`gap-2 ${hasPaidAnalyticsAccess ? "" : "opacity-65 border-dashed"}`}
+            className="smb-btn smb-btn--sec smb-btn--sm"
             title={hasPaidAnalyticsAccess ? "Open analytics" : "Upgrade to unlock analytics"}
           >
             <Sparkles className="h-4 w-4" />
             Analytics
+            {hasPaidAnalyticsAccess ? null : <span className="smb-nav-tag">Pro</span>}
           </Button>
           {!subscriptionStatus?.is_subscribed && (
-            <Button onClick={onOpenUpgrade} className="gap-2">
+            <Button onClick={onOpenUpgrade} className="smb-btn smb-btn--pri smb-btn--sm">
               <Sparkles className="h-4 w-4" />
               Upgrade
             </Button>
@@ -42,14 +48,6 @@ const PublishWorkflow = ({
       </div>
 
       <div className="space-y-4 sm:space-y-6">
-        <div className="workflow-metadata-heading">
-          <div className="workflow-step-strip">
-            <span className="workflow-step-pill workflow-step-pill--done">1. Build Metadata</span>
-            <span className="workflow-step-pill">2. Review Outputs</span>
-            <span className="workflow-step-pill">3. Connect + Upload</span>
-          </div>
-        </div>
-
         <div className="terminal-workflow-grid">
           <div className="terminal-workflow-column">
             <TagsSection {...tagsSectionProps} mode="editor" showInlineOutput={false} />
@@ -83,11 +81,11 @@ const PublishWorkflow = ({
         <div className="space-y-3">
           <div className="flex items-stretch gap-2">
             {youtubeConnected ? (
-              <Button variant="outline" onClick={onDisconnectYouTube} className="whitespace-nowrap">
+              <Button variant="outline" onClick={onDisconnectYouTube} className="smb-btn smb-btn--sec smb-btn--sm whitespace-nowrap">
                 Switch Account
               </Button>
             ) : (
-              <Button onClick={onConnectYouTube} className="gap-2 whitespace-nowrap">
+              <Button onClick={onConnectYouTube} className="smb-btn smb-btn--pri smb-btn--sm whitespace-nowrap">
                 <Youtube className="h-4 w-4" />
                 Connect YouTube
               </Button>
@@ -100,10 +98,10 @@ const PublishWorkflow = ({
                 <img
                   src={youtubeProfilePicture}
                   alt={youtubeName || youtubeEmail || "Connected YouTube account"}
-                  className="h-10 w-10 border border-[var(--border-color)] object-cover"
+                  className="h-10 w-10 rounded-full border border-[var(--border-color)] object-cover"
                 />
               ) : (
-                <div className="flex h-10 w-10 items-center justify-center text-[var(--accent-primary)]">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border-color)] bg-[var(--bg-tertiary)]">
                   {youtubeConnected ? <Youtube className="h-5 w-5" /> : <AlertCircle className="h-5 w-5" />}
                 </div>
               )}

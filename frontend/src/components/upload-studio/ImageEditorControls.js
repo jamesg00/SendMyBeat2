@@ -37,7 +37,7 @@ const ImageEditorControls = ({
                 type="button"
                 variant={imageSettingsOpen ? "default" : "outline"}
                 onClick={() => setImageSettingsOpen((v) => !v)}
-                className={imageSettingsOpen ? "bg-amber-600 hover:bg-amber-700" : ""}
+                className={imageSettingsOpen ? "smb-toggle-on" : ""}
              >
                 {imageSettingsOpen ? "Close Editor" : "Open Image Editor"}
              </Button>
@@ -127,7 +127,7 @@ const ImageEditorControls = ({
                         return next;
                       });
                     }}
-                    className={centerLockEnabled ? "bg-amber-600 hover:bg-amber-700" : ""}
+                    className={centerLockEnabled ? "smb-toggle-on" : ""}
                  >
                     {centerLockEnabled ? "Center Locked" : "Lock Center"}
                  </Button>

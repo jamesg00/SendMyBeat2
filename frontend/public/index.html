@@ -3,9 +3,29 @@
     <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta name="theme-color" content="#00ff41" />
+        <meta name="theme-color" content="#000000" />
         <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; img-src 'self' data: blob: https:; media-src 'self' blob: data:; font-src 'self' data: https:; style-src 'self' 'unsafe-inline' https:; script-src 'self' 'unsafe-inline' https://pagead2.googlesyndication.com https://www.googletagmanager.com https://www.googletagservices.com https://ep2.adtrafficquality.google https://us.i.posthog.com https://us-assets.i.posthog.com; connect-src 'self' https: ws: wss:; frame-src 'self' https://googleads.g.doubleclick.net https://tpc.googlesyndication.com; upgrade-insecure-requests" />
         <meta name="referrer" content="strict-origin-when-cross-origin" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" />
+        <script>
+          /* Apply the saved palette before React loads so the page doesn't flash. */
+          (function () {
+            try {
+              var raw = localStorage.getItem("smb_theme");
+              var id = raw ? (JSON.parse(raw) || {}).id : "console";
+              var light = { light: 1, paper: 1 };
+              if (id === "auto") id = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "console";
+              if (!id) id = "console";
+              document.documentElement.setAttribute("data-palette", id);
+              document.documentElement.classList.toggle("dark", !light[id]);
+            } catch (e) {
+              document.documentElement.setAttribute("data-palette", "console");
+              document.documentElement.classList.add("dark");
+            }
+          })();
+        </script>
         
         <!-- Primary Meta Tags -->
         <title>SendMyBeat - AI YouTube Tag Generator for Beat Producers | Level Up Your Channel</title>

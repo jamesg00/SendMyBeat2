@@ -1638,19 +1638,19 @@ const UploadStudio = ({
                   <div className="absolute inset-0 pointer-events-none">
                      {(centerLockEnabled || Math.abs(imagePosX) < 0.03) && (
                        <div
-                          className="absolute left-1/2 top-0 h-full w-px bg-amber-400/90"
+                          className="absolute left-1/2 top-0 h-full w-px bg-[var(--c-warn)]"
                           style={{ transform: "translateX(-50%)" }}
                        />
                      )}
                      {(centerLockEnabled || Math.abs(imagePosY) < 0.03) && (
                        <div
-                          className="absolute top-1/2 left-0 w-full h-px bg-amber-400/90"
+                          className="absolute top-1/2 left-0 w-full h-px bg-[var(--c-warn)]"
                           style={{ transform: "translateY(-50%)" }}
                        />
                      )}
                      {(centerLockEnabled || (Math.abs(imagePosX) < 0.03 && Math.abs(imagePosY) < 0.03)) && (
                        <div
-                          className="absolute left-1/2 top-1/2 h-3 w-3 rounded-full border border-amber-300 bg-amber-400/30"
+                          className="absolute left-1/2 top-1/2 h-3 w-3 rounded-full border border-[var(--c-warn)] bg-[var(--c-warnsoft)]"
                           style={{ transform: "translate(-50%, -50%)" }}
                        />
                      )}

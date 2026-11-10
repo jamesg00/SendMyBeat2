@@ -48,55 +48,26 @@ const ProgressBar = ({ isActive, message = "Processing...", duration = 30000, on
   };
 
   return (
-    <div
-      className="fixed bottom-0 left-0 right-0 z-50 border-t shadow-2xl backdrop-blur-md"
-      style={{
-        background: "color-mix(in srgb, var(--card-bg) 92%, transparent)",
-        borderTopColor: "var(--accent-primary)",
-        color: "var(--text-primary)",
-      }}
-    >
-      <div className="container mx-auto px-4 py-3">
-        <div className="mb-2 flex items-start justify-between gap-3">
-          <p className="min-w-0 flex-1 text-sm font-medium" style={{ color: "var(--text-primary)" }}>
-            {message}
-          </p>
-          <div className="flex shrink-0 items-center gap-3">
-            <p
-              className="whitespace-nowrap text-right text-sm font-bold leading-none tabular-nums"
-              style={{ color: "var(--accent-primary)" }}
+    <div className="smb-progress" role="status" aria-live="polite">
+      <div className="smb-progress-inner">
+        <div className="smb-progress-row">
+          <span className="smb-progress-dot" aria-hidden="true" />
+          <p className="smb-progress-message">{message}</p>
+          <span className="smb-progress-pct">{Math.round(progress)}%</span>
+          {onCancel && (
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="smb-progress-cancel"
+              title="Cancel"
+              aria-label="Cancel"
             >
-              {Math.round(progress)}%
-            </p>
-            {onCancel && (
-              <button
-                onClick={handleCancel}
-                className="rounded-full border p-1.5 transition-transform hover:scale-110"
-                style={{
-                  backgroundColor: "color-mix(in srgb, #ef4444 12%, transparent)",
-                  borderColor: "color-mix(in srgb, #ef4444 32%, var(--border-color))",
-                }}
-                title="Cancel operation"
-              >
-                <X className="w-5 h-5" style={{color: '#ef4444'}} />
-              </button>
-            )}
-          </div>
+              <X className="h-4 w-4" />
+            </button>
+          )}
         </div>
-        <div
-          className="h-3 w-full overflow-hidden rounded-full border"
-          style={{
-            backgroundColor: "color-mix(in srgb, var(--bg-secondary) 82%, transparent)",
-            borderColor: "var(--border-color)",
-          }}
-        >
-          <div 
-            className="h-full bg-gradient-to-r from-[var(--accent-primary)] to-[var(--accent-secondary)] transition-all duration-300 ease-out"
-            style={{ 
-              width: `${progress}%`,
-              boxShadow: '0 0 20px var(--accent-primary)'
-            }}
-          />
+        <div className="smb-bar">
+          <i className="smb-bar-fill smb-bar-fill--acc" style={{ width: `${progress}%` }} />
         </div>
       </div>
     </div>
