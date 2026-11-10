@@ -171,7 +171,12 @@
 .sp-card-foot b { font-family: var(--font-mono); font-weight: 500; color: var(--c-text); }
 .sp-card-beat { all: unset; margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--c-text); cursor: pointer; }
 .sp-card-beat:hover { color: var(--c-acc); }
-@media (max-width: 860px) { .sp-hero { grid-template-columns: 1fr; } .sp-hero-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* Notices and the button sit under the copy and stats, across the whole hero. */
+.sp-hero > .smb-notice, .sp-hero > p { grid-column: 1 / -1; width: 100%; max-width: none; margin: 0; }
+.sp-hero > .smb-notice p { margin: 0; }
+/* With the sidebar open the hero gets narrow well before the window does: stack it early. */
+@media (max-width: 1240px) { .sp-hero { grid-template-columns: minmax(0, 1fr); } .sp-hero-stats { grid-template-columns: repeat(4, minmax(0, auto)); justify-content: start; } }
+@media (max-width: 560px) { .sp-hero-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 /* ---- Upload section */
 .up-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; }
@@ -234,8 +239,11 @@ label.up-step:hover, .up-step.is-active { border-color: var(--c-t3); background:
 @media (max-width: 640px) {
   .pro-hero { height: 300px; }
   .pro-hero--tall { height: 340px; }
-  .pro-seg { display: grid; width: 100%; }
-  .pro-seg button { padding: 0 8px; }
+  /* Never break a label in half: the row scrolls sideways if it runs out of room. */
+  .pro-seg { display: grid; width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .pro-seg::-webkit-scrollbar { display: none; }
+  /* !important: a site-wide button rule (App.css) forces words to break anywhere. */
+  .pro-seg button { padding: 0 10px; white-space: nowrap !important; overflow-wrap: normal !important; word-break: normal !important; min-width: max-content !important; font-size: 13px; }
   .pro-match-name { width: 96px; }
 }
 
