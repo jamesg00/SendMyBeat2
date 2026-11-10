@@ -220,7 +220,9 @@ export function setTheme(id) {
   } catch {
     // keeping the choice is best effort
   }
-  paintTheme();
+  // Cross-fade to the new colors where the browser can.
+  if (document.startViewTransition && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) document.startViewTransition(paintTheme);
+  else paintTheme();
 }
 export const useThemeId = () => useStore(themeStore);
 paintTheme();
