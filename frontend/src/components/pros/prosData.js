@@ -49,13 +49,21 @@ export function useStylePlan() {
   return { plan: data, setPlan: setData, reload };
 }
 
-/** Whether you can see Pro features: true while unknown, so the server decides. */
+/** Whether you have Pro. Locked until the server says yes (and if it can't be reached), so free
+ *  accounts never see Pro screens; `checking` is true while the answer is on its way. */
 export function useProAccess() {
-  const [status, setStatus] = useState(null);
+  const [state, setState] = useState({ status: null, checking: true });
   useEffect(() => {
-    axios.get(`${API}/subscription/status`).then((r) => setStatus(r.data), () => setStatus(null));
+    let alive = true;
+    axios.get(`${API}/subscription/status`).then(
+      (r) => alive && setState({ status: r.data, checking: false }),
+      () => alive && setState({ status: null, checking: false }),
+    );
+    return () => {
+      alive = false;
+    };
   }, []);
-  return { status, proAccess: !status || !!status.pro_access };
+  return { status: state.status, checking: state.checking, proAccess: state.status?.pro_access === true };
 }
 
 /** The plans open on the Dashboard; `reason` picks which plan it starts on. */

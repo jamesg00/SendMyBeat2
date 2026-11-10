@@ -3,8 +3,8 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, BadgeCheck, ExternalLink, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import AppShell from "@/components/AppShell";
-import { ProHero } from "@/components/pros/ProsGallery";
-import { compactNumber, fetchPro, fetchStyleMatch, plansHref, useLoad, useStylePlan } from "@/components/pros/prosData";
+import { ProHero, ProPaywall } from "@/components/pros/ProsGallery";
+import { compactNumber, fetchPro, fetchStyleMatch, plansHref, useLoad, useProAccess, useStylePlan } from "@/components/pros/prosData";
 
 // A pro producer's page: why they blew up, how their channel works, and how close you are to their
 // style (the app's pro/[id] screen).
@@ -23,6 +23,7 @@ const ProPage = () => {
   const navigate = useNavigate();
   const pro = useLoad(() => fetchPro(id), [id]);
   const { plan } = useStylePlan();
+  const { status } = useProAccess();
   const [section, setSection] = useState("story");
 
   const handleShellSelect = (tab) => {
@@ -48,6 +49,27 @@ const ProPage = () => {
 
           {!p ? (
             pro.error ? <p className="smb-danger text-sm">{pro.error}</p> : <p className="smb-t3 text-sm">Loading…</p>
+          ) : locked ? (
+            // Without Pro: who they are and why they blew up, then the way in.
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] items-start">
+              <div className="pro-card pro-card--hero">
+                <ProHero pro={p} tall>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <h2 className="pro-hero-name truncate">{p.name}</h2>
+                    {p.verified ? <BadgeCheck className="h-6 w-6 flex-shrink-0" aria-label="Verified channel" /> : null}
+                  </div>
+                </ProHero>
+              </div>
+              <div className="space-y-4">
+                {p.why ? (
+                  <section className="pro-quote">
+                    <p className="smb-eyebrow smb-acc">Why they blew up</p>
+                    <p className="pro-quote-text">{p.why}</p>
+                  </section>
+                ) : null}
+                <ProPaywall status={status} title={`See how ${p.name} did it`} lead={`Pro opens ${p.name}'s full story, their channel breakdown, and a plan to copy their moves.`} />
+              </div>
+            </div>
           ) : (
             <>
               <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] items-start">

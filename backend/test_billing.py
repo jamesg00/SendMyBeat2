@@ -185,9 +185,19 @@ async def test_checkout_returns_only_into_the_app():
 async def test_pro_breakdowns_and_copying_style_are_pro_only():
     with patch.object(server, 'get_user_subscription_status', AsyncMock(return_value={'pro_access': False})), \
          patch.object(server, '_pro_channels', AsyncMock(return_value={})), \
+         patch.object(server.pros_service, 'overrides_by_pro', AsyncMock(return_value={})), \
          patch.object(server, 'db', MagicMock(**{'__getitem__.return_value.find_one': AsyncMock(return_value=None)})):
         detail = await server.get_pro('taz-taylor', current_user={'id': 'u1'})
-        assert detail['locked'] is True and detail['patterns'] is None and detail['story']
+        assert detail['locked'] is True and detail['patterns'] is None and detail['breakdown'] is None
+        # Without Pro you only get the preview: no story, moves, uploads or channel.
+        assert detail['story'] == [] and detail['moves'] == [] and detail['latest_uploads'] == []
+        assert detail['channel_url'] is None and detail['subscribers'] is None and detail['name']
+        listing = await server.list_pros(current_user={'id': 'u1'})
+        assert listing['locked'] is True and all(p['locked'] and p['channel_url'] is None and p['match'] is None for p in listing['pros'])
+        assert (await server.get_style_plan(current_user={'id': 'u1'}))['plan'] is None
+        with pytest.raises(HTTPException) as tick:
+            await server.update_style_plan_step('rhythm-0', server.StylePlanStepUpdate(done=True), current_user={'id': 'u1'})
+        assert tick.value.status_code == 402
         with pytest.raises(HTTPException) as err:
             await server.create_style_plan('taz-taylor', server.StylePlanRequest(moves=[]), current_user={'id': 'u1'})
     assert err.value.status_code == 402 and err.value.detail['code'] == 'needs_pro'

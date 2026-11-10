@@ -143,7 +143,9 @@ async def test_only_manual_steps_can_be_ticked_by_hand():
     db = MagicMock()
     db.__getitem__ = lambda self, name: getattr(db, name)
     db.style_plans.update_one = AsyncMock(return_value=MagicMock(matched_count=0))
-    with patch.object(server, 'db', db), pytest.raises(HTTPException) as err:
+    with patch.object(server, 'db', db), \
+         patch.object(server, '_ensure_pro_access', AsyncMock()), \
+         pytest.raises(HTTPException) as err:
         await server.update_style_plan_step('rhythm-0', server.StylePlanStepUpdate(done=True), current_user={'id': 'u1'})
     assert err.value.status_code == 404
     query = db.style_plans.update_one.await_args.args[0]

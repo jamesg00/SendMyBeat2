@@ -87,6 +87,7 @@ async def test_asking_for_help_queues_a_paid_job():
     db = plan_db([{'id': 's1', 'kind': 'title_formula', 'text': 'Lead 3 titles', 'target': 3, 'move': 'x'}])
     queue = AsyncMock(return_value={'id': 'job-1', 'type': 'plan_assist', 'status': 'queued'})
     with patch.object(server, 'db', db), \
+         patch.object(server, '_ensure_pro_access', AsyncMock()), \
          patch.object(server, '_guard_heavy_feature', AsyncMock()), \
          patch.object(server, '_find_active_background_job', AsyncMock(return_value=None)), \
          patch.object(server, '_queue_paid_job', queue):
