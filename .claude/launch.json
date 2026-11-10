@@ -36,6 +36,15 @@
         "cd frontend && set MOCK_PLAN=free&& set MOCK_PORT=3101&& node dev/mock-api.js"
       ],
       "port": 3101
+    },
+    {
+      "name": "website-mock-admin",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "cd frontend && set MOCK_ADMIN=1&& set MOCK_PORT=3102&& node dev/mock-api.js"
+      ],
+      "port": 3102
     }
   ]
 }

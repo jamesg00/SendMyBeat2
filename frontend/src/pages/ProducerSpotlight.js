@@ -75,6 +75,7 @@ export default function ProducerSpotlight() {
   const [spotlightData, setSpotlightData] = useState(null);
   const [myProfile, setMyProfile] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [allQuery, setAllQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -459,23 +460,20 @@ export default function ProducerSpotlight() {
   const MiniProducerCard = ({ producer }) => (
     <button
       type="button"
-      className="text-left rounded-lg border p-3 bg-[var(--bg-secondary)] transition-colors hover:border-[var(--accent-primary)]"
+      className="sp-mini"
       onClick={() => {
         setShowAllOpen(false);
         openProducerStats(producer);
       }}
     >
-      <div className="flex items-center gap-2">
-        <div className="h-10 w-10 rounded-full overflow-hidden bg-[var(--bg-tertiary)] flex items-center justify-center">
-          <img src={producer.avatar_url || DEFAULT_AVATAR_URL} alt={producer.username} className="h-full w-full object-cover" loading="lazy" />
-        </div>
-        <div className="min-w-0">
-          <p className="font-semibold truncate">{producer.username}</p>
-          <p className="text-[11px] text-muted-foreground truncate">
-            {producer.total_days_completed || 0} days • {producer.current_streak || 0} streak
-          </p>
-        </div>
-      </div>
+      <img src={producer.avatar_url || DEFAULT_AVATAR_URL} alt="" className="sp-mini-avatar" loading="lazy" />
+      <span className="sp-mini-body">
+        <span className="sp-mini-name" title={producer.username}>{producer.username}</span>
+        <span className="sp-mini-meta">
+          <b>{producer.current_streak || 0}</b> streak · <b>{producer.total_days_completed || 0}</b>d
+        </span>
+      </span>
+      <span className="sp-mini-tier">{producer.spotlight_tier || "Bronze"}</span>
     </button>
   );
 
@@ -491,7 +489,7 @@ export default function ProducerSpotlight() {
         <span className="spotlight-hero-glow" aria-hidden="true" />
         <div className="sp-hero-copy">
           <p className="smb-eyebrow">SendMyBeat network</p>
-          <h1 className="spotlight-hero-title">Producer Spotlight</h1>
+          <h1 className="spotlight-hero-title sp-rainbow-text" data-text="Producer Spotlight">Producer Spotlight</h1>
           <p className="smb-t2">
             {!isAuthenticated
               ? "Find producers, follow their streaks and open their stats. Sign in to add your own profile."
@@ -516,7 +514,7 @@ export default function ProducerSpotlight() {
 
         <Dialog open={isEditing} onOpenChange={setIsEditing}>
           <DialogTrigger asChild>
-            <Button className="smb-btn smb-btn--pri sp-hero-cta">
+            <Button className="smb-btn smb-btn--pri sp-hero-cta sp-rainbow-btn">
               {!isAuthenticated
                 ? "Sign In to Join"
                 : youtubeConnected
@@ -718,7 +716,7 @@ export default function ProducerSpotlight() {
           <div className="smb-notice mx-auto max-w-3xl text-left">
             <Youtube className="smb-ico" aria-hidden="true" />
             <p>Connect Google to verify your channel and show fuller stats on your Spotlight card.</p>
-            <Button onClick={connectYouTube} disabled={connectingYouTube} className="smb-btn smb-btn--sec smb-btn--sm">
+            <Button onClick={connectYouTube} disabled={connectingYouTube} className="smb-btn smb-btn--sec smb-btn--sm sp-rainbow-btn">
               {connectingYouTube ? "Connecting..." : "Connect"}
             </Button>
           </div>
@@ -734,7 +732,7 @@ export default function ProducerSpotlight() {
             ["network", "Network"],
             ["pros", "Pros"],
           ].map(([id, label]) => (
-            <button key={id} type="button" role="tab" aria-selected={activeView === id} className={activeView === id ? "is-active" : ""} onClick={() => setActiveView(id)}>
+            <button key={id} type="button" role="tab" aria-selected={activeView === id} className={`${activeView === id ? "is-active" : ""} ${id === "pros" ? "sp-gold-tab" : ""}`} onClick={() => setActiveView(id)}>
               {label}
             </button>
           ))}
@@ -834,15 +832,28 @@ export default function ProducerSpotlight() {
       )}
 
       <Dialog open={showAllOpen} onOpenChange={setShowAllOpen}>
-        <DialogContent className="w-[calc(100vw-1rem)] max-w-4xl max-h-[85vh] overflow-y-auto bg-[var(--card-bg)] border border-[var(--border-color)] p-4 sm:p-6">
-          <DialogHeader>
-            <DialogTitle>All Producers</DialogTitle>
-            <DialogDescription>Click any producer card to open full stats and top content.</DialogDescription>
+        <DialogContent className="sp-all w-[calc(100vw-1rem)] sm:max-w-4xl max-h-[85vh] overflow-hidden bg-[var(--card-bg)] border border-[var(--border-color)] p-0">
+          <DialogHeader className="sp-all-head">
+            <DialogTitle>All producers · {allProducers.length}</DialogTitle>
+            <DialogDescription>Open anyone to see their stats and top beat.</DialogDescription>
+            <input
+              type="search"
+              value={allQuery}
+              onChange={(e) => setAllQuery(e.target.value)}
+              placeholder="Search producers"
+              aria-label="Search producers"
+              className="sp-all-search"
+            />
           </DialogHeader>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-            {allProducers.map((p) => (
-              <MiniProducerCard key={`mini-${p.user_id}`} producer={p} />
-            ))}
+          <div className="sp-all-grid">
+            {allProducers
+              .filter((p) => !allQuery.trim() || String(p.username || "").toLowerCase().includes(allQuery.trim().toLowerCase()))
+              .map((p) => (
+                <MiniProducerCard key={`mini-${p.user_id}`} producer={p} />
+              ))}
+            {allQuery.trim() && !allProducers.some((p) => String(p.username || "").toLowerCase().includes(allQuery.trim().toLowerCase())) ? (
+              <p className="smb-t3 text-sm">No producer called "{allQuery.trim()}".</p>
+            ) : null}
           </div>
         </DialogContent>
       </Dialog>
