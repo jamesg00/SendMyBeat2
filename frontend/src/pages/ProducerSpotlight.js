@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Trophy, Star, TrendingUp, Music, User, Globe, Youtube, Crown, BadgeCheck, Shield, Flame, Eye, BarChart3 } from "lucide-react";
 import { getAuthToken } from "@/lib/auth";
 import AppShell from "@/components/AppShell";
+import SpotlightParticles from "@/components/SpotlightParticles";
 import ProsGallery from "@/components/pros/ProsGallery";
 import { toast } from "sonner";
 
@@ -984,6 +985,7 @@ export default function ProducerSpotlight() {
   if (isAuthenticated) {
     return (
       <div className="min-h-screen dashboard-parallax-bg">
+        <SpotlightParticles />
         <AppShell
           active="spotlight"
           onSelect={handleShellSelect}
@@ -1000,6 +1002,7 @@ export default function ProducerSpotlight() {
 
   return (
     <div className="min-h-screen dashboard-parallax-bg">
+      <SpotlightParticles />
       <header className="spotlight-public-nav">
         <a href="/" className="smb-wordmark">SENDMYBEAT</a>
         <Button onClick={() => navigate("/")} className="smb-btn smb-btn--pri smb-btn--sm">

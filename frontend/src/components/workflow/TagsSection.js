@@ -308,8 +308,8 @@ const TagsSection = ({
     </div>
   );
 
-  const [showAllRuns, setShowAllRuns] = useState(false);
-  const visibleRuns = showAllRuns ? tagHistory : tagHistory.slice(0, 6);
+  // Every run is listed; the list scrolls inside the card so the card never grows.
+  const visibleRuns = tagHistory;
 
   const renderEditorCard = () => (
     <Card className="dashboard-card tags-studio-card h-full">
@@ -365,7 +365,7 @@ const TagsSection = ({
             {joiningTagsLoading && <p className="smb-t2 text-xs">Optimizing combined tags with AI…</p>}
             {tagHistory.length > 0 ? (
               <>
-                <div className="wf-runs">
+                <div className="wf-runs wf-runs--scroll" tabIndex={0} aria-label={`Recent runs, ${tagHistory.length}`}>
                   {visibleRuns.map((item) => {
                     const displayLabel = formatTagHistoryLabel(item.query);
                     const isSelected = selectedTagHistoryIds.includes(item.id);
@@ -406,11 +406,6 @@ const TagsSection = ({
                     );
                   })}
                 </div>
-                {tagHistory.length > 6 ? (
-                  <Button type="button" variant="ghost" size="sm" className="w-full text-xs" onClick={() => setShowAllRuns((v) => !v)}>
-                    {showAllRuns ? "Show fewer" : `Show all ${tagHistory.length} runs`}
-                  </Button>
-                ) : null}
               </>
             ) : (
               <div className="wf-empty">Your tag runs show up here. Type an artist above to make the first one.</div>
