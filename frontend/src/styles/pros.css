@@ -321,8 +321,6 @@ label.up-step:hover, .up-step.is-active { border-color: var(--c-t3); background:
 }
 
 /* ---- Spotlight flair: a soft rainbow glow on the title and main buttons, a gold ring on Pros */
-@property --sp-spin { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
-@keyframes sp-spin { to { --sp-spin: 360deg; } }
 @keyframes sp-hue { from { filter: blur(10px) hue-rotate(0deg); } to { filter: blur(10px) hue-rotate(360deg); } }
 @keyframes sp-shine { from { background-position: -120% 0; } to { background-position: 220% 0; } }
 
@@ -338,31 +336,52 @@ label.up-step:hover, .up-step.is-active { border-color: var(--c-t3); background:
 }
 html[data-palette="light"] .sp-rainbow-text, html[data-palette="paper"] .sp-rainbow-text { color: var(--c-text); }
 
-/* Buttons stay white; a thin spinning rainbow ring, a soft glow, and a faint colour fringe on the text. */
-.sp-rainbow-btn { position: relative; isolation: isolate; overflow: visible !important; text-shadow: -0.6px 0 rgba(255, 77, 140, 0.45), 0.6px 0 rgba(77, 195, 255, 0.45); }
-.sp-rainbow-btn::before, .sp-rainbow-btn::after {
-  content: ""; position: absolute; inset: -2px; z-index: -1; border-radius: inherit; pointer-events: none;
-  background: conic-gradient(from var(--sp-spin), #ff4d6d, #ffb84d, #f5f05a, #4dff9e, #4dc3ff, #9b6bff, #ff4dd8, #ff4d6d);
-  animation: sp-spin 4s linear infinite;
+/* Buttons: no outline. A soft rainbow glow that breathes around the button (box-shadows, so
+   it fades out evenly instead of ending in a hard box), plus a faint iridescent sheen across the
+   face like liquid glass. */
+@keyframes sp-aura {
+  0%, 100% { filter: drop-shadow(-5px 0 9px rgba(255, 77, 140, 0.45)) drop-shadow(5px 0 9px rgba(77, 195, 255, 0.45)) drop-shadow(0 4px 9px rgba(77, 255, 158, 0.3)); }
+  33% { filter: drop-shadow(-5px 0 9px rgba(155, 107, 255, 0.45)) drop-shadow(5px 0 9px rgba(77, 255, 158, 0.45)) drop-shadow(0 4px 9px rgba(255, 184, 77, 0.3)); }
+  66% { filter: drop-shadow(-5px 0 9px rgba(77, 195, 255, 0.45)) drop-shadow(5px 0 9px rgba(255, 184, 77, 0.45)) drop-shadow(0 4px 9px rgba(255, 77, 140, 0.3)); }
 }
-/* Only the ring outside the button is painted, so the button itself stays white. */
-.sp-rainbow-btn::before, .sp-rainbow-btn::after {
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+@keyframes sp-sheen { from { background-position: 0% 50%; } to { background-position: 200% 50%; } }
+button.sp-rainbow-btn.sp-rainbow-btn { position: relative; isolation: isolate; overflow: hidden !important; animation: sp-aura 6s ease-in-out infinite; transition: transform 0.2s var(--ease); }
+button.sp-rainbow-btn.sp-rainbow-btn:hover { transform: translateY(-1px); }
+.sp-rainbow-btn::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(110deg, rgba(255, 77, 140, 0.16), rgba(255, 184, 77, 0.14), rgba(77, 255, 158, 0.14), rgba(77, 195, 255, 0.16), rgba(155, 107, 255, 0.16), rgba(255, 77, 140, 0.16));
+  background-size: 200% 100%;
+  animation: sp-sheen 7s linear infinite;
 }
-.sp-rainbow-btn::before { padding: 2px; opacity: 0.9; }
-.sp-rainbow-btn::after { inset: -12px; padding: 10px; border-radius: 999px; filter: blur(8px); opacity: 0.4; transition: opacity 0.25s var(--ease); }
-.sp-rainbow-btn:hover::after { opacity: 0.55; }
-.sp-rainbow-btn:disabled::before, .sp-rainbow-btn:disabled::after { animation: none; opacity: 0.2; }
+/* Glass highlight: a soft light band across the top half. */
+.sp-rainbow-btn::after {
+  content: ""; position: absolute; inset: 0 0 50% 0; z-index: -1; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0));
+}
+.sp-rainbow-btn:disabled { animation: none; }
 
 /* Pros tab: gold ring, gold text and a slow shine; brighter when picked. */
 .pro-seg button.sp-gold-tab { position: relative; color: #f3cf6b !important; box-shadow: inset 0 0 0 1px rgba(243, 207, 107, 0.55), 0 0 14px -4px rgba(243, 190, 70, 0.55); background-image: linear-gradient(100deg, transparent 30%, rgba(255, 230, 150, 0.18) 50%, transparent 70%) !important; background-size: 200% 100% !important; background-repeat: no-repeat !important; animation: sp-shine 3.5s ease-in-out infinite; }
 .pro-seg button.sp-gold-tab:hover { box-shadow: inset 0 0 0 1px rgba(243, 207, 107, 0.85), 0 0 20px -2px rgba(243, 190, 70, 0.6); }
 .pro-seg button.sp-gold-tab.is-active { color: #1a1305 !important; background-color: #f3cf6b !important; background-image: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.45) 50%, transparent 70%), linear-gradient(135deg, #ffe39a, #e0a93a) !important; background-size: 200% 100%, 100% 100% !important; box-shadow: 0 0 0 1px rgba(255, 220, 130, 0.9), 0 0 22px -2px rgba(243, 190, 70, 0.7); }
 
+
+html[data-palette="light"] .pro-seg button.sp-gold-tab, html[data-palette="paper"] .pro-seg button.sp-gold-tab {
+  color: #8a5a00 !important;
+  background-color: rgba(240, 196, 80, 0.16) !important;
+  background-image: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.7) 50%, transparent 70%) !important;
+  box-shadow: inset 0 0 0 1px rgba(184, 128, 20, 0.55), 0 2px 10px -4px rgba(184, 128, 20, 0.45);
+}
+html[data-palette="light"] .pro-seg button.sp-gold-tab:hover, html[data-palette="paper"] .pro-seg button.sp-gold-tab:hover { box-shadow: inset 0 0 0 1px rgba(184, 128, 20, 0.8), 0 4px 14px -4px rgba(184, 128, 20, 0.5); }
+html[data-palette="light"] .pro-seg button.sp-gold-tab.is-active, html[data-palette="paper"] .pro-seg button.sp-gold-tab.is-active {
+  color: #3d2800 !important;
+  background-image: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.55) 50%, transparent 70%), linear-gradient(135deg, #ffd978, #e3a833) !important;
+  box-shadow: 0 0 0 1px rgba(184, 128, 20, 0.7), 0 4px 16px -4px rgba(214, 150, 30, 0.6);
+}
+/* The title glow is quieter on light backgrounds. */
+html[data-palette="light"] .sp-rainbow-text::after, html[data-palette="paper"] .sp-rainbow-text::after { opacity: 0.35; }
 @media (prefers-reduced-motion: reduce) {
-  .sp-rainbow-text::after, .sp-rainbow-btn::before, .sp-rainbow-btn::after, .pro-seg button.sp-gold-tab { animation: none; }
+  .sp-rainbow-text::after, .sp-rainbow-btn, .sp-rainbow-btn::before, .pro-seg button.sp-gold-tab { animation: none !important; }
 }
 
 /* ---- All producers popup */
@@ -439,3 +458,13 @@ button.adm-btn-danger.adm-btn-danger:hover { background: color-mix(in srgb, var(
 .adm-icon-btn { width: 34px; height: 34px; padding: 0 !important; justify-content: center; }
 .adm .adm-id { padding: 0 !important; height: auto !important; background: none !important; border: 0 !important; justify-content: flex-start; }
 .adm-users td:nth-child(2) { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+
+/* Recent runs: about six rows tall, the rest scrolls; a fade at the bottom hints there's more. */
+.wf-runs--scroll { max-height: 296px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--c-line) transparent; -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(180deg, #000 calc(100% - 28px), transparent); padding-bottom: 20px; }
+.wf-runs--scroll::-webkit-scrollbar { width: 6px; }
+.wf-runs--scroll::-webkit-scrollbar-thumb { border-radius: 3px; background: var(--c-line); }
+.wf-runs--scroll:focus-visible { outline: 2px solid var(--c-accline); outline-offset: 2px; }
+
+/* Spotlight particles: a fixed canvas behind the page (the shell sits above it at z-index 1). */
+.sp-particles { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+.spotlight-public-nav, .spotlight-public-main { position: relative; z-index: 1; }
