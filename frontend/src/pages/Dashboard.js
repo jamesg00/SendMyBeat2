@@ -15,6 +15,10 @@ import UpgradeModal from "@/components/UpgradeModal";
 import AdBanner from "@/components/AdBanner";
 import ProgressBar from "@/components/ProgressBar";
 import PublishWorkflow from "@/components/workflow/PublishWorkflow";
+import UploadInsights from "@/components/analytics/UploadInsights";
+import StylePlanCard from "@/components/pros/StylePlanCard";
+import { useStylePlan } from "@/components/pros/prosData";
+import { AccountLinksCard, CreditsCard, FeedbackCard, StylePlanSection, SupportCard, VerificationCard } from "@/components/profile/ProfileExtras";
 import { clearAuthToken } from "@/lib/auth";
 
 const TAG_LIMIT = 120;
@@ -170,6 +174,7 @@ const normalizeAnalyticsData = (raw) => {
     total_views: toSafeNumber(raw.total_views, 0),
     total_videos: toSafeNumber(raw.total_videos, 0),
     recent_videos: toSafeArray(raw.recent_videos).map((video) => ({
+      id: video?.id,
       title: typeof video?.title === "string" ? video.title : "Untitled",
       views: toSafeNumber(video?.views, 0),
       likes: toSafeNumber(video?.likes, 0),
@@ -179,6 +184,9 @@ const normalizeAnalyticsData = (raw) => {
     insights: {
       channel_health_score: normalizeAnalyticsText(typeof insights.channel_health_score === "string" ? insights.channel_health_score : "N/A"),
       growth_roadmap: normalizeAnalyticsText(typeof insights.growth_roadmap === "string" ? insights.growth_roadmap : ""),
+      // Per-upload reviews (index 1 = newest) and the title patterns that win and lose.
+      video_reviews: toSafeArray(insights.video_reviews).filter((r) => r && typeof r === "object"),
+      title_patterns: insights.title_patterns && typeof insights.title_patterns === "object" ? insights.title_patterns : null,
       what_works: toSafeArray(insights.what_works).map(normalizeAnalyticsText).filter(Boolean),
       critical_issues: toSafeArray(insights.critical_issues).map(normalizeAnalyticsText).filter(Boolean),
       immediate_actions: toSafeArray(insights.immediate_actions).map(normalizeAnalyticsText).filter(Boolean),
@@ -266,7 +274,9 @@ const Dashboard = ({ setIsAuthenticated }) => {
 
   // Subscription states
   const [subscriptionStatus, setSubscriptionStatus] = useState(null);
-  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  // ?plans=pro (from the Pros pages) opens the plans straight away.
+  const { plan: stylePlan, setPlan: setStylePlan } = useStylePlan();
+  const [showUpgradeModal, setShowUpgradeModal] = useState(() => new URLSearchParams(window.location.search).has("plans"));
   const [upgradingSubscription, setUpgradingSubscription] = useState(false);
   const [syncingSubscription, setSyncingSubscription] = useState(false);
   const [userLoaded, setUserLoaded] = useState(false);
@@ -520,7 +530,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
       // Already subscribed: the server switched the plan in place, no checkout page.
       if (response.data?.switched) {
         await syncSubscriptionStatus({ silent: true });
-        toast.success(`You're on ${plan === "max" ? "Pro" : "Plus"} now`);
+        toast.success(`You're on ${plan === "plus" ? "Plus" : "Pro"} now`);
         setShowUpgradeModal(false);
         setUpgradingSubscription(false);
         return;
@@ -1208,6 +1218,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
           )}
 
           <TabsContent value="workflow" className="space-y-4 sm:space-y-6 dashboard-section">
+            {stylePlan ? <StylePlanCard plan={stylePlan} onChange={setStylePlan} /> : null}
             <PublishWorkflow
               subscriptionStatus={subscriptionStatus}
               youtubeConnected={youtubeConnected}
@@ -1298,6 +1309,9 @@ const Dashboard = ({ setIsAuthenticated }) => {
           {/* Settings Tab */}
           <TabsContent value="settings" className="dashboard-section">
             <div className="smb-grid2">
+              <CreditsCard subscription={subscriptionStatus} onPlans={() => setShowUpgradeModal(true)} />
+              <VerificationCard onOpenSpotlight={() => navigate("/spotlight")} />
+              <StylePlanSection />
               <section className="smb-card">
                 <div className="smb-card-head">
                   <h2 className="smb-card-title">Plan</h2>
@@ -1359,6 +1373,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
                 </div>
                 <ThemePicker />
               </section>
+
+              <FeedbackCard />
+              <SupportCard subscription={subscriptionStatus} onFounding={() => handleUpgrade("founding", false)} />
+              <AccountLinksCard onNavigate={(path) => navigate(path)} onLogout={handleLogout} />
             </div>
           </TabsContent>
 
@@ -1447,6 +1465,9 @@ const Dashboard = ({ setIsAuthenticated }) => {
                         </div>
                       </CardContent>
                     </Card>
+
+                    {/* Upload by upload: views against your average, title patterns and reviews */}
+                    <UploadInsights data={analyticsData} />
 
                     {/* Visual Performance Snapshot */}
                     <Card className="producer-card">

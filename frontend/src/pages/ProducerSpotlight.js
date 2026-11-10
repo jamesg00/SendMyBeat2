@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Trophy, Star, TrendingUp, Music, User, Globe, Youtube, Crown, BadgeCheck, Shield, Flame, Eye, BarChart3 } from "lucide-react";
 import { getAuthToken } from "@/lib/auth";
 import AppShell from "@/components/AppShell";
+import ProsGallery from "@/components/pros/ProsGallery";
 import { toast } from "sonner";
 
 const createGlossyAvatarDataUrl = ({ rim, shell, glow, inner, highlight }) => {
@@ -87,7 +88,7 @@ export default function ProducerSpotlight() {
   const [producerStatsCache, setProducerStatsCache] = useState({});
   const [loadingProducerStats, setLoadingProducerStats] = useState(false);
   const [producerStatsOpen, setProducerStatsOpen] = useState(false);
-  const [activeView, setActiveView] = useState("trending");
+  const [activeView, setActiveView] = useState(() => (new URLSearchParams(window.location.search).get("view") === "pros" ? "pros" : "trending"));
   const [showAllOpen, setShowAllOpen] = useState(false);
   const [verificationForm, setVerificationForm] = useState({
     stage_name: "",
@@ -795,6 +796,9 @@ export default function ProducerSpotlight() {
           <Button className="border-[var(--border-color)]" variant={activeView === "network" ? "default" : "outline"} onClick={() => setActiveView("network")}>
             Network
           </Button>
+          <Button className="border-[var(--border-color)]" variant={activeView === "pros" ? "default" : "outline"} onClick={() => setActiveView("pros")}>
+            Pros
+          </Button>
         </div>
       </section>
 
@@ -811,6 +815,18 @@ export default function ProducerSpotlight() {
             ))}
           </div>
         </section>
+      )}
+
+      {activeView === "pros" && (
+        isAuthenticated ? (
+          <ProsGallery />
+        ) : (
+          <section className="smb-card">
+            <h2 className="smb-card-title">Sign in to see the Pros</h2>
+            <p className="smb-t2">See why the biggest type-beat producers blew up, read their numbers and copy their moves.</p>
+            <Button onClick={() => navigate("/")} className="smb-btn smb-btn--pri">Log in</Button>
+          </section>
+        )
       )}
 
       {activeView === "trending" && (

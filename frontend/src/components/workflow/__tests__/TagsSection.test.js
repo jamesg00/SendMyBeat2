@@ -31,7 +31,18 @@ jest.mock("@/components/ui/textarea", () => ({
   Textarea: (props) => <textarea {...props} />,
 }));
 
+// The tag detail dialog isn't under test here; a plain stand-in keeps Radix out of these tests.
+jest.mock("@/components/ui/dialog", () => ({
+  Dialog: ({ open, children }) => (open ? <div role="dialog">{children}</div> : null),
+  DialogContent: ({ children }) => <div>{children}</div>,
+  DialogDescription: ({ children }) => <p>{children}</p>,
+  DialogHeader: ({ children }) => <div>{children}</div>,
+  DialogTitle: ({ children }) => <h2>{children}</h2>,
+}));
+
 jest.mock("lucide-react", () => ({
+  ChevronDown: () => <span>ChevronDownIcon</span>,
+  ChevronUp: () => <span>ChevronUpIcon</span>,
   Copy: () => <span>CopyIcon</span>,
   Plus: () => <span>PlusIcon</span>,
   Sparkles: () => <span>SparklesIcon</span>,
@@ -106,8 +117,9 @@ describe("TagsSection", () => {
     render(<TagsSection {...baseProps} mode="results" />);
 
     expect(screen.getByText("Generated Tags")).toBeInTheDocument();
-    expect(screen.getByText("Waiting for first run")).toBeInTheDocument();
-    expect(screen.getByText("Your generated tag set will appear here after the first run.")).toBeInTheDocument();
+    // The results panel starts collapsed.
+    fireEvent.click(screen.getByText("Expand"));
+    expect(screen.getByText(/Your high-intent tag set will appear here after generation/)).toBeInTheDocument();
   });
 
   test("renders generated tags and output controls when results exist", () => {
@@ -120,8 +132,32 @@ describe("TagsSection", () => {
     );
 
     expect(screen.getByText("Generated Tags (2)")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Expand"));
     expect(screen.getByText("future type beat")).toBeInTheDocument();
     expect(screen.getByTestId("copy-tags-btn")).toBeInTheDocument();
     expect(screen.getByText("Add More Tags")).toBeInTheDocument();
+    // "future type beat" (16 + 2 quotes) + comma + "dark trap beat" (14 + 2 quotes)
+    expect(screen.getByTestId("tag-limit-meter")).toHaveTextContent("35 / 500");
+  });
+
+  test("ranks scored tags best first and opens why a tag got its score", () => {
+    const scores = {
+      "future type beat": { tag: "future type beat", score: 61, reason: "Searched often.", signals: { demand: "medium", competition: "high" } },
+      "dark trap beat": { tag: "dark trap beat", score: 88, reason: "High demand, few videos.", signals: { demand: "high", competition: "low" } },
+    };
+    render(<TagsSection {...baseProps} mode="results" generatedTags={["future type beat", "dark trap beat"]} generatedTagScores={scores} />);
+    fireEvent.click(screen.getByText("Expand"));
+    expect(screen.getByText("1 high demand")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Ranking" }));
+    const rows = screen.getByTestId("tag-ranking").querySelectorAll(".tag-rank-row");
+    expect(rows[0]).toHaveTextContent("dark trap beat");
+    expect(rows[1]).toHaveTextContent("future type beat");
+
+    fireEvent.click(rows[0]);
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveTextContent("#1 in this run");
+    expect(dialog).toHaveTextContent("Strong tag");
+    expect(dialog).toHaveTextContent("High demand, few videos.");
   });
 });

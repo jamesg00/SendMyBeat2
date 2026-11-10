@@ -41,6 +41,8 @@ jest.mock("@/components/ui/textarea", () => ({
 }));
 
 jest.mock("lucide-react", () => ({
+  ChevronDown: () => <span>ChevronDownIcon</span>,
+  ChevronUp: () => <span>ChevronUpIcon</span>,
   Copy: () => <span>CopyIcon</span>,
   Edit: () => <span>EditIcon</span>,
   Save: () => <span>SaveIcon</span>,
@@ -100,7 +102,8 @@ describe("DescriptionsSection", () => {
     render(<DescriptionsSection {...baseProps} mode="results" />);
 
     expect(screen.getByText("Saved Descriptions")).toBeInTheDocument();
-    expect(screen.getByText("Waiting for first save")).toBeInTheDocument();
+    // The results panel starts collapsed.
+    fireEvent.click(screen.getByText("Expand"));
     expect(screen.getByText("No saved descriptions yet. Your reusable versions will show up here after you save one.")).toBeInTheDocument();
   });
 
@@ -116,6 +119,7 @@ describe("DescriptionsSection", () => {
     );
 
     expect(screen.getByText("Saved Descriptions")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Expand"));
     expect(screen.getByText("Free For Profit")).toBeInTheDocument();
     expect(screen.getByText("7 words")).toBeInTheDocument();
   });

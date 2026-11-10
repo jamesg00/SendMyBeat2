@@ -28,6 +28,15 @@ jest.mock("@/components/UploadStudio", () => () => (
   <div data-testid="upload-studio">UploadStudio</div>
 ));
 
+// The tag detail dialog isn't under test here; a plain stand-in keeps Radix out of these tests.
+jest.mock("@/components/ui/dialog", () => ({
+  Dialog: ({ open, children }) => (open ? <div role="dialog">{children}</div> : null),
+  DialogContent: ({ children }) => <div>{children}</div>,
+  DialogDescription: ({ children }) => <p>{children}</p>,
+  DialogHeader: ({ children }) => <div>{children}</div>,
+  DialogTitle: ({ children }) => <h2>{children}</h2>,
+}));
+
 jest.mock("lucide-react", () => ({
   AlertCircle: () => <span>AlertCircle</span>,
   Sparkles: () => <span>Sparkles</span>,

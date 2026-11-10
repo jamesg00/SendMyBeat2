@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import "@/App.css";
 import "@/styles/console.css";
+import "@/styles/pros.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import axios from "axios";
 import LandingPage from "@/pages/LandingPage";
@@ -8,6 +9,8 @@ import Dashboard from "@/pages/Dashboard";
 import AdminCosts from "@/pages/AdminCosts";
 import AdminUsers from "@/pages/AdminUsers";
 import ProducerSpotlight from "@/pages/ProducerSpotlight";
+import ProPage from "@/pages/ProPage";
+import ProPlanPage from "@/pages/ProPlanPage";
 import YouTubeCallback from "@/pages/YouTubeCallback";
 import PrivacyPolicy from "@/pages/PrivacyPolicy";
 import TermsAndConditions from "@/pages/TermsAndConditions";
@@ -160,6 +163,8 @@ function App() {
                 )
               }
             />
+            <Route path="/pros/:id" element={isAuthenticated ? <ProPage /> : <Navigate to="/" replace />} />
+            <Route path="/pros/:id/plan" element={isAuthenticated ? <ProPlanPage /> : <Navigate to="/" replace />} />
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
             <Route path="/terms" element={<TermsAndConditions />} />
             <Route path="/about" element={<About />} />

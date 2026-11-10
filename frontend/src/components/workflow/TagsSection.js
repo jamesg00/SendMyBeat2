@@ -5,6 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ChevronDown, ChevronUp, Copy, Plus, Sparkles, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { DemandLegend, TagDetailDialog, TagLimitMeter, TagRanking, TagViewToggle } from "@/components/workflow/TagInsights";
 
 const TAG_SCORE_GREEN_MIN = 60;
 const TAG_SCORE_YELLOW_MIN = 45;
@@ -72,6 +74,30 @@ const TagsSection = ({
 }) => {
   const [resultsCollapsed, setResultsCollapsed] = useState(mode === "results");
   const hasGeneratedTags = generatedTags.length > 0;
+  // Tags as chips, or ranked best to worst; clicking a tag opens why it got its score.
+  const [tagView, setTagView] = useState("tags");
+  const [tagDetail, setTagDetail] = useState(null);
+  const scoreFor = (tag) => generatedTagScores[normalizeTagKey(tag)];
+  const hasScores = generatedTags.some((tag) => scoreFor(tag)?.score);
+  const rankOf = (tag) =>
+    generatedTags
+      .map(scoreFor)
+      .filter((entry) => entry?.score)
+      .sort((a, b) => b.score - a.score)
+      .findIndex((entry) => normalizeTagKey(entry.tag) === normalizeTagKey(tag)) + 1;
+  const copyOneTag = async (tag) => {
+    try {
+      await navigator.clipboard.writeText(tag);
+      toast.success("Tag copied");
+    } catch (error) {
+      toast.error("Could not copy the tag");
+    }
+  };
+  const removeTagByName = async (tag) => {
+    const index = generatedTags.findIndex((t) => normalizeTagKey(t) === normalizeTagKey(tag));
+    setTagDetail(null);
+    if (index >= 0) await handleRemoveGeneratedTag(index);
+  };
 
   const renderResultsPanel = ({ inline = false } = {}) => (
     <div
@@ -133,9 +159,23 @@ const TagsSection = ({
         </div>
       </div>
 
+      <TagDetailDialog detail={tagDetail} onClose={() => setTagDetail(null)} onCopy={copyOneTag} onRemove={removeTagByName} />
       {!resultsCollapsed && (
         <div className="workflow-inline-output-body">
           {hasGeneratedTags ? (
+            <div className="space-y-3 mb-3">
+              <TagLimitMeter tags={generatedTags} />
+              {hasScores ? (
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <TagViewToggle value={tagView} onChange={setTagView} />
+                  {tagView === "tags" ? <DemandLegend tags={generatedTags} scoreFor={scoreFor} /> : null}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+          {hasGeneratedTags && tagView === "ranking" && hasScores ? (
+            <TagRanking tags={generatedTags} scoreFor={scoreFor} onOpen={(entry, rank) => setTagDetail({ entry, rank })} />
+          ) : hasGeneratedTags ? (
             <div className="tag-cloud" data-testid="tags-list">
               {generatedTags.map((tag, index) => {
                 const scoreEntry = generatedTagScores[normalizeTagKey(tag)];
@@ -146,6 +186,8 @@ const TagsSection = ({
                   className="tag-item group relative"
                   data-testid={`tag-${index}`}
                   title={buildTagScoreTooltip(scoreEntry, tag)}
+                  onClick={scoreEntry?.score ? () => setTagDetail({ entry: scoreEntry, rank: rankOf(tag) }) : undefined}
+                  style={scoreEntry?.score ? { cursor: "pointer" } : undefined}
                 >
                   {scoreEntry?.score ? (
                     <span className="mr-2 inline-flex rounded-full border px-1.5 py-0.5 text-[10px] font-semibold" style={badgeStyle}>
