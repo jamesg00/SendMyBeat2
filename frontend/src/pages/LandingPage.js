@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { setAuthToken } from "@/lib/auth";
-import { useTheme } from "@/lib/ThemeContext";
+import { resolvePalette, useTheme } from "@/lib/ThemeContext";
 import "@/pages/LandingPage.css";
 
 // The page before signing in. It explains the app by letting you use small working copies of it:
@@ -274,18 +274,23 @@ function StepPreview({ id }) {
     return (
       <div className="lp-prev">
         <div className="lp-video">
-          <span className="lp-video-cover">cover.jpg</span>
+          <div className="lp-video-cover" aria-hidden="true">
+            <span>VAMP</span>
+            <small>ken carson type beat</small>
+          </div>
           <span className="lp-video-badge smb-mono">16:9 · 1080p</span>
         </div>
         <div className="lp-player">
           <button type="button" className="lp-play" onClick={() => setPlaying((p) => !p)} aria-label={playing ? "Pause the preview" : "Play the preview"}>
-            {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+            {playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
           </button>
+          <span className="smb-mono lp-time">0:42</span>
           <div className={`lp-wave ${playing ? "is-playing" : ""}`} aria-hidden="true">
-            {Array.from({ length: 36 }, (_, i) => (
-              <i key={i} style={{ height: `${30 + 60 * Math.abs(Math.sin(i * 0.9) * Math.cos(i * 0.31))}%`, animationDelay: `${(i % 9) * 0.09}s` }} />
+            {Array.from({ length: 72 }, (_, i) => (
+              <i key={i} className={i < 18 ? "is-played" : ""} style={{ height: `${22 + 70 * Math.abs(Math.sin(i * 0.7) * Math.cos(i * 0.23))}%`, animationDelay: `${(i % 11) * 0.08}s` }} />
             ))}
           </div>
+          <span className="smb-mono lp-time">2:58</span>
         </div>
         <div className="lp-prev-rows">
           <div><span>Title</span><b>ken carson type beat – “vamp”</b></div>
@@ -335,13 +340,12 @@ function HowItWorks() {
   const step = STEPS[active];
   return (
     <div className="lp-how" onMouseEnter={() => setAuto(false)}>
-      <div className="lp-how-steps" role="tablist" aria-label="How it works">
+      <div className="lp-how-steps">
         {STEPS.map((s, i) => (
           <button
             key={s.id}
             type="button"
-            role="tab"
-            aria-selected={active === i}
+            aria-pressed={active === i}
             className={`lp-how-step ${active === i ? "is-active" : ""}`}
             onClick={() => {
               setActive(i);
@@ -463,7 +467,27 @@ const LandingPage = ({ setIsAuthenticated }) => {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const { theme, setTheme, palettes } = useTheme();
+  const { theme } = useTheme();
+
+  // The landing page always uses the dark Console look, whatever theme is saved for the app.
+  // The saved theme comes back when you leave this page (after signing in, or to Spotlight).
+  useEffect(() => {
+    const root = document.documentElement;
+    const paint = (palette) => {
+      const dark = palette !== "light" && palette !== "paper";
+      root.setAttribute("data-palette", palette);
+      root.classList.toggle("dark", dark);
+      document.body.classList.toggle("dark", dark);
+      document.body.setAttribute("data-theme", dark ? "dark" : "light");
+    };
+    paint("console");
+    // The theme provider paints the saved theme right after the first render; paint over it.
+    const again = setTimeout(() => paint("console"), 0);
+    return () => {
+      clearTimeout(again);
+      paint(resolvePalette(theme));
+    };
+  }, [theme]);
   const pageRef = useReveal();
 
   const openAuth = (mode) => {
@@ -496,7 +520,16 @@ const LandingPage = ({ setIsAuthenticated }) => {
   const start = () => openAuth("register");
 
   return (
-    <div className="landing-page lp" ref={pageRef}>
+    <div
+      className="landing-page lp"
+      ref={pageRef}
+      onMouseMove={(e) => {
+        // One glow for the whole page: it follows the pointer wherever it is.
+        e.currentTarget.style.setProperty("--gx", `${e.clientX}px`);
+        e.currentTarget.style.setProperty("--gy", `${e.clientY}px`);
+      }}
+    >
+      <span className="lp-glow" aria-hidden="true" />
       <header className="lp-nav">
         <a href="/" className="smb-wordmark lp-wordmark">SENDMYBEAT</a>
         <nav className="lp-links" aria-label="Sections">
@@ -514,7 +547,7 @@ const LandingPage = ({ setIsAuthenticated }) => {
         </div>
       </header>
 
-      <section className="lp-hero" onMouseMove={followPointer}>
+      <section className="lp-hero">
         <div className="lp-hero-copy">
           <p className="smb-eyebrow">For beat producers on YouTube</p>
           <h1 className="lp-h1">
@@ -577,28 +610,6 @@ const LandingPage = ({ setIsAuthenticated }) => {
         <MatchDemo />
       </section>
 
-      <section className="lp-section" data-reveal>
-        <div className="lp-section-head">
-          <p className="smb-eyebrow">Make it yours</p>
-          <h2 className="lp-h2">Pick a look. The whole site follows.</h2>
-          <p className="smb-t2">The same 11 themes as the app. Try one now; your choice is kept after you sign in.</p>
-        </div>
-        <div className="lp-themes" role="radiogroup" aria-label="Theme">
-          {palettes.map((palette) => {
-            const [bg, fg, acc] = palette.swatch;
-            return (
-              <button key={palette.id} type="button" role="radio" aria-checked={theme === palette.id} className={`lp-theme ${theme === palette.id ? "is-active" : ""}`} onClick={() => setTheme(palette.id)}>
-                <span className="lp-theme-swatch" style={{ background: bg }} aria-hidden="true">
-                  <i style={{ background: fg }} />
-                  <i style={{ background: acc }} />
-                </span>
-                {palette.label}
-              </button>
-            );
-          })}
-        </div>
-      </section>
-
       <section className="lp-section" id="pricing" data-reveal>
         <div className="lp-section-head">
           <p className="smb-eyebrow">Pricing</p>
@@ -622,7 +633,7 @@ const LandingPage = ({ setIsAuthenticated }) => {
         </div>
       </section>
 
-      <section className="lp-final" data-reveal onMouseMove={followPointer}>
+      <section className="lp-final" data-reveal>
         <h2 className="lp-h2">Your next upload, done in minutes.</h2>
         <p className="smb-t2">Tags, description, video and upload, from one page.</p>
         <Button onClick={start} className="smb-btn smb-btn--pri smb-btn--lg">

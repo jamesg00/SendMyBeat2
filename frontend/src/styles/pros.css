@@ -287,3 +287,12 @@ label.up-step:hover, .up-step.is-active { border-color: var(--c-t3); background:
   .an-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .an-stat { padding-left: 0; border-left: 0; }
 }
+
+/* Cards are one column that can shrink, so a long title can't push content past the card's edge. */
+.smb-card { grid-template-columns: minmax(0, 1fr); }
+.smb-card > * { min-width: 0; }
+.an-summary { grid-template-columns: auto minmax(0, 1fr); }
+.smb-card-head > * { min-width: 0; }
+.smb-card-head > .smb-mono { flex-shrink: 0; white-space: nowrap; }
+.an-upload-head > span:nth-child(2) { overflow-wrap: anywhere; }
+.an-upload-head { padding: 12px 0 !important; }
