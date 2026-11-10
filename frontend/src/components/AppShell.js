@@ -1,5 +1,7 @@
-import React from "react";
-import { BarChart3, DollarSign, Layers, LogOut, Settings, Star, Users } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import axios from "axios";
+import { BarChart3, DollarSign, Layers, LogOut, Settings, Shield, Star, Users } from "lucide-react";
+import { API } from "@/App";
 
 // Signed-in layout: a sidebar on desktop, a top bar plus a floating pill tab bar on phones.
 // `active` is one of "workflow" | "analytics" | "spotlight" | "settings".
@@ -18,6 +20,27 @@ const initials = (name = "") => {
   const letters = parts.length > 1 ? parts[0][0] + parts[1][0] : clean.slice(0, 2);
   return letters.toUpperCase();
 };
+
+// Who's signed in, fetched once per page load and shared by every page's shell, so pages that
+// don't load the user themselves (Spotlight, pros, admin) still show your name and admin links.
+let mePromise = null;
+const loadMe = () => {
+  if (!mePromise) {
+    mePromise = axios.get(`${API}/auth/me`).then(
+      (r) => r.data || null,
+      () => {
+        mePromise = null;
+        return null;
+      },
+    );
+  }
+  return mePromise;
+};
+
+const ADMIN_LINKS = [
+  { id: "admin-costs", path: "/admin/costs", label: "Ops and costs", Icon: DollarSign },
+  { id: "admin-users", path: "/admin/users", label: "Users", Icon: Users },
+];
 
 export const planLabelFor = (subscription) => {
   if (!subscription) return null;
@@ -41,6 +64,23 @@ const AppShell = ({
   credits = null,
   children,
 }) => {
+  const [me, setMe] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    loadMe().then((data) => alive && setMe(data));
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const name = username || me?.username;
+  const admin = isAdmin || Boolean(me?.is_admin);
+  const openAdmin = (path) => (event) => {
+    event.preventDefault();
+    if (onAdmin) onAdmin(path);
+    else window.location.assign(path);
+  };
+  const onAdminPage = active === "admin-costs" || active === "admin-users";
+
   const select = (id) => (event) => {
     if (event) event.preventDefault();
     if (onSelect) onSelect(id);
@@ -70,17 +110,21 @@ const AppShell = ({
           ))}
         </nav>
 
-        {isAdmin ? (
+        {admin ? (
           <nav className="smb-nav smb-nav--admin" aria-label="Admin">
             <span className="smb-nav-heading">Admin</span>
-            <a href="/admin/costs" className="smb-nav-link" onClick={(e) => { if (onAdmin) { e.preventDefault(); onAdmin("/admin/costs"); } }}>
-              <DollarSign className="smb-ico" aria-hidden="true" />
-              <span>Costs</span>
-            </a>
-            <a href="/admin/users" className="smb-nav-link" onClick={(e) => { if (onAdmin) { e.preventDefault(); onAdmin("/admin/users"); } }}>
-              <Users className="smb-ico" aria-hidden="true" />
-              <span>Users</span>
-            </a>
+            {ADMIN_LINKS.map(({ id, path, label, Icon }) => (
+              <a
+                key={id}
+                href={path}
+                className={`smb-nav-link ${active === id ? "is-active" : ""}`}
+                aria-current={active === id ? "page" : undefined}
+                onClick={openAdmin(path)}
+              >
+                <Icon className="smb-ico" aria-hidden="true" />
+                <span>{label}</span>
+              </a>
+            ))}
           </nav>
         ) : null}
 
@@ -89,8 +133,8 @@ const AppShell = ({
         {credits ? <div className="smb-side-credits">{credits}</div> : null}
 
         <div className="smb-me">
-          <span className="smb-avatar" aria-hidden="true">{initials(username)}</span>
-          <span className="smb-me-name" title={username}>{username || "Producer"}</span>
+          <span className="smb-avatar" aria-hidden="true">{initials(name)}</span>
+          <span className="smb-me-name" title={name}>{name || "Producer"}</span>
           {planLabel ? <span className="smb-badge">{planLabel}</span> : null}
         </div>
         {onLogout ? (
@@ -105,6 +149,11 @@ const AppShell = ({
         <header className="smb-topbar">
           <a href="/dashboard" className="smb-wordmark" onClick={select("workflow")}>SENDMYBEAT</a>
           <div className="smb-topbar-right">
+            {admin ? (
+              <a href="/admin/costs" className={`smb-badge smb-admin-chip ${onAdminPage ? "is-active" : ""}`} onClick={openAdmin("/admin/costs")} aria-label="Admin">
+                <Shield className="h-3.5 w-3.5" aria-hidden="true" /> Admin
+              </a>
+            ) : null}
             {planLabel ? <span className="smb-badge">{planLabel}</span> : null}
             <button
               type="button"
@@ -112,7 +161,7 @@ const AppShell = ({
               onClick={select("settings")}
               aria-label="Open settings"
             >
-              {initials(username)}
+              {initials(name)}
             </button>
           </div>
         </header>

@@ -28,7 +28,22 @@ const sub = {
 }[PLAN];
 Object.assign(sub, { founding_member: false, founding_spots_left: 37, plan_version: 2 });
 
-const user = { id: "u-you", username: "jamesbeats", is_admin: false };
+// MOCK_ADMIN=1 signs you in as an admin (admin links and /admin pages).
+const user = { id: "u-you", username: "jamesbeats", is_admin: process.env.MOCK_ADMIN === "1" };
+const opsControls = {
+  overload_mode_enabled: false,
+  global_disable_new_heavy_jobs: false,
+  disabled_features: { youtube_upload: false, channel_analytics: false, thumbnail_check: false, tag_generation: false, tag_join: false, beat_analysis: true, beat_fix: false },
+};
+const adminUsers = Array.from({ length: 31 }, (_, i) => ({
+  id: `0b5f${(1000 + i).toString(16)}-7c2e-4f1a-9d3b-${(0xa1b2c3d4e5f0 + i * 7919).toString(16)}`,
+  username: ["deadat18", "prodtrustt", "sync440", "LKS", "BillyElePe", "dznbeats", "veli", "xanbeats", "luka", "milsi"][i % 10] + (i >= 10 ? String(i) : ""),
+  email: i % 3 === 0 ? null : `producer${i}@example.com`,
+  created_at: daysAgo(i * 3 + 1),
+  auth_provider: i % 2 ? "google" : "password",
+  deleted: i === 4,
+  status: i === 4 ? "disabled" : "active",
+}));
 
 const scored = (tag, score, demand, competition, record) => ({
   tag,
@@ -273,6 +288,51 @@ const startJob = (seconds, result) => {
 const routes = [
   ["POST", /^\/auth\/(login|register)$/, () => ({ access_token: "mock-token", token_type: "bearer", user })],
   ["GET", /^\/auth\/me$/, () => user],
+  ["GET", /^\/admin\/ops$/, () => (user.is_admin ? {
+    health: { status: "ok", ready: true, jobs: { queued: 3, processing: 1, failed_last_hour: 2 }, controls: opsControls },
+    recent_jobs: [
+      { id: "job-91a", type: "youtube_upload", status: "processing", stage: "uploading", progress: 64, last_heartbeat_at: daysAgo(0.0004), updated_at: daysAgo(0.0004) },
+      { id: "job-91b", type: "tags", status: "succeeded", stage: "done", progress: 100, last_heartbeat_at: daysAgo(0.01), updated_at: daysAgo(0.01) },
+      { id: "job-91c", type: "channel_analytics", status: "queued", stage: null, progress: 0, last_heartbeat_at: null, updated_at: daysAgo(0.002) },
+      { id: "job-91d", type: "plan_assist", status: "failed", stage: "drafting", progress: 55, last_heartbeat_at: daysAgo(0.04), updated_at: daysAgo(0.04) },
+      { id: "job-91e", type: "beat_analysis", status: "succeeded", stage: "done", progress: 100, last_heartbeat_at: daysAgo(0.2), updated_at: daysAgo(0.2) },
+    ],
+    jobs_by_type: [],
+  } : [403, { detail: "Admin access only" }])],
+  ["PUT", /^\/admin\/ops\/controls$/, (m, body) => {
+    if (!user.is_admin) return [403, { detail: "Admin access only" }];
+    if (typeof body.overload_mode_enabled === "boolean") opsControls.overload_mode_enabled = body.overload_mode_enabled;
+    if (typeof body.global_disable_new_heavy_jobs === "boolean") opsControls.global_disable_new_heavy_jobs = body.global_disable_new_heavy_jobs;
+    Object.assign(opsControls.disabled_features, body.disabled_features || {});
+    return { controls: opsControls };
+  }],
+  ["POST", /^\/admin\/ops\/clear-jobs$/, () => ({ cleared: 1 })],
+  ["POST", /^\/admin\/ops\/clear-job\/([^/]+)$/, () => ({ cleared: 1 })],
+  ["GET", /^\/admin\/costs$/, () => (user.is_admin ? {
+    total_estimated_cost: 14.83, hosting_cost: 12, llm_cost: 2.8312,
+    details: [
+      { _id: "tag_generation", count: 412, total_tokens_in: 820431, total_tokens_out: 120554, total_cost: 1.8463 },
+      { _id: "channel_analytics", count: 37, total_tokens_in: 210992, total_tokens_out: 40211, total_cost: 0.8241 },
+      { _id: "plan_assist", count: 22, total_tokens_in: 40210, total_tokens_out: 8022, total_cost: 0.1608 },
+    ],
+  } : [403, { detail: "Admin access only" }])],
+  ["GET", /^\/admin\/users$/, (m, body, query) => {
+    if (!user.is_admin) return [403, { detail: "Admin access only" }];
+    const q = String(query?.get?.("search") || "").toLowerCase();
+    const page = Number(query?.get?.("page") || 1);
+    const list = adminUsers.filter((u) => !q || [u.username, u.email, u.id].some((v) => String(v || "").toLowerCase().includes(q)));
+    return { users: list.slice((page - 1) * 25, page * 25), pagination: { page, page_size: 25, total: list.length, total_pages: Math.max(1, Math.ceil(list.length / 25)) } };
+  }],
+  ["POST", /^\/admin\/users\/([^/]+)\/disable$/, (m) => {
+    const u = adminUsers.find((x) => x.id === m[1]);
+    if (u) Object.assign(u, { deleted: true, status: "disabled" });
+    return { ok: true };
+  }],
+  ["DELETE", /^\/admin\/users\/([^/]+)$/, (m) => {
+    const i = adminUsers.findIndex((x) => x.id === m[1]);
+    if (i >= 0) adminUsers.splice(i, 1);
+    return { ok: true };
+  }],
   ["GET", /^\/subscription\/status$/, () => sub],
   ["POST", /^\/subscription\/sync$/, () => sub],
   [
@@ -421,7 +481,7 @@ http
     const route = routes.find(([method, pattern]) => method === req.method && pattern.test(path));
     const body = await readBody(req);
     let status = 200;
-    let payload = route ? route[2](path.match(route[1]), body) : [404, { detail: `The mock server has no ${req.method} ${path}` }];
+    let payload = route ? route[2](path.match(route[1]), body, url.searchParams) : [404, { detail: `The mock server has no ${req.method} ${path}` }];
     if (Array.isArray(payload) && typeof payload[0] === "number") [status, payload] = payload;
     res.writeHead(status, { "Content-Type": "application/json" });
     res.end(JSON.stringify(payload));

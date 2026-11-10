@@ -1,468 +1,321 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { API } from "@/App";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { ArrowLeft, RefreshCw, DollarSign, Server, Cpu, Activity, AlertTriangle, Gauge, Users } from "lucide-react";
+import AppShell from "@/components/AppShell";
+import { Activity, AlertTriangle, Cpu, DollarSign, Gauge, RefreshCw, Server } from "lucide-react";
+
+// Admin: server health, launch controls, recent jobs and this month's estimated costs.
+
+const money = (value, digits = 2) => `$${Number(value || 0).toFixed(digits)}`;
+const number = (value) => Number(value || 0).toLocaleString();
+const label = (key) => String(key || "").replace(/_/g, " ");
+
+const formatAge = (isoValue) => {
+  if (!isoValue) return "–";
+  const parsed = new Date(isoValue);
+  if (Number.isNaN(parsed.getTime())) return "–";
+  const seconds = Math.max(0, Math.floor((Date.now() - parsed.getTime()) / 1000));
+  if (seconds < 60) return `${seconds}s ago`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86400)}d ago`;
+};
+
+const errorText = (err, fallback) => {
+  const detail = err?.response?.data?.detail;
+  if (typeof detail === "string") return detail;
+  if (detail?.message) return detail.message;
+  return fallback;
+};
+
+const STATUS_PILL = { succeeded: "smb-pill--ok", failed: "smb-pill--bad", cancelled: "smb-pill--bad", processing: "smb-pill--warn", queued: "smb-pill--warn" };
+
+const Tile = ({ icon: Icon, label: name, value, hint, tone }) => (
+  <div className={`smb-card adm-tile ${tone ? `adm-tile--${tone}` : ""}`}>
+    <span className="smb-eyebrow">
+      <Icon className="h-3.5 w-3.5" aria-hidden="true" /> {name}
+    </span>
+    <b>{value}</b>
+    {hint ? <span className="smb-t3 text-xs">{hint}</span> : null}
+  </div>
+);
 
 export default function AdminCosts() {
+  const navigate = useNavigate();
   const [costs, setCosts] = useState(null);
   const [ops, setOps] = useState(null);
   const [controls, setControls] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [savingControls, setSavingControls] = useState(false);
-  const [clearingJobs, setClearingJobs] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const [error, setError] = useState(null);
 
-  const formatAge = (isoValue) => {
-    if (!isoValue) return "-";
-    const parsed = new Date(isoValue);
-    if (Number.isNaN(parsed.getTime())) return "-";
-    const diffSeconds = Math.max(0, Math.floor((Date.now() - parsed.getTime()) / 1000));
-    if (diffSeconds < 60) return `${diffSeconds}s ago`;
-    const minutes = Math.floor(diffSeconds / 60);
-    const seconds = diffSeconds % 60;
-    return `${minutes}m ${seconds.toString().padStart(2, "0")}s ago`;
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const [costsResponse, opsResponse] = await Promise.all([axios.get(`${API}/admin/costs`), axios.get(`${API}/admin/ops`)]);
+      setCosts(costsResponse.data);
+      setOps(opsResponse.data);
+      setControls(opsResponse?.data?.health?.controls || null);
+      setError(null);
+    } catch (err) {
+      setError(err?.response?.status === 403 ? "This page is only for admin accounts." : errorText(err, "Couldn't load the admin data."));
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
     fetchData();
   }, []);
 
-  const extractErrorMessage = (err, fallback) => {
-    const detail = err?.response?.data?.detail;
-    if (typeof detail === "string") return detail;
-    if (detail?.message) return detail.message;
-    return fallback;
-  };
-
-  const fetchData = async () => {
-    setLoading(true);
+  const updateControls = async (body, fallback) => {
+    setSaving(true);
     try {
-      const [costsResponse, opsResponse] = await Promise.all([
-        axios.get(`${API}/admin/costs`),
-        axios.get(`${API}/admin/ops`),
-      ]);
-      setCosts(costsResponse.data);
-      setOps(opsResponse.data);
-      setControls(opsResponse?.data?.health?.controls || null);
-      setError(null);
-    } catch (err) {
-      console.error("Failed to fetch costs:", err);
-      if (err?.response?.status === 403) {
-        setError("Unauthorized. This page is only available to admin accounts.");
-      } else {
-        setError("Failed to load cost data. Ensure you are logged in.");
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleToggleFeature = async (featureKey, nextValue) => {
-    if (!controls) return;
-    setSavingControls(true);
-    try {
-      const response = await axios.put(`${API}/admin/ops/controls`, {
-        disabled_features: {
-          [featureKey]: nextValue,
-        },
-      });
+      const response = await axios.put(`${API}/admin/ops/controls`, body);
       setControls(response?.data?.controls || controls);
       await fetchData();
     } catch (err) {
-      setError(extractErrorMessage(err, "Failed to update feature controls."));
+      setError(errorText(err, fallback));
     } finally {
-      setSavingControls(false);
+      setSaving(false);
     }
   };
 
-  const handleSetOverloadMode = async (enabled) => {
-    setSavingControls(true);
+  const clearUploads = async () => {
+    if (!window.confirm("Clear all active YouTube upload jobs? Use this only if an upload is stuck.")) return;
+    setClearing(true);
     try {
-      const response = await axios.put(`${API}/admin/ops/controls`, {
-        overload_mode_enabled: enabled,
-      });
-      setControls(response?.data?.controls || controls);
+      await axios.post(`${API}/admin/ops/clear-jobs`, { job_type: "youtube_upload", statuses: ["queued", "processing"] });
       await fetchData();
     } catch (err) {
-      setError(extractErrorMessage(err, "Failed to update overload mode."));
+      setError(errorText(err, "Couldn't clear the upload jobs."));
     } finally {
-      setSavingControls(false);
+      setClearing(false);
     }
   };
 
-  const handleGlobalHeavyJobs = async (enabled) => {
-    setSavingControls(true);
-    try {
-      const response = await axios.put(`${API}/admin/ops/controls`, {
-        global_disable_new_heavy_jobs: enabled,
-      });
-      setControls(response?.data?.controls || controls);
-      await fetchData();
-    } catch (err) {
-      setError(extractErrorMessage(err, "Failed to update heavy-job controls."));
-    } finally {
-      setSavingControls(false);
-    }
-  };
-
-  const handleClearActiveUploadJobs = async () => {
-    const confirmed = window.confirm(
-      "Clear all active YouTube upload jobs? Use this only if an upload is stuck."
-    );
-    if (!confirmed) return;
-    setClearingJobs(true);
-    try {
-      await axios.post(`${API}/admin/ops/clear-jobs`, {
-        job_type: "youtube_upload",
-        statuses: ["queued", "processing"],
-      });
-      await fetchData();
-      setError(null);
-    } catch (err) {
-      setError(extractErrorMessage(err, "Failed to clear active upload jobs."));
-    } finally {
-      setClearingJobs(false);
-    }
-  };
-
-  const handleClearSingleJob = async (jobId) => {
-    const confirmed = window.confirm(
-      `Clear job ${jobId}? This will mark it as failed so you can retry.`
-    );
-    if (!confirmed) return;
-    setClearingJobs(true);
+  const clearJob = async (jobId) => {
+    if (!window.confirm(`Clear job ${jobId}? It will be marked failed so it can be retried.`)) return;
+    setClearing(true);
     try {
       await axios.post(`${API}/admin/ops/clear-job/${jobId}`);
       await fetchData();
-      setError(null);
     } catch (err) {
-      setError(extractErrorMessage(err, "Failed to clear the selected job."));
+      setError(errorText(err, "Couldn't clear that job."));
     } finally {
-      setClearingJobs(false);
+      setClearing(false);
     }
   };
 
-  if (loading && !costs) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-slate-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 p-4">
-        <div className="bg-white p-8 rounded-lg shadow-lg text-center max-w-md w-full border-l-4 border-red-500">
-          <h2 className="text-xl font-bold text-red-600 mb-2">Error Loading Costs</h2>
-          <p className="text-gray-600 mb-6">{error}</p>
-          <div className="flex gap-4 justify-center">
-            <Button onClick={() => window.location.href = '/dashboard'} variant="outline">
-              Back to Dashboard
-            </Button>
-            <Button onClick={fetchData}>
-              Retry
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const handleShellSelect = (tab) => {
+    if (tab === "spotlight") navigate("/spotlight");
+    else navigate(`/dashboard?tab=${tab}`);
+  };
 
   const health = ops?.health || {};
-  const healthControls = controls || health?.controls || {};
-  const disabledFeatures = healthControls?.disabled_features || {};
+  const ctl = controls || health.controls || {};
+  const features = Object.entries(ctl.disabled_features || {});
+  const jobs = ops?.recent_jobs || [];
+  const details = costs?.details || [];
+  const totals = details.reduce(
+    (acc, item) => ({ count: acc.count + (item.count || 0), tin: acc.tin + (item.total_tokens_in || 0), tout: acc.tout + (item.total_tokens_out || 0) }),
+    { count: 0, tin: 0, tout: 0 },
+  );
+  const healthy = String(health.status || "").toLowerCase() === "ok" || health.ready;
 
   return (
-    <div className="min-h-screen bg-slate-50 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-6xl mx-auto space-y-8">
-
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-slate-900">Backend Ops + Cost Tracker</h1>
-            <p className="text-slate-500 mt-1">Launch hardening controls, queue visibility, and monthly cost estimates.</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <Button variant="outline" onClick={() => window.location.href = '/admin/users'} className="gap-2">
-              <Users className="h-4 w-4" />
-              Users
-            </Button>
-            <Button variant="outline" onClick={() => window.location.href = '/dashboard'} className="gap-2">
-              <ArrowLeft className="h-4 w-4" />
-              Back
-            </Button>
-            <Button onClick={fetchData} className="gap-2" disabled={loading}>
-              <RefreshCw className="h-4 w-4" />
-              Refresh
-            </Button>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <Card className="border-l-4 border-emerald-500 shadow-md">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-slate-500 uppercase tracking-wide">Health</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-2">
-                <Activity className="h-8 w-8 text-emerald-500" />
-                <span className="text-2xl font-bold text-slate-900">{health?.status || "unknown"}</span>
-              </div>
-              <p className="text-xs text-slate-400 mt-2">Ready: {health?.ready ? "yes" : "no"}</p>
-            </CardContent>
-          </Card>
-
-          <Card className="border-l-4 border-amber-500 shadow-md">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-slate-500 uppercase tracking-wide">Queued Jobs</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-2">
-                <Gauge className="h-8 w-8 text-amber-500" />
-                <span className="text-4xl font-bold text-slate-900">{health?.jobs?.queued ?? 0}</span>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-l-4 border-blue-600 shadow-md">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-slate-500 uppercase tracking-wide">Processing Jobs</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-2">
-                <Server className="h-8 w-8 text-blue-600" />
-                <span className="text-4xl font-bold text-slate-900">{health?.jobs?.processing ?? 0}</span>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-l-4 border-red-500 shadow-md">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-slate-500 uppercase tracking-wide">Failed Last Hour</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="h-8 w-8 text-red-500" />
-                <span className="text-4xl font-bold text-slate-900">{health?.jobs?.failed_last_hour ?? 0}</span>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        <Card className="shadow-md">
-          <CardHeader className="bg-white border-b border-slate-100">
-            <CardTitle>Launch Controls</CardTitle>
-            <CardDescription>Use these when promo traffic starts stressing the worker queue.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6 pt-6">
-            <div className="flex flex-wrap gap-3">
-              <Button onClick={() => handleSetOverloadMode(!healthControls?.overload_mode_enabled)} disabled={savingControls} variant={healthControls?.overload_mode_enabled ? "destructive" : "default"}>
-                {healthControls?.overload_mode_enabled ? "Disable Overload Mode" : "Enable Overload Mode"}
-              </Button>
-              <Button onClick={() => handleGlobalHeavyJobs(!healthControls?.global_disable_new_heavy_jobs)} disabled={savingControls} variant="outline">
-                {healthControls?.global_disable_new_heavy_jobs ? "Allow New Heavy Jobs" : "Pause New Heavy Jobs"}
-              </Button>
-              <Button onClick={handleClearActiveUploadJobs} disabled={clearingJobs} variant="destructive">
-                {clearingJobs ? "Clearing Upload Jobs..." : "Clear Active Upload Jobs"}
-              </Button>
+    <div className="min-h-screen dashboard-parallax-bg">
+      <AppShell
+        active="admin-costs"
+        onSelect={handleShellSelect}
+        title="Ops and costs"
+        crumb="Admin · Server health, launch controls and spend"
+        isAdmin
+        onAdmin={(path) => navigate(path)}
+        actions={
+          <button type="button" className="smb-btn smb-btn--sec smb-btn--sm" onClick={fetchData} disabled={loading}>
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Refresh
+          </button>
+        }
+      >
+        <div className="adm">
+          {error ? (
+            <div className="smb-card adm-error" role="alert">
+              <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+              <span className="flex-1">{error}</span>
+              <button type="button" className="smb-btn smb-btn--sec smb-btn--sm" onClick={fetchData}>Try again</button>
             </div>
+          ) : null}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {Object.entries(disabledFeatures).map(([featureKey, disabled]) => (
-                <div key={featureKey} className="flex items-center justify-between rounded-lg border border-slate-200 px-4 py-3">
-                  <div>
-                    <p className="font-medium text-slate-900">{featureKey.replace(/_/g, " ")}</p>
-                    <p className="text-xs text-slate-500">{disabled ? "Temporarily disabled" : "Available"}</p>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant={disabled ? "destructive" : "outline"}
-                    disabled={savingControls}
-                    onClick={() => handleToggleFeature(featureKey, !disabled)}
-                  >
-                    {disabled ? "Enable" : "Disable"}
-                  </Button>
+          {loading && !ops && !costs ? <p className="smb-t3 text-sm">Loading…</p> : null}
+
+          {ops || costs ? (
+            <>
+              <div className="adm-tiles">
+                <Tile icon={Activity} label="Health" value={health.status || "unknown"} hint={health.ready ? "Ready for traffic" : "Not ready"} tone={healthy ? "ok" : "bad"} />
+                <Tile icon={Gauge} label="Queued" value={number(health.jobs?.queued)} hint="jobs waiting" tone={(health.jobs?.queued || 0) > 20 ? "warn" : null} />
+                <Tile icon={Server} label="Processing" value={number(health.jobs?.processing)} hint="jobs running now" />
+                <Tile icon={AlertTriangle} label="Failed" value={number(health.jobs?.failed_last_hour)} hint="in the last hour" tone={(health.jobs?.failed_last_hour || 0) > 0 ? "bad" : null} />
+              </div>
+
+              <section className="smb-card">
+                <div className="smb-card-head">
+                  <h2 className="smb-card-title">Launch controls</h2>
+                  <span className="smb-mono smb-t3 text-xs">for traffic spikes</span>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+                <div className="adm-switches">
+                  <div className="adm-switch">
+                    <div className="min-w-0">
+                      <b>Overload mode</b>
+                      <span className="smb-t3 text-xs">Slows new work down so the queue can catch up.</span>
+                    </div>
+                    <button type="button" role="switch" aria-checked={!!ctl.overload_mode_enabled} disabled={saving} className={`adm-toggle ${ctl.overload_mode_enabled ? "is-on is-warn" : ""}`} onClick={() => updateControls({ overload_mode_enabled: !ctl.overload_mode_enabled }, "Couldn't change overload mode.")}>
+                      <i />
+                    </button>
+                  </div>
+                  <div className="adm-switch">
+                    <div className="min-w-0">
+                      <b>Pause new heavy jobs</b>
+                      <span className="smb-t3 text-xs">Running jobs finish; new uploads and AI jobs wait.</span>
+                    </div>
+                    <button type="button" role="switch" aria-checked={!!ctl.global_disable_new_heavy_jobs} disabled={saving} className={`adm-toggle ${ctl.global_disable_new_heavy_jobs ? "is-on is-warn" : ""}`} onClick={() => updateControls({ global_disable_new_heavy_jobs: !ctl.global_disable_new_heavy_jobs }, "Couldn't change heavy-job controls.")}>
+                      <i />
+                    </button>
+                  </div>
+                </div>
 
-        <Card className="shadow-md overflow-hidden">
-          <CardHeader className="bg-white border-b border-slate-100">
-            <CardTitle>Recent Jobs</CardTitle>
-            <CardDescription>Most recent background job activity.</CardDescription>
-          </CardHeader>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Type</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Stage</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Progress</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Heartbeat</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Updated</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Action</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-slate-200">
-                {(ops?.recent_jobs || []).map((job) => (
-                  <tr key={job.id}>
-                    <td className="px-4 py-3 text-sm text-slate-900">{job.type}</td>
-                    <td className="px-4 py-3 text-sm text-slate-600">{job.status}</td>
-                    <td className="px-4 py-3 text-sm text-slate-600">{job.stage || "-"}</td>
-                    <td className="px-4 py-3 text-sm text-slate-600 text-right">{job.progress}%</td>
-                    <td className="px-4 py-3 text-sm text-slate-600">{formatAge(job.last_heartbeat_at)}</td>
-                    <td className="px-4 py-3 text-sm text-slate-600">{job.updated_at || "-"}</td>
-                    <td className="px-4 py-3 text-right">
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        disabled={clearingJobs}
-                        onClick={() => handleClearSingleJob(job.id)}
-                      >
-                        Clear
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+                {features.length ? (
+                  <>
+                    <p className="smb-eyebrow">Features</p>
+                    <div className="adm-features">
+                      {features.map(([key, disabled]) => (
+                        <div key={key} className="adm-switch">
+                          <div className="min-w-0">
+                            <b className="capitalize">{label(key)}</b>
+                            <span className={`text-xs ${disabled ? "smb-danger" : "smb-t3"}`}>{disabled ? "Turned off for everyone" : "On"}</span>
+                          </div>
+                          <button type="button" role="switch" aria-checked={!disabled} aria-label={`${label(key)} on`} disabled={saving} className={`adm-toggle ${!disabled ? "is-on" : ""}`} onClick={() => updateControls({ disabled_features: { [key]: !disabled } }, "Couldn't change that feature.")}>
+                            <i />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : null}
 
-        {/* Existing cost UI */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card className="border-l-4 border-blue-600 shadow-md">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-slate-500 uppercase tracking-wide">
-                Total Estimated Cost
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-2">
-                <DollarSign className="h-8 w-8 text-blue-600" />
-                <span className="text-4xl font-bold text-slate-900">${costs?.total_estimated_cost.toFixed(2)}</span>
-              </div>
-              <p className="text-xs text-slate-400 mt-2">Hosting + AI Usage</p>
-            </CardContent>
-          </Card>
+                <div className="adm-danger">
+                  <div className="min-w-0">
+                    <b>Stuck uploads</b>
+                    <span className="smb-t3 text-xs">Clears every queued and processing YouTube upload.</span>
+                  </div>
+                  <button type="button" className="smb-btn smb-btn--sm adm-btn-danger" onClick={clearUploads} disabled={clearing}>
+                    {clearing ? "Clearing…" : "Clear active uploads"}
+                  </button>
+                </div>
+              </section>
 
-          <Card className="border-l-4 border-emerald-500 shadow-md">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-slate-500 uppercase tracking-wide">
-                Hosting (Fixed)
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-2">
-                <Server className="h-8 w-8 text-emerald-500" />
-                <span className="text-4xl font-bold text-slate-900">${costs?.hosting_cost.toFixed(2)}</span>
-              </div>
-              <p className="text-xs text-slate-400 mt-2">Amazon Lightsail Instance</p>
-            </CardContent>
-          </Card>
-
-          <Card className="border-l-4 border-purple-500 shadow-md">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-slate-500 uppercase tracking-wide">
-                AI Usage (Variable)
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-2">
-                <Cpu className="h-8 w-8 text-purple-500" />
-                <span className="text-4xl font-bold text-slate-900">${costs?.llm_cost.toFixed(4)}</span>
-              </div>
-              <p className="text-xs text-slate-400 mt-2">Grok / LLM Token Usage</p>
-            </CardContent>
-          </Card>
-        </div>
-
-        <Card className="shadow-md overflow-hidden">
-          <CardHeader className="bg-white border-b border-slate-100">
-            <CardTitle>Usage Breakdown</CardTitle>
-            <CardDescription>Detailed token usage by operation type</CardDescription>
-          </CardHeader>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Operation Type</th>
-                  <th className="px-6 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Requests</th>
-                  <th className="px-6 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Tokens In</th>
-                  <th className="px-6 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Tokens Out</th>
-                  <th className="px-6 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Est. Cost</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-slate-200">
-                {costs?.details.length > 0 ? (
-                  costs.details.map((item, index) => (
-                    <tr key={index} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900 capitalize">
-                        {item._id.replace(/_/g, ' ')}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 text-right font-mono">
-                        {item.count.toLocaleString()}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 text-right font-mono">
-                        {item.total_tokens_in.toLocaleString()}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 text-right font-mono">
-                        {item.total_tokens_out.toLocaleString()}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-slate-900 text-right font-mono">
-                        ${item.total_cost.toFixed(5)}
-                      </td>
-                    </tr>
-                  ))
+              <section className="smb-card">
+                <div className="smb-card-head">
+                  <h2 className="smb-card-title">Recent jobs</h2>
+                  <span className="smb-mono smb-t3 text-xs">{jobs.length} shown</span>
+                </div>
+                {jobs.length ? (
+                  <div className="adm-table-wrap">
+                    <table className="adm-table">
+                      <thead>
+                        <tr>
+                          <th>Type</th>
+                          <th>Status</th>
+                          <th>Stage</th>
+                          <th className="is-num">Progress</th>
+                          <th>Heartbeat</th>
+                          <th>Updated</th>
+                          <th aria-label="Actions" />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {jobs.map((job) => (
+                          <tr key={job.id}>
+                            <td className="capitalize">{label(job.type)}</td>
+                            <td><span className={`smb-pill ${STATUS_PILL[job.status] || ""}`}>{job.status}</span></td>
+                            <td className="smb-t2">{job.stage || "–"}</td>
+                            <td className="is-num">
+                              <span className="adm-progress"><i style={{ width: `${Math.max(0, Math.min(100, job.progress || 0))}%` }} /></span>
+                              <span className="smb-mono">{job.progress ?? 0}%</span>
+                            </td>
+                            <td className="smb-mono smb-t2">{formatAge(job.last_heartbeat_at)}</td>
+                            <td className="smb-mono smb-t2">{formatAge(job.updated_at)}</td>
+                            <td className="is-num">
+                              <button type="button" className="smb-btn smb-btn--sec smb-btn--sm" disabled={clearing} onClick={() => clearJob(job.id)}>Clear</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 ) : (
-                  <tr>
-                    <td colSpan="5" className="px-6 py-12 text-center text-slate-500">
-                      <p className="text-lg font-medium">No usage recorded yet this month.</p>
-                      <p className="text-sm mt-1">Start using AI features to see data here.</p>
-                    </td>
-                  </tr>
+                  <p className="smb-t3 text-sm">No recent jobs.</p>
                 )}
-              </tbody>
-              <tfoot className="bg-slate-50 font-semibold text-slate-900">
-                <tr>
-                  <td className="px-6 py-3">Total</td>
-                  <td className="px-6 py-3 text-right font-mono">
-                    {costs?.details.reduce((acc, item) => acc + item.count, 0).toLocaleString()}
-                  </td>
-                  <td className="px-6 py-3 text-right font-mono">
-                    {costs?.details.reduce((acc, item) => acc + item.total_tokens_in, 0).toLocaleString()}
-                  </td>
-                  <td className="px-6 py-3 text-right font-mono">
-                    {costs?.details.reduce((acc, item) => acc + item.total_tokens_out, 0).toLocaleString()}
-                  </td>
-                  <td className="px-6 py-3 text-right font-mono">
-                    ${costs?.llm_cost.toFixed(4)}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </Card>
+              </section>
 
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800 flex items-start gap-3">
-          <div className="bg-blue-100 p-2 rounded-full">
-            <DollarSign className="h-4 w-4 text-blue-600" />
-          </div>
-          <div>
-            <p className="font-semibold">About Cost Tracking</p>
-            <p className="mt-1">
-              Hosting costs are fixed based on your Amazon Lightsail plan (default $12.00).
-              AI costs are estimated based on token usage with Grok-2 pricing ($2/M input, $10/M output).
-              Actual billing from xAI and AWS may vary slightly due to taxes and exchange rates.
-            </p>
-          </div>
+              <div className="adm-tiles adm-tiles--3">
+                <Tile icon={DollarSign} label="This month" value={money(costs?.total_estimated_cost)} hint="hosting + AI, estimated" />
+                <Tile icon={Server} label="Hosting" value={money(costs?.hosting_cost)} hint="fixed, Lightsail" />
+                <Tile icon={Cpu} label="AI usage" value={money(costs?.llm_cost, 4)} hint="token spend so far" />
+              </div>
+
+              <section className="smb-card">
+                <div className="smb-card-head">
+                  <h2 className="smb-card-title">AI usage by feature</h2>
+                  <span className="smb-mono smb-t3 text-xs">this month</span>
+                </div>
+                {details.length ? (
+                  <div className="adm-table-wrap">
+                    <table className="adm-table">
+                      <thead>
+                        <tr>
+                          <th>Feature</th>
+                          <th className="is-num">Requests</th>
+                          <th className="is-num">Tokens in</th>
+                          <th className="is-num">Tokens out</th>
+                          <th className="is-num">Est. cost</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {details.map((item, index) => (
+                          <tr key={item._id || index}>
+                            <td className="capitalize">{label(item._id)}</td>
+                            <td className="is-num smb-mono">{number(item.count)}</td>
+                            <td className="is-num smb-mono">{number(item.total_tokens_in)}</td>
+                            <td className="is-num smb-mono">{number(item.total_tokens_out)}</td>
+                            <td className="is-num smb-mono">{money(item.total_cost, 4)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr>
+                          <td>Total</td>
+                          <td className="is-num smb-mono">{number(totals.count)}</td>
+                          <td className="is-num smb-mono">{number(totals.tin)}</td>
+                          <td className="is-num smb-mono">{number(totals.tout)}</td>
+                          <td className="is-num smb-mono">{money(costs?.llm_cost, 4)}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="smb-t3 text-sm">No AI usage recorded yet this month.</p>
+                )}
+                <p className="smb-t3 text-xs">
+                  Hosting is the fixed Lightsail plan. AI cost is estimated from token counts; the xAI and AWS bills can differ slightly (taxes, exchange rates).
+                </p>
+              </section>
+            </>
+          ) : null}
         </div>
-      </div>
+      </AppShell>
     </div>
   );
 }
