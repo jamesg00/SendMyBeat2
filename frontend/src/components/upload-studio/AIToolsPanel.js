@@ -22,7 +22,7 @@ const AIToolsPanel = ({
   });
 
   return (
-    <Card className="border-l-4 border-l-emerald-500 shadow-sm">
+    <Card className="shadow-none">
       <CardHeader className="pb-3 flex flex-row items-center justify-between">
         <CardTitle className="text-base font-semibold flex items-center gap-2">
           <Wand2 className="h-4 w-4" /> AI Tools

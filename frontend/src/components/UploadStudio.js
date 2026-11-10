@@ -50,7 +50,10 @@ const UploadStudio = ({
   API,
   onUpgrade,
   onDisconnectYouTube,
-  onConnectYouTube
+  onConnectYouTube,
+  // The tag run and saved description picked on Workflow, selected when the studio opens.
+  initialTagsId,
+  initialDescriptionId
 }) => {
   // --- State ---
   const [studioOpen, setStudioOpen] = useState(false);
@@ -80,6 +83,12 @@ const UploadStudio = ({
   const [beatMetaPromptShown, setBeatMetaPromptShown] = useState(false);
   const [selectedTagsId, setSelectedTagsId] = useState("");
   const [privacyStatus, setPrivacyStatus] = useState("public");
+  useEffect(() => {
+    if (initialTagsId) setSelectedTagsId(initialTagsId);
+  }, [initialTagsId]);
+  useEffect(() => {
+    if (initialDescriptionId) setSelectedDescriptionId(initialDescriptionId);
+  }, [initialDescriptionId]);
 
   // AI Tools State
   const [beatAnalysis, setBeatAnalysis] = useState(null);
@@ -1533,18 +1542,17 @@ const UploadStudio = ({
 
   // --- STUDIO OVERLAY (SPLIT VIEW) ---
   return (
-    <div className={`fixed inset-0 z-50 bg-background/95 flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-300`}>
+    <div className={`fixed inset-0 z-50 bg-background flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-300`}>
       {audioPreviewUrl && <audio ref={audioPlayerRef} src={audioPreviewUrl} preload="metadata" />}
 
       {/* Header */}
       <div className="flex-none h-14 border-b bg-background px-4 flex items-center justify-between z-50">
          <div className="flex items-center gap-2">
-            <span className="font-bold text-lg gradient-text">Upload Studio</span>
-            <span className="text-xs px-2 py-0.5 text-muted-foreground hidden sm:inline-block">LIVE</span>
+            <span className="font-display text-lg">Upload Studio</span>
          </div>
          <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={closeStudio}>
-               Exit Upload Studio
+               Close studio
             </Button>
             <Button variant="ghost" size="icon" onClick={closeStudio}>
                <X className="h-5 w-5" />

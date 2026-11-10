@@ -68,17 +68,17 @@ const LayoutSettings = ({
           {selectedFpsOption.description}
         </p>
         {isAnimatedVisual && String(videoRenderFps) === "2" ? (
-          <p className="text-xs text-amber-600 dark:text-amber-400">
+          <p className="text-xs text-[var(--warn)]">
             GIF or animated artwork at 2 fps will look choppy. Try 30 fps for smoother motion.
           </p>
         ) : null}
         {visualizerEnabled ? (
-          <p className="text-xs text-green-600 dark:text-green-400">
+          <p className="text-xs text-[var(--acc)]">
             The visualizer will be recorded and baked into your YouTube video. Use 30 or 60 fps for smooth motion.
           </p>
         ) : null}
         {!visualizerEnabled && !isAnimatedVisual && ["30", "60"].includes(String(videoRenderFps)) ? (
-          <p className="text-xs text-amber-600 dark:text-amber-400">
+          <p className="text-xs text-[var(--warn)]">
             Static cover art is encoded at 2 fps for speed (looks the same on YouTube). Use 30/60 fps for GIFs or video loops.
           </p>
         ) : null}
