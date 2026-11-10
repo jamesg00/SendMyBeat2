@@ -236,7 +236,12 @@ const analytics = {
     ],
     what_works: ["Your artist-first titles get 2.4× the views of the rest.", "Uploading every other day keeps you in recommendations."],
     critical_issues: ["3 of your last 10 titles have no artist name.", "Your descriptions put the store link below the fold."],
-    immediate_actions: ["Rename “night drive”, “beat 47” and “untitled 3” with the titles suggested here."],
+    immediate_actions: ["Rename “night drive”, “beat 47” and “untitled 3” with the titles suggested here.", "Use two artists in every title this week.", "Move your store link to the first line of the description."],
+    growth_roadmap: "Reach 2,000 average views by naming an artist in every title. Track weekly views per artist tag.",
+    seo_optimization: ["Front-load two artist names.", "Always include your producer tag."],
+    content_strategy: ["Make one collab-style beat a week.", "Upload three times a week."],
+    discoverability_tactics: ["Target the tags your best upload ranks for.", "Test “free” in the title."],
+    internet_money_lessons: ["Artist names beat mood words."],
   },
 };
 
