@@ -293,8 +293,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [joiningTagsProgress, setJoiningTagsProgress] = useState(0);
   const joinProgressIntervalRef = useRef(null);
 
-  const analyticsPlan = subscriptionStatus?.plan || "free";
-  const hasPaidAnalyticsAccess = ["plus", "max"].includes(analyticsPlan);
+  // Channel analytics is a Pro feature (the server checks pro_access too).
+  const hasPaidAnalyticsAccess = subscriptionStatus?.pro_access === true;
   const isAdmin = Boolean(user?.is_admin);
   const canViewTagDebug = isAdmin;
   const visibleTabs = DASHBOARD_TABS;
@@ -1349,7 +1349,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                 <CardDescription>
                   {hasPaidAnalyticsAccess
                     ? "Get AI-powered insights on your channel performance (uses 1 AI credit)"
-                    : "Channel analytics is available on paid plans."}
+                    : "Channel analytics is part of Pro."}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -1357,7 +1357,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                   <Alert>
                     <AlertCircle className="h-4 w-4" />
                     <AlertDescription>
-                      Channel analytics is a paid feature. Upgrade to Plus or Pro to unlock channel analysis.
+                      Channel analytics is part of Pro ($10/mo): your channel health, upload-by-upload reviews and what to do next.
                     </AlertDescription>
                   </Alert>
                 )}
@@ -1384,7 +1384,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                       className="w-full btn-modern"
                     >
                       <Sparkles className="mr-2 h-5 w-5" />
-                      Upgrade For Channel Analytics
+                      Get Pro for channel analytics
                     </Button>
                   )}
 

@@ -296,3 +296,18 @@ label.up-step:hover, .up-step.is-active { border-color: var(--c-t3); background:
 .smb-card-head > .smb-mono { flex-shrink: 0; white-space: nowrap; }
 .an-upload-head > span:nth-child(2) { overflow-wrap: anywhere; }
 .an-upload-head { padding: 12px 0 !important; }
+
+/* ---- Pro paywall (free accounts on Pros pages) */
+.pro-paywall { grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 14px 16px; border-color: var(--c-accline) !important; background: linear-gradient(135deg, var(--c-accsoft), var(--c-card) 70%) !important; }
+.pro-paywall-icon { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 12px; border: 1px solid var(--c-accline); color: var(--c-acc); background: var(--c-card); }
+.pro-paywall-title { margin: 0; font-family: var(--font-display); font-size: 22px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; }
+.pro-paywall-perks { grid-column: 1 / -1; list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 20px; }
+.pro-paywall-perks li { display: grid; grid-template-columns: 16px 1fr; gap: 10px; align-items: start; font-size: 14px; line-height: 1.45; color: var(--c-t2); }
+.pro-paywall-perks svg { margin-top: 2px; color: var(--c-acc); }
+.pro-paywall-cta { grid-column: 1 / -1; }
+.pro-card--locked .pro-hero img { filter: saturate(0.6) brightness(0.8); }
+.pro-card--locked:hover .pro-hero img { filter: none; }
+.pro-lock-pill { justify-self: start; display: inline-flex; align-items: center; gap: 5px; }
+@media (max-width: 640px) {
+  .pro-paywall-perks { grid-template-columns: 1fr; }
+}

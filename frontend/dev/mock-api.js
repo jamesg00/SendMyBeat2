@@ -114,6 +114,24 @@ const proCard = (p) => ({
   verified: true,
   claimed_by: null,
 });
+// Without Pro the server sends a preview only (backend/server.py _pro_teaser).
+const proTeaser = (p) => ({
+  ...proCard(p),
+  subscribers: null,
+  total_views: null,
+  channel_url: null,
+  channel_title: null,
+  match: null,
+  story: [],
+  notable: [],
+  moves: [],
+  sources: [],
+  latest_uploads: [],
+  patterns: null,
+  breakdown: null,
+  locked: true,
+});
+const needsPro = (what) => [402, { detail: { code: "needs_pro", message: `${what} is part of Pro.` } }];
 const patterns = (uploads) => ({
   uploads,
   lead_artist_pct: 92,
@@ -339,19 +357,21 @@ const routes = [
       channel_top_beats: [1, 2, 3, 4].map((n) => ({ title: `${p.username} type beat – “vol. ${n}”`, url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", views: 1200 * (5 - n), published_at: daysAgo(n * 3), thumbnail: svg("▶", "#1b2a3a", "#06090f") })),
     };
   }],
-  ["GET", /^\/pros$/, () => ({ pros: PROS.map(proCard) })],
-  ["GET", /^\/pros\/plan$/, () => ({ plan: planView() })],
+  ["GET", /^\/pros$/, () => (sub.pro_access ? { pros: PROS.map(proCard) } : { pros: PROS.map(proTeaser), locked: true })],
+  ["GET", /^\/pros\/plan$/, () => (sub.pro_access ? { plan: planView() } : { plan: null, locked: true })],
   ["DELETE", /^\/pros\/plan$/, () => {
     plan = null;
     return { plan: null };
   }],
   ["PATCH", /^\/pros\/plan\/steps\/([^/]+)$/, (m, body) => {
+    if (!sub.pro_access) return needsPro("Your style plan");
     const step = plan?.steps.find((s) => s.id === m[1]);
     if (step) step.done = !!body.done;
     return { plan: planView() };
   }],
-  ["GET", /^\/pros\/([^/]+)\/analyze$/, (m) => analysis(PROS.find((p) => p.id === m[1]) ?? PROS[0])],
+  ["GET", /^\/pros\/([^/]+)\/analyze$/, (m) => (sub.pro_access ? analysis(PROS.find((p) => p.id === m[1]) ?? PROS[0]) : needsPro("Comparing your uploads"))],
   ["POST", /^\/pros\/([^/]+)\/plan$/, (m, body) => {
+    if (!sub.pro_access) return needsPro("Copying a pro's style");
     const p = PROS.find((x) => x.id === m[1]) ?? PROS[0];
     const moves = proDetail(p).moves.filter((mv) => body.moves.includes(mv.id));
     plan = { pro_id: p.id, pro_name: p.name, created_at: new Date().toISOString(), steps: moves.map((mv, i) => ({ id: `s${i}`, kind: mv.uploads ? "uploads" : "manual", text: mv.steps[0], move: mv.title, done: false, ...(mv.uploads ? { target: mv.uploads, count: 0 } : null) })) };
@@ -359,7 +379,8 @@ const routes = [
   }],
   ["GET", /^\/pros\/([^/]+)$/, (m) => {
     const p = PROS.find((x) => x.id === m[1]);
-    return p ? proDetail(p) : [404, { detail: "Not found" }];
+    if (!p) return [404, { detail: "Not found" }];
+    return sub.pro_access ? proDetail(p) : proTeaser(p);
   }],
   ["GET", /^\/feedback\/mine$/, () => ({ items: [{ id: "f1", kind: "idea", message: "Let me schedule uploads for later in the week.", status: "planned", created_at: daysAgo(5) }] })],
   ["POST", /^\/feedback$/, () => ({ ok: true, id: "f2" })],

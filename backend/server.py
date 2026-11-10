@@ -9727,6 +9727,35 @@ async def _pro_channels() -> dict[str, dict]:
     return channels
 
 
+async def _has_pro_access(user_id: str) -> bool:
+    return bool((await get_user_subscription_status(user_id)).get("pro_access"))
+
+
+# What a pro's page shows without Pro: who they are and why they blew up. Their story, moves,
+# uploads and channel stay behind the paywall.
+_PRO_TEASER_FIELDS = ("id", "name", "group", "tagline", "sound", "photo", "photo_credit", "photo_source", "cover", "verified", "claimed_by", "why")
+
+
+def _pro_teaser(full: dict) -> dict:
+    return {
+        **{key: full.get(key) for key in _PRO_TEASER_FIELDS},
+        "subscribers": None,
+        "total_views": None,
+        "channel_url": None,
+        "channel_title": None,
+        "banner": None,
+        "match": None,
+        "story": [],
+        "notable": [],
+        "moves": [],
+        "sources": [],
+        "latest_uploads": [],
+        "patterns": None,
+        "breakdown": None,
+        "locked": True,
+    }
+
+
 async def _plan_with_progress(user_id: str) -> Optional[dict]:
     plan = await db[pros_service.PLANS].find_one({"user_id": user_id}, {"_id": 0})
     if not plan:
@@ -9738,6 +9767,15 @@ async def _plan_with_progress(user_id: str) -> Optional[dict]:
 async def list_pros(current_user: dict = Depends(get_current_user)):
     channels = await _pro_channels()
     overrides = await pros_service.overrides_by_pro(db)
+    if not await _has_pro_access(current_user["id"]):
+        # Without Pro the gallery is a preview: names, pictures and why they blew up.
+        return {
+            "pros": [
+                _pro_teaser({**pros_service.card(pro, channels.get(pro["id"]), overrides.get(pro["id"])), "why": pro.get("why")})
+                for pro in pros_service.PROS
+            ],
+            "locked": True,
+        }
     you = pros_service.title_patterns(await _my_uploads(current_user["id"]))
     cards = []
     for pro in pros_service.PROS:
@@ -9753,11 +9791,15 @@ async def list_pros(current_user: dict = Depends(get_current_user)):
 
 @api_router.get("/pros/plan")
 async def get_style_plan(current_user: dict = Depends(get_current_user)):
+    # A plan stays saved if your Pro lapses, but you only see and work on it with Pro.
+    if not await _has_pro_access(current_user["id"]):
+        return {"plan": None, "locked": True}
     return {"plan": await _plan_with_progress(current_user["id"])}
 
 
 @api_router.patch("/pros/plan/steps/{step_id}")
 async def update_style_plan_step(step_id: str, request: StylePlanStepUpdate, current_user: dict = Depends(get_current_user)):
+    await _ensure_pro_access(current_user, "Your style plan")
     result = await db[pros_service.PLANS].update_one(
         {"user_id": current_user["id"], "steps": {"$elemMatch": {"id": step_id, "kind": "manual"}}},
         {"$set": {"steps.$.done": request.done}},
@@ -9781,9 +9823,9 @@ async def get_pro(pro_id: str, current_user: dict = Depends(get_current_user)):
     channels = await _pro_channels()
     override = await db[pros_service.OVERRIDES].find_one({"pro_id": pro_id}, {"_id": 0})
     result = pros_service.detail(pro, channels.get(pro_id), override)
-    # Everyone can read the story; the breakdown of how their channel works is part of Pro.
-    if not (await get_user_subscription_status(current_user["id"])).get("pro_access"):
-        result.update({"patterns": None, "breakdown": None, "locked": True})
+    # Pro pages are part of Pro: without it you get a preview (who they are, why they blew up).
+    if not await _has_pro_access(current_user["id"]):
+        return _pro_teaser(result)
     return result
 
 
@@ -9843,6 +9885,7 @@ async def assist_style_plan_step(step_id: str, request: Optional[PlanAssistReque
     mode = pros_service.assist_mode(step)
     if not mode:
         raise HTTPException(status_code=400, detail="This step ticks itself off from your uploads; there's nothing to draft.")
+    await _ensure_pro_access(current_user, "The plan agent")
     await _guard_heavy_feature(current_user=current_user, feature_key="plan_assist", job_type="plan_assist")
     _enforce_action_rate_limit(
         f"plan_assist:{current_user['id']}",

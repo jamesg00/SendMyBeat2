@@ -65,10 +65,22 @@ export default function ProScreen() {
               { value: 'you', label: 'You vs them' },
             ]}
           />
-          {tab === 'story' ? (
+          {locked ? (
+            // Without Pro the server only sends who they are and why they blew up.
+            <>
+              {p.why ? (
+                <View style={s.quote}>
+                  <Text style={s.kicker}>WHY THEY BLEW UP</Text>
+                  <Text style={s.quoteText}>{p.why}</Text>
+                </View>
+              ) : null}
+              <ProLock
+                name={p.name}
+                what={tab === 'story' ? `how ${p.name} did it` : tab === 'breakdown' ? 'how their channel works' : 'how close you are to their style'}
+              />
+            </>
+          ) : tab === 'story' ? (
             <Story p={p} />
-          ) : locked ? (
-            <ProLock name={p.name} what={tab === 'breakdown' ? 'how their channel works' : 'how close you are to their style'} />
           ) : tab === 'breakdown' ? (
             <Breakdown p={p} />
           ) : (
@@ -105,7 +117,7 @@ function ProLock({ name, what }: { name: string; what: string }) {
       </Svg>
       <Text style={s.lockTitle}>See {what}</Text>
       <Text style={[s.fine, { textAlign: 'center' }]}>
-        Pro shows {name}’s title formula, upload rhythm and best days, and compares your uploads with theirs.
+        Pro opens {name}’s full story and moves, their title formula, upload rhythm and best days, and compares your uploads with theirs.
       </Text>
       <Button title={sub?.trial_available ? 'Try it free, then see Pro' : 'See Pro'} onPress={() => openPaywall('needs_pro')} />
     </View>

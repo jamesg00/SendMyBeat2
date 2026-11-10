@@ -4,6 +4,7 @@ import { ArrowLeft, Check } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import AppShell from "@/components/AppShell";
+import { ProPaywall } from "@/components/pros/ProsGallery";
 import { apiError, fetchPro, startStylePlan, useLoad } from "@/components/pros/prosData";
 
 // Copy their style: pick the moves that fit you and see your next 14 days. They become your plan,
@@ -73,12 +74,7 @@ const ProPlanPage = () => {
           {!p ? (
             pro.error ? <p className="smb-danger text-sm">{pro.error}</p> : <p className="smb-t3 text-sm">Loading…</p>
           ) : p.locked ? (
-            <section className="smb-card">
-              <h3 className="smb-card-title">Copying a style is part of Pro</h3>
-              <Button asChild className="smb-btn smb-btn--pri">
-                <a href="/dashboard?plans=pro">See Pro</a>
-              </Button>
-            </section>
+            <ProPaywall title="Copying a style is part of Pro" lead={`Pro turns ${p.name}'s moves into your next 14 days.`} />
           ) : (
             <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-start">
               <div className="space-y-6">
