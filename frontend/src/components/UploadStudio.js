@@ -50,10 +50,7 @@ const UploadStudio = ({
   API,
   onUpgrade,
   onDisconnectYouTube,
-  onConnectYouTube,
-  // The tag run and saved description picked on Workflow, selected when the studio opens.
-  initialTagsId,
-  initialDescriptionId
+  onConnectYouTube
 }) => {
   // --- State ---
   const [studioOpen, setStudioOpen] = useState(false);
@@ -83,12 +80,6 @@ const UploadStudio = ({
   const [beatMetaPromptShown, setBeatMetaPromptShown] = useState(false);
   const [selectedTagsId, setSelectedTagsId] = useState("");
   const [privacyStatus, setPrivacyStatus] = useState("public");
-  useEffect(() => {
-    if (initialTagsId) setSelectedTagsId(initialTagsId);
-  }, [initialTagsId]);
-  useEffect(() => {
-    if (initialDescriptionId) setSelectedDescriptionId(initialDescriptionId);
-  }, [initialDescriptionId]);
 
   // AI Tools State
   const [beatAnalysis, setBeatAnalysis] = useState(null);
@@ -1542,17 +1533,18 @@ const UploadStudio = ({
 
   // --- STUDIO OVERLAY (SPLIT VIEW) ---
   return (
-    <div className={`fixed inset-0 z-50 bg-background flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-300`}>
+    <div className={`fixed inset-0 z-50 bg-background/95 flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-300`}>
       {audioPreviewUrl && <audio ref={audioPlayerRef} src={audioPreviewUrl} preload="metadata" />}
 
       {/* Header */}
       <div className="flex-none h-14 border-b bg-background px-4 flex items-center justify-between z-50">
          <div className="flex items-center gap-2">
-            <span className="font-display text-lg">Upload Studio</span>
+            <span className="font-bold text-lg gradient-text">Upload Studio</span>
+            <span className="text-xs px-2 py-0.5 text-muted-foreground hidden sm:inline-block">LIVE</span>
          </div>
          <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={closeStudio}>
-               Close studio
+               Exit Upload Studio
             </Button>
             <Button variant="ghost" size="icon" onClick={closeStudio}>
                <X className="h-5 w-5" />
@@ -1646,19 +1638,19 @@ const UploadStudio = ({
                   <div className="absolute inset-0 pointer-events-none">
                      {(centerLockEnabled || Math.abs(imagePosX) < 0.03) && (
                        <div
-                          className="absolute left-1/2 top-0 h-full w-px bg-[var(--warn)]"
+                          className="absolute left-1/2 top-0 h-full w-px bg-[var(--c-warn)]"
                           style={{ transform: "translateX(-50%)" }}
                        />
                      )}
                      {(centerLockEnabled || Math.abs(imagePosY) < 0.03) && (
                        <div
-                          className="absolute top-1/2 left-0 w-full h-px bg-[var(--warn)]"
+                          className="absolute top-1/2 left-0 w-full h-px bg-[var(--c-warn)]"
                           style={{ transform: "translateY(-50%)" }}
                        />
                      )}
                      {(centerLockEnabled || (Math.abs(imagePosX) < 0.03 && Math.abs(imagePosY) < 0.03)) && (
                        <div
-                          className="absolute left-1/2 top-1/2 h-3 w-3 rounded-full border border-[var(--warn)] bg-[color-mix(in_srgb,var(--warn)_30%,transparent)]"
+                          className="absolute left-1/2 top-1/2 h-3 w-3 rounded-full border border-[var(--c-warn)] bg-[var(--c-warnsoft)]"
                           style={{ transform: "translate(-50%, -50%)" }}
                        />
                      )}

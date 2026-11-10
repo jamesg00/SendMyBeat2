@@ -43,9 +43,11 @@ const YouTubeCallback = () => {
   }, [searchParams, navigate]);
 
   return (
-    <div className="s-app" style={{ alignItems: "center", justifyContent: "center", gap: 14 }}>
-      <span className="s-spinner" role="status" aria-label="Loading" />
-      <p className="s-body">Connecting your YouTube account…</p>
+    <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--c-bg)" }}>
+      <div className="text-center">
+        <div className="app-boot-bar mx-auto mb-4"><i /></div>
+        <p className="smb-t2">Connecting your YouTube account...</p>
+      </div>
     </div>
   );
 };

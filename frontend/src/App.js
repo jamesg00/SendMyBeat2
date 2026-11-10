@@ -1,32 +1,33 @@
-import { useEffect, useState } from "react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { useState, useEffect } from "react";
+import "@/App.css";
+import "@/styles/console.css";
+import "@/styles/pros.css";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import axios from "axios";
-
-import { API as API_URL, me as fetchMe } from "@/app/api";
-import { resetDraft } from "@/app/draft";
-import Shell from "@/app/Shell";
-import Analytics from "@/app/pages/Analytics";
-import Landing from "@/app/pages/Landing";
-import Pro from "@/app/pages/Pro";
-import ProPlan from "@/app/pages/ProPlan";
-import Producer from "@/app/pages/Producer";
-import Profile from "@/app/pages/Profile";
-import Spotlight from "@/app/pages/Spotlight";
-import Workflow from "@/app/pages/Workflow";
-import { resetStores, setUser } from "@/app/store";
-import { AppIcon } from "@/app/ui";
-import Footer from "@/components/Footer";
-import { Toaster } from "@/components/ui/sonner";
-import { clearAuthToken, getAuthToken } from "@/lib/auth";
-import About from "@/pages/About";
+import LandingPage from "@/pages/LandingPage";
+import Dashboard from "@/pages/Dashboard";
 import AdminCosts from "@/pages/AdminCosts";
 import AdminUsers from "@/pages/AdminUsers";
+import ProducerSpotlight from "@/pages/ProducerSpotlight";
+import ProPage from "@/pages/ProPage";
+import ProPlanPage from "@/pages/ProPlanPage";
+import YouTubeCallback from "@/pages/YouTubeCallback";
 import PrivacyPolicy from "@/pages/PrivacyPolicy";
 import TermsAndConditions from "@/pages/TermsAndConditions";
-import YouTubeCallback from "@/pages/YouTubeCallback";
+import About from "@/pages/About";
+import Footer from "@/components/Footer";
+import { Toaster } from "@/components/ui/sonner";
+import { ThemeProvider } from "@/lib/ThemeContext";
+import { clearAuthToken, getAuthToken } from "@/lib/auth";
 
-// Older pages import the API address from here.
-export const API = API_URL;
+const BACKEND_URL =
+  process.env.REACT_APP_BACKEND_URL || process.env.REACT_APP_API_BASE_URL;
+const API_BASE_URL = (BACKEND_URL || window.location.origin).replace(/\/$/, "");
+export const API = `${API_BASE_URL}/api`;
+
+if (!BACKEND_URL) {
+  console.warn("Missing REACT_APP_BACKEND_URL / REACT_APP_API_BASE_URL. Falling back to current origin for API requests.");
+}
 
 // Axios interceptor for auth token
 axios.interceptors.request.use(
@@ -73,11 +74,11 @@ function App() {
   useEffect(() => {
     if (DEV_BYPASS) return;
     const checkAuth = async () => {
-      if (getAuthToken()) {
+      const token = getAuthToken();
+      if (token) {
         try {
-          const user = await fetchMe();
-          setUser(user);
-          setIsAdmin(Boolean(user?.is_admin));
+          const me = await axios.get(`${API}/auth/me`);
+          setIsAdmin(Boolean(me?.data?.is_admin));
           setIsAuthenticated(true);
         } catch (error) {
           clearAuthToken();
@@ -92,59 +93,87 @@ function App() {
     checkAuth();
   }, []);
 
-  const signedIn = (user) => {
-    setUser(user ?? null);
-    setIsAdmin(Boolean(user?.is_admin));
-    setIsAuthenticated(true);
-  };
-  const signOut = () => {
-    clearAuthToken();
-    resetStores();
-    resetDraft();
-    setIsAdmin(false);
-    setIsAuthenticated(false);
-  };
-
   if (loading) {
     return (
-      <div className="s-app" style={{ alignItems: "center", justifyContent: "center", gap: 16 }}>
-        <AppIcon size={56} />
-        <span className="s-spinner" role="status" aria-label="Loading" />
+      <div className="app-boot" role="status" aria-label="Loading">
+        <span className="app-boot-mark">SENDMYBEAT</span>
+        <span className="app-boot-bar"><i /></span>
       </div>
     );
   }
 
-  const home = <Navigate to={isAuthenticated ? "/dashboard" : "/"} replace />;
-  const member = (page) => (isAuthenticated ? page : home);
-  const admin = (page) => (isAuthenticated && isAdmin ? page : home);
-
   return (
-    <BrowserRouter>
-      <Toaster position="top-right" theme="dark" />
-      <Routes>
-        <Route path="/" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Landing onSignedIn={signedIn} />} />
-
-        {/* The app: four tabs inside one frame. Guests can open Spotlight and profiles. */}
-        <Route element={<Shell signedIn={isAuthenticated} />}>
-          <Route path="/dashboard" element={member(<Workflow />)} />
-          <Route path="/spotlight" element={<Spotlight signedIn={isAuthenticated} />} />
-          <Route path="/producer/:id" element={<Producer signedIn={isAuthenticated} />} />
-          <Route path="/pros/:id" element={member(<Pro />)} />
-          <Route path="/pros/:id/plan" element={member(<ProPlan />)} />
-          <Route path="/analytics" element={member(<Analytics />)} />
-          <Route path="/profile" element={member(<Profile onSignOut={signOut} />)} />
-          <Route path="/admin/costs" element={admin(<AdminCosts />)} />
-          <Route path="/admin/users" element={admin(<AdminUsers />)} />
-        </Route>
-
-        <Route path="/youtube-callback" element={member(<YouTubeCallback />)} />
-        <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-        <Route path="/terms" element={<TermsAndConditions />} />
-        <Route path="/about" element={<About />} />
-        <Route path="*" element={home} />
-      </Routes>
-      <Footer />
-    </BrowserRouter>
+    <ThemeProvider>
+      <div className="App flex flex-col min-h-screen">
+        <Toaster position="top-right" richColors />
+        <BrowserRouter>
+        <div className="flex-grow">
+          <Routes>
+            <Route
+              path="/"
+              element={
+                isAuthenticated ? (
+                  <Navigate to="/dashboard" replace />
+                ) : (
+                  <LandingPage setIsAuthenticated={setIsAuthenticated} />
+                )
+              }
+            />
+            <Route
+              path="/spotlight"
+              element={<ProducerSpotlight />}
+            />
+            <Route
+              path="/admin/costs"
+              element={
+                isAuthenticated && isAdmin ? (
+                  <AdminCosts />
+                ) : (
+                  <Navigate to={isAuthenticated ? "/dashboard" : "/"} replace />
+                )
+              }
+            />
+            <Route
+              path="/admin/users"
+              element={
+                isAuthenticated && isAdmin ? (
+                  <AdminUsers />
+                ) : (
+                  <Navigate to={isAuthenticated ? "/dashboard" : "/"} replace />
+                )
+              }
+            />
+            <Route
+              path="/dashboard"
+              element={
+                isAuthenticated ? (
+                  <Dashboard setIsAuthenticated={setIsAuthenticated} />
+                ) : (
+                  <Navigate to="/" replace />
+                )
+              }
+            />
+            <Route
+              path="/youtube-callback"
+              element={
+                isAuthenticated ? (
+                  <YouTubeCallback />
+                ) : (
+                  <Navigate to="/" replace />
+                )
+              }
+            />
+            <Route path="/pros/:id" element={isAuthenticated ? <ProPage /> : <Navigate to="/" replace />} />
+            <Route path="/pros/:id/plan" element={isAuthenticated ? <ProPlanPage /> : <Navigate to="/" replace />} />
+            <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+            <Route path="/terms" element={<TermsAndConditions />} />
+            <Route path="/about" element={<About />} />
+          </Routes>
+        </div>
+          <Footer />
+        </BrowserRouter>
+      </div>
+    </ThemeProvider>
   );
 }
 

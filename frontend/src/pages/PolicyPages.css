@@ -1,6 +1,8 @@
 .policy-shell {
   min-height: 100vh;
-  background: var(--bg);
+  background:
+    radial-gradient(circle at top, color-mix(in srgb, var(--accent-primary) 12%, transparent), transparent 34%),
+    linear-gradient(180deg, var(--bg-primary) 0%, color-mix(in srgb, var(--bg-primary) 88%, black) 100%);
   color: var(--text-primary);
 }
 
@@ -25,9 +27,12 @@
 
 .policy-card {
   border: 1px solid var(--border-color);
-  border-radius: 16px;
-  background: var(--card);
+  border-radius: 1.5rem;
+  background: color-mix(in srgb, var(--card-bg) 92%, transparent);
+  box-shadow: 0 18px 42px color-mix(in srgb, var(--shadow) 74%, transparent);
   color: var(--text-primary);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 .policy-title {

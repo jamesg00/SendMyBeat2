@@ -25,7 +25,7 @@ const ImageEditorControls = ({
   setCenterLockEnabled
 }) => {
   return (
-    <Card className="shadow-none">
+    <Card className="border-l-4 border-l-amber-500 shadow-sm">
        <CardHeader className="pb-3">
           <CardTitle className="text-base font-semibold flex items-center gap-2">
              <Move className="h-4 w-4" /> Image Settings
@@ -37,7 +37,7 @@ const ImageEditorControls = ({
                 type="button"
                 variant={imageSettingsOpen ? "default" : "outline"}
                 onClick={() => setImageSettingsOpen((v) => !v)}
-                className={imageSettingsOpen ? "" : ""}
+                className={imageSettingsOpen ? "smb-toggle-on" : ""}
              >
                 {imageSettingsOpen ? "Close Editor" : "Open Image Editor"}
              </Button>
@@ -127,7 +127,7 @@ const ImageEditorControls = ({
                         return next;
                       });
                     }}
-                    className={centerLockEnabled ? "" : ""}
+                    className={centerLockEnabled ? "smb-toggle-on" : ""}
                  >
                     {centerLockEnabled ? "Center Locked" : "Lock Center"}
                  </Button>

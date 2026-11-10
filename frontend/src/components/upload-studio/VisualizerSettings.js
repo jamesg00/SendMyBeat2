@@ -20,7 +20,7 @@ const VisualizerSettings = ({
   centerVisualizerImageInputRef
 }) => {
   return (
-    <Card className="shadow-none">
+    <Card className="border-l-4 border-l-purple-500 shadow-sm">
        <CardHeader className="pb-3 flex flex-row items-center justify-between">
           <CardTitle className="text-base font-semibold flex items-center gap-2">
              <Music className="h-4 w-4" /> Audio Visualizer
@@ -29,7 +29,7 @@ const VisualizerSettings = ({
             size="sm"
             variant={visualizerEnabled ? "default" : "outline"}
             onClick={() => setVisualizerEnabled(!visualizerEnabled)}
-            className={visualizerEnabled ? "" : ""}
+            className={visualizerEnabled ? "smb-toggle-on" : ""}
           >
              {visualizerEnabled ? "Enabled" : "Disabled"}
           </Button>
@@ -277,7 +277,7 @@ const VisualizerSettings = ({
                         <Button
                           variant={visualizerSettings.spectrumRgb ? "default" : "outline"}
                           size="sm"
-                          className={`flex-1 text-xs ${visualizerSettings.spectrumRgb ? "" : ""}`}
+                          className={`flex-1 text-xs ${visualizerSettings.spectrumRgb ? "smb-toggle-on" : ""}`}
                           onClick={() => setVisualizerSettings(s => ({...s, spectrumRgb: !s.spectrumRgb, multiColorReactive: !s.spectrumRgb}))}
                         >
                           {visualizerSettings.spectrumRgb ? "RGB On" : "RGB Off"}
@@ -289,7 +289,7 @@ const VisualizerSettings = ({
                       <Button
                         variant={visualizerSettings.spectrumMirror !== false ? "default" : "outline"}
                         size="sm"
-                        className={`w-full ${visualizerSettings.spectrumMirror !== false ? "" : ""}`}
+                        className={`w-full ${visualizerSettings.spectrumMirror !== false ? "smb-toggle-on" : ""}`}
                         onClick={() => setVisualizerSettings(s => ({...s, spectrumMirror: !s.spectrumMirror}))}
                       >
                         {visualizerSettings.spectrumMirror !== false ? "Mirror On" : "Mirror Off"}
@@ -403,7 +403,7 @@ const VisualizerSettings = ({
                           type="button"
                           size="sm"
                           variant={visualizerSettings.monstercatParticleEnabled ? "default" : "outline"}
-                          className={visualizerSettings.monstercatParticleEnabled ? "" : ""}
+                          className={visualizerSettings.monstercatParticleEnabled ? "smb-toggle-on" : ""}
                           onClick={() => setVisualizerSettings(s => ({...s, monstercatParticleEnabled: !s.monstercatParticleEnabled}))}
                         >
                           {visualizerSettings.monstercatParticleEnabled ? "On" : "Off"}
