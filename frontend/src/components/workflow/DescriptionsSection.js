@@ -166,121 +166,83 @@ const DescriptionsSection = ({
 
   const renderEditorCard = () => (
     <Card className="dashboard-card description-studio-card h-full">
-      <CardHeader className="px-4 sm:px-6 py-4 sm:py-6">
-        <div className="flex flex-col gap-3 sm:gap-4">
-          <div className="flex items-center gap-2 text-base sm:text-lg md:text-xl">
-            <Save className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
-            <CardTitle className="text-base sm:text-lg md:text-xl">Template Descriptions</CardTitle>
+      <CardHeader className="px-4 sm:px-6 pt-5 pb-3">
+        <div className="wf-head">
+          <div className="flex items-center gap-2 min-w-0">
+            <Save className="h-5 w-5 flex-shrink-0" />
+            <CardTitle className="text-lg sm:text-xl">Template Descriptions</CardTitle>
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="description-studio-chip">
-              <p className="description-studio-chip-value">{visibleDescriptionTemplates.length}</p>
-              <p className="description-studio-chip-label">Starter Templates</p>
-            </div>
-            <div className="description-studio-chip">
-              <p className="description-studio-chip-value">{draftWords}</p>
-              <p className="description-studio-chip-label">Draft Words</p>
-            </div>
-          </div>
+          <span className="smb-mono smb-t3 text-xs whitespace-nowrap">{descriptions.length} saved</span>
         </div>
       </CardHeader>
-      <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6 space-y-4 sm:space-y-5">
-        <div className="description-templates-panel">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div>
-              <Label>Quick Starts</Label>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs description-inline-meta" style={{ color: "var(--text-secondary)" }}>
-                {visibleDescriptionTemplates.length}/{descriptionTemplates.length}
-              </span>
-              {descriptionTemplates.length > 2 && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="shrink-0 text-xs"
-                  onClick={() => setShowAllDescriptionTemplates((prev) => !prev)}
-                >
-                  {showAllDescriptionTemplates ? "Show Less" : "Show All"}
-                </Button>
-              )}
-            </div>
+      <CardContent className="px-4 sm:px-6 pb-5 space-y-5">
+        <div className="space-y-2">
+          <div className="wf-head">
+            <Label className="smb-eyebrow">Quick Starts</Label>
+            {descriptionTemplates.length > 2 ? (
+              <Button type="button" variant="ghost" size="sm" className="text-xs h-8" onClick={() => setShowAllDescriptionTemplates((prev) => !prev)}>
+                {showAllDescriptionTemplates ? "Show fewer" : `Show all ${descriptionTemplates.length}`}
+              </Button>
+            ) : null}
           </div>
-          <div className="description-template-grid">
+          <div className="wf-templates">
             {visibleDescriptionTemplates.map((template) => (
-              <button
-                key={template.id}
-                type="button"
-                className="description-template-button"
-                onClick={() => handleApplyDescriptionTemplate(template)}
-              >
-                <p className="text-sm font-semibold description-template-name" style={{ color: "var(--text-primary)" }}>
-                  {template.name}
-                </p>
-                <p className="mt-1 text-xs description-template-blurb" style={{ color: "var(--text-secondary)" }}>
-                  {template.blurb}
-                </p>
+              <button key={template.id} type="button" className="wf-template" onClick={() => handleApplyDescriptionTemplate(template)}>
+                <span className="wf-template-name">{template.name}</span>
+                <span className="wf-template-blurb">{template.blurb}</span>
               </button>
             ))}
           </div>
-          <p className="description-panel-note">
-            Applying one fills the description body only.
-          </p>
+          <p className="smb-t3 text-xs">Picking one fills the content below; the name stays as you typed it.</p>
         </div>
 
-        <div className="description-editor-grid">
-          <div className="space-y-2">
-            <Label htmlFor="desc-title">Template Name</Label>
-            <Input
-              id="desc-title"
-              placeholder="e.g., Free For Profit Template"
-              value={newDescription.title}
-              onChange={(e) => setNewDescription({ ...newDescription, title: e.target.value })}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && newDescription.content.trim()) {
-                  e.preventDefault();
-                  handleSaveDescription();
-                }
-              }}
-              data-testid="desc-title-input"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="desc-content">Content</Label>
-            <Textarea
-              id="desc-content"
-              placeholder="Write your description here..."
-              rows={9}
-              value={newDescription.content}
-              onChange={(e) => setNewDescription({ ...newDescription, content: e.target.value })}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && e.shiftKey && newDescription.title.trim()) {
-                  e.preventDefault();
-                  handleSaveDescription();
-                }
-              }}
-              data-testid="desc-content-input"
-            />
-            <div className="flex justify-between items-center text-xs gap-3">
-              <p style={{ color: "var(--text-secondary)" }}>
-                Press Enter for a new line. Use Shift+Enter to save.
-              </p>
-              <p style={{ color: "var(--text-secondary)" }}>
-                {(newDescription.content || "").length} chars
-              </p>
-            </div>
-          </div>
+        <div className="space-y-2">
+          <Label htmlFor="desc-title" className="smb-eyebrow">Template Name</Label>
+          <Input
+            id="desc-title"
+            placeholder="e.g., Free For Profit Template"
+            value={newDescription.title}
+            onChange={(e) => setNewDescription({ ...newDescription, title: e.target.value })}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && newDescription.content.trim()) {
+                e.preventDefault();
+                handleSaveDescription();
+              }
+            }}
+            data-testid="desc-title-input"
+          />
         </div>
 
-        <Button
-          onClick={handleSaveDescription}
-          className="w-full"
-          disabled={loadingDescriptions}
-          data-testid="save-desc-btn"
-        >
-          Save to My Templates
-        </Button>
+        <div className="space-y-2">
+          <div className="wf-head">
+            <Label htmlFor="desc-content" className="smb-eyebrow">Content</Label>
+            <span className="smb-mono smb-t3 text-xs">
+              {draftWords} words · {(newDescription.content || "").length} chars
+            </span>
+          </div>
+          <Textarea
+            id="desc-content"
+            placeholder="Write your description here: purchase links, contact, credits…"
+            rows={9}
+            value={newDescription.content}
+            onChange={(e) => setNewDescription({ ...newDescription, content: e.target.value })}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && e.shiftKey && newDescription.title.trim()) {
+                e.preventDefault();
+                handleSaveDescription();
+              }
+            }}
+            data-testid="desc-content-input"
+          />
+        </div>
+
+        <div className="wf-head">
+          <p className="smb-t3 text-xs">Shift+Enter saves.</p>
+          <Button onClick={handleSaveDescription} className="smb-btn smb-btn--pri" disabled={loadingDescriptions} data-testid="save-desc-btn">
+            <Save className="h-4 w-4" />
+            Save to My Templates
+          </Button>
+        </div>
 
         {showInlineOutput ? renderSavedPanel({ inline: true }) : null}
       </CardContent>

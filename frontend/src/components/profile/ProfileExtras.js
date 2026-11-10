@@ -95,7 +95,7 @@ export const VerificationCard = ({ onOpenSpotlight }) => {
   );
 };
 
-const SCREENS = ["Workflow", "Upload Studio", "Spotlight", "Analytics", "Pros", "Profile", "Plans", "Other"];
+const SCREENS = ["Create", "Upload Studio", "Spotlight", "Analytics", "Pros", "Profile", "Plans", "Other"];
 const COPY = {
   bug: { prompt: "What went wrong?", placeholder: "What did you click, what did you expect, and what happened instead?", thanks: "Thanks for the report. We'll look into it." },
   idea: { prompt: "What would you like to see?", placeholder: "Describe the feature and how it would help your uploads.", thanks: "Thanks for the idea. We read every one." },

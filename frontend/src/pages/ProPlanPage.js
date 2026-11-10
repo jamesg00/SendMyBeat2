@@ -7,7 +7,7 @@ import AppShell from "@/components/AppShell";
 import { apiError, fetchPro, startStylePlan, useLoad } from "@/components/pros/prosData";
 
 // Copy their style: pick the moves that fit you and see your next 14 days. They become your plan,
-// shown on Workflow and Profile; upload steps tick themselves off. A new plan replaces the old one.
+// shown on Create and Profile; upload steps tick themselves off. A new plan replaces the old one.
 
 const DAY = 24 * 60 * 60 * 1000;
 

@@ -308,150 +308,114 @@ const TagsSection = ({
     </div>
   );
 
+  const [showAllRuns, setShowAllRuns] = useState(false);
+  const visibleRuns = showAllRuns ? tagHistory : tagHistory.slice(0, 6);
+
   const renderEditorCard = () => (
     <Card className="dashboard-card tags-studio-card h-full">
-      <CardHeader className="px-4 sm:px-6 py-4 sm:py-6">
-        <div className="flex flex-col gap-3 sm:gap-4">
-          <div className="flex items-center gap-2 text-base sm:text-lg md:text-xl">
-            <Sparkles className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
-            <CardTitle className="text-base sm:text-lg md:text-xl">Generate YouTube Tags</CardTitle>
+      <CardHeader className="px-4 sm:px-6 pt-5 pb-3">
+        <div className="wf-head">
+          <div className="flex items-center gap-2 min-w-0">
+            <Sparkles className="h-5 w-5 flex-shrink-0" />
+            <CardTitle className="text-lg sm:text-xl">Generate YouTube Tags</CardTitle>
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="tags-studio-chip">
-              <p className="tags-studio-chip-value">{tagHistory.length}</p>
-              <p className="tags-studio-chip-label">Saved Runs</p>
-            </div>
-            <div className="tags-studio-chip">
-              <p className="tags-studio-chip-value">{generatedTags.length || "--"}</p>
-              <p className="tags-studio-chip-label">Current Tags</p>
-            </div>
-          </div>
+          <span className="smb-mono smb-t3 text-xs whitespace-nowrap">60–80 tags · 1 credit</span>
         </div>
       </CardHeader>
-      <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
-        <form onSubmit={handleGenerateTags} className="space-y-3 sm:space-y-4" data-testid="tag-generator-form">
-          <div className="space-y-1.5 sm:space-y-2">
-            <Label htmlFor="tag-query" className="text-sm sm:text-base">Search Query</Label>
-            <Input
-              id="tag-query"
-              placeholder="e.g., lil uzi, travis scott, dark trap beat"
-              value={tagQuery}
-              onChange={(e) => setTagQuery(e.target.value)}
-              data-testid="tag-query-input"
-              className="text-sm sm:text-base"
-            />
-            <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-              Tip: Include artist name for popular song "type beat" variations
-            </p>
+      <CardContent className="px-4 sm:px-6 pb-5">
+        <form onSubmit={handleGenerateTags} className="space-y-5" data-testid="tag-generator-form">
+          <div className="space-y-2">
+            <Label htmlFor="tag-query" className="smb-eyebrow">Search Query</Label>
+            <div className="wf-search">
+              <Input
+                id="tag-query"
+                placeholder="e.g., lil uzi, travis scott, dark trap beat"
+                value={tagQuery}
+                onChange={(e) => setTagQuery(e.target.value)}
+                data-testid="tag-query-input"
+              />
+              <Button type="submit" className="smb-btn smb-btn--pri" disabled={loadingTags} data-testid="generate-tags-btn">
+                <Sparkles className="h-4 w-4" />
+                {loadingTags ? "Generating…" : "Generate"}
+              </Button>
+            </div>
+            <p className="smb-t3 text-xs">Tip: include the artist’s name to get “type beat” variations people search for.</p>
           </div>
 
-          <div className="tags-recent-panel">
-            <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
-              <div>
-                <p className="text-sm sm:text-base font-semibold" style={{ color: "var(--text-primary)" }}>
-                  Recent Runs
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-                <span className="tags-inline-stat">
-                  {selectedTagHistoryIds.length} selected
-                </span>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleJoinSelectedTagHistory}
-                  disabled={selectedTagHistoryIds.length < 2 || joiningTagsLoading}
-                  className={`text-xs sm:text-sm ${selectedTagHistoryIds.length < 2 ? "opacity-60" : ""}`}
-                >
-                  {joiningTagsLoading ? `Joining... ${joiningTagsProgress}%` : "Join Selected"}
-                </Button>
+          <div className="space-y-2">
+            <div className="wf-head">
+              <p className="smb-eyebrow">
+                Recent Runs{tagHistory.length ? ` · ${tagHistory.length}` : ""}
+              </p>
+              <div className="flex items-center gap-2">
                 {selectedTagHistoryIds.length > 0 && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleClearTagSelection}
-                    className="text-xs sm:text-sm"
-                  >
+                  <Button type="button" variant="ghost" size="sm" onClick={handleClearTagSelection} className="text-xs h-8">
                     Clear
                   </Button>
                 )}
+                {selectedTagHistoryIds.length >= 2 || joiningTagsLoading ? (
+                  <Button type="button" size="sm" onClick={handleJoinSelectedTagHistory} disabled={joiningTagsLoading} className="smb-btn smb-btn--sec smb-btn--sm">
+                    {joiningTagsLoading ? `Joining… ${joiningTagsProgress}%` : `Join ${selectedTagHistoryIds.length} with AI`}
+                  </Button>
+                ) : tagHistory.length > 1 ? (
+                  <span className="smb-t3 text-xs">Pick two or more to join them</span>
+                ) : null}
               </div>
             </div>
-            {joiningTagsLoading && (
-              <p className="mt-2 text-xs sm:text-sm" style={{ color: "var(--text-secondary)" }}>
-                Optimizing combined tags with AI...
-              </p>
-            )}
+            {joiningTagsLoading && <p className="smb-t2 text-xs">Optimizing combined tags with AI…</p>}
             {tagHistory.length > 0 ? (
-              <div className="mt-3">
-                <div className="tags-recent-grid">
-                  {tagHistory.slice(0, 6).map((item) => {
+              <>
+                <div className="wf-runs">
+                  {visibleRuns.map((item) => {
                     const displayLabel = formatTagHistoryLabel(item.query);
                     const isSelected = selectedTagHistoryIds.includes(item.id);
                     const isActive = activeTagHistoryId === item.id;
                     return (
                       <div
                         key={item.id}
-                        className="tags-recent-tile group"
-                        style={{
-                          borderColor: isActive ? "var(--accent-primary)" : isSelected ? "var(--accent-secondary)" : "var(--border-color)"
-                        }}
+                        role="button"
+                        tabIndex={0}
+                        className={`wf-run group ${isActive ? "is-active" : isSelected ? "is-selected" : ""}`}
                         onClick={() => handleTagHistoryTileClick(item)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            handleTagHistoryTileClick(item);
+                          }
+                        }}
                         data-testid="tag-history-item"
                       >
-                        <div className="flex justify-between items-start gap-2">
-                          <div className="min-w-0 flex-1">
-                            <p
-                              className="text-sm font-medium leading-snug break-words"
-                              style={{ color: "var(--text-primary)" }}
-                              title={displayLabel}
-                            >
-                              {displayLabel}
-                            </p>
-                            <p className="mt-1 text-xs break-words" style={{ color: "var(--text-secondary)" }}>
-                              {item.tags.length} tags
-                            </p>
-                          </div>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity smb-danger hover:bg-[var(--c-dangersoft)] flex-shrink-0"
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              await handleDeleteTagHistoryItem(item.id);
-                            }}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                        <div className="mt-3 flex items-center justify-between gap-2">
-                          <span className="tags-recent-status">
-                            {isActive ? "Current set" : isSelected ? "Queued to join" : "Reopen"}
-                          </span>
-                        </div>
+                        <span className="wf-run-dot" aria-hidden="true" />
+                        <span className="wf-run-name" title={displayLabel}>{displayLabel}</span>
+                        <span className="smb-mono smb-t3 text-xs whitespace-nowrap">{item.tags.length} tags</span>
+                        <span className="wf-run-status">{isActive ? "Current set" : isSelected ? "Queued to join" : "Reopen"}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity smb-danger hover:bg-[var(--c-dangersoft)] flex-shrink-0"
+                          aria-label={`Delete ${displayLabel}`}
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            await handleDeleteTagHistoryItem(item.id);
+                          }}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
                       </div>
                     );
                   })}
                 </div>
-              </div>
+                {tagHistory.length > 6 ? (
+                  <Button type="button" variant="ghost" size="sm" className="w-full text-xs" onClick={() => setShowAllRuns((v) => !v)}>
+                    {showAllRuns ? "Show fewer" : `Show all ${tagHistory.length} runs`}
+                  </Button>
+                ) : null}
+              </>
             ) : (
-              <div className="mt-3 rounded-lg border border-dashed px-3 py-5 text-center text-xs sm:text-sm" style={{ borderColor: "var(--border-color)", color: "var(--text-secondary)" }}>
-                Your recent tag generations will show up here.
-              </div>
+              <div className="wf-empty">Your tag runs show up here. Type an artist above to make the first one.</div>
             )}
           </div>
-
-          <Button
-            type="submit"
-            className="w-full text-sm sm:text-base py-5 sm:py-6"
-            disabled={loadingTags}
-            data-testid="generate-tags-btn"
-          >
-            {loadingTags ? "Generating Tags..." : "Generate 60-80 Tags"}
-          </Button>
 
           {showInlineOutput ? renderResultsPanel({ inline: true }) : null}
         </form>

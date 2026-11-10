@@ -1,17 +1,14 @@
 import React from "react";
-import { Youtube, Music, Image as ImageIcon, Wand2 } from "lucide-react";
+import { Check, Image as ImageIcon, Music, Wand2, Youtube } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 
 const AUDIO_EXTENSIONS = [".mp3", ".wav", ".m4a", ".flac", ".ogg"];
 const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif", ".heic", ".heif"];
 
+// The start of Upload Studio: pick the beat and the artwork, then open the studio.
+// The YouTube account itself is shown just above, in the Upload section's header.
 const UploadDashboard = ({
   youtubeConnected,
-  youtubeName,
-  youtubeEmail,
-  onDisconnectYouTube,
   onConnectYouTube,
   handleAudioUpload,
   handleImageUpload,
@@ -32,156 +29,118 @@ const UploadDashboard = ({
   uploadJobElapsed,
   uploadJobStage,
 }) => {
+  const running = currentUploadJob && ["queued", "processing"].includes(currentUploadJob.status);
+  const progress = typeof uploadJobProgress === "number" ? uploadJobProgress : currentUploadJob?.progress || 0;
+  const ready = audioFile && hasImageReady;
+  const imageName = hasImageReady ? selectedImageLabel || imageFile?.name || "Artwork ready" : null;
+
   return (
-    <Card className="dashboard-card min-h-[400px] relative overflow-hidden terminal-panel-card">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Youtube className="h-5 w-5 text-[var(--accent-primary)]" />
-          New Upload
-        </CardTitle>
-        <CardDescription>Connect YouTube, then upload audio and artwork. GIF artwork loops in the rendered video.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        {youtubeConnected && (
-          <div className="terminal-inline-status">
-            <div className="flex items-center gap-3">
-              <span className="terminal-status-dot" />
-              <div>
-                <p className="font-medium text-sm">{youtubeName ? `Connected as ${youtubeName}` : "YouTube connected"}</p>
-                {youtubeEmail && <p className="text-xs opacity-70">{youtubeEmail}</p>}
-              </div>
-            </div>
-            <Button size="sm" variant="outline" onClick={onDisconnectYouTube}>
-              Disconnect
-            </Button>
-          </div>
-        )}
+    <section className="smb-card up-card">
+      <div className="smb-card-head">
+        <h3 className="smb-card-title">New upload</h3>
+        <span className="smb-mono smb-t3 text-xs">beat + artwork → YouTube video</span>
+      </div>
 
-        <div className="grid md:grid-cols-2 gap-4">
-          <div
-            className={`terminal-upload-zone p-8 text-center transition-all ${isAudioDragActive ? "terminal-upload-zone--active" : ""}`}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setIsAudioDragActive(true);
-            }}
-            onDragLeave={() => setIsAudioDragActive(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setIsAudioDragActive(false);
-              handleAudioUpload(e.dataTransfer.files[0]);
-            }}
-          >
-            <Input type="file" accept={AUDIO_EXTENSIONS.join(",")} className="hidden" id="audio-input" onChange={(e) => handleAudioUpload(e.target.files[0])} />
-            <label htmlFor="audio-input" className="cursor-pointer flex flex-col items-center gap-3">
-              <div className="h-12 w-12 flex items-center justify-center text-[var(--accent-primary)]">
-                <Music className="h-6 w-6" />
-              </div>
-              <div>
-                <p className="font-medium">Upload Audio</p>
-                <p className="text-xs text-slate-500">MP3, WAV, M4A, FLAC, OGG</p>
-              </div>
-              {uploadingAudio && <div className="text-xs text-[var(--accent-primary)]">Uploading... {uploadProgress}%</div>}
-              {audioFile && <div className="text-xs text-[var(--accent-primary)] font-medium break-all">{audioFile.name}</div>}
-            </label>
-          </div>
-
-          <div
-            className={`terminal-upload-zone p-8 text-center transition-all ${isImageDragActive ? "terminal-upload-zone--active" : ""}`}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setIsImageDragActive(true);
-            }}
-            onDragLeave={() => setIsImageDragActive(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setIsImageDragActive(false);
-              handleImageUpload(e.dataTransfer.files[0]);
-            }}
-          >
-            <Input type="file" accept={IMAGE_EXTENSIONS.join(",")} className="hidden" id="image-input" onChange={(e) => handleImageUpload(e.target.files[0])} />
-            <label htmlFor="image-input" className="cursor-pointer flex flex-col items-center gap-3">
-              <div className="h-12 w-12 flex items-center justify-center text-[var(--accent-primary)]">
-                <ImageIcon className="h-6 w-6" />
-              </div>
-              <div>
-                <p className="font-medium">Upload Artwork</p>
-                <p className="text-xs text-slate-500">JPG, PNG, WEBP, GIF</p>
-              </div>
-              {uploadingImage && <div className="text-xs text-[var(--accent-primary)]">Uploading...</div>}
-              {hasImageReady && (
-                <div className="text-xs text-[var(--accent-primary)] font-medium break-all">
-                  {selectedImageLabel || imageFile?.name || "Selected image ready"}
-                </div>
-              )}
-            </label>
-          </div>
-        </div>
-
-        {currentUploadJob && ["queued", "processing"].includes(currentUploadJob.status) && (
-          <div className="terminal-job-status px-4 py-4 text-sm space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <p className="font-medium text-[var(--accent-primary)]">
-                  YouTube upload {currentUploadJob.status === "queued" ? "queued" : "processing"}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {uploadJobStage || currentUploadJob.message || "Rendering and uploading in the background."}
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-sm font-semibold text-[var(--accent-primary)]">
-                  {typeof uploadJobProgress === "number" ? `${uploadJobProgress}%` : `${currentUploadJob.progress || 0}%`}
-                </p>
-                {uploadJobElapsed && (
-                  <p className="text-xs text-muted-foreground">Running {uploadJobElapsed}</p>
-                )}
-              </div>
-            </div>
-            <div className="h-2 w-full overflow-hidden bg-[var(--bg-tertiary)]">
-              <div
-                className="h-full bg-[var(--accent-primary)] transition-all duration-300"
-                style={{ width: `${typeof uploadJobProgress === "number" ? uploadJobProgress : (currentUploadJob.progress || 0)}%` }}
-              />
-            </div>
-            <div className="flex flex-wrap gap-2 text-[11px] text-muted-foreground">
-              <span>Queued</span>
-              <span>&gt;</span>
-              <span>Token Refresh</span>
-              <span>&gt;</span>
-              <span>Render</span>
-              <span>&gt;</span>
-              <span>Upload</span>
+      {youtubeConnected ? (
+        <>
+          <div className="up-steps">
+            <Picker
+              id="audio-input"
+              step="1"
+              title="Beat"
+              formats="MP3, WAV, M4A, FLAC, OGG"
+              accept={AUDIO_EXTENSIONS.join(",")}
+              Icon={Music}
+              active={isAudioDragActive}
+              setActive={setIsAudioDragActive}
+              onFile={handleAudioUpload}
+              status={uploadingAudio ? `Uploading… ${uploadProgress}%` : null}
+              chosen={audioFile?.name}
+            />
+            <Picker
+              id="image-input"
+              step="2"
+              title="Artwork"
+              formats="JPG, PNG, WEBP, GIF"
+              accept={IMAGE_EXTENSIONS.join(",")}
+              Icon={ImageIcon}
+              active={isImageDragActive}
+              setActive={setIsImageDragActive}
+              onFile={handleImageUpload}
+              status={uploadingImage ? "Uploading…" : null}
+              chosen={imageName}
+            />
+            <div className={`up-step up-step--go ${ready ? "is-done" : ""}`}>
+              <span className="up-step-num">3</span>
+              <span className="up-step-body">
+                <b>Open the studio</b>
+                <span className="smb-t3 text-xs">{ready ? "Preview it, set the title and upload." : "Pick a beat and artwork first."}</span>
+              </span>
+              <Button onClick={() => setStudioOpen(true)} disabled={!ready} className="smb-btn smb-btn--pri smb-btn--sm">
+                Enter Studio <Wand2 className="h-4 w-4" />
+              </Button>
             </div>
           </div>
-        )}
-
-        {audioFile && hasImageReady && (
-          <Button onClick={() => setStudioOpen(true)} variant="outline" className="w-full py-6 text-lg terminal-publish-button">
-            Enter Studio <Wand2 className="ml-2 h-5 w-5" />
+          <p className="smb-t3 text-xs">Drop files on a box or click it to choose. GIF artwork loops in the rendered video.</p>
+        </>
+      ) : (
+        <div className="up-connect">
+          <Youtube className="h-6 w-6 smb-t2" aria-hidden="true" />
+          <div className="min-w-0 flex-1">
+            <b>Connect YouTube first</b>
+            <p className="smb-t2 text-sm">Connect the channel you want this beat published to, then pick your beat and artwork.</p>
+          </div>
+          <Button onClick={onConnectYouTube} className="smb-btn smb-btn--pri smb-btn--sm">
+            Connect YouTube Account
           </Button>
-        )}
-      </CardContent>
-
-      {!youtubeConnected && (
-        <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/88 px-4">
-          <div className="w-full max-w-md border border-[var(--border-color)] bg-[var(--card-bg)] p-6 text-center">
-            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center text-[var(--accent-primary)]">
-              <Youtube className="h-6 w-6" />
-            </div>
-            <h3 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
-              Connect YouTube First
-            </h3>
-            <p className="mt-2 text-sm" style={{ color: "var(--text-secondary)" }}>
-              Before uploading audio or artwork, connect the YouTube account you want this beat published to.
-            </p>
-            <Button className="mt-5 w-full" onClick={onConnectYouTube}>
-              Connect YouTube Account
-            </Button>
-          </div>
         </div>
       )}
-    </Card>
+
+      {running ? (
+        <div className="up-job">
+          <div className="smb-meter-row">
+            <b>YouTube upload {currentUploadJob.status === "queued" ? "queued" : "running"}</b>
+            <span className="smb-meter-value">{progress}%</span>
+          </div>
+          <span className="smb-bar">
+            <span className="smb-bar-fill smb-bar-fill--acc" style={{ width: `${progress}%` }} />
+          </span>
+          <div className="smb-meter-row">
+            <span className="smb-mono smb-t3 text-xs">{uploadJobStage || currentUploadJob.message || "Rendering and uploading in the background."}</span>
+            {uploadJobElapsed ? <span className="smb-mono smb-t3 text-xs">{uploadJobElapsed}</span> : null}
+          </div>
+        </div>
+      ) : null}
+    </section>
   );
 };
+
+const Picker = ({ id, step, title, formats, accept, Icon, active, setActive, onFile, status, chosen }) => (
+  <label
+    htmlFor={id}
+    className={`up-step ${active ? "is-active" : ""} ${chosen ? "is-done" : ""}`}
+    onDragOver={(e) => {
+      e.preventDefault();
+      setActive(true);
+    }}
+    onDragLeave={() => setActive(false)}
+    onDrop={(e) => {
+      e.preventDefault();
+      setActive(false);
+      onFile(e.dataTransfer.files[0]);
+    }}
+  >
+    <input type="file" id={id} accept={accept} className="hidden" onChange={(e) => onFile(e.target.files[0])} />
+    <span className="up-step-num">{chosen ? <Check className="h-3.5 w-3.5" /> : step}</span>
+    <span className="up-step-body">
+      <b>
+        <Icon className="inline h-4 w-4 mr-1.5 -mt-0.5" aria-hidden="true" />
+        {title}
+      </b>
+      <span className={`text-xs truncate ${chosen ? "" : "smb-t3"}`}>{status || chosen || formats}</span>
+    </span>
+    <span className="up-step-action">{chosen ? "Change" : "Choose"}</span>
+  </label>
+);
 
 export default UploadDashboard;
