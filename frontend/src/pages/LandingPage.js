@@ -22,18 +22,85 @@ const reducedMotion = () => typeof window !== "undefined" && window.matchMedia?.
 
 const LOG_STEPS = ["Reading your search…", "Searching YouTube for top type beats…", "Pulling tags from similar videos…", "Asking AI for type beat variations…", "Scoring and ranking tags…"];
 
-// Tag shapes the generator returns for any artist; {a} is what you typed.
-const TAG_SHAPES = [
-  ["{a} type beat", 87, "high", "low", "People search this exact phrase often and few uploads target it, so a new video can rank."],
-  ["{a} type beat 2026", 81, "high", "medium", "The year catches people looking for new beats in this style."],
-  ["free {a} type beat", 76, "high", "high", "Lots of searches, but many videos already fight for it."],
-  ["{a} instrumental", 71, "medium", "low", "Fewer searches, but very little competition."],
-  ["{a} type beat hard", 68, "medium", "medium", "A mood word narrows the search to listeners who want this energy."],
-  ["dark {a} type beat", 64, "medium", "low", "Pairs the artist with a mood people add when they search."],
-  ["{a} x type beat", 59, "medium", "medium", "Collab-style searches are common for this lane."],
-  ["{a} beat", 47, "low", "high", "Too broad: it competes with the artist's own songs."],
+// Sample runs for the suggestions: tags a real run would surface for each search, built from the
+// artist's own eras, albums, collaborators and nicknames, the way the generator mines YouTube.
+// [tag, score, demand, competition, why]
+const SAMPLE_RUNS = {
+  future: [
+    ["future type beat", 88, "high", "medium", "The core search for this lane. Steady demand all year, so every upload needs it."],
+    ["future x metro boomin type beat", 84, "high", "low", "Their joint albums made this pairing its own search, and few beats are titled for it."],
+    ["ds2 type beat", 79, "medium", "low", "Fans search the album by name for that dark, codeine-trap sound."],
+    ["dirty sprite 2 type beat", 74, "medium", "low", "The long form of DS2 catches people who type it out in full."],
+    ["pluto type beat", 71, "medium", "low", "Future's nickname. Smaller, but almost nobody tags it."],
+    ["future type beat 2026", 69, "high", "high", "The year draws people looking for something new, but lots of uploads already use it."],
+    ["purple reign type beat", 63, "medium", "low", "Mixtape-era search for slower, melodic beats."],
+    ["future young thug type beat", 58, "medium", "medium", "Super Slimey-style searches for a two-artist sound."],
+    ["future mask off type beat", 54, "medium", "high", "Huge song, but the search is full of remakes and covers."],
+    ["future instrumental", 41, "low", "high", "Too broad: it competes with official instrumentals of his songs."],
+  ],
+  "travis scott": [
+    ["travis scott type beat", 89, "high", "high", "The biggest search in this lane. You need it, but it alone won't rank a new channel."],
+    ["utopia type beat", 83, "high", "low", "The newest album has its own search and few beats are named for it yet."],
+    ["astroworld type beat", 80, "high", "medium", "Album-era search for psychedelic, bouncy trap."],
+    ["travis scott x don toliver type beat", 76, "medium", "low", "A collab pairing listeners search for melodic, airy beats."],
+    ["la flame type beat", 70, "medium", "low", "His nickname. Fewer searches, almost no competition."],
+    ["rodeo type beat", 66, "medium", "low", "Older-era search for darker, spacey production."],
+    ["cactus jack type beat", 62, "medium", "low", "Label-name search that also pulls in fans of the whole crew."],
+    ["travis scott type beat 2026", 57, "high", "high", "The year helps, but this exact phrase is crowded."],
+    ["psychedelic trap beat", 49, "low", "low", "A sound word that brings in people who don't search by artist."],
+    ["sicko mode type beat", 44, "medium", "high", "Hit-song search packed with remakes."],
+  ],
+  "ken carson": [
+    ["ken carson type beat", 88, "high", "medium", "The main search for this lane, still growing."],
+    ["a great chaos type beat", 84, "high", "low", "His latest album has its own search and few beats are titled for it."],
+    ["project x type beat", 79, "medium", "low", "Debut-album search for raw, distorted rage beats."],
+    ["ken carson x destroy lonely type beat", 77, "medium", "low", "Opium labelmates searched together for the same dark sound."],
+    ["opium type beat", 72, "medium", "medium", "Label search that pulls in fans of Playboi Carti's whole roster."],
+    ["rage type beat", 68, "high", "high", "Big sound search, but very crowded."],
+    ["x type beat ken carson", 61, "medium", "low", "The album X, searched with his name to avoid unrelated results."],
+    ["ken carson type beat 2026", 56, "high", "high", "Year searches help reach new listeners but are crowded."],
+    ["distorted 808 beat", 48, "low", "low", "A sound word for producers' listeners who search by texture."],
+    ["ken carson instrumental", 40, "low", "high", "Competes with official instrumentals of his songs."],
+  ],
+  "dark trap": [
+    ["dark trap beat", 86, "high", "medium", "The core search for this mood. Fits almost any dark upload."],
+    ["dark trap type beat", 82, "high", "medium", "Adds the type-beat phrasing people use when shopping for beats."],
+    ["evil trap beat", 77, "medium", "low", "A mood word with steady searches and few uploads targeting it."],
+    ["scary trap beat", 73, "medium", "low", "Halloween spikes this every year; good to have in the back catalogue."],
+    ["21 savage type beat dark", 70, "high", "medium", "Pairs the mood with the artist most searched for it."],
+    ["dark piano trap beat", 66, "medium", "low", "An instrument word narrows it to listeners who want melodies."],
+    ["metro boomin type beat dark", 62, "high", "high", "A huge producer search, but crowded."],
+    ["horror trap beat", 57, "medium", "low", "Small but loyal search for cinematic, eerie beats."],
+    ["hard dark trap instrumental", 51, "medium", "medium", "Long-tail phrasing that rappers type when they want something to write to."],
+    ["trap beat", 38, "high", "high", "Too broad: millions of uploads compete for it."],
+  ],
+  pluggnb: [
+    ["pluggnb type beat", 87, "high", "low", "The main search for this sound, and still underserved."],
+    ["pluggnb beat", 81, "high", "low", "Shorter phrasing many listeners use."],
+    ["summrs type beat", 78, "medium", "low", "One of the artists who defined pluggnb; few beats name him."],
+    ["autumn! type beat", 75, "medium", "low", "Another core pluggnb artist with a dedicated fanbase."],
+    ["kankan type beat", 71, "medium", "low", "Searched for the bright, bouncy pluggnb sound."],
+    ["plugg type beat", 68, "high", "medium", "The parent genre. Bigger, but more crowded."],
+    ["r&b plugg beat", 62, "medium", "low", "Spelled-out phrasing for listeners who don't know the genre name."],
+    ["melodic plugg beat", 57, "medium", "low", "A mood word for the softer side of the sound."],
+    ["pluggnb type beat 2026", 52, "medium", "medium", "Year searches help, but the genre is young enough that the base tag matters more."],
+    ["chill trap beat", 42, "medium", "high", "Broad mood search with heavy competition."],
+  ],
+};
+// For anything else you type: the patterns a run tries first. {a} is your search.
+const FALLBACK_SHAPES = [
+  ["{a} type beat", 85, "high", "medium", "The exact phrase people search. Every upload in this lane needs it."],
+  ["{a} type beat 2026", 76, "high", "high", "The year catches people looking for new beats, but many uploads already use it."],
+  ["free {a} type beat", 72, "high", "high", "Lots of searches from rappers looking for free beats, and lots of competition."],
+  ["{a} instrumental", 66, "medium", "low", "Fewer searches, but very little competition."],
+  ["hard {a} type beat", 63, "medium", "medium", "A mood word narrows the search to listeners who want this energy."],
+  ["dark {a} type beat", 60, "medium", "low", "Pairs your search with a mood people add."],
+  ["{a} type beat with hook", 52, "low", "low", "Small search, but people typing it are ready to buy."],
+  ["{a} beat", 44, "low", "high", "Too broad: it competes with the artist's own songs."],
 ];
-const SUGGESTIONS = ["travis scott", "ken carson", "dark trap", "pluggnb"];
+const runFor = (query) =>
+  SAMPLE_RUNS[query] || FALLBACK_SHAPES.map(([shape, ...rest]) => [shape.replace("{a}", query), ...rest]);
+const SUGGESTIONS = ["future", "travis scott", "ken carson", "dark trap", "pluggnb"];
 const LEVEL = { high: "High", medium: "Medium", low: "Low" };
 const tagChars = (tags) => (tags.length ? tags.reduce((n, t) => n + t.length + (t.includes(" ") ? 2 : 0), 0) + tags.length - 1 : 0);
 
@@ -106,8 +173,8 @@ const followPointer = (e) => {
 // ---- the tag run you can start
 
 function TagLab() {
-  const [query, setQuery] = useState("travis scott");
-  const [run, setRun] = useState({ artist: "travis scott", phase: "done", step: LOG_STEPS.length });
+  const [query, setQuery] = useState("future");
+  const [run, setRun] = useState({ artist: "future", phase: "done", step: LOG_STEPS.length });
   const [open, setOpen] = useState(0);
   const timer = useRef(null);
 
@@ -137,7 +204,7 @@ function TagLab() {
     }, 520);
   };
 
-  const tags = useMemo(() => TAG_SHAPES.map(([shape, score, demand, competition, why]) => ({ tag: shape.replace("{a}", run.artist), score, demand, competition, why })), [run.artist]);
+  const tags = useMemo(() => runFor(run.artist).map(([tag, score, demand, competition, why]) => ({ tag, score, demand, competition, why })), [run.artist]);
   const chars = tagChars(tags.map((t) => t.tag));
   const detail = open == null ? null : tags[open];
   const pct = run.phase === "done" ? 100 : Math.round(((run.step + 0.5) / LOG_STEPS.length) * 100);

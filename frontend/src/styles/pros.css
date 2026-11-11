@@ -194,7 +194,21 @@ label.up-step:hover, .up-step.is-active { border-color: var(--c-t3); background:
 .up-step-action { font-size: 13px; color: var(--c-t2); }
 .up-connect { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 16px; border: 1px dashed var(--c-line); border-radius: var(--r-card); }
 .up-job { display: grid; gap: 8px; padding: 14px; border: 1px solid var(--c-line); border-radius: var(--r-control); background: var(--c-card2); }
-@media (max-width: 900px) { .up-steps { grid-template-columns: 1fr; } }
+/* The steps follow the card's own width, not the window's: with the sidebar open the card is
+   narrow long before the window is. Three across when there's room, then Beat and Artwork side by
+   side with the studio step under them, then one per row. */
+.up-card { container-type: inline-size; }
+.up-step .smb-btn, .up-step-action { flex: none; white-space: nowrap !important; overflow-wrap: normal !important; word-break: normal !important; min-width: max-content !important; }
+.up-step-body b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@container (max-width: 820px) {
+  .up-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .up-step--go { grid-column: 1 / -1; }
+}
+@container (max-width: 460px) {
+  .up-steps { grid-template-columns: 1fr; }
+  .up-step--go { flex-wrap: wrap; }
+  .up-step--go .smb-btn { width: 100%; justify-content: center; }
+}
 .wf-run-name, .wf-template { text-align: left; }
 
 /* ---- tag detail on Workflow */
@@ -468,3 +482,9 @@ button.adm-btn-danger.adm-btn-danger:hover { background: color-mix(in srgb, var(
 /* Spotlight particles: a fixed canvas behind the page (the shell sits above it at z-index 1). */
 .sp-particles { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
 .spotlight-public-nav, .spotlight-public-main { position: relative; z-index: 1; }
+/* The name/email column truncates instead of widening the pill; the button keeps its label whole. */
+.up-account .smb-btn, .up-account button { flex: none; white-space: nowrap !important; overflow-wrap: normal !important; word-break: normal !important; }
+.up-account > span.min-w-0 { flex: 1 1 0; width: 0; }
+.up-card .smb-card-head { flex-wrap: wrap; row-gap: 4px; }
+.up-card .smb-card-title { white-space: nowrap; }
+.up-account { flex: 1 1 340px; max-width: 460px; }
