@@ -353,26 +353,32 @@ html[data-palette="light"] .sp-rainbow-text, html[data-palette="paper"] .sp-rain
 /* Buttons: no outline. A soft rainbow glow that breathes around the button (box-shadows, so
    it fades out evenly instead of ending in a hard box), plus a faint iridescent sheen across the
    face like liquid glass. */
-@keyframes sp-aura {
-  0%, 100% { filter: drop-shadow(-5px 0 9px rgba(255, 77, 140, 0.45)) drop-shadow(5px 0 9px rgba(77, 195, 255, 0.45)) drop-shadow(0 4px 9px rgba(77, 255, 158, 0.3)); }
-  33% { filter: drop-shadow(-5px 0 9px rgba(155, 107, 255, 0.45)) drop-shadow(5px 0 9px rgba(77, 255, 158, 0.45)) drop-shadow(0 4px 9px rgba(255, 184, 77, 0.3)); }
-  66% { filter: drop-shadow(-5px 0 9px rgba(77, 195, 255, 0.45)) drop-shadow(5px 0 9px rgba(255, 184, 77, 0.45)) drop-shadow(0 4px 9px rgba(255, 77, 140, 0.3)); }
-}
-@keyframes sp-sheen { from { background-position: 0% 50%; } to { background-position: 200% 50%; } }
-button.sp-rainbow-btn.sp-rainbow-btn { position: relative; isolation: isolate; overflow: hidden !important; animation: sp-aura 6s ease-in-out infinite; transition: transform 0.2s var(--ease); }
+@keyframes sp-aura { from { filter: blur(12px) hue-rotate(0deg); } to { filter: blur(12px) hue-rotate(360deg); } }
+@keyframes sp-sheen { from { background-position: 0% 50%, 0 0; } to { background-position: 200% 50%, 0 0; } }
+/* The hero is its own layer (isolation), so the glow below sits behind the button face but in
+   front of the card. No filter on the button itself: iPhone Safari draws that as a dark box. */
+button.sp-rainbow-btn.sp-rainbow-btn { position: relative; overflow: visible !important; transition: transform 0.2s var(--ease); }
 button.sp-rainbow-btn.sp-rainbow-btn:hover { transform: translateY(-1px); }
+/* Soft rainbow light around the button. */
+.sp-rainbow-btn::after {
+  content: ""; position: absolute; inset: -5px; z-index: -1; border-radius: 999px; pointer-events: none;
+  background: linear-gradient(90deg, #ff4d8c, #ffb84d, #4dff9e, #4dc3ff, #9b6bff, #ff4d8c);
+  opacity: 0.42;
+  filter: blur(12px);
+  animation: sp-aura 8s linear infinite;
+  transition: opacity 0.25s var(--ease);
+}
+.sp-rainbow-btn:hover::after { opacity: 0.6; }
+/* Liquid-glass face: a faint rainbow sheen and a light band across the top. */
 .sp-rainbow-btn::before {
-  content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none;
-  background: linear-gradient(110deg, rgba(255, 77, 140, 0.16), rgba(255, 184, 77, 0.14), rgba(77, 255, 158, 0.14), rgba(77, 195, 255, 0.16), rgba(155, 107, 255, 0.16), rgba(255, 77, 140, 0.16));
-  background-size: 200% 100%;
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background:
+    linear-gradient(110deg, rgba(255, 77, 140, 0.13), rgba(255, 184, 77, 0.11), rgba(77, 255, 158, 0.11), rgba(77, 195, 255, 0.13), rgba(155, 107, 255, 0.13), rgba(255, 77, 140, 0.13)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0) 55%);
+  background-size: 200% 100%, 100% 100%;
   animation: sp-sheen 7s linear infinite;
 }
-/* Glass highlight: a soft light band across the top half. */
-.sp-rainbow-btn::after {
-  content: ""; position: absolute; inset: 0 0 50% 0; z-index: -1; border-radius: inherit; pointer-events: none;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0));
-}
-.sp-rainbow-btn:disabled { animation: none; }
+.sp-rainbow-btn:disabled::after { animation: none; opacity: 0.15; }
 
 /* Pros tab: gold ring, gold text and a slow shine; brighter when picked. */
 .pro-seg button.sp-gold-tab { position: relative; color: #f3cf6b !important; box-shadow: inset 0 0 0 1px rgba(243, 207, 107, 0.55), 0 0 14px -4px rgba(243, 190, 70, 0.55); background-image: linear-gradient(100deg, transparent 30%, rgba(255, 230, 150, 0.18) 50%, transparent 70%) !important; background-size: 200% 100% !important; background-repeat: no-repeat !important; animation: sp-shine 3.5s ease-in-out infinite; }
@@ -395,7 +401,7 @@ html[data-palette="light"] .pro-seg button.sp-gold-tab.is-active, html[data-pale
 /* The title glow is quieter on light backgrounds. */
 html[data-palette="light"] .sp-rainbow-text::after, html[data-palette="paper"] .sp-rainbow-text::after { opacity: 0.35; }
 @media (prefers-reduced-motion: reduce) {
-  .sp-rainbow-text::after, .sp-rainbow-btn, .sp-rainbow-btn::before, .pro-seg button.sp-gold-tab { animation: none !important; }
+  .sp-rainbow-text::after, .sp-rainbow-btn::after, .sp-rainbow-btn::before, .pro-seg button.sp-gold-tab { animation: none !important; }
 }
 
 /* ---- All producers popup */
@@ -488,3 +494,10 @@ button.adm-btn-danger.adm-btn-danger:hover { background: color-mix(in srgb, var(
 .up-card .smb-card-head { flex-wrap: wrap; row-gap: 4px; }
 .up-card .smb-card-title { white-space: nowrap; }
 .up-account { flex: 1 1 340px; max-width: 460px; }
+
+/* Phone top bar: the Admin chip and your initials never break onto two lines. */
+.smb-topbar-right > * { flex: none; }
+.smb-topbar .smb-avatar, .smb-topbar .smb-avatar-btn, .smb-admin-chip { white-space: nowrap !important; overflow-wrap: normal !important; word-break: normal !important; min-width: max-content !important; line-height: 1; }
+.smb-topbar .smb-avatar-btn { width: 34px; height: 34px; min-width: 34px !important; padding: 0 !important; font-size: 12px; letter-spacing: 0; }
+.smb-admin-chip { height: 30px; padding: 0 10px; }
+@media (max-width: 380px) { .smb-admin-chip span, .smb-admin-chip { font-size: 12px; } }
