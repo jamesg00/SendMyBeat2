@@ -82,21 +82,20 @@ const SpotlightParticles = () => {
       const o = off.getContext("2d");
       const cx = pad + width * beam.x;
       const topY = height * beam.top;
-      const bottomHalf = width * 0.04 + width * beam.spread * 1.15;
-      const grad = o.createLinearGradient(0, topY, 0, height);
+      // A tall ellipse of light falling from above: wide enough on phones to have no visible edge.
+      const radius = Math.max(width * 0.42, 260);
+      const stretch = Math.max(1.6, (height * 1.2) / radius);
       const tint = light ? "255, 236, 200" : "255, 248, 236";
-      grad.addColorStop(0, `rgba(${tint}, ${light ? 0.22 : 0.075})`);
-      grad.addColorStop(0.55, `rgba(${tint}, ${light ? 0.08 : 0.03})`);
-      grad.addColorStop(1, `rgba(${tint}, 0)`);
-      o.filter = "blur(40px)";
-      o.fillStyle = grad;
-      o.beginPath();
-      o.moveTo(cx - width * 0.03, topY);
-      o.lineTo(cx + width * 0.03, topY);
-      o.lineTo(cx + bottomHalf, height * 1.05);
-      o.lineTo(cx - bottomHalf, height * 1.05);
-      o.closePath();
-      o.fill();
+      o.save();
+      o.translate(cx, topY);
+      o.scale(1, stretch);
+      const glow = o.createRadialGradient(0, 0, 0, 0, 0, radius);
+      glow.addColorStop(0, `rgba(${tint}, ${light ? 0.2 : 0.08})`);
+      glow.addColorStop(0.45, `rgba(${tint}, ${light ? 0.08 : 0.032})`);
+      glow.addColorStop(1, `rgba(${tint}, 0)`);
+      o.fillStyle = glow;
+      o.fillRect(-radius, 0, radius * 2, radius);
+      o.restore();
       return off;
     };
     const drawBeam = (t, light) => {

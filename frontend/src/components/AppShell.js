@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { BarChart3, DollarSign, Layers, LogOut, Settings, Shield, Star, Users } from "lucide-react";
 import { API } from "@/App";
+import { getAuthToken } from "@/lib/auth";
 
 // Signed-in layout: a sidebar on desktop, a top bar plus a floating pill tab bar on phones.
 // `active` is one of "workflow" | "analytics" | "spotlight" | "settings".
@@ -24,7 +25,14 @@ const initials = (name = "") => {
 // Who's signed in, fetched once per page load and shared by every page's shell, so pages that
 // don't load the user themselves (Spotlight, pros, admin) still show your name and admin links.
 let mePromise = null;
+let meToken = null;
 const loadMe = () => {
+  const token = getAuthToken();
+  if (!token) return Promise.resolve(null);
+  if (token !== meToken) {
+    mePromise = null;
+    meToken = token;
+  }
   if (!mePromise) {
     mePromise = axios.get(`${API}/auth/me`).then(
       (r) => r.data || null,

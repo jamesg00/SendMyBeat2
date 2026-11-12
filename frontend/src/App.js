@@ -69,6 +69,9 @@ const DEV_BYPASS =
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(DEV_BYPASS);
   const [isAdmin, setIsAdmin] = useState(DEV_BYPASS);
+  // null while we don't know yet (e.g. right after signing in), so admin pages wait instead of
+  // sending you back to the Dashboard.
+  const [adminChecked, setAdminChecked] = useState(DEV_BYPASS);
   const [loading, setLoading] = useState(!DEV_BYPASS);
 
   useEffect(() => {
@@ -79,19 +82,62 @@ function App() {
         try {
           const me = await axios.get(`${API}/auth/me`);
           setIsAdmin(Boolean(me?.data?.is_admin));
+          setAdminChecked(true);
           setIsAuthenticated(true);
         } catch (error) {
           clearAuthToken();
           setIsAuthenticated(false);
           setIsAdmin(false);
+          setAdminChecked(true);
         }
       } else {
         setIsAdmin(false);
+        setAdminChecked(true);
       }
       setLoading(false);
     };
     checkAuth();
   }, []);
+
+  // Signing in (or out) without a page reload: look up whether the new account is an admin.
+  useEffect(() => {
+    if (DEV_BYPASS || loading) return undefined;
+    if (!isAuthenticated) {
+      setIsAdmin(false);
+      setAdminChecked(true);
+      return undefined;
+    }
+    let alive = true;
+    setAdminChecked(false);
+    axios.get(`${API}/auth/me`).then(
+      (me) => {
+        if (!alive) return;
+        setIsAdmin(Boolean(me?.data?.is_admin));
+        setAdminChecked(true);
+      },
+      () => {
+        if (!alive) return;
+        setIsAdmin(false);
+        setAdminChecked(true);
+      },
+    );
+    return () => {
+      alive = false;
+    };
+  }, [isAuthenticated, loading]);
+
+  const adminRoute = (page) => {
+    if (!isAuthenticated) return <Navigate to="/" replace />;
+    if (!adminChecked) {
+      return (
+        <div className="app-boot" role="status" aria-label="Loading">
+          <span className="app-boot-mark">SENDMYBEAT</span>
+          <span className="app-boot-bar"><i /></span>
+        </div>
+      );
+    }
+    return isAdmin ? page : <Navigate to="/dashboard" replace />;
+  };
 
   if (loading) {
     return (
@@ -125,23 +171,11 @@ function App() {
             />
             <Route
               path="/admin/costs"
-              element={
-                isAuthenticated && isAdmin ? (
-                  <AdminCosts />
-                ) : (
-                  <Navigate to={isAuthenticated ? "/dashboard" : "/"} replace />
-                )
-              }
+              element={adminRoute(<AdminCosts />)}
             />
             <Route
               path="/admin/users"
-              element={
-                isAuthenticated && isAdmin ? (
-                  <AdminUsers />
-                ) : (
-                  <Navigate to={isAuthenticated ? "/dashboard" : "/"} replace />
-                )
-              }
+              element={adminRoute(<AdminUsers />)}
             />
             <Route
               path="/dashboard"
