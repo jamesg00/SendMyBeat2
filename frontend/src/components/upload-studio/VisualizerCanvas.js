@@ -1,5 +1,10 @@
 import React, { useEffect, useRef } from "react";
 import AudioVisualizer from "@/lib/AudioVisualizer";
+import { buildVisualizerOptions, designSizeFor } from "@/lib/visualizerOptions";
+
+// The live visualizer over the preview. It draws in the same design size and reads the same
+// analysis of the decoded beat as the video export, so what you see is what gets rendered.
+// Until the beat is decoded (or if decoding fails) it falls back to the live audio analyser.
 
 const VisualizerCanvas = ({
   visualizerRef,
@@ -11,84 +16,31 @@ const VisualizerCanvas = ({
   audioPreviewUrl,
   imagePreviewUrl,
   centerVisualizerImageUrl,
-  spectrumRecordImageUrl
+  spectrumRecordImageUrl,
+  analysis = null,
+  aspectRatio = "16:9",
 }) => {
   const visualizerCanvasRef = useRef(null);
-
-  const hexToRgbString = (hex, fallback = "255, 255, 255") => {
-    const clean = (hex || "").replace("#", "");
-    if (clean.length !== 6) return fallback;
-    const value = Number.parseInt(clean, 16);
-    if (Number.isNaN(value)) return fallback;
-    const r = (value >> 16) & 255;
-    const g = (value >> 8) & 255;
-    const b = value & 255;
-    return `${r}, ${g}, ${b}`;
-  };
 
   useEffect(() => {
     const canvas = visualizerCanvasRef.current;
     const audioEl = audioPlayerRef.current;
 
-    // Helper to get options (defined inside effect to capture current props)
-    const getVisualizerOptions = () => ({
-      bars: visualizerSettings.bars,
-      gain: visualizerSettings.intensity * 0.8,
-      maxBarLength: visualizerSettings.maxBarLength,
-      radius: visualizerSettings.radius,
-      rotateSpeed: visualizerSettings.rotateSpeed,
-      trailsEnabled: visualizerSettings.trailsEnabled,
-      particleEnabled: visualizerSettings.particleEnabled,
-      particleIntensity: visualizerSettings.particleIntensity,
-      monstercatParticleEnabled: visualizerSettings.monstercatParticleEnabled,
-      maxSpawnRate: Math.round(120 * visualizerSettings.particleIntensity),
-      baseSpawnRate: Math.round(10 * Math.max(0.5, visualizerSettings.particleIntensity)),
-      particleSpeed: 72 * visualizerSettings.particleIntensity,
-      mode: visualizerSettings.mode,
-      shakeIntensity: visualizerSettings.shakeIntensity * 0.7,
-      multiColorReactive: visualizerSettings.multiColorReactive,
-      spectrumStyle: visualizerSettings.mode === "circle" ? "fill" : visualizerSettings.spectrumStyle,
-      fillCenter: visualizerSettings.fillCenter,
-      fillCenterColor: hexToRgbString(visualizerSettings.fillCenterColor, "255, 255, 255"),
-      centerImageSpin: visualizerSettings.centerImageSpin,
-      spectrumColor: hexToRgbString(visualizerSettings.spectrumColor, "255, 255, 255"),
-      centerImageUrl: centerVisualizerImageUrl || imagePreviewUrl || "",
-      particleColor: hexToRgbString(visualizerSettings.particleColor, "140, 200, 255"),
-      spectrumBorderEnabled:
-        visualizerSettings.mode === "circle" && visualizerSettings.fillCenter === "transparent"
-          ? false
-          : visualizerSettings.spectrumBorderEnabled,
-      spectrumBorderWidth: 5,
-      spectrumBorderColor: hexToRgbString(visualizerSettings.spectrumBorderColor, "255, 255, 255"),
-      spectrumRecordImageUrl,
-      monstercatYOffset: visualizerSettings.monstercatYOffset,
-      monstercatSpacing: visualizerSettings.monstercatSpacing,
-      monstercatParticleSpeed: visualizerSettings.monstercatParticleSpeed,
-      monstercatParticleSize: visualizerSettings.monstercatParticleSize,
-      monstercatParticleCount: visualizerSettings.monstercatParticleCount,
-      monstercatGlow: visualizerSettings.monstercatGlow,
-      lowSensitivity: visualizerSettings.lowSensitivity,
-      midSensitivity: visualizerSettings.midSensitivity,
-      highSensitivity: visualizerSettings.highSensitivity,
-      monstercatSmoothing: visualizerSettings.monstercatSmoothing,
-      spectrumBarThickness: visualizerSettings.spectrumBarThickness ?? 4,
-      spectrumGlow: visualizerSettings.spectrumGlow ?? 20,
-      spectrumOpacity: visualizerSettings.spectrumOpacity ?? 1.0,
-      spectrumRgb: visualizerSettings.spectrumRgb ?? false,
-      spectrumSmoothing: visualizerSettings.spectrumSmoothing ?? 0.3,
-      spectrumMirror: visualizerSettings.spectrumMirror !== false,
-    });
-
     if (!canvas || !audioEl || !visualizerEnabled) {
       if (visualizerRef.current) {
         visualizerRef.current.stop();
         const ctx = canvas?.getContext("2d");
-        ctx?.clearRect(0, 0, canvas.width, canvas.height);
+        if (ctx) {
+          ctx.save();
+          ctx.setTransform(1, 0, 0, 1, 0, 0);
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.restore();
+        }
       }
       return;
     }
 
-    const options = getVisualizerOptions();
+    const options = buildVisualizerOptions(visualizerSettings, { imagePreviewUrl, centerVisualizerImageUrl, spectrumRecordImageUrl });
 
     if (!visualizerRef.current) {
       visualizerRef.current = new AudioVisualizer(canvas, options);
@@ -96,15 +48,32 @@ const VisualizerCanvas = ({
       visualizerRef.current.attachCanvas(canvas);
       visualizerRef.current.setOptions(options);
     }
-    visualizerRef.current.resize();
+    const viz = visualizerRef.current;
+    viz.setDesignSize(...designSizeFor(aspectRatio));
     requestAnimationFrame(() => visualizerRef.current?.resize());
 
+    if (analysis) {
+      // Read the spectrum for wherever the player is right now. Paused = silence.
+      viz.setAnalysisProvider({
+        fftSize: analysis.fftSize,
+        sampleRate: analysis.sampleRate,
+        fill: (out) => {
+          const player = audioPlayerRef.current;
+          if (!player || player.paused || player.ended) out.fill(0);
+          else analysis.fillAtTime(player.currentTime, out);
+        },
+      });
+      if (!audioEl.paused && !audioEl.ended) viz.start();
+      return;
+    }
+
+    viz.setAnalysisProvider(null);
     const initViz = async () => {
       try {
-        await visualizerRef.current.connectMediaElement(audioEl);
+        await viz.connectMediaElement(audioEl);
         if (!audioEl.paused && !audioEl.ended) {
-          await visualizerRef.current.resumeAudioContext();
-          visualizerRef.current.start();
+          await viz.resumeAudioContext();
+          viz.start();
         }
       } catch (err) { console.error(err); }
     };
@@ -120,7 +89,9 @@ const VisualizerCanvas = ({
     studioOpen,
     previewDims,
     visualizerRef,
-    audioPlayerRef
+    audioPlayerRef,
+    analysis,
+    aspectRatio,
   ]);
 
   return (

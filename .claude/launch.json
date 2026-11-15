@@ -45,6 +45,15 @@
         "cd frontend && set MOCK_ADMIN=1&& set MOCK_PORT=3102&& node dev/mock-api.js"
       ],
       "port": 3102
+    },
+    {
+      "name": "website-mock-save",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "cd frontend && set MOCK_PORT=3103&& set MOCK_SAVE_DIR=%TEMP%\\smb-mock-uploads&& (if not exist %TEMP%\\smb-mock-uploads mkdir %TEMP%\\smb-mock-uploads) && node dev/mock-api.js"
+      ],
+      "port": 3103
     }
   ]
 }

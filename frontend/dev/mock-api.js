@@ -478,6 +478,24 @@ http
       return;
     }
     const path = url.pathname.slice(4);
+    // MOCK_SAVE_DIR=<folder>: keep uploaded files there (to inspect an exported visualizer video).
+    const uploadKind = req.method === "POST" && /^\/upload\/(audio|image)$/.exec(path);
+    if (uploadKind && process.env.MOCK_SAVE_DIR) {
+      const chunks = [];
+      for await (const chunk of req) chunks.push(chunk);
+      const raw = Buffer.concat(chunks);
+      const headerEnd = raw.indexOf("\r\n\r\n");
+      const header = raw.subarray(0, headerEnd).toString("latin1");
+      const boundary = header.split("\r\n")[0];
+      const name = (/filename="([^"]+)"/.exec(header) || [])[1] || `upload-${uploadKind[1]}`;
+      const tail = raw.lastIndexOf(Buffer.from(`\r\n${boundary}`));
+      const file = raw.subarray(headerEnd + 4, tail > 0 ? tail : raw.length);
+      require("fs").writeFileSync(require("path").join(process.env.MOCK_SAVE_DIR, name.replace(/[^\w.-]/g, "_")), file);
+      console.log(`saved upload ${name} (${file.length} bytes)`);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ file_id: `mock-${uploadKind[1]}`, media_kind: /\.(mp4|webm)$/i.test(name) ? "video" : uploadKind[1] }));
+      return;
+    }
     const route = routes.find(([method, pattern]) => method === req.method && pattern.test(path));
     const body = await readBody(req);
     let status = 200;
