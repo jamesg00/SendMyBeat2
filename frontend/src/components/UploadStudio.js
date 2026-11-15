@@ -1137,6 +1137,9 @@ const UploadStudio = ({
     } catch { return null; }
   };
 
+  // Development only: lets a test run the visualizer export without filling in the upload form.
+  if (process.env.NODE_ENV === "development") window.__smbBakeVisualizer = bakeVisualizerToVideo;
+
   const handleYouTubeUpload = async () => {
     if (!uploadTitle || !selectedDescriptionId || !audioFileId || !imageFileId) {
       toast.error("Please fill title, description, and ensure files are uploaded.");
