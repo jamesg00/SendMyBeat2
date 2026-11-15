@@ -191,6 +191,18 @@ export default class AudioVisualizer {
     this.monstercatParticles = [];
     this.spectrumSmoothedBars = [];
 
+    // Deterministic drawing: a fixed design size (so the preview and the exported video are the
+    // same picture at different scales), a fixed 60 Hz step, and a seeded random source.
+    this.designW = 0;
+    this.designH = 0;
+    this.fixedOutput = false;
+    this.viewW = 0;
+    this.viewH = 0;
+    this.pixelScale = 1;
+    this.stepAccumulator = 0;
+    this.analysisProvider = null;
+    this.seedRandom(0x5eed1e55);
+
     this.resize = this.resize.bind(this);
     this.loop = this.loop.bind(this);
     this.buildBinMap();
@@ -216,6 +228,57 @@ export default class AudioVisualizer {
     if (typeof next.bars === "number" || typeof next.minHz === "number" || typeof next.maxHz === "number") {
       this.buildBinMap();
     }
+  }
+
+  /** Seeded random (mulberry32), so particles and shake repeat exactly from the same seed. */
+  seedRandom(seed) {
+    let a = seed >>> 0;
+    this.rand = () => {
+      a = (a + 0x6d2b79f5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  /** Everything is laid out in this size; the canvas scales it to whatever size it really is. */
+  setDesignSize(width, height) {
+    this.designW = Math.max(0, width || 0);
+    this.designH = Math.max(0, height || 0);
+    this.resize();
+  }
+
+  /** Export: draw into an exact pixel size, ignoring the page layout and screen scaling. */
+  setOutputSize(width, height) {
+    this.fixedOutput = true;
+    this.canvas.width = width;
+    this.canvas.height = height;
+    this.applyViewTransform();
+  }
+
+  applyViewTransform() {
+    const designW = this.designW || this.canvas.width;
+    const designH = this.designH || this.canvas.height;
+    const scale = this.canvas.width / Math.max(1, designW);
+    this.viewW = designW;
+    this.viewH = designH;
+    this.pixelScale = scale;
+    this.ctx.setTransform(scale, 0, 0, scale, 0, 0);
+  }
+
+  /**
+   * Where the spectrum comes from. Default: the live audio analyser. A provider
+   * ({ fftSize, sampleRate, fill(Uint8Array) }) reads it from the decoded beat instead, which is
+   * what makes the preview and the export identical.
+   */
+  setAnalysisProvider(provider) {
+    this.analysisProvider = provider || null;
+    if (provider) {
+      const bins = provider.fftSize / 2;
+      if (!this.dataArray || this.dataArray.length !== bins) this.dataArray = new Uint8Array(bins);
+    }
+    this.buildBinMap();
   }
 
   attachCanvas(nextCanvas) {
@@ -396,6 +459,7 @@ export default class AudioVisualizer {
     if (this.running) return;
     this.running = true;
     this.lastTs = 0;
+    this.stepAccumulator = 0;
     this.animationFrame = requestAnimationFrame(this.loop);
   }
 
@@ -443,8 +507,8 @@ export default class AudioVisualizer {
     this.prevSmoothedBars = previousBars;
     this.barTransition = previousBars.length ? 1 : 0;
 
-    const sampleRate = this.audioContext?.sampleRate || 48000;
-    const fftSize = this.analyser?.fftSize || this.closestFftSize(this.options.fftSize);
+    const sampleRate = this.analysisProvider?.sampleRate || this.audioContext?.sampleRate || 48000;
+    const fftSize = this.analysisProvider?.fftSize || this.analyser?.fftSize || this.closestFftSize(this.options.fftSize);
     const nyquist = sampleRate / 2;
     const minHz = Math.max(10, this.options.minHz);
     const maxHz = Math.min(nyquist, this.options.maxHz);
@@ -495,6 +559,7 @@ export default class AudioVisualizer {
   }
 
   resize() {
+    if (this.fixedOutput) return; // export canvases keep their exact size
     const rect = this.canvas.getBoundingClientRect();
     const cssW = Math.floor(rect.width || this.canvas.clientWidth || 0);
     const cssH = Math.floor(rect.height || this.canvas.clientHeight || 0);
@@ -502,7 +567,14 @@ export default class AudioVisualizer {
     const dpr = window.devicePixelRatio || 1;
     this.canvas.width = Math.max(1, Math.floor(cssW * dpr));
     this.canvas.height = Math.max(1, Math.floor(cssH * dpr));
-    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (this.designW && this.designH) {
+      this.applyViewTransform();
+    } else {
+      this.viewW = cssW;
+      this.viewH = cssH;
+      this.pixelScale = dpr;
+      this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
     // Keep caches aligned with new viewport to avoid warped transitions.
     if (this.monstercatSmoothedBars.length > this.options.bars) {
       this.monstercatSmoothedBars = this.monstercatSmoothedBars.slice(0, this.options.bars);
@@ -510,10 +582,13 @@ export default class AudioVisualizer {
   }
 
   computeBars() {
-    if (!this.analyser || !this.dataArray) {
+    if (this.analysisProvider && this.dataArray) {
+      this.analysisProvider.fill(this.dataArray);
+    } else if (this.analyser && this.dataArray) {
+      this.analyser.getByteFrequencyData(this.dataArray);
+    } else {
       return this.smoothedBars.map(() => 0);
     }
-    this.analyser.getByteFrequencyData(this.dataArray);
     const [selectedStart, selectedEnd] = this.getSelectedBinRange();
 
     const bars = new Array(this.frequencyBins.length).fill(0);
@@ -624,20 +699,20 @@ export default class AudioVisualizer {
     this.spawnRemainder = toSpawnFloat - Math.floor(toSpawnFloat);
 
     for (let i = 0; i < toSpawn; i += 1) {
-      const angle = Math.random() * Math.PI * 2 + this.rotation;
+      const angle = this.rand() * Math.PI * 2 + this.rotation;
       const px = cx + Math.cos(angle) * radius;
       const py = cy + Math.sin(angle) * radius;
       const speedBurst = 1 + this.beatPulse * 1.1 + this.impactPulse * 1.35;
-      const baseSpeed = this.runtime.particleSpeed * speedBurst * (0.4 + Math.random() * 1.25);
-      const tangent = (Math.random() - 0.5) * this.options.particleJitter;
+      const baseSpeed = this.runtime.particleSpeed * speedBurst * (0.4 + this.rand() * 1.25);
+      const tangent = (this.rand() - 0.5) * this.options.particleJitter;
       const vx = Math.cos(angle) * baseSpeed + -Math.sin(angle) * tangent;
       const vy = Math.sin(angle) * baseSpeed + Math.cos(angle) * tangent;
-      const baseLife = this.options.particleLifeMin + Math.random() * (this.options.particleLifeMax - this.options.particleLifeMin);
+      const baseLife = this.options.particleLifeMin + this.rand() * (this.options.particleLifeMax - this.options.particleLifeMin);
       const maxToEdge = Math.max(
         Math.hypot(px, py),
-        Math.hypot((this.canvas.clientWidth || 0) - px, py),
-        Math.hypot(px, (this.canvas.clientHeight || 0) - py),
-        Math.hypot((this.canvas.clientWidth || 0) - px, (this.canvas.clientHeight || 0) - py)
+        Math.hypot(this.viewW - px, py),
+        Math.hypot(px, this.viewH - py),
+        Math.hypot(this.viewW - px, this.viewH - py)
       );
       const minLifeToEdge = maxToEdge / Math.max(1, baseSpeed * 0.92);
       const life = Math.max(baseLife, minLifeToEdge);
@@ -649,8 +724,8 @@ export default class AudioVisualizer {
         life,
         maxLife: life,
         baseSpeed,
-        spin: (Math.random() - 0.5) * (0.85 + Math.random() * 0.75),
-        seed: Math.random() * Math.PI * 2,
+        spin: (this.rand() - 0.5) * (0.85 + this.rand() * 0.75),
+        seed: this.rand() * Math.PI * 2,
         age: 0,
       });
     }
@@ -707,9 +782,9 @@ export default class AudioVisualizer {
       const margin = 40;
       if (
         p.x < -margin ||
-        p.x > (this.canvas.clientWidth || 0) + margin ||
+        p.x > this.viewW + margin ||
         p.y < -margin ||
-        p.y > (this.canvas.clientHeight || 0) + margin
+        p.y > this.viewH + margin
       ) {
         continue;
       }
@@ -759,7 +834,7 @@ export default class AudioVisualizer {
     const c = this.ctx;
     const count = bars.length;
     const step = (Math.PI * 2) / count;
-    const maxBarPx = Math.min(this.canvas.clientWidth, this.canvas.clientHeight) * this.runtime.maxBarLength;
+    const maxBarPx = Math.min(this.viewW, this.viewH) * this.runtime.maxBarLength;
     const avgAmp = bars.reduce((acc, n) => acc + Math.max(0, n), 0) / Math.max(1, count);
     const reactiveAmp = Math.min(1.6, avgAmp + this.beatPulse * 0.55 + this.impactPulse * 0.7);
     const [sr, sg, sb] = (this.options.spectrumColor || "255, 255, 255").split(",").map((v) => Number(v.trim()));
@@ -960,22 +1035,22 @@ export default class AudioVisualizer {
     if (!this.options.monstercatParticleEnabled || this.options.mode !== "monstercat") return;
     const intensity = Math.max(0, Math.min(1.4, this.energySlew * 0.9 + this.bassSlew * 0.7 + this.impactPulse * 0.8));
     const rate = (8 + intensity * 48) * Math.max(0.25, this.options.particleIntensity || 1);
-    const toSpawn = Math.floor(rate * dt + Math.random() * 0.7);
+    const toSpawn = Math.floor(rate * dt + this.rand() * 0.7);
     const speedScale = Math.max(0.25, this.options.monstercatParticleSpeed || 1);
     const yPad = 14;
 
     for (let i = 0; i < toSpawn; i += 1) {
-      const y = yPad + Math.random() * Math.max(1, h - yPad * 2);
-      const vx = (110 + intensity * 260 + Math.random() * 150) * speedScale;
-      const life = (w + 120) / Math.max(1, vx) + Math.random() * 0.9;
+      const y = yPad + this.rand() * Math.max(1, h - yPad * 2);
+      const vx = (110 + intensity * 260 + this.rand() * 150) * speedScale;
+      const life = (w + 120) / Math.max(1, vx) + this.rand() * 0.9;
       this.monstercatParticles.push({
-        x: -40 - Math.random() * 100,
+        x: -40 - this.rand() * 100,
         y,
         vx,
         life,
         maxLife: life,
-        size: (1.2 + Math.random() * 2.2) * Math.max(0.35, this.options.monstercatParticleSize || 1),
-        seed: Math.random() * Math.PI * 2,
+        size: (1.2 + this.rand() * 2.2) * Math.max(0.35, this.options.monstercatParticleSize || 1),
+        seed: this.rand() * Math.PI * 2,
       });
     }
   }
@@ -1062,7 +1137,7 @@ export default class AudioVisualizer {
         c.stroke();
       } else {
         c.fillStyle = this.getReactiveColor(barReactive, 0.92, 1.15);
-        c.shadowBlur = Math.max(0, this.options.monstercatGlow ?? 15);
+        c.shadowBlur = Math.max(0, this.options.monstercatGlow ?? 15) * this.pixelScale;
         c.shadowColor = this.getReactiveColor(barReactive, 0.6, 1.1);
         c.fillRect(x, y, barWidth, barHeight);
       }
@@ -1108,7 +1183,7 @@ export default class AudioVisualizer {
         const y = h - barHeight;
 
         if (glow > 0) {
-          c.shadowBlur = glow;
+          c.shadowBlur = glow * this.pixelScale;
           c.shadowColor = baseColor;
         }
 
@@ -1146,8 +1221,8 @@ export default class AudioVisualizer {
 
   drawVignette() {
     const c = this.ctx;
-    const w = this.canvas.clientWidth;
-    const h = this.canvas.clientHeight;
+    const w = this.viewW;
+    const h = this.viewH;
     const grad = c.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.2, w / 2, h / 2, Math.max(w, h) * 0.7);
     grad.addColorStop(0, "rgba(0,0,0,0)");
     grad.addColorStop(1, "rgba(0,0,0,0.26)");
@@ -1158,8 +1233,8 @@ export default class AudioVisualizer {
   calculateShake() {
     if (this.bassEnergy > 0.45 && this.options.shakeIntensity > 0) { // Threshhold 0.4 -> 0.45
         const shakeAmt = (this.bassEnergy - 0.45) * 10 * this.options.shakeIntensity; // Mult 15 -> 10
-        this.shakeOffsetX = (Math.random() - 0.5) * shakeAmt;
-        this.shakeOffsetY = (Math.random() - 0.5) * shakeAmt;
+        this.shakeOffsetX = (this.rand() - 0.5) * shakeAmt;
+        this.shakeOffsetY = (this.rand() - 0.5) * shakeAmt;
     } else {
         this.shakeOffsetX *= 0.9;
         this.shakeOffsetY *= 0.9;
@@ -1168,16 +1243,27 @@ export default class AudioVisualizer {
 
   loop(ts) {
     if (!this.running) return;
-    const dt = this.lastTs ? Math.min(0.06, (ts - this.lastTs) / 1000) : 0.016;
+    // Advance in fixed 1/60 s steps so motion is the same on any monitor and in the export.
+    const STEP = 1 / 60;
+    const elapsed = this.lastTs ? Math.min(0.1, (ts - this.lastTs) / 1000) : STEP;
     this.lastTs = ts;
-
-    const c = this.ctx;
-    const w = this.canvas.clientWidth;
-    const h = this.canvas.clientHeight;
-    if (!w || !h) {
-      this.animationFrame = requestAnimationFrame(this.loop);
-      return;
+    this.stepAccumulator += elapsed;
+    let steps = 0;
+    while (this.stepAccumulator >= STEP * 0.9 && steps < 2) {
+      this.stepAccumulator -= STEP;
+      this.renderFrame(STEP);
+      steps += 1;
     }
+    if (this.stepAccumulator > STEP) this.stepAccumulator = 0; // too far behind: drop the backlog
+    this.animationFrame = requestAnimationFrame(this.loop);
+  }
+
+  /** Advance the simulation by dt seconds and draw one frame. */
+  renderFrame(dt) {
+    const c = this.ctx;
+    const w = this.viewW;
+    const h = this.viewH;
+    if (!w || !h) return;
 
     c.globalCompositeOperation = "source-over";
     // Keep the visualizer transparent so it does not darken the background image.
@@ -1250,7 +1336,5 @@ export default class AudioVisualizer {
         this.prevSmoothedBars = [];
       }
     }
-
-    this.animationFrame = requestAnimationFrame(this.loop);
   }
 }

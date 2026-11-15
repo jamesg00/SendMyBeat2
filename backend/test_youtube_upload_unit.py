@@ -420,6 +420,48 @@ class TestYouTubeUpload(unittest.IsolatedAsyncioTestCase):
         self.assertIn("force_original_aspect_ratio=decrease", filter_chain)
         self.assertNotIn("gblur", filter_chain)
 
+    def test_build_render_filter_free_transform_flips_and_frame_position(self):
+        payload = {
+            "target_w": 1280,
+            "target_h": 720,
+            "image_scale_x": 1.6,
+            "image_scale_y": 0.7,
+            "image_pos_x": 0.5,
+            "image_pos_y": -0.25,
+            "image_rotation": 12.0,
+            "image_flip_h": True,
+            "image_flip_v": False,
+            "image_pos_mode": "frame",
+            "background_color": "black",
+            "remove_watermark": True,
+        }
+        chain = server._build_render_filter(payload)
+        # Stretch each axis on its own, flip, then rotate (the editor's order).
+        self.assertIn("iw*1.6000", chain)
+        self.assertIn("ih*0.7000", chain)
+        self.assertIn("hflip", chain)
+        self.assertNotIn("vflip", chain)
+        self.assertLess(chain.index("hflip"), chain.index("rotate="))
+        # Position is measured in half-frames, not in the artwork's own size.
+        self.assertIn("(0.5000*W*0.5)", chain)
+        self.assertIn("(-0.2500*H*0.5)", chain)
+
+    def test_render_settings_accept_free_transform_ranges(self):
+        settings = server._normalize_upload_render_settings(
+            aspect_ratio="16:9", image_scale=1.0, image_scale_x=3.5, image_scale_y=0.2,
+            image_pos_x=1.4, image_pos_y=-1.8, image_rotation=-45.0, background_color="black",
+            image_flip_v=True, image_pos_mode="frame",
+        )
+        self.assertEqual((settings["image_scale_x"], settings["image_scale_y"]), (3.5, 0.2))
+        self.assertTrue(settings["image_flip_v"])
+        self.assertEqual(settings["image_pos_mode"], "frame")
+        # The older position meaning still stops at 1.
+        with self.assertRaises(server.HTTPException):
+            server._normalize_upload_render_settings(
+                aspect_ratio="16:9", image_scale=1.0, image_scale_x=1.0, image_scale_y=1.0,
+                image_pos_x=1.4, image_pos_y=0.0, image_rotation=0.0, background_color="black",
+            )
+
     def test_sniff_visual_format_accepts_gif(self):
         self.assertEqual(server._sniff_visual_format(b"GIF87a" + b"\x00" * 16), ".gif")
         self.assertEqual(server._sniff_visual_format(b"GIF89a" + b"\x00" * 16), ".gif")

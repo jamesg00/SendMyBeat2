@@ -2913,6 +2913,10 @@ def _log_youtube_render_timeout_configuration() -> None:
         )
 
 
+IMAGE_SCALE_MIN = 0.05
+IMAGE_SCALE_MAX = 5.0
+
+
 def _normalize_upload_render_settings(
     aspect_ratio: str,
     image_scale: float,
@@ -2923,6 +2927,9 @@ def _normalize_upload_render_settings(
     image_rotation: float,
     background_color: str,
     render_fps: Any = None,
+    image_flip_h: bool = False,
+    image_flip_v: bool = False,
+    image_pos_mode: str = "art",
 ) -> dict[str, Any]:
     safe_aspect_ratio = (aspect_ratio or "16:9").strip()
     aspect_map = {
@@ -2936,14 +2943,19 @@ def _normalize_upload_render_settings(
 
     scale_x = image_scale_x if image_scale_x is not None else image_scale
     scale_y = image_scale_y if image_scale_y is not None else image_scale
-    if not 0.5 <= scale_x <= 2.0:
-        raise HTTPException(status_code=400, detail="image_scale_x must be between 0.5 and 2.0.")
-    if not 0.5 <= scale_y <= 2.0:
-        raise HTTPException(status_code=400, detail="image_scale_y must be between 0.5 and 2.0.")
-    if not -1.0 <= image_pos_x <= 1.0:
-        raise HTTPException(status_code=400, detail="image_pos_x must be between -1 and 1.")
-    if not -1.0 <= image_pos_y <= 1.0:
-        raise HTTPException(status_code=400, detail="image_pos_y must be between -1 and 1.")
+    # Free transform lets you stretch and squash each axis, so the range is wide.
+    if not IMAGE_SCALE_MIN <= scale_x <= IMAGE_SCALE_MAX:
+        raise HTTPException(status_code=400, detail=f"image_scale_x must be between {IMAGE_SCALE_MIN} and {IMAGE_SCALE_MAX}.")
+    if not IMAGE_SCALE_MIN <= scale_y <= IMAGE_SCALE_MAX:
+        raise HTTPException(status_code=400, detail=f"image_scale_y must be between {IMAGE_SCALE_MIN} and {IMAGE_SCALE_MAX}.")
+    # "frame": position is the image centre's offset from the frame centre, in half-frames (what the
+    # editor shows). "art" is the older meaning (in half the image's own size), kept for old clients.
+    safe_pos_mode = "frame" if str(image_pos_mode or "").strip().lower() == "frame" else "art"
+    pos_limit = 2.0 if safe_pos_mode == "frame" else 1.0
+    if not -pos_limit <= image_pos_x <= pos_limit:
+        raise HTTPException(status_code=400, detail=f"image_pos_x must be between -{pos_limit:g} and {pos_limit:g}.")
+    if not -pos_limit <= image_pos_y <= pos_limit:
+        raise HTTPException(status_code=400, detail=f"image_pos_y must be between -{pos_limit:g} and {pos_limit:g}.")
     if not -180.0 <= image_rotation <= 180.0:
         raise HTTPException(status_code=400, detail="image_rotation must be between -180 and 180 degrees.")
 
@@ -2966,6 +2978,9 @@ def _normalize_upload_render_settings(
         "image_pos_x": float(image_pos_x),
         "image_pos_y": float(image_pos_y),
         "image_rotation": float(image_rotation),
+        "image_flip_h": bool(image_flip_h),
+        "image_flip_v": bool(image_flip_v),
+        "image_pos_mode": safe_pos_mode,
         "background_color": safe_background_color,
         "background_mode": safe_background_mode,
         "render_fps": _normalize_render_fps(render_fps),
@@ -3272,9 +3287,11 @@ def _build_render_filter(payload: dict[str, Any]) -> str:
 
     # Browser preview uses object-contain first, then user transform.
     # The renderer must do the same: fit the artwork into the frame before applying scale/position.
+    flips = ("hflip," if payload.get("image_flip_h") else "") + ("vflip," if payload.get("image_flip_v") else "")
     foreground_chain = (
         f"scale={target_w}:{target_h}:force_original_aspect_ratio=decrease,"
-        f"scale=iw*{scale_x:.4f}:ih*{scale_y:.4f},setsar=1"
+        # Even sizes, never below 2px; "\\," escapes the comma inside the ffmpeg expression.
+        f"scale=max(2\\,trunc(iw*{scale_x:.4f}/2)*2):max(2\\,trunc(ih*{scale_y:.4f}/2)*2),{flips}setsar=1"
     )
     if abs(rotation_degrees) < 0.01:
         artwork_chain = f"{foreground_chain}[art]"
@@ -3284,8 +3301,13 @@ def _build_render_filter(payload: dict[str, Any]) -> str:
             f"rotate={rotation_radians:.8f}:c=none:ow=rotw(iw):oh=roth(ih)[art]"
         )
 
-    overlay_x = f"(W-w)/2+({pos_x:.4f}*w*0.5)"
-    overlay_y = f"(H-h)/2+({pos_y:.4f}*h*0.5)"
+    if payload.get("image_pos_mode") == "frame":
+        # Centre of the (rotated) artwork sits pos * half-frame away from the frame centre.
+        overlay_x = f"(W-w)/2+({pos_x:.4f}*W*0.5)"
+        overlay_y = f"(H-h)/2+({pos_y:.4f}*H*0.5)"
+    else:
+        overlay_x = f"(W-w)/2+({pos_x:.4f}*w*0.5)"
+        overlay_y = f"(H-h)/2+({pos_y:.4f}*h*0.5)"
 
     if payload.get("blurred_background_input"):
         filter_chain = (
@@ -3735,6 +3757,9 @@ async def _build_youtube_upload_job_payload(
     render_fps: int = YOUTUBE_RENDER_FPS_DEFAULT,
     visualizer_enabled: bool = False,
     visualizer_settings_json: str | None = None,
+    image_flip_h: bool = False,
+    image_flip_v: bool = False,
+    image_pos_mode: str = "art",
 ) -> dict[str, Any]:
     safe_title = str(title or "").strip()
     if not safe_title:
@@ -3818,6 +3843,9 @@ async def _build_youtube_upload_job_payload(
         image_rotation=image_rotation,
         background_color=background_color,
         render_fps=render_fps,
+        image_flip_h=image_flip_h,
+        image_flip_v=image_flip_v,
+        image_pos_mode=image_pos_mode,
     )
     visualizer_payload = _normalize_visualizer_payload(visualizer_enabled, visualizer_settings_json)
 
@@ -9590,6 +9618,9 @@ async def upload_to_youtube(
     render_fps: str = Form(str(YOUTUBE_RENDER_FPS_DEFAULT)),
     visualizer_enabled: bool = Form(False),
     visualizer_settings: Optional[str] = Form(None),
+    image_flip_h: bool = Form(False),
+    image_flip_v: bool = Form(False),
+    image_pos_mode: str = Form("art"),
     current_user: dict = Depends(get_current_user)
 ):
     """Create a persisted YouTube upload job and return immediately."""
@@ -9632,6 +9663,9 @@ async def upload_to_youtube(
             render_fps=safe_render_fps,
             visualizer_enabled=visualizer_enabled,
             visualizer_settings_json=visualizer_settings,
+            image_flip_h=image_flip_h,
+            image_flip_v=image_flip_v,
+            image_pos_mode=image_pos_mode,
         )
         job_doc = await _create_youtube_upload_job(current_user=current_user, payload=payload)
         logger.info(

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import StudioSection, { StudioSwitch } from "@/components/upload-studio/StudioSection";
 
 const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif", ".heic", ".heif"];
 
@@ -20,23 +20,15 @@ const VisualizerSettings = ({
   centerVisualizerImageInputRef
 }) => {
   return (
-    <Card className="border-l-4 border-l-purple-500 shadow-sm">
-       <CardHeader className="pb-3 flex flex-row items-center justify-between">
-          <CardTitle className="text-base font-semibold flex items-center gap-2">
-             <Music className="h-4 w-4" /> Audio Visualizer
-          </CardTitle>
-          <Button
-            size="sm"
-            variant={visualizerEnabled ? "default" : "outline"}
-            onClick={() => setVisualizerEnabled(!visualizerEnabled)}
-            className={visualizerEnabled ? "smb-toggle-on" : ""}
-          >
-             {visualizerEnabled ? "Enabled" : "Disabled"}
-          </Button>
-       </CardHeader>
-
+    <StudioSection
+      icon={Music}
+      tone="purple"
+      title="Visualizer"
+      summary={visualizerEnabled ? "Bars that move with the beat, recorded into the video" : "Off. Add bars that move with the beat"}
+      action={<StudioSwitch checked={visualizerEnabled} onChange={setVisualizerEnabled} label="Visualizer" />}
+    >
        {visualizerEnabled && (
-       <CardContent className="space-y-5 animate-in slide-in-from-top-2">
+       <div className="space-y-5 animate-in slide-in-from-top-2">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
              <Button
                type="button"
@@ -454,9 +446,9 @@ const VisualizerSettings = ({
                 </div>
              )}
           </div>
-       </CardContent>
+       </div>
        )}
-    </Card>
+    </StudioSection>
   );
 };
 

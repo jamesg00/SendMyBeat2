@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import axios from "axios";
 import { toast } from "sonner";
 import {
-  Play, Pause, X, SlidersHorizontal, Youtube
+  Play, Pause, X, SlidersHorizontal, Youtube, Check, Music2, Image as ImageIcon
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,10 @@ import { Drawer, DrawerContent, DrawerTrigger, DrawerHeader, DrawerTitle, Drawer
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import AudioVisualizer from "@/lib/AudioVisualizer";
 import { getMediaAspectRatio, getPreviewImageTransform } from "@/lib/mediaLayout";
+import FreeTransform, { SCALE_MAX, SCALE_MIN } from "@/components/upload-studio/FreeTransform";
+import { OfflineAnalyser, decodeBeat } from "@/lib/offlineAnalysis";
+import { canExportOffline, exportVisualizerVideo } from "@/lib/visualizerExport";
+import { buildVisualizerOptions, designSizeFor, outputDimsFor } from "@/lib/visualizerOptions";
 import {
   AUDIO_EXTENSIONS,
   AUDIO_MIME_TYPES,
@@ -103,6 +107,8 @@ const UploadStudio = ({
   const [imagePosX, setImagePosX] = useState(0);
   const [imagePosY, setImagePosY] = useState(0);
   const [imageRotation, setImageRotation] = useState(0);
+  const [imageFlipH, setImageFlipH] = useState(false);
+  const [imageFlipV, setImageFlipV] = useState(false);
   const [imageSettingsOpen, setImageSettingsOpen] = useState(false);
   const [centerLockEnabled, setCenterLockEnabled] = useState(false);
   const [imageMeta, setImageMeta] = useState({ width: 0, height: 0, ratio: 1 });
@@ -129,7 +135,10 @@ const UploadStudio = ({
   const [uploadingToYouTube, setUploadingToYouTube] = useState(false);
   const [uploadController, setUploadController] = useState(null);
   const [currentUploadJob, setCurrentUploadJob] = useState(null);
-  const [vizBakeStatus, setVizBakeStatus] = useState(null); // null | "recording" | "uploading"
+  const [vizBakeStatus, setVizBakeStatus] = useState(null); // null | "rendering" | "recording" | "uploading"
+  const [vizBakeProgress, setVizBakeProgress] = useState(0); // 0..1 within the current stage
+  // The decoded beat, analysed for the visualizer (preview and export read the same numbers).
+  const [beatSpectrum, setBeatSpectrum] = useState(null);
 
   const hasAudioReady = Boolean(audioFileId);
   const hasImageReady = Boolean(imageFileId);
@@ -259,8 +268,61 @@ const UploadStudio = ({
     setImageScaleX(1);
     setImageScaleY(1);
     setImageRotation(0);
+    setImageFlipH(false);
+    setImageFlipV(false);
     setLockImageScale(true);
     setCenterLockEnabled(false);
+    transformHistoryRef.current = { past: [], future: [] };
+    setHistorySize({ past: 0, future: 0 });
+  };
+
+  // ---- Free transform: one object for the editor, with undo/redo.
+  const imageTransform = {
+    posX: imagePosX,
+    posY: imagePosY,
+    sx: imageScaleX,
+    sy: imageScaleY,
+    rot: imageRotation,
+    flipH: imageFlipH,
+    flipV: imageFlipV,
+  };
+  const imageTransformRef = useRef(imageTransform);
+  imageTransformRef.current = imageTransform;
+  const transformHistoryRef = useRef({ past: [], future: [] });
+  const [historySize, setHistorySize] = useState({ past: 0, future: 0 });
+  const setImageTransform = (next) => {
+    const clampScale = (v) => Math.min(SCALE_MAX, Math.max(SCALE_MIN, Number(v) || 1));
+    setImagePosX(centerLockEnabled ? 0 : next.posX);
+    setImagePosY(centerLockEnabled ? 0 : next.posY);
+    setImageScaleX(clampScale(next.sx));
+    setImageScaleY(clampScale(next.sy));
+    setImageRotation(next.rot);
+    setImageFlipH(Boolean(next.flipH));
+    setImageFlipV(Boolean(next.flipV));
+  };
+  const pushTransformHistory = () => {
+    const h = transformHistoryRef.current;
+    h.past = [...h.past, { ...imageTransformRef.current }].slice(-60);
+    h.future = [];
+    setHistorySize({ past: h.past.length, future: 0 });
+  };
+  const undoTransform = () => {
+    const h = transformHistoryRef.current;
+    if (!h.past.length) return;
+    const prev = h.past[h.past.length - 1];
+    h.past = h.past.slice(0, -1);
+    h.future = [...h.future, { ...imageTransformRef.current }];
+    setHistorySize({ past: h.past.length, future: h.future.length });
+    setImageTransform(prev);
+  };
+  const redoTransform = () => {
+    const h = transformHistoryRef.current;
+    if (!h.future.length) return;
+    const next = h.future[h.future.length - 1];
+    h.future = h.future.slice(0, -1);
+    h.past = [...h.past, { ...imageTransformRef.current }];
+    setHistorySize({ past: h.past.length, future: h.future.length });
+    setImageTransform(next);
   };
 
   const centerImagePosition = () => {
@@ -274,6 +336,30 @@ const UploadStudio = ({
     setPinchState(null);
     toast.success("Image settings applied. Image is now locked.");
   };
+
+  // Decode the beat once the visualizer is on, so the preview and the export share one analysis.
+  useEffect(() => {
+    if (!visualizerEnabled || !audioFile) {
+      setBeatSpectrum(null);
+      return undefined;
+    }
+    let alive = true;
+    decodeBeat(audioFile).then(
+      (beat) => alive && setBeatSpectrum(new OfflineAnalyser(beat)),
+      (error) => {
+        console.error("Could not decode the beat for the visualizer", error);
+        if (alive) setBeatSpectrum(null);
+      },
+    );
+    return () => {
+      alive = false;
+    };
+  }, [visualizerEnabled, audioFile]);
+
+  // A visualizer at 2 fps is a slideshow: turning it on moves the frame rate to 30.
+  useEffect(() => {
+    if (visualizerEnabled) setVideoRenderFps((fps) => (String(fps) === "2" ? "30" : fps));
+  }, [visualizerEnabled]);
 
   const handlePreviewClick = () => {
     if (previewDraggedRef.current || imageSettingsOpen) {
@@ -293,10 +379,13 @@ const UploadStudio = ({
 
       const targetRatio = getMediaAspectRatio(videoAspectRatio);
 
-      const maxWidth = mobile ? window.innerWidth : (window.innerWidth / 2) - 64;
-      const maxHeight = mobile ? window.innerHeight : (window.innerHeight - 150);
+      // Desktop: everything left of the settings column (min(560px, 46vw)), minus room for the
+      // editor's handles (40px each side) and the player under the preview.
+      const sideWidth = Math.min(560, window.innerWidth * 0.46);
+      const maxWidth = mobile ? window.innerWidth : window.innerWidth - sideWidth - 120;
+      const maxHeight = mobile ? window.innerHeight : window.innerHeight - 56 - 150;
 
-      let width = Math.min(maxWidth, 800);
+      let width = Math.min(maxWidth, 960);
       let height = width / targetRatio;
 
       if (height > maxHeight) {
@@ -448,7 +537,7 @@ const UploadStudio = ({
         const currentDist = getDistance(e.touches[0], e.touches[1]);
         if (currentDist > 0 && pinchState.startDist > 0) {
           const scaleFactor = currentDist / pinchState.startDist;
-          const newScale = Math.min(2.0, Math.max(0.1, pinchState.startScale * scaleFactor));
+          const newScale = Math.min(SCALE_MAX, Math.max(SCALE_MIN, pinchState.startScale * scaleFactor));
 
           setImageScaleX(newScale);
           if (lockImageScale) setImageScaleY(newScale);
@@ -681,37 +770,21 @@ const UploadStudio = ({
     toast.success("Center image ready.");
   };
 
+  const PRESET_NAMES = {
+    "ncs-clean": "NCS Clean",
+    "ncs-aggressive": "NCS Aggressive",
+    "spectrum-analyzer": "Spectrum Analyzer",
+    "monstercat-tight": "Monstercat Tight",
+  };
   const applyVisualizerPreset = (preset) => {
-    setVisualizerSettings((s) => {
-      if (preset === "ncs-clean") {
-        return {
-          ...s,
-          ...VISUALIZER_PRESETS["ncs-clean"],
-          spectrumBorderEnabled: s.fillCenter !== "transparent",
-        };
-      }
-      if (preset === "ncs-aggressive") {
-        return {
-          ...s,
-          ...VISUALIZER_PRESETS["ncs-aggressive"],
-          spectrumBorderEnabled: s.fillCenter !== "transparent",
-        };
-      }
-      if (preset === "monstercat-tight") {
-        return {
-          ...s,
-          ...VISUALIZER_PRESETS["monstercat-tight"],
-        };
-      }
-      return s;
-    });
-    toast.success(
-      preset === "ncs-clean"
-        ? "Applied preset: NCS Clean"
-        : preset === "ncs-aggressive"
-          ? "Applied preset: NCS Aggressive"
-          : "Applied preset: Monstercat Tight"
-    );
+    const values = VISUALIZER_PRESETS[preset];
+    if (!values) return;
+    setVisualizerSettings((s) => ({
+      ...s,
+      ...values,
+      ...(preset === "ncs-clean" || preset === "ncs-aggressive" ? { spectrumBorderEnabled: s.fillCenter !== "transparent" } : null),
+    }));
+    toast.success(`Applied preset: ${PRESET_NAMES[preset] || preset}`);
   };
 
   const pollBackgroundJobUntilDone = async (jobId, { intervalMs = 2500, maxAttempts = 180 } = {}) => {
@@ -858,24 +931,19 @@ const UploadStudio = ({
     }
   };
 
-  // Renders the visualizer + cover image at full output resolution and records a 20s WebM loop.
-  // Returns a backend file_id, or null on failure.
+  // Builds the visualizer video for the whole beat and uploads it.
+  // Returns { fileId, fps }, or null if it failed.
+  //  1. Normal path: every frame is drawn from the decoded beat and encoded directly (exact frame
+  //     rate and size, in sync for the full length, works in a background tab).
+  //  2. Fallback for browsers without a video encoder: record the canvas in real time, full length.
   const bakeVisualizerToVideo = async () => {
     const audioEl = audioPlayerRef.current;
     if (!audioEl || !imagePreviewUrl) return null;
 
-    const ASPECT_DIMS = { "16:9": [1920, 1080], "1:1": [1080, 1080], "9:16": [1080, 1920], "4:5": [1080, 1350] };
-    const [targetW, targetH] = ASPECT_DIMS[videoAspectRatio] || ASPECT_DIMS["16:9"];
-    const recordFps = Math.min(60, Math.max(24, Number(videoRenderFps) || 30));
-    const RECORD_SECONDS = 20;
-
-    const hexToRgb = (hex, fallback = "255, 255, 255") => {
-      const clean = (hex || "").replace("#", "");
-      if (clean.length !== 6) return fallback;
-      const v = parseInt(clean, 16);
-      if (isNaN(v)) return fallback;
-      return `${(v >> 16) & 255}, ${(v >> 8) & 255}, ${v & 255}`;
-    };
+    const [targetW, targetH] = outputDimsFor(videoAspectRatio);
+    const exportFps = Number(videoRenderFps) === 60 ? 60 : 30;
+    const recordFps = exportFps;
+    const RECORD_SECONDS = Math.min(15 * 60, Math.max(1, Math.ceil(Number.isFinite(audioEl.duration) ? audioEl.duration : audioDuration || 20)));
 
     // Load cover image
     const coverImg = new Image();
@@ -888,6 +956,80 @@ const UploadStudio = ({
         if (coverImg.complete) res();
       });
     } catch { return null; }
+
+    // Everything behind the visualizer: background, then the artwork with its transform.
+    const paintBackdrop = (ctx, w, h) => {
+      if (backgroundColor === "blurred") {
+        ctx.fillStyle = "#000000";
+        ctx.fillRect(0, 0, w, h);
+        const coverScale = Math.max(w / coverImg.naturalWidth, h / coverImg.naturalHeight) * 1.08;
+        const bgW = coverImg.naturalWidth * coverScale;
+        const bgH = coverImg.naturalHeight * coverScale;
+        ctx.save();
+        ctx.globalAlpha = 0.72;
+        ctx.filter = "blur(18px)";
+        ctx.drawImage(coverImg, (w - bgW) / 2, (h - bgH) / 2, bgW, bgH);
+        ctx.restore();
+        ctx.filter = "none";
+      } else {
+        ctx.fillStyle = backgroundColor === "white" ? "#ffffff" : "#000000";
+        ctx.fillRect(0, 0, w, h);
+      }
+      const fit = Math.min(w / coverImg.naturalWidth, h / coverImg.naturalHeight);
+      const artW = coverImg.naturalWidth * fit * imageScaleX;
+      const artH = coverImg.naturalHeight * fit * imageScaleY;
+      ctx.save();
+      ctx.globalAlpha = visualizerSettings.backgroundOpacity ?? 1;
+      // Centre of the artwork, offset from the frame centre in half-frames (same as the editor).
+      ctx.translate(w / 2 + imagePosX * w * 0.5, h / 2 + imagePosY * h * 0.5);
+      if (Math.abs(imageRotation) > 0.01) ctx.rotate(imageRotation * Math.PI / 180);
+      ctx.scale(imageFlipH ? -1 : 1, imageFlipV ? -1 : 1);
+      ctx.drawImage(coverImg, -artW / 2, -artH / 2, artW, artH);
+      ctx.restore();
+      ctx.globalAlpha = 1;
+    };
+
+    const uploadVisual = async (blob, name, type) => {
+      setVizBakeStatus("uploading");
+      setVizBakeProgress(0);
+      const fd = new FormData();
+      fd.append("file", new File([blob], name, { type }));
+      const res = await axios.post(`${API}/upload/image`, fd, {
+        timeout: 20 * 60_000,
+        onUploadProgress: (e) => e.total && setVizBakeProgress(e.loaded / e.total),
+      });
+      return res.data?.file_id || null;
+    };
+
+    const drawingOptions = buildVisualizerOptions(visualizerSettings, { imagePreviewUrl, centerVisualizerImageUrl, spectrumRecordImageUrl });
+
+    if (canExportOffline() && audioFile) {
+      try {
+        setVizBakeStatus("rendering");
+        setVizBakeProgress(0);
+        const source = beatSpectrum || new OfflineAnalyser(await decodeBeat(audioFile));
+        const result = await exportVisualizerVideo({
+          analyser: source.clone(),
+          options: drawingOptions,
+          size: [targetW, targetH],
+          designSize: designSizeFor(videoAspectRatio),
+          fps: exportFps,
+          duration: source.duration,
+          drawBackdrop: paintBackdrop,
+          onProgress: setVizBakeProgress,
+        });
+        console.info(`Visualizer export: ${result.frames} frames at ${result.fps} fps, ${result.width}x${result.height}, ${result.codec}, ${(result.blob.size / 1048576).toFixed(1)} MB in ${result.seconds.toFixed(1)}s`);
+        const fileId = await uploadVisual(result.blob, "visualizer.mp4", "video/mp4");
+        if (fileId) return { fileId, fps: exportFps };
+      } catch (error) {
+        console.error("Offline visualizer export failed; falling back to recording", error);
+      }
+    }
+
+    // ---- Fallback: record the canvas in real time for the whole beat.
+    setVizBakeStatus("recording");
+    setVizBakeProgress(0);
+    toast.info("This browser can't encode video directly, so the visualizer is recorded in real time. Keep this tab open and in front until it finishes.", { duration: 12000 });
 
     // Create a full-res hidden canvas for the dedicated baking visualizer.
     // It must be in the DOM so clientWidth/clientHeight return valid values.
@@ -902,61 +1044,14 @@ const UploadStudio = ({
       }
     };
 
-    // Build full options matching VisualizerCanvas logic
-    const s = visualizerSettings;
-    const bakingVizOptions = {
-      bars: s.bars,
-      gain: s.intensity * 0.8,
-      maxBarLength: s.maxBarLength,
-      radius: s.radius,
-      rotateSpeed: s.rotateSpeed,
-      trailsEnabled: s.trailsEnabled,
-      particleEnabled: s.particleEnabled,
-      particleIntensity: s.particleIntensity,
-      monstercatParticleEnabled: s.monstercatParticleEnabled,
-      maxSpawnRate: Math.round(120 * s.particleIntensity),
-      baseSpawnRate: Math.round(10 * Math.max(0.5, s.particleIntensity)),
-      particleSpeed: 72 * s.particleIntensity,
-      mode: s.mode,
-      shakeIntensity: (s.shakeIntensity || 0) * 0.7,
-      multiColorReactive: s.multiColorReactive,
-      spectrumStyle: s.mode === "circle" ? "fill" : s.spectrumStyle,
-      fillCenter: s.fillCenter,
-      fillCenterColor: hexToRgb(s.fillCenterColor, "255, 255, 255"),
-      centerImageSpin: s.centerImageSpin,
-      spectrumColor: hexToRgb(s.spectrumColor, "255, 255, 255"),
-      centerImageUrl: centerVisualizerImageUrl || imagePreviewUrl || "",
-      particleColor: hexToRgb(s.particleColor, "140, 200, 255"),
-      spectrumBorderEnabled: s.mode === "circle" && s.fillCenter === "transparent" ? false : s.spectrumBorderEnabled,
-      spectrumBorderWidth: 5,
-      spectrumBorderColor: hexToRgb(s.spectrumBorderColor, "255, 255, 255"),
-      spectrumRecordImageUrl,
-      monstercatYOffset: s.monstercatYOffset,
-      monstercatSpacing: s.monstercatSpacing,
-      monstercatParticleSpeed: s.monstercatParticleSpeed,
-      monstercatParticleSize: s.monstercatParticleSize,
-      monstercatParticleCount: s.monstercatParticleCount,
-      monstercatGlow: s.monstercatGlow,
-      lowSensitivity: s.lowSensitivity,
-      midSensitivity: s.midSensitivity,
-      highSensitivity: s.highSensitivity,
-      monstercatSmoothing: s.monstercatSmoothing,
-      spectrumBarThickness: s.spectrumBarThickness ?? 4,
-      spectrumGlow: s.spectrumGlow ?? 20,
-      spectrumOpacity: s.spectrumOpacity ?? 1.0,
-      spectrumRgb: s.spectrumRgb ?? false,
-      spectrumSmoothing: s.spectrumSmoothing ?? 0.3,
-      spectrumMirror: s.spectrumMirror !== false,
-    };
+    const bakingVizOptions = drawingOptions;
 
     let bakingViz = null;
     try {
       bakingViz = new AudioVisualizer(bakingCanvas, bakingVizOptions);
-      // Force exactly targetW×targetH — override DPR scaling so the canvas pixel
-      // buffer stays 1:1 with the composite (no Retina 2x cropping).
-      bakingCanvas.width = targetW;
-      bakingCanvas.height = targetH;
-      bakingViz.ctx.setTransform(1, 0, 0, 1, 0, 0);
+      // Exact output size, laid out in the same design size as the preview.
+      bakingViz.setDesignSize(...designSizeFor(videoAspectRatio));
+      bakingViz.setOutputSize(targetW, targetH);
       const reusedLiveAnalyser = bakingViz.attachAudioAnalysisFrom?.(visualizerRef.current, audioEl);
       if (!reusedLiveAnalyser) {
         await bakingViz.connectMediaElement(audioEl);
@@ -973,53 +1068,9 @@ const UploadStudio = ({
     composite.height = targetH;
     const ctx = composite.getContext("2d");
 
-    const bgColor = backgroundColor === "white" ? "#ffffff" : "#000000";
-    const fitScale = Math.min(targetW / coverImg.naturalWidth, targetH / coverImg.naturalHeight);
-    const fitW = coverImg.naturalWidth * fitScale;
-    const fitH = coverImg.naturalHeight * fitScale;
-    const artW = fitW * imageScaleX;
-    const artH = fitH * (lockImageScale ? imageScaleX : imageScaleY);
-    const artX = (targetW - artW) / 2 + imagePosX * artW * 0.5;
-    const artY = (targetH - artH) / 2 + imagePosY * artH * 0.5;
-
-    const drawBlurredBackground = () => {
-      ctx.fillStyle = "#000000";
-      ctx.fillRect(0, 0, targetW, targetH);
-
-      const coverScale = Math.max(targetW / coverImg.naturalWidth, targetH / coverImg.naturalHeight) * 1.08;
-      const bgW = coverImg.naturalWidth * coverScale;
-      const bgH = coverImg.naturalHeight * coverScale;
-      const bgX = (targetW - bgW) / 2;
-      const bgY = (targetH - bgH) / 2;
-
-      ctx.save();
-      ctx.globalAlpha = 0.72;
-      ctx.filter = "blur(18px)";
-      ctx.drawImage(coverImg, bgX, bgY, bgW, bgH);
-      ctx.restore();
-      ctx.filter = "none";
-    };
-
     const drawFrame = () => {
-      if (backgroundColor === "blurred") {
-        drawBlurredBackground();
-      } else {
-        ctx.fillStyle = bgColor;
-        ctx.fillRect(0, 0, targetW, targetH);
-      }
-
-      ctx.save();
-      ctx.globalAlpha = visualizerSettings.backgroundOpacity ?? 1;
-      if (Math.abs(imageRotation) > 0.01) {
-        ctx.translate(artX + artW / 2, artY + artH / 2);
-        ctx.rotate(imageRotation * Math.PI / 180);
-        ctx.translate(-(artX + artW / 2), -(artY + artH / 2));
-      }
-      ctx.drawImage(coverImg, artX, artY, artW, artH);
-      ctx.restore();
-
+      paintBackdrop(ctx, targetW, targetH);
       // Draw baking visualizer — explicit size ensures correct compositing at any DPR
-      ctx.globalAlpha = 1;
       ctx.drawImage(bakingCanvas, 0, 0, targetW, targetH);
     };
 
@@ -1027,13 +1078,10 @@ const UploadStudio = ({
     const wasPlaying = !audioEl.paused;
     const savedTime = audioEl.currentTime;
     try {
-      if (!wasPlaying) {
-        audioEl.currentTime = 0;
-        await bakingViz.resumeAudioContext();
-        await audioEl.play();
-      } else {
-        await bakingViz.resumeAudioContext();
-      }
+      audioEl.pause();
+      audioEl.currentTime = 0;
+      await bakingViz.resumeAudioContext();
+      await audioEl.play();
     } catch {
       try { bakingViz?.destroy(); } catch {}
       removeBakingCanvas();
@@ -1041,16 +1089,6 @@ const UploadStudio = ({
     }
     bakingViz.start();
 
-    // Brief warm-up so bars are visible from the first captured frame
-    await new Promise((res) => setTimeout(res, 400));
-
-    // Lock the baking canvas size so window resize events don't undo the DPR fix
-    const _noopResize = () => {
-      bakingCanvas.width = targetW;
-      bakingCanvas.height = targetH;
-      bakingViz.ctx.setTransform(1, 0, 0, 1, 0, 0);
-    };
-    window.addEventListener("resize", _noopResize);
 
     const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
       ? "video/webm;codecs=vp9"
@@ -1074,30 +1112,28 @@ const UploadStudio = ({
     recorder.start(200);
     renderLoop();
 
+    const recordStarted = Date.now();
+    const progressTimer = setInterval(() => setVizBakeProgress(Math.min(1, (Date.now() - recordStarted) / (RECORD_SECONDS * 1000))), 500);
     await new Promise((res) => setTimeout(res, RECORD_SECONDS * 1000));
+    clearInterval(progressTimer);
 
     cancelAnimationFrame(rafId);
     recorder.stop();
 
     // Cleanup baking resources
-    window.removeEventListener("resize", _noopResize);
     bakingViz.destroy();
     removeBakingCanvas();
 
-    if (!wasPlaying) {
-      audioEl.pause();
-      audioEl.currentTime = savedTime;
-    }
+    audioEl.pause();
+    audioEl.currentTime = savedTime;
+    if (wasPlaying) audioEl.play().catch(() => {});
 
     const blob = await recordingComplete;
     if (!blob || blob.size < 1000) return null;
 
-    setVizBakeStatus("uploading");
-    const fd = new FormData();
-    fd.append("file", new File([blob], "visualizer.webm", { type: mimeType }));
     try {
-      const res = await axios.post(`${API}/upload/image`, fd, { timeout: 120_000 });
-      return res.data?.file_id || null;
+      const fileId = await uploadVisual(blob, "visualizer.webm", mimeType);
+      return fileId ? { fileId, fps: recordFps } : null;
     } catch { return null; }
   };
 
@@ -1121,12 +1157,15 @@ const UploadStudio = ({
     formData.append('remove_watermark', removeWatermark);
     formData.append('description_override', buildUploadDescriptionWithMetadata());
     formData.append('aspect_ratio', videoAspectRatio);
-    formData.append('image_scale', String(lockImageScale ? imageScaleX : (imageScaleX + imageScaleY) / 2));
+    formData.append('image_scale', String((imageScaleX + imageScaleY) / 2));
     formData.append('image_scale_x', String(imageScaleX));
     formData.append('image_scale_y', String(imageScaleY));
     formData.append('image_pos_x', String(imagePosX));
     formData.append('image_pos_y', String(imagePosY));
     formData.append('image_rotation', String(imageRotation));
+    formData.append('image_flip_h', String(imageFlipH));
+    formData.append('image_flip_v', String(imageFlipV));
+    formData.append('image_pos_mode', 'frame');
     formData.append('background_color', backgroundColor);
     formData.append('render_fps', String(videoRenderFps || DEFAULT_VIDEO_RENDER_FPS));
     formData.append('visualizer_enabled', 'false');
@@ -1172,20 +1211,20 @@ const UploadStudio = ({
     setUploadController(controller);
     setUploadingToYouTube(true);
 
-    // When the visualizer is active, record a 20-second clip of the live canvas
-    // and use it as the visual input — the backend loops it over the full audio.
+    // With the visualizer on, the whole video (artwork + visualizer) is rendered here for the
+    // full beat and used as the visual; the server only adds the audio and the watermark.
     let visualFileId = imageFileId;
     let vizBaked = false;
+    let vizFps = 30;
     if (visualizerEnabled) {
-      setVizBakeStatus("recording");
-      toast.info("Recording visualizer (20s loop)...", { duration: 22000 });
-      const bakedFileId = await bakeVisualizerToVideo();
+      const baked = await bakeVisualizerToVideo();
       setVizBakeStatus(null);
-      if (bakedFileId) {
-        visualFileId = bakedFileId;
+      if (baked?.fileId) {
+        visualFileId = baked.fileId;
+        vizFps = baked.fps;
         vizBaked = true;
       } else {
-        toast.error("Visualizer recording failed. No upload was queued because the YouTube render must match the preview visualizer.");
+        toast.error("The visualizer video couldn't be made, so nothing was uploaded. Try again, or turn the visualizer off.");
         setUploadingToYouTube(false);
         setUploadController(null);
         setVizBakeStatus(null);
@@ -1203,7 +1242,7 @@ const UploadStudio = ({
     formData.append('remove_watermark', removeWatermark);
     formData.append('description_override', buildUploadDescriptionWithMetadata());
     formData.append('aspect_ratio', videoAspectRatio);
-    formData.append('render_fps', String(vizBaked ? videoRenderFps || '30' : (videoRenderFps || DEFAULT_VIDEO_RENDER_FPS)));
+    formData.append('render_fps', String(vizBaked ? vizFps : (videoRenderFps || DEFAULT_VIDEO_RENDER_FPS)));
     formData.append('background_color', backgroundColor);
     if (vizBaked) {
       // The WebM already has background + image + visualizer fully composited.
@@ -1218,12 +1257,15 @@ const UploadStudio = ({
       formData.append('visualizer_enabled', 'false');
       formData.append('visualizer_settings', '{}');
     } else {
-      formData.append('image_scale', String(lockImageScale ? imageScaleX : (imageScaleX + imageScaleY) / 2));
+      formData.append('image_scale', String((imageScaleX + imageScaleY) / 2));
       formData.append('image_scale_x', String(imageScaleX));
       formData.append('image_scale_y', String(imageScaleY));
       formData.append('image_pos_x', String(imagePosX));
       formData.append('image_pos_y', String(imagePosY));
       formData.append('image_rotation', String(imageRotation));
+      formData.append('image_flip_h', String(imageFlipH));
+      formData.append('image_flip_v', String(imageFlipV));
+      formData.append('image_pos_mode', 'frame');
       formData.append('visualizer_enabled', 'false');
       formData.append('visualizer_settings', '{}');
     }
@@ -1346,8 +1388,13 @@ const UploadStudio = ({
   }, [audioFileId, imageFileId, selectedDescriptionId, beatMetaPromptShown, uploadBeatBpm, uploadBeatKey]);
 
   // --- Controls Markup ---
+  const uploadChecklist = [
+    { label: "Title", ok: Boolean(uploadTitle?.trim()) && uploadTitle.length <= 100 },
+    { label: "Description", ok: Boolean(selectedDescriptionId) },
+    { label: "Tags", ok: Boolean(selectedTagsId), optional: true },
+  ];
   const controlsMarkup = (
-    <div className="space-y-6 pb-20 lg:pb-6">
+    <div className="us-panel">
         {activeUploadJob && (
           <div className="border border-[var(--border-color)] bg-[var(--bg-secondary)] px-4 py-4 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1428,46 +1475,25 @@ const UploadStudio = ({
           setPrivacyStatus={setPrivacyStatus}
         />
 
-        <AIToolsPanel
-          showTools={showTools}
-          setShowTools={setShowTools}
-          analyzingBeat={analyzingBeat}
-          handleAnalyzeBeat={handleAnalyzeBeat}
-          canAnalyzeBeat={Boolean(subscriptionStatus?.is_subscribed)}
-          checkingThumbnail={checkingThumbnail}
-          handleThumbnailCheck={handleThumbnailCheck}
-          beatAnalysis={beatAnalysis}
-          thumbnailCheckResult={thumbnailCheckResult}
-          onUpgrade={onUpgrade}
-        />
-
-        <VisualizerSettings
-          visualizerEnabled={visualizerEnabled}
-          setVisualizerEnabled={setVisualizerEnabled}
-          visualizerSettings={visualizerSettings}
-          setVisualizerSettings={setVisualizerSettings}
-          applyVisualizerPreset={applyVisualizerPreset}
-          handleCenterVisualizerImageUpload={handleCenterVisualizerImageUpload}
-          centerVisualizerImageName={centerVisualizerImageName}
-          centerVisualizerImageInputRef={centerVisualizerImageInputRef}
-        />
-
         <ImageEditorControls
           imageSettingsOpen={imageSettingsOpen}
           setImageSettingsOpen={setImageSettingsOpen}
           applyImageSettings={applyImageSettings}
           handleImageUpload={handleImageUpload}
           studioImageInputRef={studioImageInputRef}
-          imageScaleX={imageScaleX}
-          setImageScaleX={setImageScaleX}
-          setImageScaleY={setImageScaleY}
+          transform={imageTransform}
+          setTransform={setImageTransform}
+          pushHistory={pushTransformHistory}
+          undo={undoTransform}
+          redo={redoTransform}
+          canUndo={historySize.past > 0}
+          canRedo={historySize.future > 0}
           lockImageScale={lockImageScale}
-          imageRotation={imageRotation}
-          setImageRotation={setImageRotation}
-          fitImageToFrame={fitImageToFrame}
-          centerImagePosition={centerImagePosition}
+          setLockImageScale={setLockImageScale}
           centerLockEnabled={centerLockEnabled}
           setCenterLockEnabled={setCenterLockEnabled}
+          imageRatio={imageMeta.ratio}
+          frameRatio={previewDims.width / Math.max(1, previewDims.height)}
         />
 
         <LayoutSettings
@@ -1483,19 +1509,55 @@ const UploadStudio = ({
           isAnimatedVisual={isAnimatedVisual}
           subscriptionStatus={subscriptionStatus}
           onUpgrade={onUpgrade}
+          imagePreviewUrl={imagePreviewUrl}
         />
 
-        <div className="pt-4">
-           <Button
-              size="lg"
-              variant="outline"
-              className="w-full text-lg terminal-publish-button"
-              onClick={handleYouTubeUploadAsync}
-              disabled={uploadingToYouTube}
-           >
-              {uploadingToYouTube ? "Uploading..." : "Upload Video to YouTube"}
-              {!uploadingToYouTube && <Youtube className="ml-2 h-5 w-5" />}
-           </Button>
+        <VisualizerSettings
+          visualizerEnabled={visualizerEnabled}
+          setVisualizerEnabled={setVisualizerEnabled}
+          visualizerSettings={visualizerSettings}
+          setVisualizerSettings={setVisualizerSettings}
+          applyVisualizerPreset={applyVisualizerPreset}
+          handleCenterVisualizerImageUpload={handleCenterVisualizerImageUpload}
+          centerVisualizerImageName={centerVisualizerImageName}
+          centerVisualizerImageInputRef={centerVisualizerImageInputRef}
+        />
+
+        <AIToolsPanel
+          showTools={showTools}
+          setShowTools={setShowTools}
+          analyzingBeat={analyzingBeat}
+          handleAnalyzeBeat={handleAnalyzeBeat}
+          canAnalyzeBeat={Boolean(subscriptionStatus?.is_subscribed)}
+          checkingThumbnail={checkingThumbnail}
+          handleThumbnailCheck={handleThumbnailCheck}
+          beatAnalysis={beatAnalysis}
+          thumbnailCheckResult={thumbnailCheckResult}
+          onUpgrade={onUpgrade}
+        />
+
+        {/* Pinned to the bottom of the panel: what's still missing, and the upload button. */}
+        <div className="us-upload-bar">
+          <ul className="us-ready" aria-label="Ready to upload">
+            {uploadChecklist.map((item) => (
+              <li key={item.label} className={item.ok ? "is-ok" : item.optional ? "is-optional" : ""}>
+                {item.ok ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : <span className="us-ready-dot" aria-hidden="true" />}
+                {item.label}
+              </li>
+            ))}
+          </ul>
+          <button type="button" className="smb-btn smb-btn--pri smb-btn--lg us-upload-btn" onClick={handleYouTubeUploadAsync} disabled={uploadingToYouTube}>
+            <Youtube className="h-5 w-5" aria-hidden="true" />
+            {vizBakeStatus === "rendering"
+              ? `Rendering visualizer ${Math.round(vizBakeProgress * 100)}%`
+              : vizBakeStatus === "recording"
+                ? `Recording visualizer ${Math.round(vizBakeProgress * 100)}%`
+                : vizBakeStatus === "uploading"
+                  ? `Uploading video ${Math.round(vizBakeProgress * 100)}%`
+                  : uploadingToYouTube
+                    ? "Uploading…"
+                    : `Upload to YouTube${privacyStatus !== "public" ? ` · ${privacyStatus}` : ""}`}
+          </button>
         </div>
     </div>
   );
@@ -1540,20 +1602,21 @@ const UploadStudio = ({
       {audioPreviewUrl && <audio ref={audioPlayerRef} src={audioPreviewUrl} preload="metadata" />}
 
       {/* Header */}
-      <div className="flex-none h-14 border-b bg-background px-4 flex items-center justify-between z-50">
-         <div className="flex items-center gap-2">
-            <span className="font-bold text-lg gradient-text">Upload Studio</span>
-            <span className="text-xs px-2 py-0.5 text-muted-foreground hidden sm:inline-block">LIVE</span>
+      <header className="us-topbar">
+         <button type="button" className="us-back" onClick={closeStudio} aria-label="Leave Upload Studio">
+            <X className="h-4 w-4" aria-hidden="true" />
+         </button>
+         <div className="us-topbar-title">
+            <b>Upload Studio</b>
+            <span className="us-topbar-files">
+               {audioFile?.name ? <span title={audioFile.name}><Music2 className="h-3.5 w-3.5" aria-hidden="true" />{audioFile.name}</span> : null}
+               {selectedImageLabel ? <span title={selectedImageLabel}><ImageIcon className="h-3.5 w-3.5" aria-hidden="true" />{selectedImageLabel}</span> : null}
+            </span>
          </div>
-         <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={closeStudio}>
-               Exit Upload Studio
-            </Button>
-            <Button variant="ghost" size="icon" onClick={closeStudio}>
-               <X className="h-5 w-5" />
-            </Button>
-         </div>
-      </div>
+         <button type="button" className="smb-btn smb-btn--sec smb-btn--sm us-topbar-exit" onClick={closeStudio}>
+            Leave studio
+         </button>
+      </header>
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden relative">
@@ -1586,6 +1649,8 @@ const UploadStudio = ({
              relative bg-background/50 flex flex-col items-center justify-center transition-all duration-300
              ${isMobile ? "absolute inset-0 z-10 w-full h-full" : "flex-none lg:flex-1 lg:w-1/2 lg:border-r z-20"}
          `}>
+            {/* The frame clips the picture; the editor sits beside it and reaches past its edges. */}
+            <div className="relative" style={{ width: previewDims.width, height: previewDims.height }}>
             <div
                ref={previewContainerRef}
                className="relative shadow-2xl overflow-hidden border border-border/50 rounded-md"
@@ -1622,11 +1687,12 @@ const UploadStudio = ({
                        imagePosY,
                        imageScaleX,
                        imageScaleY,
-                       lockImageScale,
                        imageRotation,
+                       imageFlipH,
+                       imageFlipV,
                      }),
                      transformOrigin: "center center",
-                     transition: dragState || pinchState ? "none" : "transform 0.1s ease-out"
+                     transition: imageSettingsOpen || dragState || pinchState ? "none" : "transform 0.1s ease-out"
                   }}
                >
                   <img
@@ -1637,28 +1703,6 @@ const UploadStudio = ({
                   />
                </div>
 
-               {imageSettingsOpen && (
-                  <div className="absolute inset-0 pointer-events-none">
-                     {(centerLockEnabled || Math.abs(imagePosX) < 0.03) && (
-                       <div
-                          className="absolute left-1/2 top-0 h-full w-px bg-[var(--c-warn)]"
-                          style={{ transform: "translateX(-50%)" }}
-                       />
-                     )}
-                     {(centerLockEnabled || Math.abs(imagePosY) < 0.03) && (
-                       <div
-                          className="absolute top-1/2 left-0 w-full h-px bg-[var(--c-warn)]"
-                          style={{ transform: "translateY(-50%)" }}
-                       />
-                     )}
-                     {(centerLockEnabled || (Math.abs(imagePosX) < 0.03 && Math.abs(imagePosY) < 0.03)) && (
-                       <div
-                          className="absolute left-1/2 top-1/2 h-3 w-3 rounded-full border border-[var(--c-warn)] bg-[var(--c-warnsoft)]"
-                          style={{ transform: "translate(-50%, -50%)" }}
-                       />
-                     )}
-                  </div>
-               )}
 
                <VisualizerCanvas
                  visualizerRef={visualizerRef}
@@ -1667,6 +1711,8 @@ const UploadStudio = ({
                  visualizerSettings={visualizerSettings}
                  studioOpen={studioOpen}
                  previewDims={previewDims}
+                 analysis={beatSpectrum}
+                 aspectRatio={videoAspectRatio}
                  audioPreviewUrl={audioPreviewUrl}
                  imagePreviewUrl={imagePreviewUrl}
                  centerVisualizerImageUrl={centerVisualizerImageUrl}
@@ -1687,6 +1733,22 @@ const UploadStudio = ({
                      </div>
                   </div>
                )}
+            </div>
+               {imageSettingsOpen && imagePreviewUrl ? (
+                  <FreeTransform
+                    frameW={previewDims.width}
+                    frameH={previewDims.height}
+                    imageUrl={imagePreviewUrl}
+                    pad={40}
+                    imageRatio={imageMeta.ratio}
+                    value={imageTransform}
+                    lockAspect={lockImageScale}
+                    onChange={setImageTransform}
+                    onGestureStart={pushTransformHistory}
+                    onUndo={undoTransform}
+                    onRedo={redoTransform}
+                  />
+               ) : null}
             </div>
 
             <div className={`
@@ -1718,7 +1780,7 @@ const UploadStudio = ({
                </div>
             </div>
 
-            <p className={`text-[10px] text-muted-foreground mt-2 text-center lg:mb-0 ${isMobile ? "hidden" : ""}`}>{imageSettingsOpen ? "Edit mode: Drag to move • Pinch to zoom • Use Rotation slider" : "Click preview or press Space to Play/Pause • Open Image Settings to edit image"}</p>
+            <p className={`text-[10px] text-muted-foreground mt-2 text-center lg:mb-0 ${isMobile ? "hidden" : ""}`}>{imageSettingsOpen ? "Transform: drag to move • handles stretch and scale • knob rotates • Ctrl+Z undoes" : "Click preview or press Space to Play/Pause • Open Image › Transform to edit the picture"}</p>
 
             {/* Mobile Toggle Button */}
             {isMobile && (
@@ -1739,8 +1801,8 @@ const UploadStudio = ({
              <Drawer open={mobileDrawerOpen} onOpenChange={setMobileDrawerOpen}>
                 <DrawerContent className="max-h-[85vh] border-[var(--border-color)] bg-[var(--card-bg)] text-[var(--text-primary)]">
                     <DrawerHeader>
-                        <DrawerTitle>Studio Controls</DrawerTitle>
-                        <DrawerDescription>Edit metadata and settings</DrawerDescription>
+                        <DrawerTitle>Upload settings</DrawerTitle>
+                        <DrawerDescription>Details, image, video and visualizer</DrawerDescription>
                     </DrawerHeader>
                     <div className="px-4 pb-8 overflow-y-auto bg-[var(--card-bg)] text-[var(--text-primary)]">
                        {controlsMarkup}
@@ -1748,7 +1810,7 @@ const UploadStudio = ({
                 </DrawerContent>
             </Drawer>
          ) : (
-             <div className="flex-1 lg:w-1/2 overflow-y-auto p-4 sm:p-6 bg-background">
+             <div className="us-side">
                  {controlsMarkup}
              </div>
          )}

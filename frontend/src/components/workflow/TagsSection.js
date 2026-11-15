@@ -251,10 +251,13 @@ const TagsSection = ({
             </div>
           )}
 
-          {canViewTagDebug && hasGeneratedTags && (
+          {/* Admins only, and only when a run actually has debug data. */}
+          {canViewTagDebug && hasGeneratedTags && tagDebug && (
             <div className="workflow-inline-output-tools">
               <div className="flex items-center justify-between gap-2">
-                <p className="text-sm sm:text-base font-semibold">Tag Generation Debug</p>
+                <p className="text-sm font-semibold flex items-center gap-2">
+                  Tag debug <span className="smb-pill">Admin only</span>
+                </p>
                 <Button
                   type="button"
                   size="sm"
