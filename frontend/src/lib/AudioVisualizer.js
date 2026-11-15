@@ -128,6 +128,10 @@ export default class AudioVisualizer {
         ...(options.reactivity || {}),
       },
     };
+    this.centerImage = null;
+    this.centerImageUrl = "";
+    this.recordImage = null;
+    this.recordImageUrl = "";
     this.setCenterImageUrl(this.options.centerImageUrl || "");
     this.setRecordImageUrl(this.options.spectrumRecordImageUrl || "");
     this.runtime = {
@@ -180,10 +184,6 @@ export default class AudioVisualizer {
     // Shake state
     this.shakeOffsetX = 0;
     this.shakeOffsetY = 0;
-    this.centerImage = null;
-    this.centerImageUrl = "";
-    this.recordImage = null;
-    this.recordImageUrl = "";
     this.recordRotation = 0;
     this.bandRefs = { low: 0.32, mid: 0.3, high: 0.26 };
     this.levelRef = 0.34;
@@ -684,349 +684,271 @@ export default class AudioVisualizer {
     return out;
   }
 
-  spawnParticles(dt, cx, cy, radius) {
-    if (!this.options.particleEnabled || this.options.mode !== 'circle') return;
-    if (!this.hasAudioSignal) return;
-    const minRate = this.runtime.baseSpawnRate;
-    const maxRate = this.runtime.maxSpawnRate;
-    const energyDrive = Math.min(1, this.energySlew * 0.9 + this.bassSlew * 0.9);
-    const burstBoost = this.beatPulse * 0.65 + this.impactPulse * 0.6;
-    const rateMix = Math.min(1, energyDrive + burstBoost);
-    const rate = minRate + (maxRate - minRate) * rateMix;
-    const toSpawnFloat = rate * dt + this.spawnRemainder;
-    const burstCount = this.beatPulse > 0.7 ? Math.floor(this.beatPulse * 4) : 0;
-    const toSpawn = Math.floor(toSpawnFloat) + burstCount;
-    this.spawnRemainder = toSpawnFloat - Math.floor(toSpawnFloat);
+  // ---- Star field (NCS / Proximity look): specks fly out from the centre toward the camera,
+  // growing and speeding up as they go. Bass pushes them faster; quiet parts drift slowly.
 
-    for (let i = 0; i < toSpawn; i += 1) {
-      const angle = this.rand() * Math.PI * 2 + this.rotation;
-      const px = cx + Math.cos(angle) * radius;
-      const py = cy + Math.sin(angle) * radius;
-      const speedBurst = 1 + this.beatPulse * 1.1 + this.impactPulse * 1.35;
-      const baseSpeed = this.runtime.particleSpeed * speedBurst * (0.4 + this.rand() * 1.25);
-      const tangent = (this.rand() - 0.5) * this.options.particleJitter;
-      const vx = Math.cos(angle) * baseSpeed + -Math.sin(angle) * tangent;
-      const vy = Math.sin(angle) * baseSpeed + Math.cos(angle) * tangent;
-      const baseLife = this.options.particleLifeMin + this.rand() * (this.options.particleLifeMax - this.options.particleLifeMin);
-      const maxToEdge = Math.max(
-        Math.hypot(px, py),
-        Math.hypot(this.viewW - px, py),
-        Math.hypot(px, this.viewH - py),
-        Math.hypot(this.viewW - px, this.viewH - py)
-      );
-      const minLifeToEdge = maxToEdge / Math.max(1, baseSpeed * 0.92);
-      const life = Math.max(baseLife, minLifeToEdge);
+  /** A soft glowing dot, drawn once per colour and reused for every particle. */
+  getGlowSprite(rgb) {
+    if (this.glowSprite && this.glowSpriteColor === rgb) return this.glowSprite;
+    const size = 64;
+    const sprite = document.createElement("canvas");
+    sprite.width = size;
+    sprite.height = size;
+    const g = sprite.getContext("2d");
+    const grad = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    grad.addColorStop(0, "rgba(255, 255, 255, 1)");
+    grad.addColorStop(0.16, `rgba(${rgb}, 0.9)`);
+    grad.addColorStop(0.45, `rgba(${rgb}, 0.22)`);
+    grad.addColorStop(1, `rgba(${rgb}, 0)`);
+    g.fillStyle = grad;
+    g.fillRect(0, 0, size, size);
+    this.glowSprite = sprite;
+    this.glowSpriteColor = rgb;
+    return sprite;
+  }
+
+  spawnParticles(dt, cx, cy, radius) {
+    if (!this.options.particleEnabled || this.options.mode === "monstercat") return;
+    const amount = Math.max(0, this.options.particleIntensity || 0);
+    if (amount <= 0) return;
+    const drive = Math.min(1.4, this.energySlew * 0.8 + this.bassSlew * 0.9 + this.beatPulse * 0.6);
+    const rate = (10 + drive * 70) * amount;
+    const toSpawnFloat = rate * dt + this.spawnRemainder;
+    let toSpawn = Math.floor(toSpawnFloat);
+    this.spawnRemainder = toSpawnFloat - toSpawn;
+    if (this.impactPulse > 0.75) toSpawn += Math.floor(this.impactPulse * 3 * amount);
+    const maxCount = Math.round(380 * Math.min(1.6, Math.max(0.3, amount)));
+    const startRadius = Math.max(8, radius);
+
+    for (let i = 0; i < toSpawn && this.particles.length < maxCount; i += 1) {
+      const angle = this.rand() * Math.PI * 2;
+      const depth = 0.35 + this.rand() * 1.25; // near specks are bigger and faster
       this.particles.push({
-        x: px,
-        y: py,
-        vx,
-        vy,
-        life,
-        maxLife: life,
-        baseSpeed,
-        spin: (this.rand() - 0.5) * (0.85 + this.rand() * 0.75),
-        seed: this.rand() * Math.PI * 2,
-        age: 0,
+        angle,
+        dist: startRadius * (0.85 + this.rand() * 0.5),
+        born: startRadius,
+        depth,
+        size: (0.7 + this.rand() * 1.5) * depth,
+        alpha: 0.45 + this.rand() * 0.55,
+        speed: 0,
       });
     }
   }
 
-  updateParticles(dt, cx, cy) {
-    const keep = [];
-    const drive = Math.max(0, Math.min(2.8, this.energySlew * 0.9 + this.bassSlew * 1.35 + this.beatPulse * 1.15 + this.impactPulse * 1.35));
-    const accel = 20 + drive * 72;
-    const silentFade = this.silenceSeconds > 0.2;
-
+  updateParticles(dt) {
+    if (!this.particles.length) return;
+    const w = this.viewW;
+    const h = this.viewH;
+    const maxDist = Math.hypot(w, h) / 2 + 30;
+    const push = 0.3 + this.bassSlew * 2.4 + this.beatPulse * 1.7 + this.impactPulse * 1.2;
+    const base = Math.max(8, this.runtime.particleSpeed);
+    let kept = 0;
     for (let i = 0; i < this.particles.length; i += 1) {
       const p = this.particles[i];
-      p.life -= dt * 0.6;
-      p.age += dt;
-      if (silentFade) {
-        p.life -= dt * (2.2 + this.silenceSeconds * 2.8);
+      // Perspective: the further out, the faster it moves across the screen.
+      p.speed = base * p.depth * push * (1 + (p.dist / maxDist) * 2.4);
+      p.dist += p.speed * dt;
+      if (p.dist < maxDist) {
+        this.particles[kept] = p;
+        kept += 1;
       }
-      if (p.life <= 0) continue;
-
-      const dx = p.x - cx;
-      const dy = p.y - cy;
-      const dist = Math.max(0.0001, Math.hypot(dx, dy));
-      const nx = dx / dist;
-      const ny = dy / dist;
-      const tx = -ny;
-      const ty = nx;
-
-      const speedNow = Math.hypot(p.vx, p.vy);
-      const targetSpeed = p.baseSpeed * (0.75 + drive * 1.25);
-      const speedAdjust = (targetSpeed - speedNow) * 0.22;
-
-      const wobble = (Math.sin(p.age * 8.5 + p.seed) + Math.cos(p.age * 5.7 + p.seed * 0.67)) * 0.5;
-      const turbulence = this.options.particleJitter * (0.012 + drive * 0.018) * wobble;
-      const swirl = (this.options.particleJitter * 0.006) * p.spin * (0.6 + drive);
-
-      p.vx += nx * (accel + speedAdjust) * dt + tx * (swirl + turbulence) * dt;
-      p.vy += ny * (accel + speedAdjust) * dt + ty * (swirl + turbulence) * dt;
-
-      const drag = silentFade
-        ? Math.max(0.88, 0.95 - this.silenceSeconds * 0.08)
-        : Math.max(0.93, 0.985 - drive * 0.02);
-      p.vx *= drag;
-      p.vy *= drag;
-
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
-      // Add NCS-style sinusoidal side drift while particles travel outward.
-      const waveAmp = (1.5 + drive * 2.2) * Math.max(0.6, this.options.particleIntensity || 1);
-      const waveFreq = 7 + drive * 3.5;
-      const waveOffset = Math.sin(p.age * waveFreq + p.seed) * waveAmp * dt * 18;
-      p.x += tx * waveOffset;
-      p.y += ty * waveOffset;
-      const margin = 40;
-      if (
-        p.x < -margin ||
-        p.x > this.viewW + margin ||
-        p.y < -margin ||
-        p.y > this.viewH + margin
-      ) {
-        continue;
-      }
-      keep.push(p);
     }
-
-    this.particles = keep.slice(-900);
-    if (this.silenceSeconds > 1.2) {
-      this.particles = [];
-      this.spawnRemainder = 0;
-    }
+    this.particles.length = kept;
   }
-  drawParticles() {
-    if (!this.options.particleEnabled || this.options.mode !== 'circle') return;
-    const c = this.ctx;
-    const [r, g, b] = this.options.particleColor.split(",").map((v) => Number(v.trim()));
 
+  drawParticles(cx, cy) {
+    if (!this.options.particleEnabled || this.options.mode === "monstercat" || !this.particles.length) return;
+    const c = this.ctx;
+    const maxDist = Math.hypot(this.viewW, this.viewH) / 2 + 30;
+    const rgb = this.options.particleColor || "140, 200, 255";
+    const sprite = this.getGlowSprite(rgb);
+    const trails = this.options.trailsEnabled !== false;
+    c.save();
+    c.globalCompositeOperation = "lighter";
+    c.lineCap = "round";
     for (let i = 0; i < this.particles.length; i += 1) {
       const p = this.particles[i];
-      const t = p.life / p.maxLife;
-      const fade = t < 0.85 ? t : (1 - t) * 6;
-      const alpha = Math.max(0, Math.min(1, fade * this.options.particleAlpha));
-      if (alpha <= 0) continue;
-
-      const speed = Math.hypot(p.vx, p.vy);
-      const speedNorm = this.clamp01((speed / Math.max(1, this.runtime.particleSpeed * 2.2)) * 0.9 + this.beatPulse * 0.45 + this.impactPulse * 0.6);
-      const coreColor = this.options.multiColorReactive
-        ? this.getReactiveColor(speedNorm * 1.35, alpha, 1.12)
-        : `rgba(${r}, ${g}, ${b}, ${alpha})`;
-      const glowColor = this.options.multiColorReactive
-        ? this.getReactiveColor(speedNorm * 1.35, alpha * 0.25, 1.25)
-        : `rgba(${r}, ${g}, ${b}, ${alpha * 0.22})`;
-
-      c.beginPath();
-      c.fillStyle = glowColor;
-      c.arc(p.x, p.y, this.options.particleGlowSize, 0, Math.PI * 2);
-      c.fill();
-
-      c.beginPath();
-      c.fillStyle = coreColor;
-      c.arc(p.x, p.y, this.options.particleSize, 0, Math.PI * 2);
-      c.fill();
+      const t = p.dist / maxDist;
+      const fadeIn = Math.min(1, (p.dist - p.born * 0.85) / 36);
+      const alpha = Math.max(0, fadeIn) * (1 - t * t * t) * p.alpha * (this.options.particleAlpha ?? 0.65) * 1.3;
+      if (alpha <= 0.01) continue;
+      const dx = Math.cos(p.angle);
+      const dy = Math.sin(p.angle);
+      const x = cx + dx * p.dist;
+      const y = cy + dy * p.dist;
+      const size = p.size * (0.7 + t * 2.4);
+      if (trails && p.speed > 90) {
+        const streak = Math.min(46, p.speed * 0.045);
+        c.strokeStyle = `rgba(${rgb}, ${Math.min(1, alpha * 0.55)})`;
+        c.lineWidth = Math.max(0.6, size * 0.7);
+        c.beginPath();
+        c.moveTo(x - dx * streak, y - dy * streak);
+        c.lineTo(x, y);
+        c.stroke();
+      }
+      c.globalAlpha = Math.min(1, alpha);
+      const d = size * 5;
+      c.drawImage(sprite, x - d / 2, y - d / 2, d, d);
     }
+    c.restore();
+  }
+
+  // ---- NCS circle: a smooth ring around the logo. Bass sits at the top and the spectrum runs
+  // down both sides to meet at the bottom, so the shape is symmetrical and has no seam. Two soft
+  // coloured layers swell behind a bright front layer, and the whole ring pulses with the kick.
+
+  /** Amplitudes for one half of the ring (bass → highs), smoothed along the ring and over time. */
+  ncsHalf(bars) {
+    // Skip the rumble below the kick (so the top of the ring is the peak, not a dip) and the dull
+    // top highs (which barely move).
+    const from = Math.floor(bars.length * 0.12);
+    const to = Math.max(from + 12, Math.floor(bars.length * 0.74));
+    const use = to - from;
+    const half = new Array(use);
+    for (let i = 0; i < use; i += 1) {
+      const v = Math.max(0, bars[from + i] || 0);
+      half[i] = Math.pow(v, 2.1) * 1.25; // widen the gap between quiet and loud bands
+    }
+    // The very top takes the strongest of the first few bands, so the crown is one peak
+    // instead of two bumps either side of a dip.
+    const crown = Math.max(2, Math.floor(use * 0.14));
+    let strongest = 0;
+    for (let i = crown; i >= 0; i -= 1) {
+      strongest = Math.max(strongest, half[i]);
+      half[i] = strongest;
+    }
+    for (let pass = 0; pass < 2; pass += 1) {
+      let prev = half[0];
+      for (let i = 0; i < use; i += 1) {
+        const next = half[Math.min(use - 1, i + 1)];
+        const cur = half[i];
+        half[i] = prev * 0.25 + cur * 0.5 + next * 0.25;
+        prev = cur;
+      }
+    }
+    if (!this.ncsSmoothed || this.ncsSmoothed.length !== use) {
+      this.ncsSmoothed = new Array(use).fill(0);
+      this.ncsTrail = new Array(use).fill(0);
+    }
+    for (let i = 0; i < use; i += 1) {
+      const prev = this.ncsSmoothed[i];
+      const target = Math.min(1.1, half[i]);
+      const value = prev + (target - prev) * (target > prev ? 0.6 : 0.22);
+      this.ncsSmoothed[i] = value;
+      // The trail jumps up with the ring and sinks back slowly: it drives the layers behind.
+      this.ncsTrail[i] = Math.max(value, this.ncsTrail[i] * 0.955);
+    }
+    return this.ncsSmoothed;
+  }
+
+  /** Closed smooth outline: radius + amplitude × length, mirrored left and right. */
+  ncsPath(half, baseRadius, length) {
+    const c = this.ctx;
+    const n = half.length;
+    const points = [];
+    // right side: top (bass) down to the bottom (highs); then the left side back up
+    for (let i = 0; i < n; i += 1) {
+      const a = -Math.PI / 2 + ((i + 0.5) / n) * Math.PI;
+      const r = baseRadius + half[i] * length;
+      points.push([Math.cos(a) * r, Math.sin(a) * r]);
+    }
+    for (let i = n - 1; i >= 0; i -= 1) {
+      const a = -Math.PI / 2 - ((i + 0.5) / n) * Math.PI;
+      const r = baseRadius + half[i] * length;
+      points.push([Math.cos(a) * r, Math.sin(a) * r]);
+    }
+    const total = points.length;
+    const last = points[total - 1];
+    const first = points[0];
+    c.beginPath();
+    c.moveTo((last[0] + first[0]) / 2, (last[1] + first[1]) / 2);
+    for (let i = 0; i < total; i += 1) {
+      const p0 = points[i];
+      const p1 = points[(i + 1) % total];
+      c.quadraticCurveTo(p0[0], p0[1], (p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2);
+    }
+    c.closePath();
   }
 
   drawSpectrum(bars, cx, cy, radius) {
     const c = this.ctx;
-    const count = bars.length;
-    const step = (Math.PI * 2) / count;
-    const maxBarPx = Math.min(this.viewW, this.viewH) * this.runtime.maxBarLength;
-    const avgAmp = bars.reduce((acc, n) => acc + Math.max(0, n), 0) / Math.max(1, count);
+    const half = this.ncsHalf(bars);
+    const maxLen = Math.min(this.viewW, this.viewH) * this.runtime.maxBarLength;
+    const pulse = 1 + this.bassSlew * 0.07 + this.beatPulse * 0.05;
+    const ring = radius * pulse;
+    const avgAmp = half.reduce((acc, n) => acc + n, 0) / Math.max(1, half.length);
     const reactiveAmp = Math.min(1.6, avgAmp + this.beatPulse * 0.55 + this.impactPulse * 0.7);
-    const [sr, sg, sb] = (this.options.spectrumColor || "255, 255, 255").split(",").map((v) => Number(v.trim()));
+    const rgb = (text, fallback) => (text || fallback).split(",").map((v) => Number(v.trim())).join(", ");
+    const front = rgb(this.options.spectrumColor, "255, 255, 255");
+    const accent = rgb(this.options.particleColor, "140, 200, 255");
+    const multi = this.options.multiColorReactive;
+    const layerColor = (alpha, amp) => (multi ? this.getReactiveColor(reactiveAmp * amp, alpha, 1.18, true) : `rgba(${accent}, ${alpha})`);
+
+    const centerModeRaw = String(this.options.fillCenter || "color").toLowerCase();
+    const centerMode = centerModeRaw === "white" ? "color" : centerModeRaw;
+    const transparentCenter = centerMode === "transparent";
+    const imageCenter = centerMode === "image" || centerMode === "ncs";
+    const inner = Math.max(6, ring * 0.97);
 
     c.save();
     c.translate(cx, cy);
-    c.rotate(this.rotation);
+
+    // Back layers: they follow the slow trail, so they linger behind each hit in the accent colour.
+    const trail = this.ncsTrail || half;
     c.globalCompositeOperation = "lighter";
-    const fillMode = this.options.spectrumStyle === "fill";
-    let disableOuterBorder = false;
+    this.ncsPath(trail, ring + 5, maxLen * 1.5);
+    c.fillStyle = layerColor(0.2, 1.25);
+    c.fill();
+    this.ncsPath(trail, ring + 2, maxLen * 1.22);
+    c.fillStyle = layerColor(0.38, 1.0);
+    c.fill();
 
-    // Draw main spectrum path
-    c.beginPath();
-    c.lineWidth = this.options.lineWidth;
+    // Front layer: bright, with a glow.
+    c.globalCompositeOperation = "source-over";
+    this.ncsPath(half, ring + 1.5, maxLen);
+    c.shadowBlur = 22 * this.pixelScale;
+    c.shadowColor = multi ? this.getReactiveColor(reactiveAmp, 0.9, 1.2, true) : `rgba(${accent}, 0.9)`;
+    c.fillStyle = multi ? this.getReactiveColor(reactiveAmp * 0.85, 0.96, 1.16, true) : `rgba(${front}, 0.96)`;
+    c.fill();
+    c.shadowBlur = 0;
 
-    // Create points for smooth curve
-    const points = [];
-    for (let i = 0; i < count; i++) {
-        const a = i * step;
-        const rawAmp = Math.max(0, bars[i]);
-        const prevAmp = Math.max(0, bars[(i - 1 + count) % count]);
-        const nextAmp = Math.max(0, bars[(i + 1) % count]);
-        const amp = fillMode
-          ? (rawAmp * 0.64 + prevAmp * 0.18 + nextAmp * 0.18)
-          : rawAmp;
-        const len = amp * maxBarPx;
-        const x = Math.cos(a) * (radius + len);
-        const y = Math.sin(a) * (radius + len);
-        points.push({x, y});
-    }
-
-    // Proper closed midpoint bezier: start at mid(last, first) so all joins are smooth
-    const pLast = points[count - 1];
-    const pFirst = points[0];
-    c.moveTo((pLast.x + pFirst.x) / 2, (pLast.y + pFirst.y) / 2);
-    for (let i = 0; i < count; i++) {
-        const p0 = points[i];
-        const p1 = points[(i + 1) % count];
-        const midX = (p0.x + p1.x) / 2;
-        const midY = (p0.y + p1.y) / 2;
-        c.quadraticCurveTo(p0.x, p0.y, midX, midY);
-    }
-    c.closePath();
-    if (fillMode) {
-      const centerModeRaw = String(this.options.fillCenter || "color").toLowerCase();
-      const centerMode = centerModeRaw === "white" ? "color" : centerModeRaw;
-      const isCenterTransparent = centerMode === "transparent";
-      if (isCenterTransparent) disableOuterBorder = true;
-      const isCenterImage = centerMode === "image" || centerMode === "ncs";
-      const [cr, cg, cb] = (this.options.fillCenterColor || "255, 255, 255")
-        .split(",")
-        .map((v) => Number(v.trim()));
-      const coreSpectrumColor = this.getReactiveColor(reactiveAmp * 0.85, 0.92, 1.16, true);
-      const layerA = this.getReactiveColor(reactiveAmp * 0.7, 0.52, 1.14, true);
-      const layerB = this.getReactiveColor(reactiveAmp * 1.0, 0.34, 1.2, true);
-      const layerC = this.getReactiveColor(reactiveAmp * 1.25, 0.2, 1.25, true);
-
-      const useConic = typeof c.createConicGradient === "function";
-      let rainbowStroke = null;
-      if (useConic) {
-        rainbowStroke = c.createConicGradient(this.rotation, 0, 0);
-        rainbowStroke.addColorStop(0.00, "rgba(255, 82, 82, 0.95)");
-        rainbowStroke.addColorStop(0.17, "rgba(255, 178, 66, 0.95)");
-        rainbowStroke.addColorStop(0.34, "rgba(247, 255, 84, 0.95)");
-        rainbowStroke.addColorStop(0.51, "rgba(97, 255, 143, 0.95)");
-        rainbowStroke.addColorStop(0.68, "rgba(88, 179, 255, 0.95)");
-        rainbowStroke.addColorStop(0.84, "rgba(166, 126, 255, 0.95)");
-        rainbowStroke.addColorStop(1.00, "rgba(255, 82, 82, 0.95)");
-      }
-
-      // NCS-style aura band (smooth, no point vectors)
+    // Centre: your image, a colour, or a hole that shows the artwork.
+    if (transparentCenter) {
       c.save();
-      c.strokeStyle = (this.options.multiColorReactive && rainbowStroke) ? rainbowStroke : layerA;
-      c.lineWidth = Math.max(6, this.options.glowWidth * 2.1);
-      c.stroke();
-      c.strokeStyle = (this.options.multiColorReactive && rainbowStroke) ? rainbowStroke : layerB;
-      c.lineWidth = Math.max(10, this.options.glowWidth * 3);
-      c.stroke();
-      c.strokeStyle = (this.options.multiColorReactive && rainbowStroke) ? rainbowStroke : layerC;
-      c.lineWidth = Math.max(14, this.options.glowWidth * 3.8);
-      c.stroke();
-      c.restore();
-
-      // For transparent mode keep only outline behavior.
-      if (!isCenterTransparent) {
-        c.fillStyle = this.getReactiveColor(reactiveAmp * 0.9, 0.24, 1.1, true);
-        c.fill();
-      }
-      c.strokeStyle = coreSpectrumColor;
-      c.stroke();
-
-      const innerRadius = Math.max(6, radius * 0.94);
-      c.save();
-      c.globalCompositeOperation = "source-over";
+      c.globalCompositeOperation = "destination-out";
       c.beginPath();
-      c.arc(0, 0, innerRadius, 0, Math.PI * 2);
-      c.closePath();
-      c.clip();
-      if (isCenterImage && this.centerImage && this.centerImage.complete && this.centerImage.naturalWidth > 0) {
-        const maxSize = innerRadius * 2;
-        const imgW = this.centerImage.naturalWidth || this.centerImage.width || maxSize;
-        const imgH = this.centerImage.naturalHeight || this.centerImage.height || maxSize;
-        const scale = Math.min(maxSize / imgW, maxSize / imgH);
-        const drawW = imgW * scale;
-        const drawH = imgH * scale;
-        c.save();
-        if (this.options.centerImageSpin) {
-          c.rotate(this.recordRotation);
-        }
-        c.drawImage(this.centerImage, -drawW / 2, -drawH / 2, drawW, drawH);
-        c.restore();
-      } else if (!isCenterTransparent) {
-        c.fillStyle = `rgba(${cr}, ${cg}, ${cb}, 0.99)`;
-        c.fillRect(-innerRadius, -innerRadius, innerRadius * 2, innerRadius * 2);
-      }
+      c.arc(0, 0, inner, 0, Math.PI * 2);
+      c.fill();
       c.restore();
-
-      if (isCenterTransparent) {
-        c.save();
-        c.globalCompositeOperation = "destination-out";
-        c.beginPath();
-        c.arc(0, 0, innerRadius * 0.99, 0, Math.PI * 2);
-        c.fill();
-        c.restore();
-        c.beginPath();
-        c.strokeStyle = coreSpectrumColor;
-        c.lineWidth = Math.max(1.4, this.options.lineWidth * 0.7);
-        c.arc(0, 0, innerRadius * 0.995, 0, Math.PI * 2);
-        c.stroke();
-      }
     } else {
-      c.strokeStyle = this.getReactiveColor(reactiveAmp, 0.95, 1.14);
-      c.stroke();
-    }
-
-    if (this.options.mode === "circle" && this.recordImage) {
-      this.drawRecordDisc(radius);
-    }
-
-    if (this.options.spectrumBorderEnabled && !disableOuterBorder) {
-      const [br, bg, bb] = this.options.spectrumBorderColor.split(",").map((v) => Number(v.trim()));
-      const borderWidth = this.options.mode === "circle" ? 5 : Math.max(1, this.options.spectrumBorderWidth || 2);
+      c.save();
       c.beginPath();
-      c.strokeStyle = `rgba(${br}, ${bg}, ${bb}, 0.92)`;
-      c.lineWidth = borderWidth;
-      c.arc(0, 0, radius, 0, Math.PI * 2);
-      c.stroke();
+      c.arc(0, 0, inner, 0, Math.PI * 2);
+      c.clip();
+      const [cr, cg, cb] = (this.options.fillCenterColor || "255, 255, 255").split(",").map((v) => Number(v.trim()));
+      c.fillStyle = imageCenter ? "rgba(0, 0, 0, 1)" : `rgba(${cr}, ${cg}, ${cb}, 1)`;
+      c.fillRect(-inner, -inner, inner * 2, inner * 2);
+      if (imageCenter && this.centerImage && this.centerImage.complete && this.centerImage.naturalWidth > 0) {
+        const imgW = this.centerImage.naturalWidth;
+        const imgH = this.centerImage.naturalHeight;
+        const scale = Math.max((inner * 2) / imgW, (inner * 2) / imgH); // cover the disc
+        c.save();
+        if (this.options.centerImageSpin) c.rotate(this.recordRotation);
+        c.drawImage(this.centerImage, (-imgW * scale) / 2, (-imgH * scale) / 2, imgW * scale, imgH * scale);
+        c.restore();
+      }
+      c.restore();
     }
 
-    // For fill mode, avoid forced full base ring so visualizer clips/reacts naturally.
-    if (!fillMode) {
-      c.beginPath();
-      c.strokeStyle = this.options.multiColorReactive
-        ? this.getReactiveColor(Math.max(0.18, reactiveAmp * 0.7), 0.32, 1.1, true)
-        : `rgba(${sr}, ${sg}, ${sb}, 0.32)`;
-      c.lineWidth = Math.max(1, this.options.lineWidth * 0.7);
-      c.arc(0, 0, radius, 0, Math.PI * 2);
-      c.stroke();
-    }
+    if (this.recordImage) this.drawRecordDisc(ring);
 
-    // Draw bars only for non-filled styles to keep NCS mode smooth.
-    if (!fillMode) {
-    for (let i = 0; i < count; i += 1) {
-      const a = i * step;
-      const amp = Math.max(0, bars[i]);
-      const len = amp > 0.01 ? Math.max(2, amp * maxBarPx) : 0;
-      const x0 = Math.cos(a) * radius;
-      const y0 = Math.sin(a) * radius;
-      const x1 = Math.cos(a) * (radius + len);
-      const y1 = Math.sin(a) * (radius + len);
-      const xTip0 = Math.cos(a) * (radius + len * 0.72);
-      const yTip0 = Math.sin(a) * (radius + len * 0.72);
-      const barReactive = Math.min(1.6, amp + this.beatPulse * 0.45 + this.impactPulse * 0.7);
-
+    if (this.options.spectrumBorderEnabled || transparentCenter) {
+      const border = rgb(this.options.spectrumBorderColor, "255, 255, 255");
       c.beginPath();
-      c.strokeStyle = fillMode
-        ? "rgba(255, 255, 255, 0.88)"
-        : this.getReactiveColor(barReactive, 0.25, 1.2);
-      c.lineWidth = fillMode ? Math.max(1.5, this.options.lineWidth * 0.95) : this.options.glowWidth;
-      c.moveTo(x0, y0);
-      c.lineTo(x1, y1);
+      c.strokeStyle = `rgba(${border}, 0.95)`;
+      c.lineWidth = transparentCenter ? 2 : 4;
+      c.arc(0, 0, inner, 0, Math.PI * 2);
       c.stroke();
-
-      c.beginPath();
-      c.strokeStyle = fillMode
-        ? this.getReactiveColor(barReactive, 0.98, 1.2, true)
-        : this.getReactiveColor(barReactive, 0.95, 1.12);
-      c.lineWidth = Math.max(1, this.options.lineWidth * 0.9);
-      c.moveTo(fillMode ? xTip0 : x0, fillMode ? yTip0 : y0);
-      c.lineTo(x1, y1);
-      c.stroke();
-    }
     }
     c.restore();
   }
@@ -1146,76 +1068,94 @@ export default class AudioVisualizer {
     c.shadowBlur = 0;
   }
 
+  // ---- Spectrum: rounded bars rising from a centre line with a faded reflection below it and a
+  // small cap that hangs at each bar's peak before falling. Mirrored, the bass sits in the middle.
   drawSpectrumAnalyzer(bars, w, h) {
     const c = this.ctx;
-    const count = Math.max(16, Math.min(bars.length, Math.floor(w / 3)));
     const smoothing = Math.max(0.05, Math.min(0.95, this.options.spectrumSmoothing ?? 0.3));
     const thickness = Math.max(1, this.options.spectrumBarThickness ?? 4);
     const glow = Math.max(0, this.options.spectrumGlow ?? 20);
     const opacity = Math.max(0, Math.min(1, this.options.spectrumOpacity ?? 1.0));
     const mirror = this.options.spectrumMirror !== false;
-    const maxHeight = h * 0.7;
+    const rainbow = this.options.multiColorReactive || this.options.spectrumRgb;
+    const [r, g, b] = (this.options.spectrumColor || "255,255,255").split(",").map((v) => Number(v.trim()));
 
-    const displayCount = mirror ? Math.floor(count / 2) : count;
-    const totalBars = mirror ? displayCount * 2 : displayCount;
-    const gap = thickness * 0.35;
-    const slotW = w / Math.max(1, totalBars);
-    const barW = Math.max(1, slotW - gap);
+    // Layout: a band across the middle 84% of the frame, sitting a little below centre.
+    const span = w * 0.84;
+    const left = (w - span) / 2;
+    const baseline = h * 0.6;
+    const maxUp = h * 0.38;
+    const slot = Math.max(3, thickness + 3);
+    const total = Math.max(16, Math.floor(span / slot));
+    const sideCount = mirror ? Math.floor(total / 2) : total;
+    const slotW = span / (mirror ? sideCount * 2 : sideCount);
+    const barW = Math.max(1.5, Math.min(thickness, slotW - 1.5));
+    const from = Math.floor(bars.length * 0.1); // skip the rumble below the kick, so the centre is the peak
+    const use = Math.max(from + 8, Math.floor(bars.length * 0.82)); // and the dull top highs
 
-    for (let i = 0; i < displayCount; i++) {
-      const rawAmp = Math.max(0, bars[i]);
+    if (this.spectrumSmoothedBars.length !== sideCount) this.spectrumSmoothedBars = new Array(sideCount).fill(0);
+    if (!this.spectrumPeaks || this.spectrumPeaks.length !== sideCount) this.spectrumPeaks = new Array(sideCount).fill(0);
+
+    const drawBar = (slotIndex, height, peak, color, glowColor) => {
+      const x = left + slotIndex * slotW + (slotW - barW) / 2;
+      const radius = barW / 2;
+      // bar
+      c.shadowBlur = glow * this.pixelScale;
+      c.shadowColor = glowColor;
+      c.fillStyle = color;
+      c.beginPath();
+      if (c.roundRect) c.roundRect(x, baseline - height, barW, height, [radius, radius, 0, 0]);
+      else c.rect(x, baseline - height, barW, height);
+      c.fill();
+      c.shadowBlur = 0;
+      // peak cap
+      c.fillRect(x, baseline - peak - 3, barW, 1.5);
+      // reflection
+      const refl = c.createLinearGradient(0, baseline + 2, 0, baseline + 2 + height * 0.55);
+      refl.addColorStop(0, glowColor.replace(/[\d.]+\)$/, `${0.3 * opacity})`));
+      refl.addColorStop(1, glowColor.replace(/[\d.]+\)$/, "0)"));
+      c.fillStyle = refl;
+      c.fillRect(x, baseline + 2, barW, height * 0.55);
+    };
+
+    // Sample the bands, then let the innermost bars take the strongest of their neighbours so the
+    // middle is one peak instead of a dip between two.
+    const raw = new Array(sideCount);
+    for (let i = 0; i < sideCount; i += 1) {
+      const pos = sideCount === 1 ? from : from + (i / (sideCount - 1)) * (use - 1 - from);
+      raw[i] = Math.max(0, this.sampleArrayAt(bars, pos));
+    }
+    let strongest = 0;
+    for (let i = Math.min(sideCount - 1, Math.floor(sideCount * 0.1)); i >= 0; i -= 1) {
+      strongest = Math.max(strongest, raw[i]);
+      raw[i] = strongest;
+    }
+
+    for (let i = 0; i < sideCount; i += 1) {
+      const rawAmp = raw[i];
       const prev = this.spectrumSmoothedBars[i] || 0;
       const amp = prev + (rawAmp - prev) * (1 - smoothing);
       this.spectrumSmoothedBars[i] = amp;
+      const height = Math.max(2, Math.min(maxUp, amp * maxUp * 1.05));
+      // The cap jumps up with the bar, then falls slowly.
+      this.spectrumPeaks[i] = Math.max(height, this.spectrumPeaks[i] - maxUp * 0.006);
+      const peak = this.spectrumPeaks[i];
 
-      const barHeight = Math.max(2, Math.min(maxHeight, amp * maxHeight * 1.05));
-      const barReactive = Math.min(1.6, amp + this.beatPulse * 0.45 + this.impactPulse * 0.7);
-
-      const baseColor = this.options.multiColorReactive || this.options.spectrumRgb
-        ? this.getReactiveColor(barReactive, opacity, 1.15, true)
-        : (() => {
-            const [r, g, b] = (this.options.spectrumColor || "255,255,255").split(",").map(v => Number(v.trim()));
-            return `rgba(${r},${g},${b},${opacity})`;
-          })();
-
-      const drawBar = (xSlot) => {
-        const x = xSlot * slotW + (slotW - barW) / 2;
-        const y = h - barHeight;
-
-        if (glow > 0) {
-          c.shadowBlur = glow * this.pixelScale;
-          c.shadowColor = baseColor;
-        }
-
-        // gradient fill: brighter at top, fades toward baseline
-        const grad = c.createLinearGradient(x, y, x, h);
-        const [r2, g2, b2] = (this.options.spectrumColor || "255,255,255").split(",").map(v => Number(v.trim()));
-        if (this.options.multiColorReactive || this.options.spectrumRgb) {
-          grad.addColorStop(0, this.getReactiveColor(barReactive, opacity, 1.2, true));
-          grad.addColorStop(1, this.getReactiveColor(barReactive * 0.4, opacity * 0.3, 1.0, true));
-        } else {
-          grad.addColorStop(0, `rgba(${r2},${g2},${b2},${opacity})`);
-          grad.addColorStop(1, `rgba(${r2},${g2},${b2},${opacity * 0.18})`);
-        }
-
-        c.fillStyle = grad;
-        c.fillRect(x, y, barW, barHeight);
-
-        // bright cap line at top of bar
-        c.fillStyle = baseColor;
-        c.fillRect(x, y, barW, Math.max(2, thickness * 0.5));
-      };
+      const reactive = Math.min(1.6, amp + this.beatPulse * 0.45 + this.impactPulse * 0.7);
+      const color = rainbow ? this.getReactiveColor(reactive, opacity, 1.18, true) : `rgba(${r}, ${g}, ${b}, ${opacity})`;
+      const glowColor = rainbow ? this.getReactiveColor(reactive, 0.85, 1.2, true) : `rgba(${r}, ${g}, ${b}, 0.85)`;
 
       if (mirror) {
-        // left half: bars go right-to-left from center
-        drawBar(displayCount - 1 - i);
-        // right half: bars go left-to-right from center
-        drawBar(displayCount + i);
+        drawBar(sideCount - 1 - i, height, peak, color, glowColor); // left of centre
+        drawBar(sideCount + i, height, peak, color, glowColor); // right of centre
       } else {
-        drawBar(i);
+        drawBar(i, height, peak, color, glowColor);
       }
     }
 
+    // centre line
+    c.fillStyle = rainbow ? this.getReactiveColor(0.6, 0.5 * opacity, 1.1, true) : `rgba(${r}, ${g}, ${b}, ${0.5 * opacity})`;
+    c.fillRect(left, baseline, span, 1);
     c.shadowBlur = 0;
   }
 
@@ -1317,9 +1257,9 @@ export default class AudioVisualizer {
 
         this.rotation += this.runtime.rotateSpeed + this.energy * 0.0008;
         this.recordRotation += this.runtime.rotateSpeed * 2.6 + this.energy * 0.02 + this.beatPulse * 0.01;
-        this.spawnParticles(dt, cx, cy, radius);
-        this.updateParticles(dt, cx, cy);
-        this.drawParticles();
+        this.spawnParticles(dt, cx, cy, radius * 0.9);
+        this.updateParticles(dt);
+        this.drawParticles(cx, cy);
         this.drawSpectrum(displayBars, cx, cy, radius);
     } else if (this.options.mode === 'monstercat') {
         this.spawnMonstercatParticles(dt, w, h);
@@ -1327,6 +1267,9 @@ export default class AudioVisualizer {
         this.drawMonstercatParticles();
         this.drawMonstercat(this.getDisplayBars(bars), w, h);
     } else if (this.options.mode === 'spectrum') {
+        this.spawnParticles(dt, w / 2, h * 0.6, 10);
+        this.updateParticles(dt);
+        this.drawParticles(w / 2, h * 0.6);
         this.drawSpectrumAnalyzer(this.getDisplayBars(bars), w, h);
     }
 
