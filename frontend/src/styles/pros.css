@@ -865,3 +865,10 @@ button.adm-btn-danger.adm-btn-danger:hover { background: color-mix(in srgb, var(
 
 /* Spotlight: the top beat plays on the page */
 .sp-card-beat.is-playing { color: var(--c-acc); }
+
+/* Pros cards: both action labels stay on one line; a card too narrow for both side by side stacks them. */
+.pro-card { container-type: inline-size; container-name: procard; }
+.pro-card-actions .smb-btn { white-space: nowrap !important; overflow-wrap: normal !important; word-break: normal !important; min-width: 0 !important; padding: 0 14px !important; justify-content: center; gap: 6px; }
+@container procard (max-width: 340px) {
+  .pro-card-actions { grid-template-columns: 1fr; }
+}
