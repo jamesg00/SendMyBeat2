@@ -849,3 +849,19 @@ button.adm-btn-danger.adm-btn-danger:hover { background: color-mix(in srgb, var(
 .ds-pick:has(.ds-pick-panel) { z-index: 80; }
 .ds-pick-panel { background: linear-gradient(var(--c-card), var(--c-card)), var(--c-bg) !important; }
 .ds-pick-preview { background: linear-gradient(var(--c-card2), var(--c-card2)), var(--c-bg) !important; }
+
+/* Image panel: the proportions link sits in its own column (the site-wide button padding pushed it over the H box). */
+.ft-chain { padding: 0 !important; width: 34px !important; min-width: 34px !important; max-width: 34px !important; height: 36px !important; justify-self: center; }
+.ft-pair { align-items: end; }
+.ft-toolbar { gap: 6px; }
+
+/* Upload Studio: Cancel next to the upload button while it works. */
+.us-upload-actions { display: flex; gap: 8px; }
+.us-upload-actions .us-upload-btn { flex: 1; min-width: 0 !important; }
+.us-cancel-btn { flex: none; white-space: nowrap !important; overflow-wrap: normal !important; word-break: normal !important; background: color-mix(in srgb, var(--c-danger) 14%, transparent) !important; color: var(--c-danger) !important; border: 1px solid color-mix(in srgb, var(--c-danger) 45%, transparent) !important; box-shadow: none !important; }
+.us-cancel-btn:hover:not(:disabled) { background: color-mix(in srgb, var(--c-danger) 24%, transparent) !important; }
+.us-cancel-btn:disabled { opacity: 0.6; }
+.us-panel .text-right .us-cancel-btn { margin-bottom: 6px; }
+
+/* Spotlight: the top beat plays on the page */
+.sp-card-beat.is-playing { color: var(--c-acc); }
