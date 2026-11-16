@@ -1,4 +1,4 @@
-
+import { STYLE_KIND, drawBlob, drawDotRing, drawMirrorBars, drawNcsRing, drawProximity, drawWave } from "@/lib/visualizerStyles";
 const IS_MOBILE = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(max-width: 768px)").matches;
 
 // Magic Number Constants for better maintainability and readability
@@ -99,6 +99,9 @@ const DEFAULT_OPTIONS = {
   // Effects
   shakeIntensity: 0.6, // Reduced from 1.0
   multiColorReactive: false,
+  fxZoomPulse: 0, // 0..1: how much the artwork zooms in on each kick
+  fxFlash: false, // a soft flash of light on hard hits
+  fxVignette: false, // darker corners
 
   // Reactivity Pipeline (Musicvid-like behavior)
   reactivity: {
@@ -793,166 +796,6 @@ export default class AudioVisualizer {
     c.restore();
   }
 
-  // ---- NCS circle: a smooth ring around the logo. Bass sits at the top and the spectrum runs
-  // down both sides to meet at the bottom, so the shape is symmetrical and has no seam. Two soft
-  // coloured layers swell behind a bright front layer, and the whole ring pulses with the kick.
-
-  /** Amplitudes for one half of the ring (bass → highs), smoothed along the ring and over time. */
-  ncsHalf(bars) {
-    // Skip the rumble below the kick (so the top of the ring is the peak, not a dip) and the dull
-    // top highs (which barely move).
-    const from = Math.floor(bars.length * 0.12);
-    const to = Math.max(from + 12, Math.floor(bars.length * 0.74));
-    const use = to - from;
-    const half = new Array(use);
-    for (let i = 0; i < use; i += 1) {
-      const v = Math.max(0, bars[from + i] || 0);
-      half[i] = Math.pow(v, 2.1) * 1.25; // widen the gap between quiet and loud bands
-    }
-    // The very top takes the strongest of the first few bands, so the crown is one peak
-    // instead of two bumps either side of a dip.
-    const crown = Math.max(2, Math.floor(use * 0.14));
-    let strongest = 0;
-    for (let i = crown; i >= 0; i -= 1) {
-      strongest = Math.max(strongest, half[i]);
-      half[i] = strongest;
-    }
-    for (let pass = 0; pass < 2; pass += 1) {
-      let prev = half[0];
-      for (let i = 0; i < use; i += 1) {
-        const next = half[Math.min(use - 1, i + 1)];
-        const cur = half[i];
-        half[i] = prev * 0.25 + cur * 0.5 + next * 0.25;
-        prev = cur;
-      }
-    }
-    if (!this.ncsSmoothed || this.ncsSmoothed.length !== use) {
-      this.ncsSmoothed = new Array(use).fill(0);
-      this.ncsTrail = new Array(use).fill(0);
-    }
-    for (let i = 0; i < use; i += 1) {
-      const prev = this.ncsSmoothed[i];
-      const target = Math.min(1.1, half[i]);
-      const value = prev + (target - prev) * (target > prev ? 0.6 : 0.22);
-      this.ncsSmoothed[i] = value;
-      // The trail jumps up with the ring and sinks back slowly: it drives the layers behind.
-      this.ncsTrail[i] = Math.max(value, this.ncsTrail[i] * 0.955);
-    }
-    return this.ncsSmoothed;
-  }
-
-  /** Closed smooth outline: radius + amplitude × length, mirrored left and right. */
-  ncsPath(half, baseRadius, length) {
-    const c = this.ctx;
-    const n = half.length;
-    const points = [];
-    // right side: top (bass) down to the bottom (highs); then the left side back up
-    for (let i = 0; i < n; i += 1) {
-      const a = -Math.PI / 2 + ((i + 0.5) / n) * Math.PI;
-      const r = baseRadius + half[i] * length;
-      points.push([Math.cos(a) * r, Math.sin(a) * r]);
-    }
-    for (let i = n - 1; i >= 0; i -= 1) {
-      const a = -Math.PI / 2 - ((i + 0.5) / n) * Math.PI;
-      const r = baseRadius + half[i] * length;
-      points.push([Math.cos(a) * r, Math.sin(a) * r]);
-    }
-    const total = points.length;
-    const last = points[total - 1];
-    const first = points[0];
-    c.beginPath();
-    c.moveTo((last[0] + first[0]) / 2, (last[1] + first[1]) / 2);
-    for (let i = 0; i < total; i += 1) {
-      const p0 = points[i];
-      const p1 = points[(i + 1) % total];
-      c.quadraticCurveTo(p0[0], p0[1], (p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2);
-    }
-    c.closePath();
-  }
-
-  drawSpectrum(bars, cx, cy, radius) {
-    const c = this.ctx;
-    const half = this.ncsHalf(bars);
-    const maxLen = Math.min(this.viewW, this.viewH) * this.runtime.maxBarLength;
-    const pulse = 1 + this.bassSlew * 0.07 + this.beatPulse * 0.05;
-    const ring = radius * pulse;
-    const avgAmp = half.reduce((acc, n) => acc + n, 0) / Math.max(1, half.length);
-    const reactiveAmp = Math.min(1.6, avgAmp + this.beatPulse * 0.55 + this.impactPulse * 0.7);
-    const rgb = (text, fallback) => (text || fallback).split(",").map((v) => Number(v.trim())).join(", ");
-    const front = rgb(this.options.spectrumColor, "255, 255, 255");
-    const accent = rgb(this.options.particleColor, "140, 200, 255");
-    const multi = this.options.multiColorReactive;
-    const layerColor = (alpha, amp) => (multi ? this.getReactiveColor(reactiveAmp * amp, alpha, 1.18, true) : `rgba(${accent}, ${alpha})`);
-
-    const centerModeRaw = String(this.options.fillCenter || "color").toLowerCase();
-    const centerMode = centerModeRaw === "white" ? "color" : centerModeRaw;
-    const transparentCenter = centerMode === "transparent";
-    const imageCenter = centerMode === "image" || centerMode === "ncs";
-    const inner = Math.max(6, ring * 0.97);
-
-    c.save();
-    c.translate(cx, cy);
-
-    // Back layers: they follow the slow trail, so they linger behind each hit in the accent colour.
-    const trail = this.ncsTrail || half;
-    c.globalCompositeOperation = "lighter";
-    this.ncsPath(trail, ring + 5, maxLen * 1.5);
-    c.fillStyle = layerColor(0.2, 1.25);
-    c.fill();
-    this.ncsPath(trail, ring + 2, maxLen * 1.22);
-    c.fillStyle = layerColor(0.38, 1.0);
-    c.fill();
-
-    // Front layer: bright, with a glow.
-    c.globalCompositeOperation = "source-over";
-    this.ncsPath(half, ring + 1.5, maxLen);
-    c.shadowBlur = 22 * this.pixelScale;
-    c.shadowColor = multi ? this.getReactiveColor(reactiveAmp, 0.9, 1.2, true) : `rgba(${accent}, 0.9)`;
-    c.fillStyle = multi ? this.getReactiveColor(reactiveAmp * 0.85, 0.96, 1.16, true) : `rgba(${front}, 0.96)`;
-    c.fill();
-    c.shadowBlur = 0;
-
-    // Centre: your image, a colour, or a hole that shows the artwork.
-    if (transparentCenter) {
-      c.save();
-      c.globalCompositeOperation = "destination-out";
-      c.beginPath();
-      c.arc(0, 0, inner, 0, Math.PI * 2);
-      c.fill();
-      c.restore();
-    } else {
-      c.save();
-      c.beginPath();
-      c.arc(0, 0, inner, 0, Math.PI * 2);
-      c.clip();
-      const [cr, cg, cb] = (this.options.fillCenterColor || "255, 255, 255").split(",").map((v) => Number(v.trim()));
-      c.fillStyle = imageCenter ? "rgba(0, 0, 0, 1)" : `rgba(${cr}, ${cg}, ${cb}, 1)`;
-      c.fillRect(-inner, -inner, inner * 2, inner * 2);
-      if (imageCenter && this.centerImage && this.centerImage.complete && this.centerImage.naturalWidth > 0) {
-        const imgW = this.centerImage.naturalWidth;
-        const imgH = this.centerImage.naturalHeight;
-        const scale = Math.max((inner * 2) / imgW, (inner * 2) / imgH); // cover the disc
-        c.save();
-        if (this.options.centerImageSpin) c.rotate(this.recordRotation);
-        c.drawImage(this.centerImage, (-imgW * scale) / 2, (-imgH * scale) / 2, imgW * scale, imgH * scale);
-        c.restore();
-      }
-      c.restore();
-    }
-
-    if (this.recordImage) this.drawRecordDisc(ring);
-
-    if (this.options.spectrumBorderEnabled || transparentCenter) {
-      const border = rgb(this.options.spectrumBorderColor, "255, 255, 255");
-      c.beginPath();
-      c.strokeStyle = `rgba(${border}, 0.95)`;
-      c.lineWidth = transparentCenter ? 2 : 4;
-      c.arc(0, 0, inner, 0, Math.PI * 2);
-      c.stroke();
-    }
-    c.restore();
-  }
-
   spawnMonstercatParticles(dt, w, h) {
     if (!this.options.monstercatParticleEnabled || this.options.mode !== "monstercat") return;
     const intensity = Math.max(0, Math.min(1.4, this.energySlew * 0.9 + this.bassSlew * 0.7 + this.impactPulse * 0.8));
@@ -1165,7 +1008,7 @@ export default class AudioVisualizer {
     const h = this.viewH;
     const grad = c.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.2, w / 2, h / 2, Math.max(w, h) * 0.7);
     grad.addColorStop(0, "rgba(0,0,0,0)");
-    grad.addColorStop(1, "rgba(0,0,0,0.26)");
+    grad.addColorStop(1, "rgba(0,0,0,0.5)");
     c.fillStyle = grad;
     c.fillRect(0, 0, w, h);
   }
@@ -1194,8 +1037,15 @@ export default class AudioVisualizer {
       this.renderFrame(STEP);
       steps += 1;
     }
+    if (steps && this.onFrame) this.onFrame(this);
     if (this.stepAccumulator > STEP) this.stepAccumulator = 0; // too far behind: drop the backlog
     this.animationFrame = requestAnimationFrame(this.loop);
+  }
+
+  /** How much to zoom the artwork behind the visualizer this frame (1 = none). */
+  getZoom() {
+    const amount = Math.max(0, Math.min(1, this.options.fxZoomPulse || 0));
+    return 1 + amount * 0.05 * (this.framePulse || 0);
   }
 
   /** Advance the simulation by dt seconds and draw one frame. */
@@ -1251,27 +1101,49 @@ export default class AudioVisualizer {
     this.runtime.highSensitivity = this.lerp(this.runtime.highSensitivity, this.options.highSensitivity, 9, dt);
     this.runtime.monstercatSmoothing = this.lerp(this.runtime.monstercatSmoothing, this.options.monstercatSmoothing, 9, dt);
 
-    if (this.options.mode === 'circle') {
-        const radius = Math.min(w, h) * this.runtime.radius;
-        const displayBars = this.getDisplayBars(bars);
+    const mode = this.options.mode;
+    const kind = STYLE_KIND[mode] || "ring";
+    // How hard the music is hitting right now, 0..1 (drives the artwork zoom).
+    this.framePulse = this.lerp(this.framePulse || 0, Math.min(1, this.bassSlew * 0.8 + this.beatPulse * 0.7), 18, dt);
 
-        this.rotation += this.runtime.rotateSpeed + this.energy * 0.0008;
-        this.recordRotation += this.runtime.rotateSpeed * 2.6 + this.energy * 0.02 + this.beatPulse * 0.01;
-        this.spawnParticles(dt, cx, cy, radius * 0.9);
-        this.updateParticles(dt);
-        this.drawParticles(cx, cy);
-        this.drawSpectrum(displayBars, cx, cy, radius);
-    } else if (this.options.mode === 'monstercat') {
+    if (kind === "monstercat") {
         this.spawnMonstercatParticles(dt, w, h);
         this.updateMonstercatParticles(dt, w, h);
         this.drawMonstercatParticles();
         this.drawMonstercat(this.getDisplayBars(bars), w, h);
-    } else if (this.options.mode === 'spectrum') {
-        this.spawnParticles(dt, w / 2, h * 0.6, 10);
+    } else {
+        const displayBars = this.getDisplayBars(bars);
+        const radius = Math.min(w, h) * this.runtime.radius;
+        this.rotation += this.runtime.rotateSpeed + this.energy * 0.0008;
+        this.recordRotation += this.runtime.rotateSpeed * 2.6 + this.energy * 0.02 + this.beatPulse * 0.01;
+
+        // Stars fly out from the logo (ring styles) or from the middle of the bars.
+        const originY = kind === "ring" ? cy : (mode === "spectrum" ? h * 0.6 : h * 0.5) + this.shakeOffsetY;
+        this.spawnParticles(dt, cx, originY, kind === "ring" ? radius * 0.9 : 10);
         this.updateParticles(dt);
-        this.drawParticles(w / 2, h * 0.6);
-        this.drawSpectrumAnalyzer(this.getDisplayBars(bars), w, h);
+        this.drawParticles(cx, originY);
+
+        c.save();
+        if (kind !== "ring") c.translate(this.shakeOffsetX, this.shakeOffsetY);
+        if (mode === "circle") drawNcsRing(this, displayBars, cx, cy, radius);
+        else if (mode === "blob") drawBlob(this, displayBars, cx, cy, radius);
+        else if (mode === "dots") drawDotRing(this, displayBars, cx, cy, radius);
+        else if (mode === "proximity") drawProximity(this, displayBars, w, h);
+        else if (mode === "wave") drawWave(this, displayBars, w, h);
+        else if (mode === "mirror") drawMirrorBars(this, displayBars, w, h);
+        else this.drawSpectrumAnalyzer(displayBars, w, h);
+        c.restore();
     }
+
+    // Effects over any style.
+    if (this.options.fxFlash && this.impactPulse > 0.08) {
+      c.save();
+      c.globalCompositeOperation = "lighter";
+      c.fillStyle = `rgba(255, 255, 255, ${Math.min(0.12, this.impactPulse * 0.1)})`;
+      c.fillRect(0, 0, w, h);
+      c.restore();
+    }
+    if (this.options.fxVignette) this.drawVignette();
 
     if (this.barTransition > 0) {
       this.barTransition = Math.max(0, this.barTransition - (dt / this.barTransitionDuration));

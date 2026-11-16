@@ -1,13 +1,100 @@
-import React from "react";
-import { toast } from "sonner";
-import { Music } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import React, { useState } from "react";
+import { ChevronDown, ImageUp, Music } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import StudioSection, { StudioSwitch } from "@/components/upload-studio/StudioSection";
+import StudioSection, { StudioSeg, StudioSwitch } from "@/components/upload-studio/StudioSection";
+import { VISUALIZER_STYLES } from "@/lib/constants";
+import { STYLE_KIND } from "@/lib/visualizerStyles";
+
+// Visualizer: pick a style, then tune its look and the effects around it.
+// Laid out as plain rows so it reads the same in a wide panel, a narrow one, and the phone drawer.
 
 const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif", ".heic", ".heif"];
+
+// A small picture of each style for its tile.
+const GLYPHS = {
+  circle: (
+    <>
+      <circle cx="24" cy="15" r="5.5" fill="currentColor" opacity="0.35" />
+      {Array.from({ length: 14 }, (_, i) => {
+        const a = (i / 14) * Math.PI * 2;
+        const len = 3 + (i % 3) * 2;
+        return <line key={i} x1={24 + Math.cos(a) * 7.5} y1={15 + Math.sin(a) * 7.5} x2={24 + Math.cos(a) * (7.5 + len)} y2={15 + Math.sin(a) * (7.5 + len)} />;
+      })}
+    </>
+  ),
+  monstercat: [4, 9, 15, 11, 7, 12, 6, 9, 5, 7, 4, 6].map((h, i) => <rect key={i} x={3 + i * 3.6} y={27 - h} width="2.6" height={h} fill="currentColor" stroke="none" />),
+  spectrum: [3, 6, 9, 12, 8, 12, 9, 6, 3].map((h, i) => (
+    <g key={i}>
+      <rect x={6 + i * 4.2} y={18 - h} width="2.6" height={h} rx="1.3" fill="currentColor" stroke="none" />
+      <rect x={6 + i * 4.2} y={19.5} width="2.6" height={h * 0.45} fill="currentColor" stroke="none" opacity="0.3" />
+    </g>
+  )),
+  proximity: [2, 4, 7, 10, 12, 10, 7, 4, 2].map((h, i) => <line key={i} x1={8 + i * 4} y1={15 - h} x2={8 + i * 4} y2={15 + h} />),
+  blob: (
+    <>
+      <path d="M24 3c7 0 13 4 13 12s-5 13-13 12S10 23 11 15 17 3 24 3z" fill="currentColor" opacity="0.3" stroke="none" />
+      <circle cx="24" cy="15" r="6" fill="currentColor" stroke="none" />
+    </>
+  ),
+  wave: (
+    <>
+      <path d="M2 15c5-12 9 12 14 0s9 12 14 0 9 10 16 0" fill="none" />
+      <path d="M2 15c5-7 9 7 14 0s9 7 14 0 9 6 16 0" fill="none" opacity="0.4" />
+    </>
+  ),
+  mirror: [5, 8, 6, 9, 7, 9, 6, 8, 5].map((h, i) => (
+    <g key={i}>
+      <rect x={5 + i * 4.3} y={0} width="3" height={h} fill="currentColor" stroke="none" />
+      <rect x={5 + i * 4.3} y={30 - h} width="3" height={h} fill="currentColor" stroke="none" />
+    </g>
+  )),
+  dots: (
+    <>
+      <circle cx="24" cy="15" r="4.5" fill="currentColor" opacity="0.35" stroke="none" />
+      {Array.from({ length: 10 }, (_, i) => {
+        const a = (i / 10) * Math.PI * 2;
+        return [8, 11, 14].slice(0, 1 + (i % 3)).map((r) => <circle key={`${i}-${r}`} cx={24 + Math.cos(a) * r} cy={15 + Math.sin(a) * r} r="1" fill="currentColor" stroke="none" />);
+      })}
+    </>
+  ),
+};
+
+const Group = ({ title, children }) => (
+  <div className="vz-group">
+    <p className="us-label">{title}</p>
+    <div className="vz-rows">{children}</div>
+  </div>
+);
+
+/** Label on the left, a small control on the right. */
+const Row = ({ label, hint, children }) => (
+  <div className="vz-row">
+    <span className="vz-row-text">
+      <b>{label}</b>
+      {hint ? <span>{hint}</span> : null}
+    </span>
+    <span className="vz-row-control">{children}</span>
+  </div>
+);
+
+const Slider = ({ label, value, min, max, step, onChange, format = (v) => v }) => (
+  <label className="vz-slider">
+    <span className="vz-slider-head">
+      <b>{label}</b>
+      <span>{format(value)}</span>
+    </span>
+    <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(parseFloat(e.target.value))} className="studio-slider ft-range" />
+  </label>
+);
+
+const Swatch = ({ value, onChange, label }) => (
+  <label className="vz-swatch" title={label}>
+    <input type="color" value={value} onChange={(e) => onChange(e.target.value)} aria-label={label} />
+    <span style={{ background: value }} aria-hidden="true" />
+  </label>
+);
+
+const pct = (v) => `${Math.round(v * 100)}%`;
 
 const VisualizerSettings = ({
   visualizerEnabled,
@@ -17,437 +104,196 @@ const VisualizerSettings = ({
   applyVisualizerPreset,
   handleCenterVisualizerImageUpload,
   centerVisualizerImageName,
-  centerVisualizerImageInputRef
+  centerVisualizerImageInputRef,
 }) => {
+  const s = visualizerSettings;
+  const set = (patch) => setVisualizerSettings((prev) => ({ ...prev, ...patch }));
+  const [advanced, setAdvanced] = useState(false);
+  const style = VISUALIZER_STYLES.find((item) => item.mode === s.mode) || VISUALIZER_STYLES[0];
+  const kind = STYLE_KIND[s.mode] || "ring";
+  const ring = kind === "ring";
+  const monstercat = kind === "monstercat";
+
   return (
     <StudioSection
       icon={Music}
       tone="purple"
       title="Visualizer"
-      summary={visualizerEnabled ? "Bars that move with the beat, recorded into the video" : "Off. Add bars that move with the beat"}
+      summary={visualizerEnabled ? `${style.name} · ${style.blurb.toLowerCase()}` : "Off. Add bars that move with the beat"}
       action={<StudioSwitch checked={visualizerEnabled} onChange={setVisualizerEnabled} label="Visualizer" />}
     >
-       {visualizerEnabled && (
-       <div className="space-y-5 animate-in slide-in-from-top-2">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-             <Button
-               type="button"
-               variant="outline"
-               size="sm"
-               className="text-xs"
-               onClick={() => applyVisualizerPreset("ncs-clean")}
-             >
-               NCS Clean
-             </Button>
-             <Button
-               type="button"
-               variant="outline"
-               size="sm"
-               className="text-xs"
-               onClick={() => applyVisualizerPreset("spectrum-analyzer")}
-             >
-               Spectrum Analyzer
-             </Button>
-             <Button
-               type="button"
-               variant="outline"
-               size="sm"
-               className="text-xs"
-               onClick={() => applyVisualizerPreset("monstercat-tight")}
-             >
-               Monstercat Tight
-             </Button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-             <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">Style</Label>
-                <Select
-                   value={visualizerSettings.mode}
-                   onValueChange={(v) => setVisualizerSettings(s => ({...s, mode: v}))}
+      {visualizerEnabled ? (
+        <>
+          <Group title="Style">
+            <div className="vz-styles" role="radiogroup" aria-label="Visualizer style">
+              {VISUALIZER_STYLES.map((item) => (
+                <button
+                  key={item.mode}
+                  type="button"
+                  role="radio"
+                  aria-checked={s.mode === item.mode}
+                  className={`vz-style ${s.mode === item.mode ? "is-active" : ""}`}
+                  onClick={() => applyVisualizerPreset(item.preset)}
+                  title={item.blurb}
                 >
-                   <SelectTrigger className="text-foreground"><SelectValue /></SelectTrigger>
-                   <SelectContent>
-                      <SelectItem value="circle">NCS Circle</SelectItem>
-                      <SelectItem value="monstercat">Linear Bars</SelectItem>
-                      <SelectItem value="spectrum">Spectrum Analyzer</SelectItem>
-                   </SelectContent>
-                </Select>
-             </div>
-             <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">Spectrum Color</Label>
-                <div className="flex flex-wrap gap-2">
-                  <Input
-                     type="color"
-                     value={visualizerSettings.spectrumColor}
-                     onChange={(e) => setVisualizerSettings(s => ({...s, spectrumColor: e.target.value, spectrumBorderColor: e.target.value}))}
-                     className="w-10 h-10 p-1 cursor-pointer"
-                  />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex-1 text-xs whitespace-nowrap px-2"
-                    onClick={() => setVisualizerSettings(s => ({...s, multiColorReactive: !s.multiColorReactive}))}
-                  >
-                    {visualizerSettings.multiColorReactive ? "Rainbow On" : "Rainbow Off"}
-                  </Button>
-                </div>
-             </div>
-             <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">Particle Color</Label>
-                <div className="flex flex-wrap gap-2">
-                  <Input
-                     type="color"
-                     value={visualizerSettings.particleColor}
-                     onChange={(e) => setVisualizerSettings(s => ({...s, particleColor: e.target.value}))}
-                     className="w-10 h-10 p-1 cursor-pointer"
-                  />
-                </div>
-             </div>
-          </div>
+                  <svg viewBox="0 0 48 30" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+                    {GLYPHS[item.mode]}
+                  </svg>
+                  <b>{item.name}</b>
+                </button>
+              ))}
+            </div>
+            <p className="us-hint">{style.blurb}. Picking a style resets it to its recommended look.</p>
+          </Group>
 
-          <div className="space-y-4 pt-2">
-             {visualizerSettings.mode === 'circle' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                   <div className="space-y-2">
-                      <Label className="text-xs text-muted-foreground">Center Mode</Label>
-                      <Select
-                         value={visualizerSettings.fillCenter}
-                         onValueChange={(v) => setVisualizerSettings(s => ({...s, fillCenter: v}))}
-                      >
-                         <SelectTrigger className="text-foreground"><SelectValue /></SelectTrigger>
-                         <SelectContent>
-                            <SelectItem value="color">Color Fill</SelectItem>
-                            <SelectItem value="image">Image</SelectItem>
-                            <SelectItem value="transparent">Transparent</SelectItem>
-                         </SelectContent>
-                      </Select>
-                   </div>
-                   {visualizerSettings.fillCenter === "color" && (
-                     <div className="space-y-2">
-                        <Label className="text-xs text-muted-foreground">Center Fill Color</Label>
-                        <Input
-                          type="color"
-                          value={visualizerSettings.fillCenterColor}
-                          onChange={(e) => setVisualizerSettings(s => ({...s, fillCenterColor: e.target.value}))}
-                          className="w-10 h-10 p-1 cursor-pointer"
-                        />
-                     </div>
-                   )}
-                   {visualizerSettings.fillCenter === "image" && (
-                     <div className="space-y-2">
-                        <Label className="text-xs text-muted-foreground">Image Spin</Label>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="w-full"
-                          onClick={() => setVisualizerSettings(s => ({...s, centerImageSpin: !s.centerImageSpin}))}
-                        >
-                          {visualizerSettings.centerImageSpin ? "Spin On" : "Spin Off"}
-                        </Button>
-                        <Input
-                          ref={centerVisualizerImageInputRef}
-                          type="file"
-                          accept={IMAGE_EXTENSIONS.join(',')}
-                          className="hidden"
-                          onChange={handleCenterVisualizerImageUpload}
-                        />
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="w-full"
-                          onClick={() => {
-                            toast("Upload image");
-                            centerVisualizerImageInputRef.current?.click();
-                          }}
-                        >
-                          Upload Image
-                        </Button>
-                        {!!centerVisualizerImageName && (
-                          <p className="text-[11px] text-muted-foreground truncate">{centerVisualizerImageName}</p>
-                        )}
-                     </div>
-                   )}
-                   <div className="space-y-2">
-                      <Label className="text-xs text-muted-foreground">Circle Border</Label>
-                      <Button
-                        variant={visualizerSettings.spectrumBorderEnabled ? "default" : "outline"}
-                        size="sm"
-                        className="w-full"
-                        onClick={() => setVisualizerSettings(s => ({ ...s, spectrumBorderEnabled: !s.spectrumBorderEnabled }))}
-                      >
-                        {visualizerSettings.spectrumBorderEnabled ? "Border On" : "Border Off"}
-                      </Button>
-                      {visualizerSettings.spectrumBorderEnabled && (
-                        <div className="flex items-center gap-2">
-                          <Input
-                            type="color"
-                            value={visualizerSettings.spectrumBorderColor}
-                            onChange={(e) => setVisualizerSettings(s => ({ ...s, spectrumBorderColor: e.target.value }))}
-                            className="w-10 h-10 p-1 cursor-pointer"
-                          />
-                          <div className="flex-1 text-[11px] text-muted-foreground">
-                            NCS thickness enabled
-                          </div>
-                        </div>
-                      )}
-                      {visualizerSettings.fillCenter === "transparent" && (
-                        <p className="text-[11px] text-muted-foreground">
-                          Border is auto-disabled in Transparent mode.
-                        </p>
-                      )}
-                   </div>
-                </div>
-             )}
+          <Group title="Look">
+            <Row label="Colour" hint={s.multiColorReactive ? "Rainbow: colour follows loudness" : "Bars and shapes"}>
+              {!s.multiColorReactive ? <Swatch label="Visualizer colour" value={s.spectrumColor} onChange={(v) => set({ spectrumColor: v })} /> : null}
+              <span className="vz-inline-label">Rainbow</span>
+              <StudioSwitch label="Rainbow colours" checked={Boolean(s.multiColorReactive)} onChange={(v) => set({ multiColorReactive: v, spectrumRgb: v })} />
+            </Row>
+            <Row label="Glow colour" hint="Glow, halo and stars">
+              <Swatch label="Glow colour" value={s.particleColor} onChange={(v) => set({ particleColor: v })} />
+            </Row>
+            <Slider label="Reactivity" value={s.intensity} min={0.5} max={2} step={0.05} onChange={(v) => set({ intensity: v })} format={(v) => `${v.toFixed(2)}×`} />
+            {ring ? (
+              <div className="vz-two">
+                <Slider label="Logo size" value={s.radius} min={0.1} max={0.34} step={0.01} onChange={(v) => set({ radius: v })} format={pct} />
+                <Slider label="Reach" value={s.maxBarLength} min={0.06} max={0.34} step={0.01} onChange={(v) => set({ maxBarLength: v })} format={pct} />
+              </div>
+            ) : null}
+            {s.mode === "spectrum" ? (
+              <div className="vz-two">
+                <Slider label="Bar width" value={s.spectrumBarThickness} min={2} max={16} step={1} onChange={(v) => set({ spectrumBarThickness: v })} format={(v) => `${v}px`} />
+                <Slider label="Glow" value={s.spectrumGlow} min={0} max={48} step={1} onChange={(v) => set({ spectrumGlow: v })} />
+              </div>
+            ) : null}
+            {monstercat ? (
+              <div className="vz-two">
+                <Slider label="Height from bottom" value={s.monstercatYOffset} min={0} max={320} step={5} onChange={(v) => set({ monstercatYOffset: v })} format={(v) => `${v}px`} />
+                <Slider label="Gap between bars" value={s.monstercatSpacing} min={0} max={12} step={0.5} onChange={(v) => set({ monstercatSpacing: v })} format={(v) => v.toFixed(1)} />
+              </div>
+            ) : null}
+          </Group>
 
-             <div className="space-y-2">
-                <div className="flex justify-between text-xs">
-                   <Label>Reactivity / Intensity</Label>
-                   <span className="text-muted-foreground">{visualizerSettings.intensity.toFixed(2)}</span>
-                </div>
-                <input
-                   type="range" min="0.5" max="2.0" step="0.1"
-                   value={visualizerSettings.intensity}
-                   onChange={(e) => setVisualizerSettings(s => ({...s, intensity: parseFloat(e.target.value)}))}
-                   className="studio-slider studio-slider-purple"
+          {ring ? (
+            <Group title="Logo">
+              <div className="us-field">
+                <StudioSeg
+                  label="What's in the middle"
+                  value={s.fillCenter === "white" ? "color" : s.fillCenter}
+                  onChange={(v) => set({ fillCenter: v })}
+                  options={[
+                    { value: "image", label: "Picture" },
+                    { value: "color", label: "Colour" },
+                    { value: "transparent", label: "See-through" },
+                  ]}
                 />
-             </div>
+              </div>
+              {s.fillCenter === "image" ? (
+                <>
+                  <Row label="Picture" hint={centerVisualizerImageName || "Your cover art"}>
+                    <Input ref={centerVisualizerImageInputRef} type="file" accept={IMAGE_EXTENSIONS.join(",")} className="hidden" onChange={handleCenterVisualizerImageUpload} />
+                    <button type="button" className="us-pill-btn" onClick={() => centerVisualizerImageInputRef.current?.click()}>
+                      <ImageUp className="h-3.5 w-3.5" aria-hidden="true" /> Upload logo
+                    </button>
+                  </Row>
+                  <Row label="Spin the picture">
+                    <StudioSwitch label="Spin the picture" checked={Boolean(s.centerImageSpin)} onChange={(v) => set({ centerImageSpin: v })} />
+                  </Row>
+                </>
+              ) : null}
+              {s.fillCenter === "color" || s.fillCenter === "white" ? (
+                <Row label="Fill colour">
+                  <Swatch label="Centre colour" value={s.fillCenterColor} onChange={(v) => set({ fillCenterColor: v })} />
+                </Row>
+              ) : null}
+              {s.fillCenter !== "transparent" ? (
+                <Row label="Outline">
+                  {s.spectrumBorderEnabled ? <Swatch label="Outline colour" value={s.spectrumBorderColor} onChange={(v) => set({ spectrumBorderColor: v })} /> : null}
+                  <StudioSwitch label="Outline around the logo" checked={Boolean(s.spectrumBorderEnabled)} onChange={(v) => set({ spectrumBorderEnabled: v })} />
+                </Row>
+              ) : null}
+            </Group>
+          ) : null}
 
-             <div className="space-y-2">
-                <div className="flex justify-between text-xs">
-                   <Label>Bar Count</Label>
-                   <span className="text-muted-foreground">{visualizerSettings.bars}</span>
+          <Group title="Effects">
+            {monstercat ? (
+              <Row label="Sparks" hint="Streaks flying across the bars">
+                <StudioSwitch label="Sparks" checked={Boolean(s.monstercatParticleEnabled)} onChange={(v) => set({ monstercatParticleEnabled: v })} />
+              </Row>
+            ) : (
+              <>
+                <Row label="Stars" hint="Fly out toward the camera, faster on bass">
+                  <StudioSwitch label="Stars" checked={Boolean(s.particleEnabled)} onChange={(v) => set({ particleEnabled: v })} />
+                </Row>
+                {s.particleEnabled ? (
+                  <>
+                    <Slider label="How many stars" value={s.particleIntensity} min={0.1} max={2} step={0.1} onChange={(v) => set({ particleIntensity: v })} format={(v) => `${v.toFixed(1)}×`} />
+                    <Row label="Speed streaks">
+                      <StudioSwitch label="Speed streaks" checked={s.trailsEnabled !== false} onChange={(v) => set({ trailsEnabled: v })} />
+                    </Row>
+                  </>
+                ) : null}
+              </>
+            )}
+            <Slider label="Artwork zoom on the kick" value={s.fxZoomPulse ?? 0} min={0} max={1} step={0.05} onChange={(v) => set({ fxZoomPulse: v })} format={(v) => (v ? pct(v) : "Off")} />
+            {!monstercat ? <Slider label="Shake" value={s.shakeIntensity} min={0} max={2} step={0.05} onChange={(v) => set({ shakeIntensity: v })} format={(v) => (v ? `${v.toFixed(2)}×` : "Off")} /> : null}
+            <Row label="Flash on hard hits">
+              <StudioSwitch label="Flash on hard hits" checked={Boolean(s.fxFlash)} onChange={(v) => set({ fxFlash: v })} />
+            </Row>
+            <Row label="Dark corners">
+              <StudioSwitch label="Dark corners" checked={Boolean(s.fxVignette)} onChange={(v) => set({ fxVignette: v })} />
+            </Row>
+            <Slider label="Artwork brightness" value={s.backgroundOpacity ?? 1} min={0.2} max={1} step={0.05} onChange={(v) => set({ backgroundOpacity: v })} format={pct} />
+          </Group>
+
+          <div className="vz-group">
+            <button type="button" className="vz-advanced" onClick={() => setAdvanced((v) => !v)} aria-expanded={advanced}>
+              Fine tuning
+              <ChevronDown className={`us-chevron h-4 w-4 ${advanced ? "is-open" : ""}`} aria-hidden="true" />
+            </button>
+            {advanced ? (
+              <div className="vz-rows">
+                <Slider label="Number of bars" value={s.bars} min={32} max={160} step={4} onChange={(v) => set({ bars: v })} />
+                <div className="vz-two">
+                  <Slider label="Bass" value={s.lowSensitivity ?? 1} min={0.4} max={2} step={0.05} onChange={(v) => set({ lowSensitivity: v })} format={(v) => `${v.toFixed(2)}×`} />
+                  <Slider label="Mids" value={s.midSensitivity ?? 1} min={0.4} max={2} step={0.05} onChange={(v) => set({ midSensitivity: v })} format={(v) => `${v.toFixed(2)}×`} />
                 </div>
-                <input
-                   type="range" min="32" max="160" step="4"
-                   value={visualizerSettings.bars}
-                   onChange={(e) => setVisualizerSettings(s => ({...s, bars: parseInt(e.target.value)}))}
-                   className="studio-slider studio-slider-purple"
-                />
-             </div>
-
-             {visualizerSettings.mode === 'circle' && (
-                <div className="grid grid-cols-2 gap-4">
-                   <div className="space-y-2">
-                      <div className="flex justify-between text-xs">
-                         <Label>Particles</Label>
-                         <span className="text-muted-foreground">{visualizerSettings.particleIntensity.toFixed(1)}</span>
-                      </div>
-                      <input
-                         type="range" min="0" max="2" step="0.1"
-                         value={visualizerSettings.particleIntensity}
-                         onChange={(e) => setVisualizerSettings(s => ({...s, particleIntensity: parseFloat(e.target.value)}))}
-                         className="studio-slider studio-slider-purple"
-                      />
-                   </div>
-                   <div className="space-y-2">
-                      <div className="flex justify-between text-xs">
-                         <Label>Shake</Label>
-                         <span className="text-muted-foreground">{visualizerSettings.shakeIntensity.toFixed(1)}</span>
-                      </div>
-                      <input
-                         type="range" min="0" max="2" step="0.1"
-                         value={visualizerSettings.shakeIntensity}
-                         onChange={(e) => setVisualizerSettings(s => ({...s, shakeIntensity: parseFloat(e.target.value)}))}
-                         className="studio-slider studio-slider-purple"
-                      />
-                   </div>
-                </div>
-             )}
-
-             {visualizerSettings.mode === 'spectrum' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                   <div className="space-y-2">
-                      <Label className="text-xs text-muted-foreground">Bar Color</Label>
-                      <div className="flex flex-wrap gap-2">
-                        <Input
-                           type="color"
-                           value={visualizerSettings.spectrumColor}
-                           onChange={(e) => setVisualizerSettings(s => ({...s, spectrumColor: e.target.value}))}
-                           className="w-10 h-10 p-1 cursor-pointer"
-                        />
-                        <Button
-                          variant={visualizerSettings.spectrumRgb ? "default" : "outline"}
-                          size="sm"
-                          className={`flex-1 text-xs ${visualizerSettings.spectrumRgb ? "smb-toggle-on" : ""}`}
-                          onClick={() => setVisualizerSettings(s => ({...s, spectrumRgb: !s.spectrumRgb, multiColorReactive: !s.spectrumRgb}))}
-                        >
-                          {visualizerSettings.spectrumRgb ? "RGB On" : "RGB Off"}
-                        </Button>
-                      </div>
-                   </div>
-                   <div className="space-y-2">
-                      <Label className="text-xs text-muted-foreground">Mirror Mode</Label>
-                      <Button
-                        variant={visualizerSettings.spectrumMirror !== false ? "default" : "outline"}
-                        size="sm"
-                        className={`w-full ${visualizerSettings.spectrumMirror !== false ? "smb-toggle-on" : ""}`}
-                        onClick={() => setVisualizerSettings(s => ({...s, spectrumMirror: !s.spectrumMirror}))}
-                      >
-                        {visualizerSettings.spectrumMirror !== false ? "Mirror On" : "Mirror Off"}
-                      </Button>
-                   </div>
-                   <div className="space-y-2">
-                      <div className="flex justify-between text-xs">
-                         <Label>Bar Thickness</Label>
-                         <span className="text-muted-foreground">{visualizerSettings.spectrumBarThickness}px</span>
-                      </div>
-                      <input
-                         type="range" min="1" max="20" step="1"
-                         value={visualizerSettings.spectrumBarThickness}
-                         onChange={(e) => setVisualizerSettings(s => ({...s, spectrumBarThickness: parseInt(e.target.value)}))}
-                         className="studio-slider studio-slider-purple"
-                      />
-                   </div>
-                   <div className="space-y-2">
-                      <div className="flex justify-between text-xs">
-                         <Label>Glow</Label>
-                         <span className="text-muted-foreground">{visualizerSettings.spectrumGlow}</span>
-                      </div>
-                      <input
-                         type="range" min="0" max="60" step="1"
-                         value={visualizerSettings.spectrumGlow}
-                         onChange={(e) => setVisualizerSettings(s => ({...s, spectrumGlow: parseInt(e.target.value)}))}
-                         className="studio-slider studio-slider-purple"
-                      />
-                   </div>
-                   <div className="space-y-2">
-                      <div className="flex justify-between text-xs">
-                         <Label>Opacity</Label>
-                         <span className="text-muted-foreground">{(visualizerSettings.spectrumOpacity ?? 1).toFixed(2)}</span>
-                      </div>
-                      <input
-                         type="range" min="0.1" max="1.0" step="0.05"
-                         value={visualizerSettings.spectrumOpacity ?? 1}
-                         onChange={(e) => setVisualizerSettings(s => ({...s, spectrumOpacity: parseFloat(e.target.value)}))}
-                         className="studio-slider studio-slider-purple"
-                      />
-                   </div>
-                   <div className="space-y-2">
-                      <div className="flex justify-between text-xs">
-                         <Label>Smoothing</Label>
-                         <span className="text-muted-foreground">{(visualizerSettings.spectrumSmoothing ?? 0.3).toFixed(2)}</span>
-                      </div>
-                      <input
-                         type="range" min="0.05" max="0.9" step="0.05"
-                         value={visualizerSettings.spectrumSmoothing ?? 0.3}
-                         onChange={(e) => setVisualizerSettings(s => ({...s, spectrumSmoothing: parseFloat(e.target.value)}))}
-                         className="studio-slider studio-slider-purple"
-                      />
-                   </div>
-                </div>
-             )}
-
-             {visualizerSettings.mode === 'monstercat' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                   <div className="space-y-2">
-                      <div className="flex justify-between text-xs">
-                         <Label>Monstercat Y Position</Label>
-                         <div className="flex items-center gap-2">
-                           <span className="text-muted-foreground">{visualizerSettings.monstercatYOffset}px</span>
-                           <Button
-                             type="button"
-                             variant="outline"
-                             size="sm"
-                             className="h-6 px-2 text-[10px]"
-                             onClick={() => setVisualizerSettings(s => ({...s, monstercatYOffset: 0}))}
-                           >
-                             Reset Position
-                           </Button>
-                         </div>
-                      </div>
-                      <input
-                         type="range" min="0" max="320" step="5"
-                         value={visualizerSettings.monstercatYOffset}
-                         onChange={(e) => setVisualizerSettings(s => ({...s, monstercatYOffset: parseInt(e.target.value, 10)}))}
-                         className="studio-slider studio-slider-purple"
-                      />
-                   </div>
-                   <div className="space-y-2">
-                      <div className="flex justify-between text-xs">
-                         <Label>Bar Spacing</Label>
-                         <span className="text-muted-foreground">{visualizerSettings.monstercatSpacing.toFixed(1)}</span>
-                      </div>
-                      <input
-                         type="range" min="0" max="12" step="0.5"
-                         value={visualizerSettings.monstercatSpacing}
-                         onChange={(e) => setVisualizerSettings(s => ({...s, monstercatSpacing: parseFloat(e.target.value)}))}
-                         className="studio-slider studio-slider-purple"
-                      />
-                   </div>
-                   <div className="space-y-2">
-                      <div className="flex justify-between text-xs">
-                         <Label>Glow</Label>
-                         <span className="text-muted-foreground">{visualizerSettings.monstercatGlow.toFixed(0)}</span>
-                      </div>
-                      <input
-                         type="range" min="0" max="36" step="1"
-                         value={visualizerSettings.monstercatGlow}
-                         onChange={(e) => setVisualizerSettings(s => ({...s, monstercatGlow: parseInt(e.target.value, 10)}))}
-                         className="studio-slider studio-slider-purple"
-                      />
-                   </div>
-
-                   <div className="md:col-span-2 border rounded-md p-3 bg-secondary/30 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-xs">Linear Particles</Label>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant={visualizerSettings.monstercatParticleEnabled ? "default" : "outline"}
-                          className={visualizerSettings.monstercatParticleEnabled ? "smb-toggle-on" : ""}
-                          onClick={() => setVisualizerSettings(s => ({...s, monstercatParticleEnabled: !s.monstercatParticleEnabled}))}
-                        >
-                          {visualizerSettings.monstercatParticleEnabled ? "On" : "Off"}
-                        </Button>
-                      </div>
-
-                      {visualizerSettings.monstercatParticleEnabled && (
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                          <div className="space-y-1">
-                            <div className="flex justify-between text-xs">
-                              <Label>Particle Speed</Label>
-                              <span className="text-muted-foreground">{visualizerSettings.monstercatParticleSpeed.toFixed(1)}</span>
-                            </div>
-                            <input
-                              type="range" min="0.2" max="3.5" step="0.1"
-                              value={visualizerSettings.monstercatParticleSpeed}
-                              onChange={(e) => setVisualizerSettings(s => ({...s, monstercatParticleSpeed: parseFloat(e.target.value)}))}
-                              className="studio-slider studio-slider-purple"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <div className="flex justify-between text-xs">
-                              <Label>Particle Size</Label>
-                              <span className="text-muted-foreground">{visualizerSettings.monstercatParticleSize.toFixed(1)}</span>
-                            </div>
-                            <input
-                              type="range" min="0.4" max="4" step="0.1"
-                              value={visualizerSettings.monstercatParticleSize}
-                              onChange={(e) => setVisualizerSettings(s => ({...s, monstercatParticleSize: parseFloat(e.target.value)}))}
-                              className="studio-slider studio-slider-purple"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <div className="flex justify-between text-xs">
-                              <Label>Particle Count</Label>
-                              <span className="text-muted-foreground">{visualizerSettings.monstercatParticleCount}</span>
-                            </div>
-                            <input
-                              type="range" min="120" max="3000" step="20"
-                              value={visualizerSettings.monstercatParticleCount}
-                              onChange={(e) => setVisualizerSettings(s => ({...s, monstercatParticleCount: parseInt(e.target.value, 10)}))}
-                              className="studio-slider studio-slider-purple"
-                            />
-                          </div>
+                <Slider label="Highs" value={s.highSensitivity ?? 1} min={0.4} max={2} step={0.05} onChange={(v) => set({ highSensitivity: v })} format={(v) => `${v.toFixed(2)}×`} />
+                {s.mode === "spectrum" ? (
+                  <>
+                    <Row label="Bass in the middle" hint="Off: bass on the left">
+                      <StudioSwitch label="Mirror the bars" checked={s.spectrumMirror !== false} onChange={(v) => set({ spectrumMirror: v })} />
+                    </Row>
+                    <div className="vz-two">
+                      <Slider label="Smoothing" value={s.spectrumSmoothing ?? 0.3} min={0.05} max={0.9} step={0.05} onChange={(v) => set({ spectrumSmoothing: v })} format={(v) => v.toFixed(2)} />
+                      <Slider label="Opacity" value={s.spectrumOpacity ?? 1} min={0.1} max={1} step={0.05} onChange={(v) => set({ spectrumOpacity: v })} format={pct} />
+                    </div>
+                  </>
+                ) : null}
+                {monstercat ? (
+                  <>
+                    <div className="vz-two">
+                      <Slider label="Glow" value={s.monstercatGlow} min={0} max={36} step={1} onChange={(v) => set({ monstercatGlow: v })} />
+                      <Slider label="Smoothing" value={s.monstercatSmoothing ?? 0.35} min={0.05} max={0.9} step={0.05} onChange={(v) => set({ monstercatSmoothing: v })} format={(v) => v.toFixed(2)} />
+                    </div>
+                    {s.monstercatParticleEnabled ? (
+                      <>
+                        <div className="vz-two">
+                          <Slider label="Spark speed" value={s.monstercatParticleSpeed} min={0.2} max={3.5} step={0.1} onChange={(v) => set({ monstercatParticleSpeed: v })} format={(v) => `${v.toFixed(1)}×`} />
+                          <Slider label="Spark size" value={s.monstercatParticleSize} min={0.4} max={4} step={0.1} onChange={(v) => set({ monstercatParticleSize: v })} format={(v) => `${v.toFixed(1)}×`} />
                         </div>
-                      )}
-                   </div>
-                </div>
-             )}
+                        <Slider label="Most sparks at once" value={s.monstercatParticleCount} min={120} max={3000} step={20} onChange={(v) => set({ monstercatParticleCount: v })} />
+                      </>
+                    ) : null}
+                  </>
+                ) : null}
+              </div>
+            ) : null}
           </div>
-       </div>
-       )}
+        </>
+      ) : null}
     </StudioSection>
   );
 };

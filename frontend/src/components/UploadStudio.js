@@ -139,6 +139,7 @@ const UploadStudio = ({
   const [vizBakeProgress, setVizBakeProgress] = useState(0); // 0..1 within the current stage
   // The decoded beat, analysed for the visualizer (preview and export read the same numbers).
   const [beatSpectrum, setBeatSpectrum] = useState(null);
+  const previewBackdropRef = useRef(null);
 
   const hasAudioReady = Boolean(audioFileId);
   const hasImageReady = Boolean(imageFileId);
@@ -770,21 +771,18 @@ const UploadStudio = ({
     toast.success("Center image ready.");
   };
 
-  const PRESET_NAMES = {
-    "ncs-clean": "NCS Clean",
-    "ncs-aggressive": "NCS Aggressive",
-    "spectrum-analyzer": "Spectrum Analyzer",
-    "monstercat-tight": "Monstercat Tight",
-  };
   const applyVisualizerPreset = (preset) => {
     const values = VISUALIZER_PRESETS[preset];
     if (!values) return;
     setVisualizerSettings((s) => ({
       ...s,
+      // Each style starts from the same effects, so one style's effects don't carry into the next.
+      fxZoomPulse: 0,
+      fxFlash: false,
+      fxVignette: false,
       ...values,
-      ...(preset === "ncs-clean" || preset === "ncs-aggressive" ? { spectrumBorderEnabled: s.fillCenter !== "transparent" } : null),
+      ...(values.fillCenter ? null : { spectrumBorderEnabled: s.fillCenter !== "transparent" && s.spectrumBorderEnabled }),
     }));
-    toast.success(`Applied preset: ${PRESET_NAMES[preset] || preset}`);
   };
 
   const pollBackgroundJobUntilDone = async (jobId, { intervalMs = 2500, maxAttempts = 180 } = {}) => {
@@ -1649,7 +1647,7 @@ const UploadStudio = ({
 
          {/* Preview Section */}
          <div className={`
-             relative bg-background/50 flex flex-col items-center justify-center transition-all duration-300
+             us-stage relative flex flex-col items-center justify-center transition-all duration-300
              ${isMobile ? "absolute inset-0 z-10 w-full h-full" : "flex-none lg:flex-1 lg:w-1/2 lg:border-r z-20"}
          `}>
             {/* The frame clips the picture; the editor sits beside it and reaches past its edges. */}
@@ -1667,6 +1665,8 @@ const UploadStudio = ({
                onTouchStart={handleTouchStart}
                onClick={handlePreviewClick}
             >
+               {/* Background + artwork: one layer, so the visualizer can zoom it on the kick. */}
+               <div ref={previewBackdropRef} className="absolute inset-0" style={{ transformOrigin: "center center" }}>
                {previewUsesBlurredBackground && (
                   <img
                     src={imagePreviewUrl}
@@ -1705,6 +1705,7 @@ const UploadStudio = ({
                     style={{ opacity: visualizerEnabled ? visualizerSettings.backgroundOpacity : 1 }}
                   />
                </div>
+               </div>
 
 
                <VisualizerCanvas
@@ -1716,6 +1717,7 @@ const UploadStudio = ({
                  previewDims={previewDims}
                  analysis={beatSpectrum}
                  aspectRatio={videoAspectRatio}
+                 backdropRef={previewBackdropRef}
                  audioPreviewUrl={audioPreviewUrl}
                  imagePreviewUrl={imagePreviewUrl}
                  centerVisualizerImageUrl={centerVisualizerImageUrl}
@@ -1783,6 +1785,12 @@ const UploadStudio = ({
                </div>
             </div>
 
+            {!isMobile ? (
+              <span className="us-stage-meta">
+                <i aria-hidden="true" />
+                {outputDimsFor(videoAspectRatio).join(" × ")} · {videoAspectRatio} · {visualizerEnabled ? `${Number(videoRenderFps) === 60 ? 60 : 30} fps` : `${videoRenderFps} fps`}
+              </span>
+            ) : null}
             <p className={`text-[10px] text-muted-foreground mt-2 text-center lg:mb-0 ${isMobile ? "hidden" : ""}`}>{imageSettingsOpen ? "Transform: drag to move • handles stretch and scale • knob rotates • Ctrl+Z undoes" : "Click preview or press Space to Play/Pause • Open Image › Transform to edit the picture"}</p>
 
             {/* Mobile Toggle Button */}
@@ -1807,7 +1815,7 @@ const UploadStudio = ({
                         <DrawerTitle>Upload settings</DrawerTitle>
                         <DrawerDescription>Details, image, video and visualizer</DrawerDescription>
                     </DrawerHeader>
-                    <div className="px-4 pb-8 overflow-y-auto bg-[var(--card-bg)] text-[var(--text-primary)]">
+                    <div className="us-drawer-body px-4 pb-8 overflow-y-auto bg-[var(--card-bg)] text-[var(--text-primary)]">
                        {controlsMarkup}
                     </div>
                 </DrawerContent>

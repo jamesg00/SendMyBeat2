@@ -64,20 +64,24 @@ export const DEFAULT_VISUALIZER_SETTINGS = {
   spectrumRgb: false,
   spectrumSmoothing: 0.3,
   spectrumMirror: true,
+  // Effects (any style)
+  fxZoomPulse: 0,
+  fxFlash: false,
+  fxVignette: false,
 };
 
 export const VISUALIZER_PRESETS = {
-  // Ring around your logo with a star field flying out behind it.
+  // Crisp bars around your logo with a soft halo and a star field flying out behind it.
   "ncs-clean": {
     mode: "circle",
     bars: 96,
-    intensity: 0.9,
+    intensity: 0.95,
     particleEnabled: true,
     trailsEnabled: true,
-    particleIntensity: 0.8,
-    shakeIntensity: 0.12,
-    radius: 0.2,
-    maxBarLength: 0.2,
+    particleIntensity: 0.9,
+    shakeIntensity: 0.1,
+    radius: 0.19,
+    maxBarLength: 0.17,
     multiColorReactive: false,
     spectrumStyle: "fill",
     fillCenter: "image",
@@ -85,6 +89,7 @@ export const VISUALIZER_PRESETS = {
     spectrumColor: "#ffffff",
     spectrumBorderEnabled: true,
     spectrumBorderColor: "#ffffff",
+    fxZoomPulse: 0.5,
   },
   // Rounded bars from a centre line, with peak caps and a reflection.
   "spectrum-analyzer": {
@@ -117,4 +122,91 @@ export const VISUALIZER_PRESETS = {
     monstercatParticleSize: 1.1,
     monstercatParticleCount: 700,
   },
+  // Filled shapes swelling around the logo, three layers deep.
+  "trap-blob": {
+    mode: "blob",
+    bars: 96,
+    intensity: 1.0,
+    particleEnabled: true,
+    trailsEnabled: true,
+    particleIntensity: 0.7,
+    shakeIntensity: 0.2,
+    radius: 0.2,
+    maxBarLength: 0.16,
+    multiColorReactive: true,
+    fillCenter: "image",
+    centerImageSpin: false,
+    spectrumBorderEnabled: true,
+    spectrumBorderColor: "#ffffff",
+    fxZoomPulse: 0.7,
+    fxFlash: true,
+  },
+  // Thin glowing lines from a centre line.
+  proximity: {
+    mode: "proximity",
+    bars: 128,
+    intensity: 1.0,
+    particleEnabled: true,
+    trailsEnabled: true,
+    particleIntensity: 0.8,
+    shakeIntensity: 0,
+    multiColorReactive: false,
+    spectrumColor: "#ffffff",
+    fxZoomPulse: 0.4,
+    fxVignette: true,
+  },
+  // Rippling ribbons of light.
+  wave: {
+    mode: "wave",
+    bars: 96,
+    intensity: 1.0,
+    particleEnabled: true,
+    trailsEnabled: false,
+    particleIntensity: 0.4,
+    shakeIntensity: 0,
+    multiColorReactive: false,
+    spectrumColor: "#ffffff",
+    fxVignette: true,
+  },
+  // Bars on the top and bottom edges, leaving the artwork clear.
+  "mirror-bars": {
+    mode: "mirror",
+    bars: 128,
+    intensity: 0.95,
+    particleEnabled: false,
+    shakeIntensity: 0,
+    multiColorReactive: false,
+    spectrumColor: "#ffffff",
+    fxZoomPulse: 0.5,
+  },
+  // Rays of dots around the logo.
+  "dot-ring": {
+    mode: "dots",
+    bars: 96,
+    intensity: 1.0,
+    particleEnabled: true,
+    trailsEnabled: true,
+    particleIntensity: 0.5,
+    shakeIntensity: 0.05,
+    radius: 0.19,
+    maxBarLength: 0.2,
+    multiColorReactive: false,
+    fillCenter: "image",
+    centerImageSpin: false,
+    spectrumColor: "#ffffff",
+    spectrumBorderEnabled: true,
+    spectrumBorderColor: "#ffffff",
+  },
 };
+
+// The styles shown in the Visualizer tab, in order. `preset` is applied when you pick one.
+export const VISUALIZER_STYLES = [
+  { mode: "circle", preset: "ncs-clean", name: "NCS", blurb: "Bars around your logo" },
+  { mode: "monstercat", preset: "monstercat-tight", name: "Monstercat", blurb: "Tight bars along the bottom" },
+  { mode: "spectrum", preset: "spectrum-analyzer", name: "Spectrum", blurb: "Bars with a reflection" },
+  { mode: "proximity", preset: "proximity", name: "Proximity", blurb: "Thin glowing lines" },
+  { mode: "blob", preset: "trap-blob", name: "Trap", blurb: "Colour blob around your logo" },
+  { mode: "wave", preset: "wave", name: "Wave", blurb: "Rippling ribbons" },
+  { mode: "mirror", preset: "mirror-bars", name: "Mirror", blurb: "Bars top and bottom" },
+  { mode: "dots", preset: "dot-ring", name: "Dots", blurb: "Rays of dots" },
+];

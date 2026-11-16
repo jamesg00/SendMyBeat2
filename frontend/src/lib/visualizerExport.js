@@ -113,7 +113,15 @@ export async function exportVisualizerVideo({ analyser, options, size, designSiz
         viz.renderFrame(1 / SIM_HZ);
         step += 1;
       }
-      ctx.drawImage(backdrop, 0, 0);
+      const zoom = viz.getZoom();
+      if (zoom > 1.0005) {
+        // Artwork zoom on the kick: scale the whole backdrop about the centre of the frame.
+        const zw = width * zoom;
+        const zh = height * zoom;
+        ctx.drawImage(backdrop, (width - zw) / 2, (height - zh) / 2, zw, zh);
+      } else {
+        ctx.drawImage(backdrop, 0, 0);
+      }
       ctx.drawImage(vizCanvas, 0, 0);
 
       const videoFrame = new window.VideoFrame(composite, { timestamp: Math.round(frame * frameDuration), duration: Math.round(frameDuration) });

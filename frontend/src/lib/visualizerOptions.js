@@ -67,4 +67,7 @@ export const buildVisualizerOptions = (s, { imagePreviewUrl = "", centerVisualiz
   spectrumRgb: s.spectrumRgb ?? false,
   spectrumSmoothing: s.spectrumSmoothing ?? 0.3,
   spectrumMirror: s.spectrumMirror !== false,
+  fxZoomPulse: s.fxZoomPulse ?? 0,
+  fxFlash: Boolean(s.fxFlash),
+  fxVignette: Boolean(s.fxVignette),
 });
