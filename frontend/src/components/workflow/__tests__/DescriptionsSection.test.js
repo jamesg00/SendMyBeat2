@@ -94,8 +94,14 @@ describe("DescriptionsSection", () => {
   test("applies starter template from editor mode", () => {
     render(<DescriptionsSection {...baseProps} mode="editor" />);
 
+    // Templates live in the "Start from" picker.
+    expect(screen.queryByText("Beat Sales")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /start from/i }));
     fireEvent.click(screen.getByText("Basic Type Beat"));
-    expect(baseProps.handleApplyDescriptionTemplate).toHaveBeenCalled();
+    expect(baseProps.handleApplyDescriptionTemplate).toHaveBeenCalledWith(expect.objectContaining({ id: "1" }));
+    // It closes after picking and shows what you started from.
+    expect(screen.queryByText("Beat Sales")).not.toBeInTheDocument();
+    expect(screen.getByText("Basic Type Beat")).toBeInTheDocument();
   });
 
   test("renders empty saved descriptions state", () => {

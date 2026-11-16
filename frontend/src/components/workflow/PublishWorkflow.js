@@ -71,10 +71,11 @@ const PublishWorkflow = ({
           </div>
         </div>
 
-        <div className="up-head">
+        <section className="workflow-results-shell up-shell">
+        <div className="workflow-results-shell__header up-head">
           <div className="min-w-0">
             <p className="workflow-section-kicker">Upload</p>
-            <p className="smb-t2 text-sm">Pick your beat and artwork, preview the video, then publish it to your channel.</p>
+            <p className="smb-t3 text-xs">Pick your beat and artwork, preview the video, then publish it to your channel.</p>
           </div>
           <div className={`up-account ${youtubeConnected ? "is-connected" : ""}`}>
             {youtubeConnected && youtubeProfilePicture ? (
@@ -99,7 +100,10 @@ const PublishWorkflow = ({
           </div>
         </div>
 
-        <UploadStudio {...uploadStudioProps} />
+        <div className="up-shell-body">
+          <UploadStudio {...uploadStudioProps} />
+        </div>
+        </section>
       </div>
     </div>
   );

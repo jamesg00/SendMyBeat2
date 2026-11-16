@@ -1647,7 +1647,7 @@ const UploadStudio = ({
 
          {/* Preview Section */}
          <div className={`
-             relative bg-background/50 flex flex-col items-center justify-center transition-all duration-300
+             us-stage relative flex flex-col items-center justify-center transition-all duration-300
              ${isMobile ? "absolute inset-0 z-10 w-full h-full" : "flex-none lg:flex-1 lg:w-1/2 lg:border-r z-20"}
          `}>
             {/* The frame clips the picture; the editor sits beside it and reaches past its edges. */}
@@ -1785,6 +1785,12 @@ const UploadStudio = ({
                </div>
             </div>
 
+            {!isMobile ? (
+              <span className="us-stage-meta">
+                <i aria-hidden="true" />
+                {outputDimsFor(videoAspectRatio).join(" × ")} · {videoAspectRatio} · {visualizerEnabled ? `${Number(videoRenderFps) === 60 ? 60 : 30} fps` : `${videoRenderFps} fps`}
+              </span>
+            ) : null}
             <p className={`text-[10px] text-muted-foreground mt-2 text-center lg:mb-0 ${isMobile ? "hidden" : ""}`}>{imageSettingsOpen ? "Transform: drag to move • handles stretch and scale • knob rotates • Ctrl+Z undoes" : "Click preview or press Space to Play/Pause • Open Image › Transform to edit the picture"}</p>
 
             {/* Mobile Toggle Button */}
