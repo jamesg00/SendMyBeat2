@@ -416,6 +416,12 @@ const UploadStudio = ({
     setUploadDescriptionText(next);
   }, [selectedDescriptionId, descriptions]);
 
+  // The player's event handlers read the visualizer switch through a ref, so turning the
+  // visualizer on/off (or changing style) never re-runs this effect, which would reload the
+  // audio element and send the song back to the start.
+  const visualizerEnabledRef = useRef(visualizerEnabled);
+  visualizerEnabledRef.current = visualizerEnabled;
+
   useEffect(() => {
     const audioEl = audioPlayerRef.current;
     if (!audioEl || !audioPreviewUrl) return;
@@ -433,7 +439,7 @@ const UploadStudio = ({
     const handleDurationChange = () => syncDuration();
     const handlePlay = async () => {
       setIsAudioPlaying(true);
-      if (visualizerEnabled && visualizerRef.current) {
+      if (visualizerEnabledRef.current && visualizerRef.current) {
         try {
           await visualizerRef.current.resumeAudioContext();
           visualizerRef.current.start();
@@ -450,7 +456,7 @@ const UploadStudio = ({
       visualizerRef.current?.stop();
     };
 
-    // Force metadata read for object URLs and initial sync
+    // Force metadata read for a new beat (only runs when the beat or the studio changes).
     audioEl.load();
     syncDuration();
     syncTime();
@@ -491,7 +497,7 @@ const UploadStudio = ({
       audioEl.removeEventListener("pause", handlePause);
       audioEl.removeEventListener("ended", handleEnded);
     };
-  }, [audioPreviewUrl, visualizerEnabled, studioOpen]);
+  }, [audioPreviewUrl, studioOpen]);
 
   useEffect(() => {
     return () => {
@@ -934,7 +940,7 @@ const UploadStudio = ({
   //  1. Normal path: every frame is drawn from the decoded beat and encoded directly (exact frame
   //     rate and size, in sync for the full length, works in a background tab).
   //  2. Fallback for browsers without a video encoder: record the canvas in real time, full length.
-  const bakeVisualizerToVideo = async () => {
+  const bakeVisualizerToVideo = async (signal) => {
     const audioEl = audioPlayerRef.current;
     if (!audioEl || !imagePreviewUrl) return null;
 
@@ -994,6 +1000,7 @@ const UploadStudio = ({
       fd.append("file", new File([blob], name, { type }));
       const res = await axios.post(`${API}/upload/image`, fd, {
         timeout: 20 * 60_000,
+        signal,
         onUploadProgress: (e) => e.total && setVizBakeProgress(e.loaded / e.total),
       });
       return res.data?.file_id || null;
@@ -1015,14 +1022,17 @@ const UploadStudio = ({
           duration: source.duration,
           drawBackdrop: paintBackdrop,
           onProgress: setVizBakeProgress,
+          signal,
         });
         console.info(`Visualizer export: ${result.frames} frames at ${result.fps} fps, ${result.width}x${result.height}, ${result.codec}, ${(result.blob.size / 1048576).toFixed(1)} MB in ${result.seconds.toFixed(1)}s`);
         const fileId = await uploadVisual(result.blob, "visualizer.mp4", "video/mp4");
         if (fileId) return { fileId, fps: exportFps };
       } catch (error) {
+        if (signal?.aborted) return null; // cancelled: don't fall back to recording
         console.error("Offline visualizer export failed; falling back to recording", error);
       }
     }
+    if (signal?.aborted) return null;
 
     // ---- Fallback: record the canvas in real time for the whole beat.
     setVizBakeStatus("recording");
@@ -1112,7 +1122,11 @@ const UploadStudio = ({
 
     const recordStarted = Date.now();
     const progressTimer = setInterval(() => setVizBakeProgress(Math.min(1, (Date.now() - recordStarted) / (RECORD_SECONDS * 1000))), 500);
-    await new Promise((res) => setTimeout(res, RECORD_SECONDS * 1000));
+    // Wait for the beat to finish, or stop early if the upload is cancelled.
+    await new Promise((res) => {
+      const done = setTimeout(res, RECORD_SECONDS * 1000);
+      signal?.addEventListener("abort", () => { clearTimeout(done); res(); }, { once: true });
+    });
     clearInterval(progressTimer);
 
     cancelAnimationFrame(rafId);
@@ -1127,7 +1141,7 @@ const UploadStudio = ({
     if (wasPlaying) audioEl.play().catch(() => {});
 
     const blob = await recordingComplete;
-    if (!blob || blob.size < 1000) return null;
+    if (signal?.aborted || !blob || blob.size < 1000) return null;
 
     try {
       const fileId = await uploadVisual(blob, "visualizer.webm", mimeType);
@@ -1202,6 +1216,33 @@ const UploadStudio = ({
     }
   };
 
+  // Cancel wherever the upload is: rendering the visualizer here, sending the video, or the
+  // server's job (queued jobs stop right away; running ones at their next step).
+  const [cancellingUpload, setCancellingUpload] = useState(false);
+  const cancelUpload = async () => {
+    uploadController?.abort();
+    setVizBakeStatus(null);
+    setVizBakeProgress(0);
+    const jobId = currentUploadJob?.id;
+    if (!jobId) {
+      setUploadingToYouTube(false);
+      setUploadController(null);
+      toast("Upload cancelled.");
+      return;
+    }
+    setCancellingUpload(true);
+    try {
+      const response = await axios.post(`${API}/jobs/${jobId}/cancel`);
+      const job = response?.data?.job;
+      if (job) setCurrentUploadJob(job);
+      toast(job?.status === "cancelled" ? "Upload cancelled." : "Cancelling… if YouTube is already receiving the video, it may still finish.");
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Couldn't cancel the upload."));
+    } finally {
+      setCancellingUpload(false);
+    }
+  };
+
   const handleYouTubeUploadAsync = async () => {
     if (!uploadTitle || !selectedDescriptionId || !audioFileId || !imageFileId) {
       toast.error("Please fill title, description, and ensure files are uploaded.");
@@ -1218,8 +1259,13 @@ const UploadStudio = ({
     let vizBaked = false;
     let vizFps = 30;
     if (visualizerEnabled) {
-      const baked = await bakeVisualizerToVideo();
+      const baked = await bakeVisualizerToVideo(controller.signal);
       setVizBakeStatus(null);
+      if (controller.signal.aborted) {
+        setUploadingToYouTube(false);
+        setUploadController(null);
+        return;
+      }
       if (baked?.fileId) {
         visualFileId = baked.fileId;
         vizFps = baked.fps;
@@ -1339,7 +1385,8 @@ const UploadStudio = ({
         } else if (nextJob.status === "failed" || nextJob.status === "cancelled") {
           window.clearInterval(interval);
           setUploadingToYouTube(false);
-          toast.error(nextJob.error || (nextJob.status === "cancelled" ? "YouTube upload was cancelled." : "YouTube upload failed."));
+          if (nextJob.status === "cancelled") toast("Upload cancelled.");
+          else toast.error(nextJob.error || "YouTube upload failed.");
           setCurrentUploadJob(null);
         }
       } catch (error) {
@@ -1408,6 +1455,9 @@ const UploadStudio = ({
                 </p>
               </div>
               <div className="text-right">
+                <button type="button" className="smb-btn smb-btn--sm us-cancel-btn" onClick={cancelUpload} disabled={cancellingUpload || activeUploadJob?.cancel_requested}>
+                  {cancellingUpload || activeUploadJob?.cancel_requested ? "Cancelling…" : "Cancel upload"}
+                </button>
                 <p className="text-sm font-semibold text-[var(--accent-primary)]">{uploadJobProgress}%</p>
                 {hasEncodeProgress && isEncodingStage ? (
                   <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
@@ -1547,6 +1597,7 @@ const UploadStudio = ({
               </li>
             ))}
           </ul>
+          <div className="us-upload-actions">
           <button type="button" className="smb-btn smb-btn--pri smb-btn--lg us-upload-btn" onClick={handleYouTubeUploadAsync} disabled={uploadingToYouTube}>
             <Youtube className="h-5 w-5" aria-hidden="true" />
             {vizBakeStatus === "rendering"
@@ -1559,6 +1610,12 @@ const UploadStudio = ({
                     ? "Uploading…"
                     : `Upload to YouTube${privacyStatus !== "public" ? ` · ${privacyStatus}` : ""}`}
           </button>
+          {uploadingToYouTube || vizBakeStatus ? (
+            <button type="button" className="smb-btn smb-btn--lg us-cancel-btn" onClick={cancelUpload} disabled={cancellingUpload || activeUploadJob?.cancel_requested}>
+              {cancellingUpload || activeUploadJob?.cancel_requested ? "Cancelling…" : "Cancel"}
+            </button>
+          ) : null}
+          </div>
         </div>
     </div>
   );

@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo } from "react";
+﻿import React, { useState, useEffect, useMemo, useRef } from "react";
 import axios from "axios";
 import { API } from "@/App";
 import { useNavigate } from "react-router-dom";
@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogClose } from "@/components/ui/dialog";
-import { Trophy, Star, TrendingUp, Music, User, Globe, Youtube, Crown, BadgeCheck, Shield, Flame, Eye, BarChart3 } from "lucide-react";
+import { Trophy, Star, TrendingUp, Music, User, Globe, Youtube, Crown, BadgeCheck, Shield, Flame, Eye, BarChart3, Pause, Loader2 } from "lucide-react";
 import { getAuthToken } from "@/lib/auth";
 import AppShell from "@/components/AppShell";
 import SpotlightParticles from "@/components/SpotlightParticles";
@@ -70,7 +70,58 @@ const TIER_CLASS_MAP = {
   Diamond: "spotlight-tier-tag spotlight-tier-tag--diamond",
 };
 
+// A top beat that is an audio file (uploaded in the app, or a direct .mp3/.wav… link) plays
+// right on the page; YouTube and other pages still open in a new tab.
+const AUDIO_FILE_RE = /\.(mp3|m4a|wav|aac|ogg|flac)(\?|#|$)/i;
+function playableBeatUrl(producer) {
+  const beat = producer?.top_beat;
+  const url = (beat?.url || producer?.top_beat_url || "").trim();
+  if (!url) return null;
+  if (beat?.kind === "audio" || /\/top-beat\/audio/.test(url) || AUDIO_FILE_RE.test(url)) return url;
+  return null;
+}
+
 export default function ProducerSpotlight() {
+  // One shared player, so starting a beat stops the one before it.
+  const beatAudioRef = useRef(null);
+  const [beatPlayer, setBeatPlayer] = useState({ id: null, state: "idle" }); // idle | loading | playing
+  useEffect(() => () => { beatAudioRef.current?.pause(); }, []);
+  const toggleTopBeat = (producer) => {
+    const url = playableBeatUrl(producer);
+    if (!url) {
+      const raw = (producer.top_beat_url || producer.top_beat?.url || "").trim();
+      if (raw) window.open(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`, "_blank", "noopener,noreferrer");
+      return;
+    }
+    let audio = beatAudioRef.current;
+    if (!audio) {
+      audio = new Audio();
+      audio.preload = "auto";
+      audio.addEventListener("playing", () => setBeatPlayer((b) => ({ ...b, state: "playing" })));
+      audio.addEventListener("waiting", () => setBeatPlayer((b) => ({ ...b, state: "loading" })));
+      audio.addEventListener("ended", () => setBeatPlayer({ id: null, state: "idle" }));
+      audio.addEventListener("error", () => {
+        setBeatPlayer({ id: null, state: "idle" });
+        toast.error("Couldn't play this beat.");
+      });
+      beatAudioRef.current = audio;
+    }
+    const id = producer.user_id || producer.id;
+    if (beatPlayer.id === id) {
+      audio.pause();
+      setBeatPlayer({ id: null, state: "idle" });
+      return;
+    }
+    audio.pause();
+    if (audio.src !== url) audio.src = url;
+    audio.currentTime = 0;
+    setBeatPlayer({ id, state: "loading" });
+    audio.play().catch((err) => {
+      if (err?.name === "AbortError") return;
+      setBeatPlayer({ id: null, state: "idle" });
+      toast.error("Couldn't play this beat.");
+    });
+  };
   const navigate = useNavigate();
   const isAuthenticated = Boolean(getAuthToken());
   const [spotlightData, setSpotlightData] = useState(null);
@@ -439,21 +490,27 @@ export default function ProducerSpotlight() {
         <span><b>{producer.current_streak || 0}</b> day streak</span>
         <span><b>{producer.total_days_completed || 0}</b> days</span>
         <span><b>{producer.likes || 0}</b> likes</span>
-        {producer.top_beat_url ? (
-          <button
-            type="button"
-            className="sp-card-beat"
-            onClick={(e) => {
-              e.stopPropagation();
-              const raw = (producer.top_beat_url || "").trim();
-              if (!raw) return;
-              const url = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
-              window.open(url, "_blank", "noopener,noreferrer");
-            }}
-          >
-            <Music className="h-3.5 w-3.5" /> Top beat
-          </button>
-        ) : null}
+        {producer.top_beat_url || producer.top_beat?.url ? (() => {
+          const id = producer.user_id || producer.id;
+          const active = beatPlayer.id === id;
+          const playable = Boolean(playableBeatUrl(producer));
+          return (
+            <button
+              type="button"
+              className={`sp-card-beat${active ? " is-playing" : ""}`}
+              aria-pressed={playable ? active : undefined}
+              aria-label={playable ? (active ? "Pause top beat" : "Play top beat") : "Open top beat"}
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleTopBeat(producer);
+              }}
+            >
+              {active && beatPlayer.state === "loading" ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                : active ? <Pause className="h-3.5 w-3.5" /> : <Music className="h-3.5 w-3.5" />}
+              {active ? (beatPlayer.state === "loading" ? "Loading…" : "Playing") : "Top beat"}
+            </button>
+          );
+        })() : null}
       </div>
     </article>
   );

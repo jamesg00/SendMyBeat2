@@ -94,7 +94,7 @@ const producers = [
     verification_status: "approved",
     top_beat: { kind: "youtube", url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", title: "night drive – dark trap type beat", thumbnail: svg("▶", "#2a1a4a", "#0a0614") },
   }),
-  producer("u2", "prodkenji", 386, { verification_status: "approved" }),
+  producer("u2", "prodkenji", 386, { verification_status: "approved", top_beat: { kind: "audio", file_id: "mockbeat1", url: "/api/producers/u2/top-beat/audio?v=mockbeat", title: "uploaded beat" }, top_beat_url: "/api/producers/u2/top-beat/audio?v=mockbeat" }),
   producer("u3", "lowend.audio", 351),
   producer("u4", "nightshift", 290),
   producer("u5", "kairo beats", 244),
@@ -285,6 +285,7 @@ const startJob = (seconds, result) => {
   return { job: { id, status: "queued" } };
 };
 
+let uploadCancelled = false;
 const routes = [
   ["POST", /^\/auth\/(login|register)$/, () => ({ access_token: "mock-token", token_type: "bearer", user })],
   ["GET", /^\/auth\/me$/, () => user],
@@ -379,7 +380,11 @@ const routes = [
     const t = (Date.now() - job.started) / 1000 / job.seconds;
     return { job: t >= 1 ? { id: job.id, status: "succeeded", progress: 100, result: job.result } : { id: job.id, status: "processing", progress: Math.round(t * 100) } };
   }],
-  ["POST", /^\/jobs\/([^/]+)\/cancel$/, (m) => ({ cancelled: jobs.delete(m[1]) })],
+  ["POST", /^\/jobs\/([^/]+)\/cancel$/, (m) => {
+    // A running upload stops at its next step: report "cancel requested" now, "cancelled" on the next poll.
+    if (m[1] === "upload1") { uploadCancelled = true; return { success: true, cancelled: false, job: { id: "upload1", status: "processing", progress: 42, message: "Cancelling…", cancel_requested: true } }; }
+    return { cancelled: jobs.delete(m[1]) };
+  }],
   ["GET", /^\/descriptions$/, () => descriptions],
   ["POST", /^\/descriptions$/, (m, body) => {
     const d = { id: `d${Date.now()}`, ...body };
@@ -398,7 +403,10 @@ const routes = [
   ["POST", /^\/youtube\/analytics$/, () => startJob(8, analytics)],
   ["POST", /^\/upload\/(audio|image)$/, (m) => ({ file_id: `mock-${m[1]}`, media_kind: m[1] })],
   ["POST", /^\/youtube\/upload$/, () => ({ job: { id: "upload1", status: "queued", progress: 0 } })],
-  ["GET", /^\/youtube\/upload-jobs\/([^/]+)$/, () => ({ job: { id: "upload1", status: "processing", progress: 42, message: "Rendering video…" } })],
+  ["GET", /^\/youtube\/upload-jobs\/([^/]+)$/, () => {
+    if (uploadCancelled) { uploadCancelled = false; return { job: { id: "upload1", status: "cancelled", progress: 100, message: "Cancelled.", cancel_requested: true } }; }
+    return { job: { id: "upload1", status: "processing", progress: 42, message: "Rendering video…" } };
+  }],
   ["GET", /^\/producers\/spotlight$/, () => ({ featured_producers: [producers[0]], trending_producers: producers.slice(0, 8), new_producers: producers.slice(8), all_producers: producers })],
   ["GET", /^\/producers\/me$/, () => me],
   ["PUT", /^\/producers\/me$/, (m, body) => Object.assign(me, body)],
@@ -478,6 +486,17 @@ http
       return;
     }
     const path = url.pathname.slice(4);
+    // An uploaded top beat: a few seconds of a generated tone, so the Spotlight player can be tried.
+    if (/^\/producers\/[^/]+\/top-beat\/audio$/.test(path)) {
+      const rate = 22050, secs = 6, n = rate * secs, wav = Buffer.alloc(44 + n * 2);
+      wav.write("RIFF", 0); wav.writeUInt32LE(36 + n * 2, 4); wav.write("WAVEfmt ", 8); wav.writeUInt32LE(16, 16);
+      wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22); wav.writeUInt32LE(rate, 24); wav.writeUInt32LE(rate * 2, 28);
+      wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write("data", 36); wav.writeUInt32LE(n * 2, 40);
+      for (let i = 0; i < n; i++) wav.writeInt16LE(Math.round(Math.sin((i / rate) * 2 * Math.PI * 220) * 6000 * Math.exp(-((i / rate) % 0.5) * 6)), 44 + i * 2);
+      res.writeHead(200, { "Content-Type": "audio/wav", "Content-Length": wav.length, "Cache-Control": "public, max-age=2592000, immutable" });
+      res.end(wav);
+      return;
+    }
     // MOCK_SAVE_DIR=<folder>: keep uploaded files there (to inspect an exported visualizer video).
     const uploadKind = req.method === "POST" && /^\/upload\/(audio|image)$/.exec(path);
     if (uploadKind && process.env.MOCK_SAVE_DIR) {

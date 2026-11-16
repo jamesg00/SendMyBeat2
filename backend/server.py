@@ -9113,13 +9113,13 @@ async def _iter_file_range(path: Path, start: int, end: int):
         await asyncio.to_thread(fh.close)
 
 
-async def _audio_file_response(path: Path, media_type: str, range_header: str | None, *, head: bool = False):
+async def _audio_file_response(path: Path, media_type: str, range_header: str | None, *, head: bool = False, cache_control: str = "public, max-age=3600"):
     """Serve audio the way iPhone players expect: every byte range they ask for, in full
     (a short answer to "bytes=0-" leaves AVPlayer loading forever), streamed from disk."""
     from fastapi.responses import Response, StreamingResponse
 
     size = path.stat().st_size
-    headers = {"Accept-Ranges": "bytes", "Cache-Control": "public, max-age=3600"}
+    headers = {"Accept-Ranges": "bytes", "Cache-Control": cache_control}
     byte_range = _parse_byte_range(range_header, size)
     if byte_range == "invalid":
         return Response(status_code=416, headers={**headers, "Content-Range": f"bytes */{size}"})
@@ -9150,12 +9150,21 @@ async def stream_top_beat_audio(user_id: str, request: Request):
     if not upload_doc or not media_storage.exists(upload_doc):
         raise HTTPException(status_code=404, detail="Top beat file is missing.")
     suffix = media_storage.get_suffix(upload_doc).lower()
+    # The link carries ?v=<file id> and changes when the beat is replaced, so browsers and CDNs
+    # can keep the file instead of pulling it from storage on every play.
+    version = (getattr(request, "query_params", None) or {}).get("v") or ""
+    cache_control = (
+        "public, max-age=2592000, immutable"
+        if version and str(top_beat["file_id"]).startswith(version)
+        else "public, max-age=3600"
+    )
     async with media_storage.local_path_for_processing(upload_doc) as path:
         return await _audio_file_response(
             path,
             TOP_BEAT_AUDIO_TYPES.get(suffix, "audio/mpeg"),
             request.headers.get("range"),
             head=getattr(request, "method", "GET") == "HEAD",
+            cache_control=cache_control,
         )
 
 
