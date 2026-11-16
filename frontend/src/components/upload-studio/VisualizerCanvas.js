@@ -19,6 +19,7 @@ const VisualizerCanvas = ({
   spectrumRecordImageUrl,
   analysis = null,
   aspectRatio = "16:9",
+  backdropRef = null,
 }) => {
   const visualizerCanvasRef = useRef(null);
 
@@ -27,7 +28,9 @@ const VisualizerCanvas = ({
     const audioEl = audioPlayerRef.current;
 
     if (!canvas || !audioEl || !visualizerEnabled) {
+      if (backdropRef?.current) backdropRef.current.style.transform = "";
       if (visualizerRef.current) {
+        visualizerRef.current.onFrame = null;
         visualizerRef.current.stop();
         const ctx = canvas?.getContext("2d");
         if (ctx) {
@@ -50,6 +53,13 @@ const VisualizerCanvas = ({
     }
     const viz = visualizerRef.current;
     viz.setDesignSize(...designSizeFor(aspectRatio));
+    // The artwork zooms a little on each kick (same amount the export uses).
+    viz.onFrame = (v) => {
+      const el = backdropRef?.current;
+      if (!el) return;
+      const zoom = v.getZoom();
+      el.style.transform = zoom > 1.0005 ? `scale(${zoom.toFixed(4)})` : "";
+    };
     requestAnimationFrame(() => visualizerRef.current?.resize());
 
     if (analysis) {
@@ -92,6 +102,7 @@ const VisualizerCanvas = ({
     audioPlayerRef,
     analysis,
     aspectRatio,
+    backdropRef,
   ]);
 
   return (

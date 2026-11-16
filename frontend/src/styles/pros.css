@@ -669,5 +669,85 @@ button.adm-btn-danger.adm-btn-danger:hover { background: color-mix(in srgb, var(
 .us-panel .us-aspect { padding: 10px 6px !important; }
 .us-panel .us-pill-btn { padding: 0 12px !important; }
 /* In the phone drawer the drawer already pads the sides. */
-[role="dialog"] .us-panel { padding: 4px 0 0; }
-[role="dialog"] .us-upload-bar { margin: 6px -16px 0; padding: 12px 16px 16px; }
+.us-drawer-body .us-panel { padding: 4px 0 0; }
+.us-drawer-body .us-upload-bar { margin: 6px -16px 0; padding: 12px 16px 16px; }
+
+/* ---- Upload Studio: Visualizer tab, and layouts that follow the panel's width (not the window's) */
+.us-sec { container-type: inline-size; container-name: studio; }
+
+.vz-group { display: grid; gap: 10px; padding-top: 14px; border-top: 1px solid var(--c-line-soft); }
+.us-body > .vz-group:first-child { padding-top: 0; border-top: 0; }
+.vz-rows { display: grid; gap: 12px; }
+.vz-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; }
+
+.vz-styles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.vz-style { all: unset; box-sizing: border-box; display: grid; justify-items: center; gap: 6px; padding: 10px 4px 8px !important; border-radius: 12px; border: 1px solid var(--c-line); background: var(--c-card2); color: var(--c-t2); cursor: pointer; text-align: center; min-width: 0 !important; transition: border-color 0.2s var(--ease), color 0.2s var(--ease), background-color 0.2s var(--ease); }
+.vz-style svg { width: 48px; height: 30px; overflow: visible; }
+.vz-style b { font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+.vz-style:hover { color: var(--c-text); border-color: var(--c-t3); }
+.vz-style.is-active { color: var(--c-acc); border-color: var(--c-accline); background: var(--c-accsoft); }
+.vz-style:focus-visible { outline: 2px solid var(--c-accline); outline-offset: 2px; }
+
+.vz-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 30px; }
+.vz-row-text { min-width: 0; display: grid; gap: 1px; }
+.vz-row-text b { font-size: 13.5px; font-weight: 500; color: var(--c-text); }
+.vz-row-text span { font-size: 12px; color: var(--c-t3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vz-row-control { flex: none; display: inline-flex; align-items: center; gap: 8px; }
+.vz-inline-label { font-size: 12px; color: var(--c-t3); }
+
+.vz-slider { display: grid; gap: 6px; min-width: 0; }
+.vz-slider-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.vz-slider-head b { font-size: 13.5px; font-weight: 500; color: var(--c-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vz-slider-head span { flex: none; font: 12px var(--font-mono); color: var(--c-t3); }
+
+.vz-swatch { position: relative; flex: none; width: 30px; height: 30px; border-radius: 9px; border: 1px solid var(--c-line); overflow: hidden; cursor: pointer; }
+.vz-swatch span { position: absolute; inset: 2px; border-radius: 6px; }
+.vz-swatch input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; padding: 0; border: 0; }
+.vz-swatch:focus-within { outline: 2px solid var(--c-accline); outline-offset: 2px; }
+
+.vz-advanced { all: unset; box-sizing: border-box; display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 0 !important; font-size: 13.5px; font-weight: 500; color: var(--c-t2); cursor: pointer; }
+.vz-advanced:hover { color: var(--c-text); }
+.vz-advanced:focus-visible { outline: 2px solid var(--c-accline); outline-offset: 4px; border-radius: 6px; }
+
+/* Narrow panel (small window, or the phone drawer): fewer columns, nothing squeezed. */
+@container studio (max-width: 430px) {
+  .vz-styles { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+  .vz-style { padding: 8px 2px 6px !important; }
+  .vz-style svg { width: 40px; height: 25px; }
+  .vz-style b { font-size: 11.5px; }
+  .vz-two { grid-template-columns: 1fr; }
+  .us-grid2 { grid-template-columns: 1fr; }
+  .us-aspects { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+  .us-aspect span:last-child { display: none; }
+  .us-bgs { grid-template-columns: 1fr; }
+  .us-summary { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+}
+@container studio (max-width: 330px) {
+  .vz-styles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Image panel: the tool groups and number boxes reflow instead of squeezing. */
+.ft-toolbar { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 8px; }
+.ft-tool-group { flex-wrap: nowrap; }
+.ft-fields { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.ft-pair { grid-template-columns: minmax(0, 1fr) 34px minmax(0, 1fr); }
+.ft-num-box input { min-width: 0; width: 100%; }
+.ft-rotate { grid-template-columns: minmax(0, 1fr) 84px; }
+.ft-rotate > .ft-num-label { grid-column: 1 / -1; }
+.ft-actions .smb-btn { flex: 1 1 auto; justify-content: center; }
+@container studio (max-width: 470px) {
+  .ft-tips { display: none; }
+}
+@container studio (max-width: 360px) {
+  .ft-tool { width: 30px; height: 30px; }
+  .ft-toolbar { gap: 6px; }
+}
+/* Section heads: the title never fights the button for room. */
+.us-head { flex-wrap: nowrap; }
+.us-head-btn { min-width: 0 !important; }
+.us-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@container studio (max-width: 360px) {
+  .us-head { gap: 8px; padding: 10px 12px; }
+  .us-chip { width: 30px; height: 30px; }
+  .us-body { padding: 12px 12px 14px; }
+}
