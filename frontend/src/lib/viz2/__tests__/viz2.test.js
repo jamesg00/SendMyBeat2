@@ -147,3 +147,34 @@ describe("styles", () => {
     expect(bad).toEqual([]);
   });
 });
+
+describe("AudioVisualizer with the new styles", () => {
+  beforeEach(() => {
+    window.matchMedia = jest.fn().mockImplementation(() => ({ matches: false, addListener: () => {}, removeListener: () => {} }));
+    global.Path2D = class {
+      moveTo() {}
+      lineTo() {}
+      arc() {}
+      rect() {}
+      closePath() {}
+      ellipse() {}
+      quadraticCurveTo() {}
+      bezierCurveTo() {}
+    };
+  });
+
+  it.each(["dot-record", "circle", "terrain-sun"])("draws %s from a beat track", async (mode) => {
+    const AudioVisualizer = (await import("../../AudioVisualizer")).default;
+    const track = await buildBeatTrack(syntheticBeat(3, 6));
+    const { ctx, bad } = mockContext();
+    const canvas = { width: 960, height: 540, clientWidth: 960, clientHeight: 540, getContext: () => ctx, style: {}, getBoundingClientRect: () => ({ width: 960, height: 540 }) };
+    const viz = new AudioVisualizer(canvas, { mode, spectrumColor: "139, 255, 208", particleColor: "76, 141, 255", fillCenter: "transparent" });
+    viz.setDesignSize(960, 540);
+    viz.setOutputSize(960, 540);
+    let step = 0;
+    viz.setBeatProvider((A) => track.fillStep(step, A));
+    for (; step < 120; step += 1) viz.renderFrame(1 / 60);
+    expect(bad).toEqual([]);
+    expect(viz.getZoom()).toBeGreaterThanOrEqual(1);
+  });
+});

@@ -15,6 +15,7 @@ import YouTubeCallback from "@/pages/YouTubeCallback";
 import PrivacyPolicy from "@/pages/PrivacyPolicy";
 import TermsAndConditions from "@/pages/TermsAndConditions";
 import About from "@/pages/About";
+import VizEmbed from "@/pages/VizEmbed";
 import Footer from "@/components/Footer";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/lib/ThemeContext";
@@ -66,7 +67,7 @@ const DEV_BYPASS =
   process.env.REACT_APP_DEV_BYPASS === "true" &&
   (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
 
-function App() {
+function MainApp() {
   const [isAuthenticated, setIsAuthenticated] = useState(DEV_BYPASS);
   const [isAdmin, setIsAdmin] = useState(DEV_BYPASS);
   // null while we don't know yet (e.g. right after signing in), so admin pages wait instead of
@@ -209,6 +210,12 @@ function App() {
       </div>
     </ThemeProvider>
   );
+}
+
+// The mobile app's visualizer page (opened in a WebView) skips the site's sign-in and layout.
+function App() {
+  if (window.location.pathname.startsWith("/viz-embed")) return <VizEmbed />;
+  return <MainApp />;
 }
 
 export default App;
