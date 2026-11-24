@@ -166,13 +166,14 @@ function Editor() {
     },
   };
 
-  // Where the video frame sits.
-  const previewH = landscape ? height : keyboard ? 0 : Math.round(height * 0.56);
+  // Where the video frame sits. The preview is only as tall as the frame needs (at most 56% of
+  // the screen), so a wide 16:9 frame doesn't leave a band of black and the sheet gets the room.
   const top = landscape ? insets.top + 8 : insets.top + 52;
   const bottom = landscape ? insets.bottom + 8 : SHEET_OVERLAP + (studio.audio ? 70 : 14);
   const side = landscape ? Math.max(insets.left, insets.right) + 8 : 16;
   const ratio = ASPECT[studio.format];
   const availW = Math.max(1, width - side * 2);
+  const previewH = landscape ? height : keyboard ? 0 : Math.min(Math.round(height * 0.56), Math.round(top + availW / ratio + bottom));
   const availH = Math.max(1, previewH - top - bottom);
   const frameW = Math.min(availW, availH * ratio);
   const frameH = frameW / ratio;
@@ -658,10 +659,15 @@ function DoneView({ phase }: { phase: Extract<Phase, { kind: 'done' }> }) {
     <View style={{ flex: 1, gap: 18, paddingTop: 8 }}>
       <View style={s.statusRow}>
         <View style={[s.statusDot, { backgroundColor: C.acc }]} />
-        <Text style={s.sub}>Live on YouTube</Text>
+        <Text style={s.sub}>{studio.publishAt ? 'Scheduled on YouTube' : 'Live on YouTube'}</Text>
       </View>
       <Text style={s.renderTitle}>{studio.title || 'Your beat'}</Text>
       <Text style={s.sub}>{phase.message}</Text>
+      {phase.warnings?.map((w) => (
+        <Text key={w} style={[s.sub, { color: C.text }]}>
+          · {w}
+        </Text>
+      ))}
       <View style={{ flex: 1 }} />
       {phase.url ? <Button title="Open on YouTube" onPress={() => Linking.openURL(phase.url!)} /> : null}
       <Button title="Done" variant="secondary" onPress={finish} />
@@ -711,7 +717,8 @@ const useStyles = makeStyles((C) => ({
 
   sheet: { flex: 1, backgroundColor: C.card, borderTopLeftRadius: 22, borderTopRightRadius: 22, borderTopWidth: 1, borderColor: C.line, overflow: 'hidden' },
   handle: { alignSelf: 'center', width: 36, height: 5, borderRadius: 3, backgroundColor: C.line, marginTop: 8 },
-  tabs: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 14, paddingTop: 12 },
+  // The hairline keeps scrolled content from running up under the tab labels.
+  tabs: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 14, paddingTop: 12, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: C.lineSoft },
   tab: { width: 64, alignItems: 'center', gap: 6 },
   tabChip: { width: 46, height: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: C.card2, borderWidth: 1, borderColor: C.line },
   tabChipOn: { backgroundColor: C.accSoft, borderColor: C.accLine },

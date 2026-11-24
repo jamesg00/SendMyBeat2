@@ -39,6 +39,7 @@ const SUPPORTED_IMAGE_MIME_TYPES = [...IMAGE_MIME_TYPES, "image/gif"];
 
 import UploadDashboard from "./upload-studio/UploadDashboard";
 import MetadataEditor from "./upload-studio/MetadataEditor";
+import { scheduleError } from "./upload-studio/PublishOptions";
 import AIToolsPanel from "./upload-studio/AIToolsPanel";
 import VisualizerSettings from "./upload-studio/VisualizerSettings";
 import ImageEditorControls from "./upload-studio/ImageEditorControls";
@@ -103,6 +104,15 @@ const UploadStudio = ({
   const [beatMetaPromptShown, setBeatMetaPromptShown] = useState(false);
   const [selectedTagsId, setSelectedTagsId] = useState("");
   const [privacyStatus, setPrivacyStatus] = useState("public");
+
+  // Publishing extras: schedule, artist playlist, custom thumbnail, language.
+  const [publishAt, setPublishAt] = useState(""); // "YYYY-MM-DDTHH:MM" in the viewer's time
+  const [playlistMode, setPlaylistMode] = useState("none");
+  const [defaultLanguage, setDefaultLanguage] = useState("");
+  const [thumbnailFileId, setThumbnailFileId] = useState("");
+  const [thumbnailName, setThumbnailName] = useState("");
+  const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
+  const [youtubeExtras, setYoutubeExtras] = useState({ playlists_allowed: false, custom_thumbnails_allowed: null });
 
   // AI Tools State
   const [beatAnalysis, setBeatAnalysis] = useState(null);
@@ -275,6 +285,68 @@ const UploadStudio = ({
     setUploadDescriptionText((prev) =>
       upsertBeatMetaInDescription(prev, uploadBeatBpm, uploadBeatKey)
     );
+  };
+
+  // Builds a description from the chosen tag run (no credits), with the chosen template under it.
+  // BPM and key are left to upsertBeatMetaInDescription, which adds them at upload.
+  const buildDescriptionFromTags = async () => {
+    if (!selectedTagsId) return null;
+    try {
+      const response = await axios.post(`${API}/descriptions/generate`, {
+        tag_id: selectedTagsId,
+        beat_name: (audioFile?.name || "").replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").replace(/\b\d{2,3}\s?bpm\b/gi, "").trim(),
+        template_id: selectedDescriptionId || null,
+        include_chapters: false,
+      });
+      setUploadDescriptionText(upsertBeatMetaInDescription(response.data.content || "", uploadBeatBpm, uploadBeatKey));
+      return response.data;
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Couldn't build the description. Try again."));
+      return null;
+    }
+  };
+
+  const handleThumbnailPick = async (file) => {
+    if (!/^image\/(jpeg|png|webp)$/.test(file?.type || "")) {
+      toast.error("Use a JPG, PNG or WEBP for the thumbnail.");
+      return;
+    }
+    setUploadingThumbnail(true);
+    const formData = new FormData();
+    formData.append("file", file);
+    try {
+      const response = await axios.post(`${API}/upload/image`, formData);
+      setThumbnailFileId(response.data.file_id);
+      setThumbnailName(file.name || "Thumbnail");
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Couldn't upload the thumbnail."));
+    } finally {
+      setUploadingThumbnail(false);
+    }
+  };
+
+  const allowPlaylists = async () => {
+    try {
+      const response = await axios.get(`${API}/youtube/auth-url`, { params: { playlists: true } });
+      window.location.href = response.data.auth_url;
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Couldn't open YouTube. Try again."));
+    }
+  };
+
+  // The extras go on every upload request; the server validates them again.
+  const appendPublishExtras = (formData) => {
+    if (publishAt) {
+      const when = new Date(publishAt);
+      if (!Number.isNaN(when.getTime())) formData.append("publish_at", when.toISOString());
+    }
+    formData.append("playlist_mode", youtubeExtras.playlists_allowed ? playlistMode : "none");
+    if (thumbnailFileId && youtubeExtras.custom_thumbnails_allowed !== false) formData.append("thumbnail_file_id", thumbnailFileId);
+    if (defaultLanguage) formData.append("default_language", defaultLanguage);
+  };
+
+  const showUploadWarnings = (result) => {
+    (result?.warnings || []).forEach((warning) => toast.warning(warning));
   };
 
   const getDistance = (touch1, touch2) => {
@@ -450,6 +522,26 @@ const UploadStudio = ({
     );
     setUploadDescriptionText(next);
   }, [selectedDescriptionId, descriptions]);
+
+  // Which extras this channel can use: playlists need an extra YouTube permission, and
+  // custom thumbnails are off for channels YouTube hasn't verified.
+  useEffect(() => {
+    if (!youtubeConnected) return undefined;
+    let alive = true;
+    axios
+      .get(`${API}/youtube/status`)
+      .then((response) => {
+        if (!alive) return;
+        setYoutubeExtras({
+          playlists_allowed: Boolean(response.data?.playlists_allowed),
+          custom_thumbnails_allowed: response.data?.custom_thumbnails_allowed ?? null,
+        });
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [youtubeConnected, API]);
 
   // The player's event handlers read the visualizer switch through a ref, so turning the
   // visualizer on/off (or changing style) never re-runs this effect, which would reload the
@@ -1195,8 +1287,12 @@ const UploadStudio = ({
   if (process.env.NODE_ENV === "development") window.__smbBakeVisualizer = bakeVisualizerToVideo;
 
   const handleYouTubeUpload = async () => {
-    if (!uploadTitle || !selectedDescriptionId || !audioFileId || !imageFileId) {
+    if (!uploadTitle || !(selectedDescriptionId || uploadDescriptionText.trim()) || !audioFileId || !imageFileId) {
       toast.error("Please fill title, description, and ensure files are uploaded.");
+      return;
+    }
+    if (scheduleError(publishAt)) {
+      toast.error(scheduleError(publishAt));
       return;
     }
 
@@ -1209,6 +1305,7 @@ const UploadStudio = ({
     formData.append('description_id', selectedDescriptionId);
     formData.append('tags_id', selectedTagsId || '');
     formData.append('privacy_status', privacyStatus);
+    appendPublishExtras(formData);
     formData.append('audio_file_id', audioFileId);
     formData.append('image_file_id', imageFileId);
     formData.append('remove_watermark', removeWatermark);
@@ -1286,8 +1383,12 @@ const UploadStudio = ({
   };
 
   const handleYouTubeUploadAsync = async () => {
-    if (!uploadTitle || !selectedDescriptionId || !audioFileId || !imageFileId) {
+    if (!uploadTitle || !(selectedDescriptionId || uploadDescriptionText.trim()) || !audioFileId || !imageFileId) {
       toast.error("Please fill title, description, and ensure files are uploaded.");
+      return;
+    }
+    if (scheduleError(publishAt)) {
+      toast.error(scheduleError(publishAt));
       return;
     }
 
@@ -1333,6 +1434,7 @@ const UploadStudio = ({
     formData.append('description_id', selectedDescriptionId);
     formData.append('tags_id', selectedTagsId || '');
     formData.append('privacy_status', privacyStatus);
+    appendPublishExtras(formData);
     formData.append('audio_file_id', audioFileId);
     formData.append('image_file_id', visualFileId);
     formData.append('remove_watermark', removeWatermark);
@@ -1430,6 +1532,7 @@ const UploadStudio = ({
           window.clearInterval(interval);
           setUploadingToYouTube(false);
           toast.success(nextJob?.result?.message || "Video uploaded successfully!");
+          showUploadWarnings(nextJob?.result);
           if (nextJob?.result?.video_url) {
             window.open(nextJob.result.video_url, "_blank");
           }
@@ -1490,7 +1593,8 @@ const UploadStudio = ({
   // --- Controls Markup ---
   const uploadChecklist = [
     { label: "Title", ok: Boolean(uploadTitle?.trim()) && uploadTitle.length <= 100 },
-    { label: "Description", ok: Boolean(selectedDescriptionId) },
+    { label: "Description", ok: Boolean(selectedDescriptionId || uploadDescriptionText.trim()) },
+    ...(publishAt ? [{ label: "Schedule", ok: !scheduleError(publishAt) }] : []),
     { label: "Tags", ok: Boolean(selectedTagsId), optional: true },
   ];
   const controlsMarkup = (
@@ -1577,6 +1681,25 @@ const UploadStudio = ({
           privacyStatus={privacyStatus}
           setPrivacyStatus={setPrivacyStatus}
           beatName={(audioFile?.name || "").replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim()}
+          onBuildDescription={buildDescriptionFromTags}
+          publishOptions={{
+            publishAt,
+            setPublishAt,
+            playlistMode,
+            setPlaylistMode,
+            defaultLanguage,
+            setDefaultLanguage,
+            thumbnailName,
+            onPickThumbnail: handleThumbnailPick,
+            onClearThumbnail: () => {
+              setThumbnailFileId("");
+              setThumbnailName("");
+            },
+            uploadingThumbnail,
+            playlistsAllowed: Boolean(youtubeExtras.playlists_allowed),
+            customThumbnailsAllowed: youtubeExtras.custom_thumbnails_allowed,
+            onAllowPlaylists: allowPlaylists,
+          }}
         />
 
         <ImageEditorControls

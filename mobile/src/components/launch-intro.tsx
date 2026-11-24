@@ -15,14 +15,14 @@ import Animated, {
 import { F } from '@/theme';
 
 // The intro that follows the native splash on a cold launch. It starts on exactly what the native
-// splash shows (the S icon at 170 wide on #060D09, from app.json), so the hand-off is invisible.
+// splash shows (the S icon at 200 wide on #0A0A0A, from app.json), so the hand-off is invisible.
 // Then the icon glows and settles, the wordmark rises in under it, and the whole thing fades away
 // into the app with the icon easing up a touch. Reduce Motion gets a short plain fade.
 // It plays once per launch: remounts (sign in/out, theme changes) don't replay it.
 
-const BG = '#060D09';
-const ICON = 170; // must match expo-splash-screen's imageWidth in app.json
-const GLOW = 260;
+const BG = '#0A0A0A'; // must match expo-splash-screen's backgroundColor in app.json
+const ICON = 200; // must match expo-splash-screen's imageWidth in app.json
+const GLOW = 300;
 let played = false;
 
 export function LaunchIntro({ onShown }: { onShown: () => void }) {

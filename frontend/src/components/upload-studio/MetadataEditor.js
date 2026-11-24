@@ -1,11 +1,12 @@
 import React, { useState } from "react";
-import { Eye, EyeOff, Globe, Link2, Tags, Type } from "lucide-react";
+import { Eye, EyeOff, Globe, Link2, Tags, Type, Wand2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import StudioSection, { StudioSeg } from "@/components/upload-studio/StudioSection";
 import TitleHelper from "@/components/workflow/TitleHelper";
+import PublishOptions from "@/components/upload-studio/PublishOptions";
 
 // Details: what YouTube shows for the video. Title, description template, tags and privacy.
 
@@ -25,9 +26,26 @@ const MetadataEditor = ({
   privacyStatus,
   setPrivacyStatus,
   beatName = "",
+  onBuildDescription,
+  publishOptions = null,
 }) => {
   const [tagsPreviewOpen, setTagsPreviewOpen] = useState(false);
   const [showDescription, setShowDescription] = useState(false);
+  const [building, setBuilding] = useState(false);
+  const [buildNotes, setBuildNotes] = useState(null); // {hashtags, bytes, warnings} from the last build
+  const buildDescription = async () => {
+    if (!onBuildDescription || !selectedTagsId || building) return;
+    setBuilding(true);
+    try {
+      const result = await onBuildDescription();
+      if (result) {
+        setBuildNotes(result);
+        setShowDescription(true);
+      }
+    } finally {
+      setBuilding(false);
+    }
+  };
   const formatTagHistoryLabel = (query = "") => {
     if (!query) return "Untitled";
     return query.replace(/\([^)]*\)/g, "").trim() || query;
@@ -84,9 +102,9 @@ const MetadataEditor = ({
         </div>
       </div>
 
-      {selectedDescription || selectedTagList.length ? (
+      {selectedDescription || selectedTagList.length || uploadDescriptionText ? (
         <div className="us-pills">
-          {selectedDescription ? (
+          {selectedDescription || uploadDescriptionText ? (
             <button type="button" className="us-pill-btn" onClick={() => setShowDescription((v) => !v)} aria-expanded={showDescription}>
               {showDescription ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
               {showDescription ? "Hide description" : "Edit description"}
@@ -101,8 +119,35 @@ const MetadataEditor = ({
         </div>
       ) : null}
 
-      {selectedDescriptionId && showDescription ? (
-        <Textarea value={uploadDescriptionText} onChange={(e) => setUploadDescriptionText(e.target.value)} rows={6} className="us-input us-textarea" aria-label="Description" />
+      {onBuildDescription ? (
+        <div className="db-build">
+          <button type="button" className="us-pill-btn" onClick={buildDescription} disabled={!selectedTagsId || building}>
+            <Wand2 className="h-3.5 w-3.5" />
+            {building ? "Building…" : "Build description from tags"}
+          </button>
+          <span className="db-hint">
+            {selectedTagsId
+              ? selectedDescription
+                ? `Keywords, links and hashtags on top, then “${selectedDescription.title}”. No credits used.`
+                : "Keywords, links and hashtags from your tag run. No credits used."
+              : "Pick a tag run first."}
+          </span>
+        </div>
+      ) : null}
+
+      {buildNotes ? (
+        <div className="db-notes" role="status">
+          <span>
+            {buildNotes.hashtags?.length || 0} hashtags · {buildNotes.bytes}/5000 bytes
+          </span>
+          {(buildNotes.warnings || []).map((w) => (
+            <span key={w} className="db-warn">{w}</span>
+          ))}
+        </div>
+      ) : null}
+
+      {(selectedDescriptionId || uploadDescriptionText) && showDescription ? (
+        <Textarea value={uploadDescriptionText} onChange={(e) => setUploadDescriptionText(e.target.value)} rows={8} className="us-input us-textarea" aria-label="Description" />
       ) : null}
 
       <div className="us-field">
@@ -118,6 +163,8 @@ const MetadataEditor = ({
           ]}
         />
       </div>
+
+      {publishOptions ? <PublishOptions {...publishOptions} hasTagRun={Boolean(selectedTagsId)} /> : null}
 
       <Dialog open={tagsPreviewOpen} onOpenChange={setTagsPreviewOpen}>
         <DialogContent className="max-w-lg bg-[var(--card-bg)] border border-[var(--border-color)]">

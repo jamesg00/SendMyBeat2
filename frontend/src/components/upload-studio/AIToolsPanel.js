@@ -152,6 +152,21 @@ const AIToolsPanel = ({
                   </div>
                 ) : null}
               </div>
+              {thumbnailCheckResult.small_size ? (
+                <div className="ts-small">
+                  <img src={thumbnailCheckResult.small_size.preview} alt="Your thumbnail at phone search size" width={168} height={94} />
+                  <div className="ts-small-body">
+                    <div className="font-semibold">At phone size ({thumbnailCheckResult.small_size.size})</div>
+                    <ul>
+                      {(thumbnailCheckResult.small_size.checks || []).map((check) => (
+                        <li key={check.id} className={check.ok ? "is-ok" : "is-miss"}>
+                          {check.ok ? "✓" : "·"} {check.message}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              ) : null}
               {thumbnailCheckResult.hook_alignment ? (
                 <div className="text-xs text-muted-foreground">
                   <span className="font-semibold text-foreground">Hook alignment: </span>

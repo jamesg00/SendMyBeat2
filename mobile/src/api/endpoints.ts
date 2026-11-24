@@ -44,7 +44,18 @@ export type ScoredTag = {
 };
 export type TagRun = { id: string; query: string; tags: string[]; scored_tags?: ScoredTag[]; created_at?: string };
 export type Description = { id: string; title: string; content: string; is_ai_generated?: boolean };
-export type YouTubeStatus = { connected: boolean; email?: string | null; name?: string | null };
+export type YouTubeStatus = {
+  connected: boolean;
+  email?: string | null;
+  name?: string | null;
+  /** Playlists need an extra YouTube permission, asked for only when the producer turns them on. */
+  playlists_allowed?: boolean;
+  /** false once YouTube refused a custom thumbnail (channel not verified); null until the first try. */
+  custom_thumbnails_allowed?: boolean | null;
+};
+/** Google sign-in link; with playlists it also asks to manage playlists. */
+export const youtubeAuthUrl = (playlists = false) =>
+  api<{ auth_url: string }>(`/youtube/auth-url${playlists ? '?playlists=true' : ''}`);
 
 export type ChannelVideo = {
   id?: string;
@@ -219,6 +230,12 @@ export const setLike = (userId: string, on: boolean) =>
 export const setFollow = (userId: string, on: boolean) =>
   api<{ following: boolean; followers: number }>(`/producers/${userId}/follow`, { method: on ? 'POST' : 'DELETE' });
 
+export type BuiltDescription = { content: string; hashtags: string[]; bytes: number; warnings: string[] };
+/** A description built from a tag run: keywords, buy link, hashtags (no credit, nothing saved). */
+export const buildDescription = (input: { tagId: string; beatName: string; templateId?: string | null }) =>
+  api<BuiltDescription>('/descriptions/generate', {
+    body: { tag_id: input.tagId, beat_name: input.beatName, template_id: input.templateId || null, include_chapters: false },
+  });
 export const createDescription = (title: string, content: string) =>
   api<Description>('/descriptions', { body: { title, content } });
 
@@ -270,6 +287,14 @@ export type YouTubeUploadOptions = {
   baked?: boolean;
   /** The visualizer style it was rendered with (the server checks Pro styles against your plan). */
   visualizerStyle?: string;
+  /** Publish later: an ISO time 15 minutes to 180 days out. The video stays private until then. */
+  publishAt?: string;
+  /** Add to the artist's playlist ("Artist Type Beats"). */
+  playlistMode?: 'none' | 'artist';
+  /** A picture uploaded with uploadImage, set as the custom thumbnail. */
+  thumbnailFileId?: string;
+  /** Language code, like en or es. */
+  defaultLanguage?: string;
 };
 
 export type UploadJob = {
@@ -283,7 +308,15 @@ export type UploadJob = {
   cancel_requested?: boolean;
   message?: string;
   error?: string;
-  result?: { video_url?: string; message?: string };
+  result?: {
+    video_url?: string;
+    message?: string;
+    scheduled_for?: string | null;
+    thumbnail_set?: boolean;
+    playlist_id?: string | null;
+    /** Thumbnail or playlist steps that didn't work; the video itself is up. */
+    warnings?: string[];
+  };
 };
 
 // Same form fields the website's UploadStudio sends (frontend/src/components/UploadStudio.js). With a rendered visualizer video the
@@ -320,6 +353,10 @@ export async function startYouTubeUpload(o: YouTubeUploadOptions) {
   form.append('visualizer_enabled', 'false');
   form.append('visualizer_settings', '{}');
   if (o.visualizerStyle) form.append('visualizer_style', o.visualizerStyle);
+  if (o.publishAt) form.append('publish_at', o.publishAt);
+  if (o.playlistMode && o.playlistMode !== 'none') form.append('playlist_mode', o.playlistMode);
+  if (o.thumbnailFileId) form.append('thumbnail_file_id', o.thumbnailFileId);
+  if (o.defaultLanguage) form.append('default_language', o.defaultLanguage);
   return api<{ job?: UploadJob; video_url?: string; message?: string }>('/youtube/upload', { body: form });
 }
 

@@ -57,6 +57,8 @@ export async function unregisterPush() {
 /** While signed in: register this phone, and open the right screen when a notification is tapped. */
 export function useJobNotifications() {
   useEffect(() => {
+    // Push notifications are phone-only; on the web build these calls throw and blank the app.
+    if (Platform.OS === 'web') return;
     void register().catch(() => {});
 
     const open = (n: Notifications.Notification) => {

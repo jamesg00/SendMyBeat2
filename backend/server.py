@@ -54,6 +54,9 @@ try:
     from backend.services import tag_outcomes as tag_outcomes_service  # noqa: F401
     from backend.services import tag_titles as tag_titles_service  # noqa: F401
     from backend.services import youtube_quota as youtube_quota_service  # noqa: F401
+    from backend.services import description_builder as description_builder_service  # noqa: F401
+    from backend.services import publish_extras as publish_extras_service  # noqa: F401
+    from backend.services import thumbnail_legibility as thumbnail_legibility_service  # noqa: F401
     from backend.services import pros as pros_service  # noqa: F401
     from backend.models_spotlight import (
         ProducerProfile,
@@ -71,6 +74,9 @@ except ImportError:
     from services import tag_outcomes as tag_outcomes_service
     from services import tag_titles as tag_titles_service
     from services import youtube_quota as youtube_quota_service
+    from services import description_builder as description_builder_service
+    from services import publish_extras as publish_extras_service
+    from services import thumbnail_legibility as thumbnail_legibility_service
     from services import pros as pros_service
     from models_spotlight import (
         ProducerProfile,
@@ -1508,6 +1514,8 @@ class Description(BaseModel):
     title: str
     content: str
     is_ai_generated: bool = False
+    source: Optional[str] = None  # template, generated or ai
+    run_id: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -1520,6 +1528,24 @@ class DescriptionCreate(BaseModel):
     title: str = Field(max_length=200)
     content: str = Field(max_length=10000)
     is_ai_generated: bool = False
+    source: Optional[Literal["template", "generated", "ai"]] = None
+    run_id: Optional[str] = Field(default=None, max_length=64)
+
+
+class ChapterIn(BaseModel):
+    t: float = Field(ge=0, le=36000)
+    label: str = Field(max_length=100)
+
+
+class DescriptionGenerateRequest(BaseModel):
+    tag_id: str = Field(max_length=64)
+    beat_name: str = Field(default="", max_length=120)
+    template_id: Optional[str] = Field(default=None, max_length=64)
+    include_chapters: bool = True
+    chapters: List[ChapterIn] = Field(default_factory=list, max_length=30)
+    bpm: Optional[float] = Field(default=None, ge=20, le=400)
+    key: Optional[str] = Field(default=None, max_length=24)
+    buy_link: Optional[str] = Field(default=None, max_length=300)
 
 class DescriptionUpdate(BaseModel):
     title: Optional[str] = Field(default=None, max_length=200)
@@ -1602,6 +1628,8 @@ class YouTubeConnectionStatus(BaseModel):
     email: Optional[str] = None
     profile_picture: Optional[str] = None
     name: Optional[str] = None
+    playlists_allowed: bool = False
+    custom_thumbnails_allowed: Optional[bool] = None  # None until the first try
 
 class YouTubeAnalyticsResponse(BaseModel):
     channel_name: str
@@ -1652,6 +1680,7 @@ class BeatFixResponse(BaseModel):
     notes: Optional[str] = None
 
 class ThumbnailCheckResponse(BaseModel):
+    small_size: Optional[Dict[str, Any]] = None  # pixel checks at phone search size, see thumbnail_legibility
     score: int  # 0-100 overall thumbnail quality
     verdict: str
     strengths: List[str]
@@ -3841,6 +3870,10 @@ async def _build_youtube_upload_job_payload(
     image_flip_v: bool = False,
     image_pos_mode: str = "art",
     visualizer_style: str | None = None,
+    publish_at: str | None = None,
+    playlist_mode: str | None = None,
+    thumbnail_file_id: str | None = None,
+    default_language: str | None = None,
 ) -> dict[str, Any]:
     safe_title = str(title or "").strip()
     if not safe_title:
@@ -3849,6 +3882,19 @@ async def _build_youtube_upload_job_payload(
     safe_privacy_status = str(privacy_status or "public").strip().lower()
     if safe_privacy_status not in {"public", "private", "unlisted"}:
         raise HTTPException(status_code=400, detail="privacy_status must be public, private, or unlisted.")
+
+    # Publish extras: schedule, playlist, language. Bad values are refused here, before any work.
+    # Only text counts: a direct call can pass FastAPI's Form(None) placeholder.
+    publish_at, playlist_mode, thumbnail_file_id, default_language = (
+        value if isinstance(value, str) else None
+        for value in (publish_at, playlist_mode, thumbnail_file_id, default_language)
+    )
+    try:
+        safe_publish_at = publish_extras_service.parse_publish_at(publish_at)
+        safe_playlist_mode = publish_extras_service.parse_playlist_mode(playlist_mode)
+        safe_language = publish_extras_service.parse_language(default_language)
+    except publish_extras_service.PublishOptionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
     sub_status = await get_user_subscription_status(current_user["id"])
     if remove_watermark and sub_status.get("plan") not in {"plus", "max"}:
@@ -3869,9 +3915,21 @@ async def _build_youtube_upload_job_payload(
             },
         )
 
-    connection = await db.youtube_connections.find_one({"user_id": current_user["id"]}, {"_id": 0, "user_id": 1})
+    connection = await db.youtube_connections.find_one(
+        {"user_id": current_user["id"]}, {"_id": 0, "user_id": 1, "custom_thumbnails_allowed": 1}
+    )
     if not connection:
         raise HTTPException(status_code=400, detail="YouTube account not connected")
+
+    safe_thumbnail_file_id = str(thumbnail_file_id or "").strip()
+    if safe_thumbnail_file_id:
+        if connection.get("custom_thumbnails_allowed") is False:
+            raise HTTPException(status_code=400, detail="Your channel can't use custom thumbnails yet. Verify it on YouTube, then reconnect.")
+        thumb_upload = await db.uploads.find_one(
+            {"id": safe_thumbnail_file_id, "user_id": current_user["id"], "file_type": "image"}, {"_id": 0, "id": 1}
+        )
+        if not thumb_upload:
+            raise HTTPException(status_code=404, detail="Referenced thumbnail image not found.")
 
     safe_description_override = str(description_override or "").strip()
     description_doc = None
@@ -3956,6 +4014,10 @@ async def _build_youtube_upload_job_payload(
         "image_file_id": safe_image_file_id,
         "remove_watermark": bool(remove_watermark),
         "visualizer": visualizer_payload,
+        "publish_at": safe_publish_at,
+        "playlist_mode": safe_playlist_mode,
+        "thumbnail_file_id": safe_thumbnail_file_id or None,
+        "default_language": safe_language,
         **render_settings,
     }
 
@@ -4117,17 +4179,7 @@ async def _execute_youtube_upload_job(job: dict) -> dict:
         )
         logging.info("YouTube API upload started for job=%s title=%r", job_id, title)
         youtube = await asyncio.to_thread(build, "youtube", "v3", credentials=credentials)
-        upload_body = {
-            "snippet": {
-                "title": title,
-                "description": str(payload.get("description") or "").strip(),
-                "tags": [tag for tag in (payload.get("tags") or []) if isinstance(tag, str)],
-                "categoryId": "10",
-            },
-            "status": {
-                "privacyStatus": str(payload.get("privacy_status") or "public"),
-            },
-        }
+        upload_body = publish_extras_service.build_upload_body({**payload, "title": title})
         media_upload = MediaFileUpload(str(rendered_video_path), chunksize=-1, resumable=True, mimetype="video/mp4")
         request = youtube.videos().insert(
             part="snippet,status",
@@ -4167,6 +4219,7 @@ async def _execute_youtube_upload_job(job: dict) -> dict:
         video_url = f"https://www.youtube.com/watch?v={video_id}"
         await consume_upload_credit(user_id)
         await _record_upload_outcome(user_id=user_id, video_id=video_id, payload=payload)
+        extras = await _run_publish_extras(youtube, job_id=job_id, user_id=user_id, video_id=video_id, payload=payload)
         media_debug = {
             **media_debug,
             "youtube_upload_duration_seconds": round(youtube_upload_duration_seconds, 3),
@@ -4189,18 +4242,68 @@ async def _execute_youtube_upload_job(job: dict) -> dict:
             youtube_upload_duration_seconds,
             json.dumps(media_debug, default=str, ensure_ascii=True),
         )
+        scheduled_for = extras.get("scheduled_for")
         return {
             "success": True,
             "video_id": video_id,
             "video_url": video_url,
-            "message": "Video uploaded successfully!",
+            "message": "Video uploaded and scheduled. It stays private until YouTube makes it public at the time you picked." if scheduled_for else "Video uploaded successfully!",
             "media_debug": media_debug,
+            "playlist_id": extras.get("playlist_id"),
+            "thumbnail_set": bool(extras.get("thumbnail_set")),
+            "scheduled_for": scheduled_for,
+            "warnings": extras.get("warnings") or [],
         }
     finally:
         try:
             rendered_video_path.unlink(missing_ok=True)
         except Exception:
             pass
+
+
+async def _run_publish_extras(youtube, *, job_id: str, user_id: str, video_id: str, payload: dict) -> dict:
+    """Thumbnail and playlist after the video is on YouTube. Failures become warnings, never a failed upload."""
+    if not payload.get("thumbnail_file_id") and str(payload.get("playlist_mode") or "none") == "none":
+        return {"scheduled_for": payload.get("publish_at"), "warnings": []}
+    try:
+        await _update_upload_job(
+            job_id, progress=96, message="Adding the thumbnail and playlist...", extra_updates={"last_heartbeat_at": _safe_iso_now()}
+        )
+        connection = await db.youtube_connections.find_one({"user_id": user_id}, {"_id": 0, "scopes": 1}) or {}
+        artist = ""
+        run_id = str(payload.get("tags_id") or "").strip()
+        if run_id:
+            run = await db.tag_generations.find_one({"id": run_id, "user_id": user_id}, {"_id": 0, "query": 1})
+            artist = _normalize_artist_query((run or {}).get("query", ""))
+
+        async def load_thumbnail() -> Optional[bytes]:
+            upload = await db.uploads.find_one({"id": payload.get("thumbnail_file_id"), "user_id": user_id, "file_type": "image"})
+            if not upload or not media_storage.exists(upload):
+                return None
+            return await asyncio.to_thread(media_storage.read_bytes, upload)
+
+        def media_factory(data: bytes):
+            from googleapiclient.http import MediaIoBaseUpload
+
+            return MediaIoBaseUpload(BytesIO(data), mimetype="image/jpeg", resumable=False)
+
+        extras = await publish_extras_service.apply_publish_extras(
+            youtube,
+            video_id=video_id,
+            payload=payload,
+            artist=artist,
+            scopes=connection.get("scopes"),
+            load_thumbnail=load_thumbnail,
+            media_factory=media_factory,
+        )
+        if extras.get("thumbnails_not_allowed"):
+            await db.youtube_connections.update_one({"user_id": user_id}, {"$set": {"custom_thumbnails_allowed": False}})
+        elif extras.get("thumbnail_set"):
+            await db.youtube_connections.update_one({"user_id": user_id}, {"$set": {"custom_thumbnails_allowed": True}})
+        return extras
+    except Exception as exc:  # never fail an upload that reached YouTube
+        logging.warning(f"Publish extras failed for {video_id}: {exc}")
+        return {"scheduled_for": payload.get("publish_at"), "warnings": ["The video is up, but the thumbnail or playlist step didn't finish."]}
 
 
 async def _record_upload_outcome(*, user_id: str, video_id: str, payload: dict) -> None:
@@ -5032,6 +5135,7 @@ RAW INPUT:
             )
             analysis = _parse_llm_json_response(normalized_text)
         analysis = _augment_thumbnail_analysis(title=title, analysis=analysis)
+        analysis["small_size"] = await _thumbnail_small_size(image_bytes)
         return ThumbnailCheckResponse(**analysis).model_dump()
     except Exception as e:
         logging.error(f"Failed to parse thumbnail analysis: {str(e)} | raw_response={response_text[:1200]}")
@@ -5044,7 +5148,16 @@ RAW INPUT:
             text_overlay_suggestion="FUTURE x UZI TYPE BEAT",
             branding_suggestion="Add a consistent corner badge with your logo",
         ).model_dump()
+        fallback["small_size"] = await _thumbnail_small_size(image_bytes)
         return _augment_thumbnail_analysis(title=title, analysis=fallback)
+
+
+async def _thumbnail_small_size(image_bytes: bytes) -> Optional[dict]:
+    try:
+        return await asyncio.to_thread(thumbnail_legibility_service.small_size_check, image_bytes)
+    except Exception as exc:  # the AI review still stands without it
+        logging.warning(f"Small-size thumbnail check failed: {exc}")
+        return None
 
 
 async def _process_thumbnail_check_job(job: dict) -> None:
@@ -5420,8 +5533,16 @@ async def _use_youtube_oauth_state(user_id: str, state: str) -> bool:
     return bool(doc)
 
 
+YOUTUBE_BASE_SCOPES = (
+    "https://www.googleapis.com/auth/youtube.upload",
+    "https://www.googleapis.com/auth/youtube.readonly",
+    "https://www.googleapis.com/auth/userinfo.email",
+)
+YOUTUBE_PLAYLIST_SCOPE = "https://www.googleapis.com/auth/youtube.force-ssl"
+
+
 @api_router.get("/youtube/auth-url")
-async def get_youtube_auth_url(current_user: dict = Depends(get_current_user)):
+async def get_youtube_auth_url(playlists: bool = False, current_user: dict = Depends(get_current_user)):
     """Get the Google OAuth URL for YouTube access"""
     if GOOGLE_CLIENT_ID == 'your_google_client_id_here':
         raise HTTPException(
@@ -5434,7 +5555,9 @@ async def get_youtube_auth_url(current_user: dict = Depends(get_current_user)):
         'client_id': GOOGLE_CLIENT_ID,
         'redirect_uri': f"{os.environ.get('FRONTEND_URL', 'https://tagbeats.preview.emergentagent.com')}/youtube-callback",
         'response_type': 'code',
-        'scope': 'https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/userinfo.email',
+        # Playlists need a broader scope, so it's only asked for when the producer turns them on.
+        'scope': " ".join(YOUTUBE_BASE_SCOPES + ((YOUTUBE_PLAYLIST_SCOPE,) if playlists else ())),
+        'include_granted_scopes': 'true',
         'access_type': 'offline',
         'prompt': 'consent',
         'state': await _new_youtube_oauth_state(current_user['id']),
@@ -5502,7 +5625,8 @@ async def connect_youtube(
                     "access_token_encrypted": _encrypt_secret_value(tokens['access_token']),
                     "refresh_token_encrypted": _encrypt_secret_value(tokens.get('refresh_token')),
                     "token_expiry": token_expiry.isoformat(),
-                    "connected_at": datetime.now(timezone.utc).isoformat()
+                    "connected_at": datetime.now(timezone.utc).isoformat(),
+                    "scopes": str(tokens.get("scope") or "").split(),
                 }
             },
             upsert=True
@@ -5529,7 +5653,9 @@ async def get_youtube_status(current_user: dict = Depends(get_current_user)):
             connected=True,
             email=connection.get('google_email'),
             profile_picture=connection.get('profile_picture'),
-            name=connection.get('name')
+            name=connection.get('name'),
+            playlists_allowed=publish_extras_service.has_playlist_scope(connection.get('scopes')),
+            custom_thumbnails_allowed=connection.get('custom_thumbnails_allowed'),
         )
     return YouTubeConnectionStatus(connected=False)
 
@@ -8076,7 +8202,9 @@ async def create_description(desc_data: DescriptionCreate, current_user: dict = 
         user_id=current_user['id'],
         title=desc_data.title,
         content=desc_data.content,
-        is_ai_generated=desc_data.is_ai_generated
+        is_ai_generated=desc_data.is_ai_generated,
+        source=desc_data.source or ("ai" if desc_data.is_ai_generated else "template"),
+        run_id=desc_data.run_id,
     )
     
     desc_doc = description.model_dump()
@@ -8086,6 +8214,66 @@ async def create_description(desc_data: DescriptionCreate, current_user: dict = 
     await db.descriptions.insert_one(desc_doc)
     
     return description
+
+STORE_LINK_KEYS = ("beatstars", "airbit", "store", "website", "linktree")
+
+
+def _display_artist(query: str) -> str:
+    """'ken carson (dark) type beat' -> 'Ken Carson': the artist as people write it in a description."""
+    text = re.sub(r"\([^)]*\)", " ", str(query or ""))
+    text = re.sub(r"\b(type beat|type|beat|style|instrumental)\b", " ", text, flags=re.I)
+    text = " ".join(text.split())
+    return text.title() if text == text.lower() else text
+
+
+@api_router.post("/descriptions/generate")
+async def generate_description(request: DescriptionGenerateRequest, current_user: dict = Depends(get_current_user)):
+    """Build a description from a tag run. Deterministic: no credit, no AI, no YouTube quota. Not saved."""
+    _enforce_action_rate_limit(
+        f"description_generate:{current_user['id']}",
+        limit=60,
+        window_seconds=60,
+        detail_message="Too many description builds. Try again in a minute.",
+    )
+    run = await db.tag_generations.find_one(
+        {"id": request.tag_id, "user_id": current_user["id"]}, {"_id": 0, "query": 1, "tags": 1, "scored_tags": 1}
+    )
+    if not run:
+        raise HTTPException(status_code=404, detail="Tag run not found.")
+    artist = _normalize_artist_query(run.get("query", ""))
+    scored = run.get("scored_tags") or []
+    top_keyword = tag_titles_service.top_sound_keyword(artist=artist, scored_tags=scored)
+
+    template_text = ""
+    if request.template_id:
+        template = await db.descriptions.find_one(
+            {"id": request.template_id, "user_id": current_user["id"]}, {"_id": 0, "content": 1}
+        )
+        if not template:
+            raise HTTPException(status_code=404, detail="Description template not found.")
+        template_text = str(template.get("content") or "")
+
+    buy_link = str(request.buy_link or "").strip()
+    if not buy_link:
+        profile = await db.producer_profiles.find_one({"user_id": current_user["id"]}, {"_id": 0, "social_links": 1, "store_url": 1}) or {}
+        links = profile.get("social_links") or {}
+        buy_link = str(profile.get("store_url") or next((links.get(k) for k in STORE_LINK_KEYS if links.get(k)), "") or "").strip()
+    if buy_link and not re.match(r"^https?://", buy_link, re.I):
+        buy_link = ""
+
+    return description_builder_service.build_description(
+        artist=_display_artist(run.get("query", "")),
+        beat_name=request.beat_name,
+        tags=run.get("tags") or [],
+        top_keyword=top_keyword,
+        buy_link=buy_link,
+        bpm=request.bpm,
+        key=request.key or "",
+        chapters=[chapter.model_dump() for chapter in request.chapters],
+        include_chapters=request.include_chapters,
+        template_text=template_text,
+    )
+
 
 @api_router.get("/descriptions", response_model=List[Description])
 async def get_descriptions(current_user: dict = Depends(get_current_user)):
@@ -9812,6 +10000,10 @@ async def upload_to_youtube(
     image_flip_v: bool = Form(False),
     image_pos_mode: str = Form("art"),
     visualizer_style: Optional[str] = Form(None),
+    publish_at: Optional[str] = Form(None),
+    playlist_mode: Optional[str] = Form(None),
+    thumbnail_file_id: Optional[str] = Form(None),
+    default_language: Optional[str] = Form(None),
     current_user: dict = Depends(get_current_user)
 ):
     """Create a persisted YouTube upload job and return immediately."""
@@ -9858,6 +10050,10 @@ async def upload_to_youtube(
             image_flip_v=image_flip_v,
             image_pos_mode=image_pos_mode,
             visualizer_style=visualizer_style,
+            publish_at=publish_at,
+            playlist_mode=playlist_mode,
+            thumbnail_file_id=thumbnail_file_id,
+            default_language=default_language,
         )
         job_doc = await _create_youtube_upload_job(current_user=current_user, payload=payload)
         logger.info(
