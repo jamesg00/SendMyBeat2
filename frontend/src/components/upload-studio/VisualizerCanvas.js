@@ -18,6 +18,7 @@ const VisualizerCanvas = ({
   centerVisualizerImageUrl,
   spectrumRecordImageUrl,
   analysis = null,
+  beatTrack = null,
   aspectRatio = "16:9",
   backdropRef = null,
 }) => {
@@ -62,6 +63,36 @@ const VisualizerCanvas = ({
     };
     requestAnimationFrame(() => visualizerRef.current?.resize());
 
+    // The new styles read the beat engine's frames for wherever the player is. Paused, the
+    // levels fall away instead of freezing, and nothing fires.
+    viz.setBeatProvider(
+      beatTrack
+        ? (A) => {
+            const player = audioPlayerRef.current;
+            if (player && !player.paused && !player.ended) {
+              beatTrack.fillAtTime(player.currentTime, A);
+              return true;
+            }
+            for (let i = 0; i < A.spec.length; i += 1) {
+              A.spec[i] *= 0.9;
+              A.specFast[i] *= 0.85;
+            }
+            A.low *= 0.9;
+            A.mid *= 0.9;
+            A.high *= 0.9;
+            A.energy *= 0.9;
+            A.kick *= 0.85;
+            A.snare *= 0.85;
+            A.hat *= 0.85;
+            A.kickHit = false;
+            A.snareHit = false;
+            A.hatHit = false;
+            A.live = false;
+            return true;
+          }
+        : null,
+    );
+
     if (analysis) {
       // Read the spectrum for wherever the player is right now. Paused = silence.
       viz.setAnalysisProvider({
@@ -101,6 +132,7 @@ const VisualizerCanvas = ({
     visualizerRef,
     audioPlayerRef,
     analysis,
+    beatTrack,
     aspectRatio,
     backdropRef,
   ]);

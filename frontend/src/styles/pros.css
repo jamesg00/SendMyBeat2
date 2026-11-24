@@ -687,6 +687,11 @@ button.adm-btn-danger.adm-btn-danger:hover { background: color-mix(in srgb, var(
 .vz-style:hover { color: var(--c-text); border-color: var(--c-t3); }
 .vz-style.is-active { color: var(--c-acc); border-color: var(--c-accline); background: var(--c-accsoft); }
 .vz-style:focus-visible { outline: 2px solid var(--c-accline); outline-offset: 2px; }
+.vz-style { position: relative; }
+.vz-style-icon { width: 48px; height: 30px; object-fit: contain; opacity: 0.82; transition: opacity 0.2s var(--ease); pointer-events: none; }
+.vz-style:hover .vz-style-icon, .vz-style.is-active .vz-style-icon { opacity: 1; }
+.vz-style-lock { position: absolute; top: 5px; right: 5px; display: grid; place-items: center; width: 16px; height: 16px; border-radius: 999px; background: var(--c-card); color: var(--c-t2); }
+.vz-pro-label { margin-top: 10px; }
 
 .vz-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 30px; }
 .vz-row-text { min-width: 0; display: grid; gap: 1px; }
@@ -713,7 +718,7 @@ button.adm-btn-danger.adm-btn-danger:hover { background: color-mix(in srgb, var(
 @container studio (max-width: 430px) {
   .vz-styles { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
   .vz-style { padding: 8px 2px 6px !important; }
-  .vz-style svg { width: 40px; height: 25px; }
+  .vz-style svg, .vz-style-icon { width: 40px; height: 25px; }
   .vz-style b { font-size: 11.5px; }
   .vz-two { grid-template-columns: 1fr; }
   .us-grid2 { grid-template-columns: 1fr; }
@@ -872,3 +877,7 @@ button.adm-btn-danger.adm-btn-danger:hover { background: color-mix(in srgb, var(
 @container procard (max-width: 340px) {
   .pro-card-actions { grid-template-columns: 1fr; }
 }
+
+/* Shown over the preview when a free member tries a Pro visualizer. */
+.viz-pro-chip { position: absolute; right: 10px; bottom: 10px; z-index: 5; padding: 6px 11px; border-radius: 999px; border: 1px solid rgba(139, 255, 208, 0.45); background: rgba(10, 10, 10, 0.72); color: #8bffd0; font-size: 12px; font-weight: 600; cursor: pointer; backdrop-filter: blur(6px); }
+.viz-pro-chip:hover { background: rgba(10, 10, 10, 0.9); }
