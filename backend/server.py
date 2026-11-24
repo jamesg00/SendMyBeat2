@@ -459,6 +459,7 @@ MAX_NET_REVENUE_USD = float(os.environ.get("MAX_NET_REVENUE_USD", "10.95"))
 _llm_client = None
 _llm_config = None
 _upload_job_worker_task: asyncio.Task | None = None
+_job_worker_tasks: list[asyncio.Task] = []
 _job_watchdog_task: asyncio.Task | None = None
 _spotlight_refresh_task: asyncio.Task | None = None
 _tag_outcome_task: asyncio.Task | None = None
@@ -508,6 +509,11 @@ GIF_TRANSCODE_CRF = str(os.environ.get("GIF_TRANSCODE_CRF", "28")).strip() or "2
 GIF_TRANSCODE_HEAVY_FRAME_THRESHOLD = int(os.environ.get("GIF_TRANSCODE_HEAVY_FRAME_THRESHOLD", "450"))
 GIF_TRANSCODE_HEAVY_BYTES_THRESHOLD = int(os.environ.get("GIF_TRANSCODE_HEAVY_BYTES_THRESHOLD", str(8 * 1024 * 1024)))
 GIF_CACHE_VERSION = 2
+# FFmpeg runs at a lower CPU priority so the API (same process, same box) stays responsive while
+# a video encodes. Renders still use every core when the machine is idle; they just yield when a
+# request needs the CPU. 0 turns it off. FFMPEG_THREADS caps encoder threads ("0" = auto/all cores).
+FFMPEG_NICE = int(os.environ.get("FFMPEG_NICE", "10") or "0")
+FFMPEG_THREADS = str(os.environ.get("FFMPEG_THREADS", "0")).strip() or "0"
 YOUTUBE_ENCODE_PROGRESS_INTERVAL_SECONDS = float(
     os.environ.get("YOUTUBE_ENCODE_PROGRESS_INTERVAL_SECONDS", "2")
 )
@@ -517,6 +523,10 @@ JOB_PROGRESS_GIF_MIN = 42
 JOB_PROGRESS_GIF_MAX = 44
 VISUAL_UPLOAD_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".gif", ".webm", ".mp4", ".mov", ".m4v"]
 VIDEO_VISUAL_EXTENSIONS = {".gif", ".webm", ".mp4", ".mov", ".m4v"}
+# Jobs that run FFmpeg; they get their own worker lane (see _start_background_job_workers).
+MEDIA_JOB_TYPES = frozenset({"youtube_upload"})
+MEDIA_JOB_WORKER_CONCURRENCY = int(os.environ.get("MEDIA_JOB_WORKER_CONCURRENCY", "1"))
+LIGHT_JOB_WORKER_CONCURRENCY = int(os.environ.get("LIGHT_JOB_WORKER_CONCURRENCY", "3"))
 PRIORITIZE_YOUTUBE_UPLOAD_JOBS = str(os.environ.get("PRIORITIZE_YOUTUBE_UPLOAD_JOBS", "true")).strip().lower() not in {"0", "false", "no"}
 SPOTLIGHT_REFRESH_INTERVAL_SECONDS = int(os.environ.get("SPOTLIGHT_REFRESH_INTERVAL_SECONDS", "1800"))
 METADATA_CACHE_TTL_SECONDS = int(os.environ.get("METADATA_CACHE_TTL_SECONDS", "86400"))
@@ -913,6 +923,16 @@ def _insert_ffmpeg_progress_flags(command: list[str]) -> list[str]:
     return full_cmd
 
 
+def _with_ffmpeg_priority(command: list[str]) -> list[str]:
+    """Prefix the command with `nice -n FFMPEG_NICE` when available (Linux/macOS)."""
+    if FFMPEG_NICE <= 0 or os.name != "posix":
+        return command
+    nice_bin = shutil.which("nice")
+    if not nice_bin:
+        return command
+    return [nice_bin, "-n", str(min(19, FFMPEG_NICE)), *command]
+
+
 def _run_ffmpeg_command_with_progress(
     command: list[str],
     *,
@@ -921,7 +941,7 @@ def _run_ffmpeg_command_with_progress(
     timeout: int,
 ) -> subprocess.CompletedProcess:
     safe_duration = max(0.5, float(duration_seconds or 0.5))
-    full_cmd = _insert_ffmpeg_progress_flags(command)
+    full_cmd = _with_ffmpeg_priority(_insert_ffmpeg_progress_flags(command))
     proc = subprocess.Popen(
         full_cmd,
         stdout=subprocess.PIPE,
@@ -1065,7 +1085,7 @@ def _transcode_gif_to_h264_mp4(
         "-loglevel",
         "error",
         "-threads",
-        "0",
+        FFMPEG_THREADS,
         "-ignore_loop",
         "1",
         "-i",
@@ -2724,6 +2744,34 @@ def _enforce_action_rate_limit(bucket_key: str, *, limit: int, window_seconds: i
     _action_rate_limit_buckets[bucket_key] = timestamps
 
 
+_QUEUE_LOAD_CACHE_SECONDS = 5.0
+_queue_load_cache: dict[str, Any] = {"at": 0.0, "value": None}
+
+
+async def _get_queue_load() -> dict[str, int]:
+    """Queued/processing counts for the overload check on every job submit.
+
+    Two indexed counts, cached for a few seconds. The admin dashboard still uses
+    _get_background_job_stats, which groups every job ever stored and is too slow to run on
+    each request once the jobs collection is large.
+    """
+    now = time.monotonic()
+    cached = _queue_load_cache.get("value")
+    if cached is not None and (now - float(_queue_load_cache.get("at") or 0.0)) < _QUEUE_LOAD_CACHE_SECONDS:
+        return cached
+    try:
+        queued, processing = await asyncio.gather(
+            db.upload_jobs.count_documents({"status": "queued"}),
+            db.upload_jobs.count_documents({"status": "processing"}),
+        )
+    except (AttributeError, TypeError):
+        queued, processing = 0, 0
+    value = {"queued": int(queued or 0), "processing": int(processing or 0)}
+    _queue_load_cache["at"] = now
+    _queue_load_cache["value"] = value
+    return value
+
+
 async def _guard_heavy_feature(
     *,
     current_user: dict,
@@ -2739,7 +2787,7 @@ async def _guard_heavy_feature(
     if controls.get("global_disable_new_heavy_jobs") and job_type:
         raise HTTPException(status_code=503, detail={"message": controls.get("overload_message"), "code": "heavy_jobs_disabled"})
 
-    job_stats = await _get_background_job_stats()
+    job_stats = await _get_queue_load()
     if job_type:
         try:
             user_active_jobs = await db.upload_jobs.count_documents(
@@ -3161,6 +3209,29 @@ async def _background_job_worker_loop() -> None:
     await background_job_service.worker_loop()
 
 
+def _start_background_job_workers() -> list[asyncio.Task]:
+    """Two lanes over the same Mongo queue.
+
+    - media lane: CPU-heavy jobs (FFmpeg render + YouTube upload), MEDIA_JOB_WORKER_CONCURRENCY
+      at a time (default 1, so a small box never runs two encodes at once).
+    - light lane: everything else (LLM and API calls that mostly wait on the network),
+      LIGHT_JOB_WORKER_CONCURRENCY at a time (default 3).
+
+    Before this, one loop ran every job in turn, so a 10-minute render + upload made every
+    other user's tag generation wait behind it.
+    """
+    tasks: list[asyncio.Task] = []
+    for index in range(max(1, MEDIA_JOB_WORKER_CONCURRENCY)):
+        tasks.append(asyncio.create_task(
+            background_job_service.worker_loop(job_types=MEDIA_JOB_TYPES, lane=f"media-{index}")
+        ))
+    for index in range(max(1, LIGHT_JOB_WORKER_CONCURRENCY)):
+        tasks.append(asyncio.create_task(
+            background_job_service.worker_loop(exclude_types=MEDIA_JOB_TYPES, lane=f"light-{index}")
+        ))
+    return tasks
+
+
 async def _background_job_watchdog_loop() -> None:
     await _job_watchdog_loop()
 
@@ -3555,7 +3626,7 @@ async def _render_youtube_video(
                         "-b:a",
                         "192k",
                         "-threads",
-                        "0",
+                        FFMPEG_THREADS,
                         "-r",
                         render_fps_value,
                         "-movflags",
@@ -4026,7 +4097,7 @@ async def _execute_youtube_upload_job(job: dict) -> dict:
             extra_updates={"stage": "youtube_upload", "last_heartbeat_at": _safe_iso_now()},
         )
         logging.info("YouTube API upload started for job=%s title=%r", job_id, title)
-        youtube = build("youtube", "v3", credentials=credentials)
+        youtube = await asyncio.to_thread(build, "youtube", "v3", credentials=credentials)
         upload_body = {
             "snippet": {
                 "title": title,
@@ -4236,7 +4307,7 @@ async def _execute_channel_analytics_job(job: dict) -> dict:
     ])
 
     if creds.expired and creds.refresh_token:
-        creds.refresh(GoogleRequest())
+        await asyncio.to_thread(creds.refresh, GoogleRequest())
         await db.youtube_connections.update_one(
             {"user_id": user_id},
             {"$set": {
@@ -4246,8 +4317,11 @@ async def _execute_channel_analytics_job(job: dict) -> dict:
             }}
         )
 
-    youtube = build('youtube', 'v3', credentials=creds)
-    channels_response = youtube.channels().list(part='statistics,snippet,contentDetails', mine=True).execute()
+    # The Google client is synchronous; run it in a thread so other requests keep moving.
+    youtube = await asyncio.to_thread(build, 'youtube', 'v3', credentials=creds)
+    channels_response = await asyncio.to_thread(
+        youtube.channels().list(part='statistics,snippet,contentDetails', mine=True).execute
+    )
     if not channels_response.get('items'):
         raise HTTPException(status_code=404, detail="No channel found")
 
@@ -4258,11 +4332,13 @@ async def _execute_channel_analytics_job(job: dict) -> dict:
     uploads_playlist_id = channel.get('contentDetails', {}).get('relatedPlaylists', {}).get('uploads', '')
     # Only the latest uploads, and mostly their titles: fast to fetch, fast for the model, and it is
     # where a producer can still change something (retitle, re-angle the next upload).
-    video_ids = _recent_upload_ids(youtube, uploads_playlist_id, CHANNEL_ANALYTICS_RECENT_VIDEOS)
+    video_ids = await asyncio.to_thread(_recent_upload_ids, youtube, uploads_playlist_id, CHANNEL_ANALYTICS_RECENT_VIDEOS)
 
     recent_videos = []
     if video_ids:
-        videos_response = youtube.videos().list(part='snippet,statistics', id=','.join(video_ids)).execute()
+        videos_response = await asyncio.to_thread(
+            youtube.videos().list(part='snippet,statistics', id=','.join(video_ids)).execute
+        )
         for video in videos_response.get('items', []):
             video_stats = video['statistics']
             recent_videos.append({
@@ -4843,7 +4919,7 @@ async def _execute_thumbnail_check_job(job: dict) -> dict:
             raise HTTPException(status_code=400, detail="Thumbnail check only supports still images right now. Use a JPG, PNG, or WEBP.")
         if not media_storage.exists(upload):
             raise HTTPException(status_code=404, detail="Referenced image file is missing on server.")
-        image_bytes = media_storage.read_bytes(upload)
+        image_bytes = await asyncio.to_thread(media_storage.read_bytes, upload)
         ext = media_storage.get_suffix(upload)
         image_mime = ".png" == ext and "image/png" or (".webp" == ext and "image/webp" or "image/jpeg")
     else:
@@ -5386,8 +5462,8 @@ async def connect_youtube(
         )
         
         # Get user email from Google
-        oauth2_service = build('oauth2', 'v2', credentials=credentials)
-        user_info = oauth2_service.userinfo().get().execute()
+        oauth2_service = await asyncio.to_thread(build, 'oauth2', 'v2', credentials=credentials)
+        user_info = await asyncio.to_thread(oauth2_service.userinfo().get().execute)
         
         # Calculate token expiry (default 1 hour from now)
         token_expiry = datetime.now(timezone.utc) + timedelta(hours=1)
@@ -8138,8 +8214,8 @@ async def refresh_youtube_token(user_id: str) -> Credentials:
     if should_refresh:
         logging.info(f"Refreshing YouTube token for user {user_id}")
         
-        # Refresh the token
-        credentials.refresh(GoogleRequest())
+        # Refresh the token (a blocking HTTP call to Google; keep it off the event loop)
+        await asyncio.to_thread(credentials.refresh, GoogleRequest())
         
         # Update database with new token
         await db.youtube_connections.update_one(
@@ -10523,7 +10599,9 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-_AGENT_DEBUG_LOG_PATH = Path(__file__).resolve().parent.parent / "debug-d4a8d0.log"
+# Leftover debugging trace. It used to append a JSON line to a file on every encode tick and
+# heartbeat for every job, forever. Now it only writes when DEBUG_TRACE_LOG_PATH is set.
+_AGENT_DEBUG_LOG_PATH = (os.environ.get("DEBUG_TRACE_LOG_PATH") or "").strip()
 
 
 def _agent_debug_log(
@@ -10534,10 +10612,10 @@ def _agent_debug_log(
     *,
     run_id: str = "worker-media",
 ) -> None:
-    # #region agent log
+    if not _AGENT_DEBUG_LOG_PATH:
+        return
     try:
         payload = {
-            "sessionId": "d4a8d0",
             "hypothesisId": hypothesis_id,
             "location": location,
             "message": message,
@@ -10545,11 +10623,10 @@ def _agent_debug_log(
             "timestamp": int(time.time() * 1000),
             "runId": run_id,
         }
-        with _AGENT_DEBUG_LOG_PATH.open("a", encoding="utf-8") as debug_file:
+        with open(_AGENT_DEBUG_LOG_PATH, "a", encoding="utf-8") as debug_file:
             debug_file.write(json.dumps(payload, default=str) + "\n")
     except Exception:
         pass
-    # #endregion
 
 
 def _schedule_upload_job_update(
@@ -10621,6 +10698,32 @@ async def _ensure_indexes() -> None:
         (db.tag_performance, [("tag_key", 1)], {"unique": True}),
         (db.style_plans, [("user_id", 1)], {"unique": True}),
         (db.pro_channel_cache, [("pro_id", 1)], {"unique": True}),
+        # Lookup indexes for the hottest queries. Without them every lookup scans the whole
+        # collection, and the cost grows with every user, upload and job. Not unique on purpose:
+        # an index that can't be built because of old duplicate rows would just be skipped.
+        (db.users, [("id", 1)], {}),  # every signed-in request (get_current_user)
+        (db.users, [("stripe_customer_id", 1)], {"sparse": True}),  # Stripe webhooks
+        (db.upload_jobs, [("id", 1)], {}),  # job status polling every few seconds
+        (db.upload_jobs, [("status", 1), ("priority", 1), ("created_at", 1)], {}),  # worker claim, every 2s per lane
+        (db.upload_jobs, [("user_id", 1), ("status", 1), ("type", 1), ("created_at", -1)], {}),  # active-job checks
+        (db.uploads, [("id", 1)], {}),
+        (db.uploads, [("user_id", 1), ("uploaded_at", -1)], {}),
+        (db.tag_generations, [("id", 1)], {}),
+        (db.tag_generations, [("user_id", 1), ("created_at", -1)], {}),
+        (db.tag_generations, [("user_id", 1), ("query_key", 1)], {}),
+        (db[tag_metrics_service.TAG_KEYWORD_CACHE_COLLECTION], [("tag_key", 1)], {}),  # ~100 lookups per tag generation
+        (db.youtube_connections, [("user_id", 1)], {}),
+        (db.producer_profiles, [("user_id", 1)], {}),
+        (db.producer_stats_cache, [("user_id", 1)], {}),
+        (db.descriptions, [("id", 1)], {}),
+        (db.descriptions, [("user_id", 1), ("created_at", -1)], {}),
+        (db.growth_streaks, [("user_id", 1)], {}),
+        (db.push_tokens, [("user_id", 1)], {}),
+        (db.push_tokens, [("token", 1)], {}),
+        (db.usage_logs, [("user_id", 1), ("timestamp", -1)], {}),  # monthly LLM cost cap checks
+        (db.ai_response_cache, [("key", 1)], {}),
+        (db.security_rate_limits, [("key", 1)], {}),
+        (db.tag_history, [("user_id", 1)], {}),
     ]
     for collection, keys, options in specs:
         try:
@@ -10631,15 +10734,20 @@ async def _ensure_indexes() -> None:
 
 @app.on_event("startup")
 async def startup_background_tasks():
-    global _upload_job_worker_task, _job_watchdog_task, _spotlight_refresh_task, _tag_outcome_task
+    global _upload_job_worker_task, _job_watchdog_task, _spotlight_refresh_task, _tag_outcome_task, _job_worker_tasks
     _validate_security_configuration()
     await _ensure_indexes()
     await _log_admin_id_hint()
     _log_youtube_render_timeout_configuration()
     await _requeue_stale_background_jobs()
-    if _upload_job_worker_task is None:
-        _upload_job_worker_task = asyncio.create_task(_background_job_worker_loop())
-        logger.info("Background job worker started")
+    if not _job_worker_tasks:
+        _job_worker_tasks = _start_background_job_workers()
+        _upload_job_worker_task = _job_worker_tasks[0]
+        logger.info(
+            "Background job workers started: media=%s light=%s",
+            max(1, MEDIA_JOB_WORKER_CONCURRENCY),
+            max(1, LIGHT_JOB_WORKER_CONCURRENCY),
+        )
     if _job_watchdog_task is None:
         _job_watchdog_task = asyncio.create_task(_background_job_watchdog_loop())
         logger.info("Background job watchdog started")
@@ -10652,10 +10760,11 @@ async def startup_background_tasks():
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
-    global _upload_job_worker_task, _job_watchdog_task, _spotlight_refresh_task, _tag_outcome_task
-    if _upload_job_worker_task:
-        _upload_job_worker_task.cancel()
-        _upload_job_worker_task = None
+    global _upload_job_worker_task, _job_watchdog_task, _spotlight_refresh_task, _tag_outcome_task, _job_worker_tasks
+    for task in _job_worker_tasks:
+        task.cancel()
+    _job_worker_tasks = []
+    _upload_job_worker_task = None
     if _job_watchdog_task:
         _job_watchdog_task.cancel()
         _job_watchdog_task = None

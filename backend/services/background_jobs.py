@@ -135,10 +135,34 @@ class BackgroundJobService:
         await self.db.upload_jobs.insert_one(job_doc)
         return job_doc
 
-    async def claim_next_job(self) -> dict | None:
+    @staticmethod
+    def _queued_filter(
+        job_types: frozenset[str] | set[str] | None = None,
+        exclude_types: frozenset[str] | set[str] | None = None,
+    ) -> dict[str, Any]:
+        query: dict[str, Any] = {"status": "queued"}
+        if job_types:
+            query["type"] = {"$in": sorted(job_types)}
+        elif exclude_types:
+            query["type"] = {"$nin": sorted(exclude_types)}
+        return query
+
+    async def claim_next_job(
+        self,
+        *,
+        job_types: frozenset[str] | set[str] | None = None,
+        exclude_types: frozenset[str] | set[str] | None = None,
+    ) -> dict | None:
+        """Atomically claim the oldest highest-priority queued job.
+
+        `job_types` / `exclude_types` let separate lanes share the queue: e.g. one lane for
+        CPU-heavy video renders and another for quick LLM/API jobs, so a long render never
+        holds up everyone's tag generations. find_one_and_update is atomic, so any number of
+        loops can claim from the same collection without taking the same job twice.
+        """
         now = self.now_factory()
         return await self.db.upload_jobs.find_one_and_update(
-            {"status": "queued"},
+            self._queued_filter(job_types, exclude_types),
             {"$set": {
                 "status": "processing",
                 "progress": 5,
@@ -410,46 +434,29 @@ class BackgroundJobService:
                 failed_stage=str(refreshed.get("stage") or "unknown"),
             )
 
-    async def worker_loop(self) -> None:
+    async def worker_loop(
+        self,
+        *,
+        job_types: frozenset[str] | set[str] | None = None,
+        exclude_types: frozenset[str] | set[str] | None = None,
+        lane: str = "default",
+    ) -> None:
         while True:
             try:
-                job = await self.claim_next_job()
+                job = await self.claim_next_job(job_types=job_types, exclude_types=exclude_types)
                 if not job:
                     await asyncio.sleep(self.poll_interval_seconds)
                     continue
                 self.logger.info(
-                    "Worker claimed job id=%s type=%s user_id=%s",
+                    "Worker lane=%s claimed job id=%s type=%s user_id=%s",
+                    lane,
                     job.get("id"),
                     job.get("type"),
                     job.get("user_id"),
                 )
-                try:
-                    from pathlib import Path
-                    import json
-                    import time as _time
-
-                    payload = {
-                        "sessionId": "d4a8d0",
-                        "hypothesisId": "H5",
-                        "location": "background_jobs.py:worker_loop",
-                        "message": "worker claimed job",
-                        "data": {
-                            "job_id": job.get("id"),
-                            "type": job.get("type"),
-                            "status": job.get("status"),
-                            "progress": job.get("progress"),
-                        },
-                        "timestamp": int(_time.time() * 1000),
-                        "runId": "worker-media",
-                    }
-                    log_path = Path(__file__).resolve().parent.parent.parent / "debug-d4a8d0.log"
-                    with log_path.open("a", encoding="utf-8") as debug_file:
-                        debug_file.write(json.dumps(payload, default=str) + "\n")
-                except Exception:
-                    pass
                 await self.process_job(job)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                self.logger.error(f"Background job worker loop error: {str(exc)}")
+                self.logger.error(f"Background job worker loop error (lane={lane}): {str(exc)}")
                 await asyncio.sleep(self.poll_interval_seconds)
