@@ -80,6 +80,10 @@ a { color: inherit; }
   white-space: nowrap;
 }
 
+/* The app icon beside the wordmark, rounded like it is on a phone home screen. */
+.smb-wordmark--icon { display: inline-flex; align-items: center; gap: 9px; }
+.smb-wordmark-icon { width: 22px; height: 22px; border-radius: 22.5%; flex-shrink: 0; display: block; }
+
 /* Tailwind/shadcn neutrals follow the palette */
 .text-muted-foreground { color: var(--c-t2) !important; }
 .bg-background { background-color: var(--c-bg) !important; }
