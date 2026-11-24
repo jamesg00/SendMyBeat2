@@ -3806,6 +3806,13 @@ async def _render_youtube_video(
             pass
 
 
+# Premium visualizers (paid plans: plus, and max which the app calls Pro). The browser bakes the video, so the server checks the style it declares.
+PREMIUM_VISUALIZER_MODES = frozenset({
+    "ridgeline", "ring-ridges", "analyzer-dots", "dot-record", "dot-rings", "jelly-dots", "jelly",
+    "waterfall", "dot-terrain", "terrain", "groove", "turntable", "terrain-sun",
+})
+
+
 async def _build_youtube_upload_job_payload(
     *,
     current_user: dict,
@@ -3831,6 +3838,7 @@ async def _build_youtube_upload_job_payload(
     image_flip_h: bool = False,
     image_flip_v: bool = False,
     image_pos_mode: str = "art",
+    visualizer_style: str | None = None,
 ) -> dict[str, Any]:
     safe_title = str(title or "").strip()
     if not safe_title:
@@ -3847,6 +3855,15 @@ async def _build_youtube_upload_job_payload(
             detail={
                 "message": "Watermark removal requires a Plus or Max plan.",
                 "feature": "remove_watermark",
+            },
+        )
+    if str(visualizer_style or "").strip().lower() in PREMIUM_VISUALIZER_MODES and sub_status.get("plan") not in {"plus", "pro", "max"}:
+        raise HTTPException(
+            status_code=402,
+            detail={
+                "message": "Premium visualizers need a Plus or Pro plan.",
+                "feature": "premium_visualizer",
+                "code": "needs_plan",
             },
         )
 
@@ -9706,6 +9723,7 @@ async def upload_to_youtube(
     image_flip_h: bool = Form(False),
     image_flip_v: bool = Form(False),
     image_pos_mode: str = Form("art"),
+    visualizer_style: Optional[str] = Form(None),
     current_user: dict = Depends(get_current_user)
 ):
     """Create a persisted YouTube upload job and return immediately."""
@@ -9751,6 +9769,7 @@ async def upload_to_youtube(
             image_flip_h=image_flip_h,
             image_flip_v=image_flip_v,
             image_pos_mode=image_pos_mode,
+            visualizer_style=visualizer_style,
         )
         job_doc = await _create_youtube_upload_job(current_user=current_user, payload=payload)
         logger.info(

@@ -38,6 +38,9 @@ export function useSubscription() {
   return s;
 }
 
+/** Your plan as last loaded, or null if it isn't known yet. */
+export const getSubscription = () => status;
+
 export function resetSubscription() {
   set(null);
   promptedFree = false;

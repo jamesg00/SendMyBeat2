@@ -6,7 +6,8 @@ import { Platform } from 'react-native';
 
 import * as api from '@/api/endpoints';
 import type { PickedFile, TagRun, UploadJob, YouTubeUploadOptions } from '@/api/endpoints';
-import { requireCredit } from '@/state/billing';
+import { getSubscription, openPaywall, requireCredit } from '@/state/billing';
+import { VIZ_DEFAULTS, getBaker, isProStyle, type BakeProgress, type VizSettings } from '@/state/visualizer';
 import { useDraft, type DraftDescription } from '@/state/draft';
 
 // Upload Studio lives here instead of in the screen, so closing the studio keeps the draft and
@@ -30,6 +31,7 @@ export type StudioSettings = {
   scale: number;
   rotation: number;
   noWatermark: boolean;
+  viz: VizSettings;
 };
 
 type Saved = StudioSettings & {
@@ -49,6 +51,7 @@ const DEFAULTS: StudioSettings = {
   scale: 1,
   rotation: 0,
   noWatermark: false,
+  viz: VIZ_DEFAULTS,
 };
 
 const persist = Platform.OS !== 'web';
@@ -86,7 +89,10 @@ type Studio = StudioSettings & {
   /** Something worth coming back to: picked files or an upload in flight or finished. */
   active: boolean;
   missing: string | null;
+  /** While the visualizer video is being made on the phone, before it's sent. */
+  bake: BakeProgress | null;
   set: (patch: Partial<StudioSettings>) => void;
+  setViz: (patch: Partial<VizSettings>) => void;
   open: () => void;
   pickAudio: () => Promise<void>;
   pickImage: () => Promise<void>;
@@ -103,7 +109,8 @@ const StudioContext = createContext<Studio | null>(null);
 export function StudioProvider({ children }: { children: ReactNode }) {
   const draft = useDraft();
   const [saved] = useState(loadSaved);
-  const [settings, setSettings] = useState<StudioSettings>(() => ({ ...DEFAULTS, ...saved }));
+  const [settings, setSettings] = useState<StudioSettings>(() => ({ ...DEFAULTS, ...saved, viz: { ...VIZ_DEFAULTS, ...saved?.viz } }));
+  const [bake, setBake] = useState<BakeProgress | null>(null);
   const [audio, setAudio] = useState<FileSlot | null>(saved?.audio ?? null);
   const [image, setImage] = useState<FileSlot | null>(saved?.image ?? null);
   // A request cut off by closing the app can't be resumed; a job id can.
@@ -212,8 +219,35 @@ export function StudioProvider({ children }: { children: ReactNode }) {
         : null;
 
   const publish = async () => {
-    if (missing || !audio?.fileId || !image?.fileId) return;
+    if (missing || !audio?.fileId || !image?.fileId || bake) return;
     if (!requireCredit('upload')) return;
+    const withViz = s.viz.enabled;
+    if (withViz && isProStyle(s.viz.mode)) {
+      const sub = getSubscription();
+      if (sub && !sub.is_subscribed) {
+        openPaywall('needs_plan', 'Premium visualizers need a Plus or Pro plan.');
+        return;
+      }
+    }
+    // With the visualizer on, the phone renders the whole video (artwork + visualizer) first,
+    // the same way the website does; the server then only adds the audio and the watermark.
+    let baked: { fileId: string; fps: number } | null = null;
+    if (withViz) {
+      const baker = getBaker();
+      if (!baker) {
+        setPhase({ kind: 'error', message: 'Open the preview so the visualizer can render, then try again.' });
+        return;
+      }
+      setBake({ stage: 'rendering', value: 0 });
+      try {
+        baked = await baker(s.fps === '60' ? '60' : '30', setBake);
+      } catch (e) {
+        setBake(null);
+        setPhase({ kind: 'error', message: e instanceof Error ? e.message : "The visualizer video couldn't be made." });
+        return;
+      }
+      setBake(null);
+    }
     setPhase({ kind: 'sending' });
     try {
       // The upload endpoint needs a saved description; starter templates get saved on first use.
@@ -230,12 +264,14 @@ export function StudioProvider({ children }: { children: ReactNode }) {
         tagsId: run?.id,
         privacy: s.privacy,
         audioFileId: audio.fileId,
-        imageFileId: image.fileId,
+        imageFileId: baked ? baked.fileId : image.fileId,
+        baked: !!baked,
+        visualizerStyle: baked ? s.viz.mode : undefined,
         aspectRatio: s.format,
         imageScale: s.scale,
         imageRotation: Math.round(s.rotation),
         background: s.bg,
-        renderFps: s.fps,
+        renderFps: baked ? (baked.fps === 60 ? '60' : '30') : s.fps,
         removeWatermark: s.noWatermark,
       });
       if (res.job?.id) {
@@ -278,7 +314,14 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     phase,
     active: !!audio || !!image || phase.kind !== 'idle',
     missing,
+    bake,
     set: (patch) => setSettings((cur) => ({ ...cur, ...patch })),
+    // A visualizer at 2 fps is a slideshow: turning it on moves the frame rate to 30.
+    setViz: (patch) =>
+      setSettings((cur) => {
+        const viz = { ...cur.viz, ...patch };
+        return { ...cur, viz, fps: viz.enabled && cur.fps === '2' ? '30' : cur.fps };
+      }),
     // Fresh drafts start with "<search> type beat" as the title.
     open: () => {
       if (!settings.title && draft.run) setSettings((cur) => ({ ...cur, title: `${draft.run!.query} type beat` }));

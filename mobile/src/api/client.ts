@@ -7,6 +7,9 @@ export const API_BASE = `${(process.env.EXPO_PUBLIC_API_URL || 'https://api.send
 const TOKEN_KEY = 'smb_token';
 let memoryToken: string | null = null;
 
+/** The signed-in token, for the visualizer page that uploads its video itself. */
+export const currentToken = () => memoryToken;
+
 // SecureStore is native-only; the web preview falls back to localStorage.
 export async function loadToken(): Promise<string | null> {
   if (Platform.OS === 'web') {
