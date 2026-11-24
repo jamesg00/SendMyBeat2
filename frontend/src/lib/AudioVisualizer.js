@@ -1,4 +1,6 @@
 import { STYLE_KIND, drawBlob, drawDotRing, drawMirrorBars, drawNcsRing, drawProximity, drawWave } from "@/lib/visualizerStyles";
+import { BeatEngine, createFrame, fillFromAnalyser } from "@/lib/viz2/engine";
+import { drawV2, isV2Mode, rgbArray } from "@/lib/viz2";
 const IS_MOBILE = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(max-width: 768px)").matches;
 
 // Magic Number Constants for better maintainability and readability
@@ -204,6 +206,13 @@ export default class AudioVisualizer {
     this.pixelScale = 1;
     this.stepAccumulator = 0;
     this.analysisProvider = null;
+    // New styles (viz2): a frame from the beat engine, per-style state, and where frames come from.
+    this.beatProvider = null;
+    this.v2Frame = createFrame();
+    this.v2Out = createFrame();
+    this.v2State = {};
+    this.v2Engine = null;
+    this.v2Time = 0;
     this.seedRandom(0x5eed1e55);
 
     this.resize = this.resize.bind(this);
@@ -282,6 +291,14 @@ export default class AudioVisualizer {
       if (!this.dataArray || this.dataArray.length !== bins) this.dataArray = new Uint8Array(bins);
     }
     this.buildBinMap();
+  }
+
+  /**
+   * Where the new styles get their frames: a function that fills a frame (engine.js createFrame)
+   * from the decoded beat and returns true. Without one they read the live analyser.
+   */
+  setBeatProvider(provider) {
+    this.beatProvider = provider || null;
   }
 
   attachCanvas(nextCanvas) {
@@ -567,7 +584,8 @@ export default class AudioVisualizer {
     const cssW = Math.floor(rect.width || this.canvas.clientWidth || 0);
     const cssH = Math.floor(rect.height || this.canvas.clientHeight || 0);
     if (!cssW || !cssH) return;
-    const dpr = window.devicePixelRatio || 1;
+    // Past 2x (1.5x on phones) the picture looks the same and every frame costs a lot more.
+    const dpr = Math.min(window.devicePixelRatio || 1, IS_MOBILE ? 1.5 : 2);
     this.canvas.width = Math.max(1, Math.floor(cssW * dpr));
     this.canvas.height = Math.max(1, Math.floor(cssH * dpr));
     if (this.designW && this.designH) {
@@ -1048,6 +1066,66 @@ export default class AudioVisualizer {
     return 1 + amount * 0.05 * (this.framePulse || 0);
   }
 
+  /** One frame of a new style: fill the beat frame, scale it by Reactivity, draw. */
+  renderV2(dt, w, h) {
+    const c = this.ctx;
+    const o = this.options;
+    const A = this.v2Frame;
+    this.v2Time += dt;
+    const filled = this.beatProvider ? this.beatProvider(A) !== false : false;
+    if (!filled) {
+      if (!this.v2Engine) this.v2Engine = new BeatEngine();
+      fillFromAnalyser(this.v2Engine, A, this.analyser, this.dataArray, dt, this.v2Time, Boolean(this.analyser) && this.running);
+    }
+    // Reactivity 0.5x to 2x scales levels and hit sizes, on a copy so the source stays untouched.
+    const gain = Math.max(0.25, Math.min(2.5, (o.gain ?? 0.8) / 0.8));
+    const out = this.v2Out;
+    for (let i = 0; i < A.spec.length; i += 1) {
+      out.spec[i] = Math.min(1, A.spec[i] * gain);
+      out.specFast[i] = Math.min(1, A.specFast[i] * gain);
+    }
+    out.wave = A.wave;
+    out.t = A.t;
+    out.dt = dt;
+    out.live = A.live;
+    out.low = Math.min(1, A.low * gain);
+    out.mid = Math.min(1, A.mid * gain);
+    out.high = Math.min(1, A.high * gain);
+    out.energy = Math.min(1, A.energy * gain);
+    out.kickHit = A.kickHit;
+    out.snareHit = A.snareHit;
+    out.hatHit = A.hatHit;
+    out.kick = Math.min(1, A.kick * gain);
+    out.snare = Math.min(1, A.snare * gain);
+    out.hat = Math.min(1, A.hat * gain);
+    out.kickStrength = Math.min(1, A.kickStrength * gain);
+    out.snareStrength = Math.min(1, A.snareStrength * gain);
+    out.hatStrength = Math.min(1, A.hatStrength * gain);
+
+    const mode = o.mode;
+    if (!this.v2State[mode]) this.v2State[mode] = {};
+    const state = this.v2State[mode];
+    state.dpr = this.pixelScale || 1;
+    c.save();
+    drawV2(c, mode, w, h, out, state, dt, {
+      primary: rgbArray(o.spectrumColor),
+      secondary: rgbArray(o.particleColor),
+      user: rgbArray(o.spectrumColor),
+      cover: this.centerImage,
+      fill: o.fillCenter === "white" ? "color" : o.fillCenter,
+      fillColor: rgbArray(o.fillCenterColor),
+      ring: o.spectrumBorderEnabled !== false,
+      radius: o.radius,
+      reach: o.maxBarLength,
+    });
+    c.restore();
+    c.globalCompositeOperation = "source-over";
+    c.globalAlpha = 1;
+    // The artwork zoom follows the kick.
+    this.framePulse = this.lerp(this.framePulse || 0, out.kick, 18, dt);
+    if (o.fxVignette) this.drawVignette();
+  }
+
   /** Advance the simulation by dt seconds and draw one frame. */
   renderFrame(dt) {
     const c = this.ctx;
@@ -1058,6 +1136,11 @@ export default class AudioVisualizer {
     c.globalCompositeOperation = "source-over";
     // Keep the visualizer transparent so it does not darken the background image.
     c.clearRect(0, 0, w, h);
+
+    if (isV2Mode(this.options.mode)) {
+      this.renderV2(dt, w, h);
+      return;
+    }
 
     const bars = this.computeBars();
 

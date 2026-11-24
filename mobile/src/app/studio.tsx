@@ -11,11 +11,14 @@ import * as api from '@/api/endpoints';
 import type { TagRun, YouTubeUploadOptions } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
 import { Checklist } from '@/components/checklist';
+import { VisualizerPreview } from '@/components/visualizer-preview';
 import { DescriptionEditor, TagEditor } from '@/components/editors';
 import { usePlan } from '@/components/pros';
 import { Button, Card, ListGroup, ListRow, Meter, PlayPauseIcon, Segmented, useUiStyles } from '@/components/ui';
 import { useDraft } from '@/state/draft';
+import { useSubscription } from '@/state/billing';
 import { useStudio, type FileSlot, type Phase } from '@/state/studio';
+import { COLOURS, COLOURS_2, VIZ_STYLES, iconUrl, reportPlayer, type VizSettings } from '@/state/visualizer';
 import { F, R, display, font, makeStyles, useColors } from '@/theme';
 
 type Tool = 'details' | 'look';
@@ -142,12 +145,13 @@ function Editor() {
   const ui = useUiStyles();
   const studio = useStudio();
   const [tool, setTool] = useState<Tool>('details');
-  const { audio, image, format, fps, bg, scale, rotation, noWatermark, phase, missing, set } = studio;
+  const { audio, image, format, fps, bg, scale, rotation, noWatermark, phase, missing, set, viz, bake } = studio;
   const { run, description } = useDraft();
+  const bakeLabel = bake ? `${bake.stage === 'rendering' ? 'Rendering visualizer' : 'Sending video'} ${Math.round(bake.value * 100)}%` : null;
 
   return (
     <>
-      <Preview image={image} format={format} fps={fps} bg={bg} scale={scale} rotation={rotation} />
+      <Preview image={image} audio={audio} viz={viz} format={format} fps={fps} bg={bg} scale={scale} rotation={rotation} />
       {audio ? <Player key={audio.uri} uri={audio.uri} /> : null}
 
       <Segmented
@@ -161,6 +165,8 @@ function Editor() {
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ gap: 12, paddingBottom: 12 }} showsVerticalScrollIndicator={false}>
         {tool === 'details' && <DetailsForm />}
+
+        {tool === 'look' && <VisualizerCard />}
 
         {tool === 'look' && (
           <Card>
@@ -177,7 +183,11 @@ function Editor() {
               { value: '30', label: '30' },
               { value: '60', label: '60' },
             ]} />
-            <Text style={s.muted}>2 fps is best for still cover art and uploads much faster. Use 30/60 for GIF artwork.</Text>
+            <Text style={s.muted}>
+              {viz.enabled
+                ? 'With the visualizer on, videos render at 30 or 60 fps.'
+                : '2 fps is best for still cover art and uploads much faster. Use 30/60 for GIF artwork.'}
+            </Text>
             <Text style={ui.sectionLabel}>Background</Text>
             <Segmented compact value={bg} onChange={(v) => set({ bg: v })} options={[
               { value: 'black', label: 'Black' },
@@ -213,14 +223,16 @@ function Editor() {
           ]}
         />
         {phase.kind === 'error' ? <Text style={[s.muted, { color: C.danger, textAlign: 'center' }]}>{phase.message}</Text> : null}
+        {bake ? <Meter value={bake.value} height={4} /> : null}
         <Button
-          title={missing ?? (phase.kind === 'error' ? 'Try again' : 'Upload to YouTube')}
-          variant={missing ? 'secondary' : 'primary'}
-          onPress={missing ? undefined : studio.publish}
+          title={bakeLabel ?? missing ?? (phase.kind === 'error' ? 'Try again' : 'Upload to YouTube')}
+          variant={missing || bake ? 'secondary' : 'primary'}
+          onPress={missing || bake ? undefined : studio.publish}
         />
         <Text style={s.summary}>
-          mp4 · {RESOLUTION[format]} · {fps} fps · {studio.privacy}
+          mp4 · {RESOLUTION[format]} · {viz.enabled ? (fps === '60' ? '60' : '30') : fps} fps{viz.enabled ? ' · visualizer' : ''} · {studio.privacy}
         </Text>
+        {bake ? <Text style={[s.muted, { textAlign: 'center' }]}>Keep the app open while the video renders.</Text> : null}
       </View>
     </>
   );
@@ -397,6 +409,8 @@ function FileField({ label, hint, slot, onPick }: { label: string; hint: string;
 
 function Preview({
   image,
+  audio,
+  viz,
   format,
   fps,
   bg,
@@ -404,6 +418,8 @@ function Preview({
   rotation,
 }: {
   image: FileSlot | null;
+  audio: FileSlot | null;
+  viz: VizSettings;
   format: YouTubeUploadOptions['aspectRatio'];
   fps: string;
   bg: YouTubeUploadOptions['background'];
@@ -412,6 +428,19 @@ function Preview({
 }) {
   const s = useStyles();
   const ratio = ASPECT[format];
+  // With the visualizer on, the website's renderer draws the artwork and the visualizer together.
+  if (viz.enabled && image && audio) {
+    return (
+      <View style={s.preview}>
+        <VisualizerPreview audio={audio} image={image} format={format} bg={bg} scale={scale} rotation={rotation} viz={viz} />
+        <View style={s.badge}>
+          <Text style={s.badgeText}>
+            {format} · {fps === '60' ? '60' : '30'} fps
+          </Text>
+        </View>
+      </View>
+    );
+  }
   return (
     <View style={s.preview}>
       <View style={[s.frame, { aspectRatio: ratio, backgroundColor: bg === 'white' ? '#FFFFFF' : '#000000' }, ratio >= 1 ? { width: '100%' } : { height: '100%' }]}>
@@ -451,8 +480,14 @@ function bars(seed: string, n: number) {
 function Player({ uri }: { uri: string }) {
   const C = useColors();
   const s = useStyles();
-  const player = useAudioPlayer(uri);
+  const player = useAudioPlayer(uri, { updateInterval: 250 });
   const status = useAudioPlayerStatus(player);
+
+  // The visualizer preview follows the player.
+  useEffect(() => {
+    reportPlayer(status.currentTime, status.playing);
+  }, [status.currentTime, status.playing]);
+  useEffect(() => () => reportPlayer(0, false), []);
   const [width, setWidth] = useState(0);
   const [heights] = useState(() => bars(uri, 44));
 
@@ -590,6 +625,112 @@ function DoneView({ phase }: { phase: Extract<Phase, { kind: 'done' }> }) {
   );
 }
 
+// Visualizer: on or off, the style, its colours and how hard it reacts.
+function VisualizerCard() {
+  const C = useColors();
+  const s = useStyles();
+  const ui = useUiStyles();
+  const studio = useStudio();
+  const sub = useSubscription();
+  const { viz, setViz } = studio;
+  const proAllowed = !sub || sub.is_subscribed;
+  const current = VIZ_STYLES.find((st) => st.mode === viz.mode) ?? VIZ_STYLES[0];
+  const pick = (mode: string, pro: boolean) =>
+    setViz({ mode, color: pro ? COLOURS[1] : COLOURS[0], color2: COLOURS_2[0] });
+
+  return (
+    <Card>
+      <Row label="Visualizer">
+        <Switch
+          value={viz.enabled}
+          onValueChange={(v) => setViz({ enabled: v })}
+          trackColor={{ false: C.card2, true: C.acc }}
+          thumbColor="#FFFFFF"
+          ios_backgroundColor={C.card2}
+          accessibilityLabel="Visualizer"
+        />
+      </Row>
+      {!viz.enabled ? (
+        <Text style={s.muted}>Adds a visualizer that moves with your beat. It renders on your phone before uploading.</Text>
+      ) : (
+        <>
+          {[false, true].map((pro) => (
+            <View key={String(pro)} style={{ gap: 8 }}>
+              <Text style={ui.sectionLabel}>{pro ? (proAllowed ? 'Premium' : 'Premium · Plus and Pro') : 'Free'}</Text>
+              <View style={s.vizGrid}>
+                {VIZ_STYLES.filter((st) => st.pro === pro).map((st) => {
+                  const active = st.mode === viz.mode;
+                  return (
+                    <Pressable
+                      key={st.mode}
+                      onPress={() => pick(st.mode, st.pro)}
+                      style={({ pressed }) => [s.vizTile, active && s.vizTileOn, pressed && { opacity: 0.7 }]}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected: active }}
+                      accessibilityLabel={`${st.name}${st.pro && !proAllowed ? ', premium style' : ''}`}>
+                      {st.icon ? (
+                        <Image source={{ uri: iconUrl(st.mode) }} style={s.vizIcon} contentFit="contain" />
+                      ) : (
+                        <View style={s.vizIcon} />
+                      )}
+                      <Text style={[s.vizName, active && { color: C.text }]} numberOfLines={1}>
+                        {st.name}
+                      </Text>
+                      {st.pro && !proAllowed ? <Text style={s.vizLock}>PAID</Text> : null}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          ))}
+          {current.pro && !proAllowed ? (
+            <Text style={s.muted}>You can try premium styles in the preview. Uploading with one needs Plus or Pro.</Text>
+          ) : null}
+          <Text style={ui.sectionLabel}>{current.pro ? 'Main colour' : 'Colour'}</Text>
+          <ColourRow colours={COLOURS} value={viz.color} onChange={(color) => setViz({ color })} />
+          {current.pro ? (
+            <>
+              <Text style={ui.sectionLabel}>Second colour</Text>
+              <ColourRow colours={COLOURS_2} value={viz.color2} onChange={(color2) => setViz({ color2 })} />
+            </>
+          ) : null}
+          <View style={s.sliderGrid}>
+            <SliderField
+              label="Reactivity"
+              value={viz.intensity}
+              display={`${viz.intensity.toFixed(2)}x`}
+              min={0.5}
+              max={2}
+              step={0.05}
+              onChange={(intensity) => setViz({ intensity })}
+            />
+          </View>
+          <Text style={s.muted}>Your artwork goes in the middle of styles that have a centre. Rendering takes about as long as the beat on newer phones.</Text>
+        </>
+      )}
+    </Card>
+  );
+}
+
+function ColourRow({ colours, value, onChange }: { colours: string[]; value: string; onChange: (c: string) => void }) {
+  const C = useColors();
+  return (
+    <View style={{ flexDirection: 'row', gap: 10 }}>
+      {colours.map((c) => (
+        <Pressable
+          key={c}
+          onPress={() => onChange(c)}
+          hitSlop={4}
+          accessibilityRole="radio"
+          accessibilityState={{ selected: c === value }}
+          accessibilityLabel={`Colour ${c}`}
+          style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: c, borderWidth: c === value ? 2 : 1, borderColor: c === value ? C.text : C.line }}
+        />
+      ))}
+    </View>
+  );
+}
+
 function Row({ label, children }: { label: string; children: ReactNode }) {
   const C = useColors();
   return (
@@ -688,6 +829,24 @@ const useStyles = makeStyles((C) => ({
   monoSub: { color: C.t3, fontSize: 13, fontFamily: F.mono },
   sliderGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 6 },
   summary: { textAlign: 'center', color: C.t3, fontSize: 11, fontFamily: F.mono },
+  vizGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  vizTile: {
+    width: '23%',
+    flexGrow: 1,
+    maxWidth: '24%',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 2,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: C.line,
+    backgroundColor: C.card2,
+  },
+  vizTileOn: { borderColor: C.acc },
+  vizIcon: { width: 44, height: 28 },
+  vizName: { color: C.t2, fontSize: 11, ...font('500') },
+  vizLock: { position: 'absolute', top: 4, right: 4, color: C.t3, fontSize: 8, fontFamily: F.mono },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   statusDot: { width: 8, height: 8, borderRadius: 4 },
   renderTitle: { color: C.text, fontSize: 24, lineHeight: 30, letterSpacing: -0.6, ...font('600') },

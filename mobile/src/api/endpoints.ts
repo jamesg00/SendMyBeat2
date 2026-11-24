@@ -254,6 +254,10 @@ export type YouTubeUploadOptions = {
   background: 'black' | 'white' | 'blurred';
   renderFps: '2' | '30' | '60';
   removeWatermark: boolean;
+  /** imageFileId is a video the phone already rendered with the visualizer: pass it through as is. */
+  baked?: boolean;
+  /** The visualizer style it was rendered with (the server checks Pro styles against your plan). */
+  visualizerStyle?: string;
 };
 
 export type UploadJob = {
@@ -265,7 +269,8 @@ export type UploadJob = {
   result?: { video_url?: string; message?: string };
 };
 
-// Same form fields the website's UploadStudio sends (visualizer off; the server renders the artwork).
+// Same form fields the website's UploadStudio sends. With a rendered visualizer video the
+// transforms are neutral, so the server passes the video through and only adds audio.
 export async function startYouTubeUpload(o: YouTubeUploadOptions) {
   const form = new FormData();
   form.append('title', o.title);
@@ -277,16 +282,18 @@ export async function startYouTubeUpload(o: YouTubeUploadOptions) {
   if (o.descriptionOverride) form.append('description_override', o.descriptionOverride);
   form.append('remove_watermark', String(o.removeWatermark));
   form.append('aspect_ratio', o.aspectRatio);
-  form.append('image_scale', String(o.imageScale));
-  form.append('image_scale_x', String(o.imageScale));
-  form.append('image_scale_y', String(o.imageScale));
+  const scale = o.baked ? '1' : String(o.imageScale);
+  form.append('image_scale', scale);
+  form.append('image_scale_x', scale);
+  form.append('image_scale_y', scale);
   form.append('image_pos_x', '0');
   form.append('image_pos_y', '0');
-  form.append('image_rotation', String(o.imageRotation));
+  form.append('image_rotation', o.baked ? '0' : String(o.imageRotation));
   form.append('background_color', o.background);
   form.append('render_fps', o.renderFps);
   form.append('visualizer_enabled', 'false');
   form.append('visualizer_settings', '{}');
+  if (o.visualizerStyle) form.append('visualizer_style', o.visualizerStyle);
   return api<{ job?: UploadJob; video_url?: string; message?: string }>('/youtube/upload', { body: form });
 }
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import axios from "axios";
 import { toast } from "sonner";
@@ -19,6 +19,8 @@ import { getMediaAspectRatio, getPreviewImageTransform } from "@/lib/mediaLayout
 import FreeTransform, { SCALE_MAX, SCALE_MIN } from "@/components/upload-studio/FreeTransform";
 import { OfflineAnalyser, decodeBeat } from "@/lib/offlineAnalysis";
 import { canExportOffline, exportVisualizerVideo } from "@/lib/visualizerExport";
+import { buildBeatTrack } from "@/lib/viz2/track";
+import { isPremiumMode, isV2Mode } from "@/lib/viz2";
 import { buildVisualizerOptions, designSizeFor, outputDimsFor } from "@/lib/visualizerOptions";
 import {
   AUDIO_EXTENSIONS,
@@ -28,6 +30,7 @@ import {
   DEFAULT_VIDEO_RENDER_FPS,
   DEFAULT_VISUALIZER_SETTINGS,
   VISUALIZER_PRESETS,
+  canUsePremiumVisualizers,
 } from "@/lib/constants";
 
 const SUPPORTED_IMAGE_EXTENSIONS = [...IMAGE_EXTENSIONS, ".gif"];
@@ -62,6 +65,21 @@ const UploadStudio = ({
   const [studioDismissed, setStudioDismissed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  // On a phone, once the keyboard has opened, scroll the field that was tapped into the middle of
+  // the drawer so it isn't hidden behind the keyboard or the sticky upload bar.
+  const keepFieldInView = useCallback((event) => {
+    const field = event.target;
+    if (!field?.matches?.("input, textarea, select, [contenteditable='true']")) return;
+    const reveal = () => field.scrollIntoView({ block: "center", behavior: "smooth" });
+    const vv = window.visualViewport;
+    if (vv && vv.height >= window.innerHeight - 60) {
+      // Keyboard not up yet: wait for it, with a fallback in case no resize comes.
+      const timer = window.setTimeout(reveal, 450);
+      vv.addEventListener("resize", () => { window.clearTimeout(timer); reveal(); }, { once: true });
+    } else {
+      window.requestAnimationFrame(reveal);
+    }
+  }, []);
 
   // Files
   const [audioFile, setAudioFile] = useState(null);
@@ -139,6 +157,8 @@ const UploadStudio = ({
   const [vizBakeProgress, setVizBakeProgress] = useState(0); // 0..1 within the current stage
   // The decoded beat, analysed for the visualizer (preview and export read the same numbers).
   const [beatSpectrum, setBeatSpectrum] = useState(null);
+  // Beat-engine frames for the new styles, built once from the same decoded beat.
+  const [beatTrack, setBeatTrack] = useState(null);
   const previewBackdropRef = useRef(null);
 
   const hasAudioReady = Boolean(audioFileId);
@@ -342,18 +362,33 @@ const UploadStudio = ({
   useEffect(() => {
     if (!visualizerEnabled || !audioFile) {
       setBeatSpectrum(null);
+      setBeatTrack(null);
       return undefined;
     }
     let alive = true;
+    const abort = new AbortController();
     decodeBeat(audioFile).then(
-      (beat) => alive && setBeatSpectrum(new OfflineAnalyser(beat)),
+      (beat) => {
+        if (!alive) return;
+        setBeatSpectrum(new OfflineAnalyser(beat));
+        buildBeatTrack(beat, { signal: abort.signal }).then(
+          (track) => alive && setBeatTrack(track),
+          (error) => {
+            if (error?.name !== "AbortError") console.error("Could not analyse the beat for the new visualizers", error);
+          },
+        );
+      },
       (error) => {
         console.error("Could not decode the beat for the visualizer", error);
-        if (alive) setBeatSpectrum(null);
+        if (alive) {
+          setBeatSpectrum(null);
+          setBeatTrack(null);
+        }
       },
     );
     return () => {
       alive = false;
+      abort.abort();
     };
   }, [visualizerEnabled, audioFile]);
 
@@ -1013,8 +1048,14 @@ const UploadStudio = ({
         setVizBakeStatus("rendering");
         setVizBakeProgress(0);
         const source = beatSpectrum || new OfflineAnalyser(await decodeBeat(audioFile));
+        // The new styles need the beat-engine track; build it now if the preview hadn't yet.
+        let track = beatTrack;
+        if (!track && isV2Mode(visualizerSettings.mode)) {
+          track = await buildBeatTrack({ samples: source.samples, sampleRate: source.sampleRate, duration: source.duration }, { signal });
+        }
         const result = await exportVisualizerVideo({
           analyser: source.clone(),
+          beatTrack: track,
           options: drawingOptions,
           size: [targetW, targetH],
           designSize: designSizeFor(videoAspectRatio),
@@ -1060,6 +1101,7 @@ const UploadStudio = ({
       // Exact output size, laid out in the same design size as the preview.
       bakingViz.setDesignSize(...designSizeFor(videoAspectRatio));
       bakingViz.setOutputSize(targetW, targetH);
+      if (beatTrack) bakingViz.setBeatProvider((A) => beatTrack.fillAtTime(audioEl.currentTime, A));
       const reusedLiveAnalyser = bakingViz.attachAudioAnalysisFrom?.(visualizerRef.current, audioEl);
       if (!reusedLiveAnalyser) {
         await bakingViz.connectMediaElement(audioEl);
@@ -1249,6 +1291,13 @@ const UploadStudio = ({
       return;
     }
 
+    // Premium styles are for paid plans (Plus, and Pro which is the max plan). The server checks this too.
+    if (visualizerEnabled && isPremiumMode(visualizerSettings.mode) && !canUsePremiumVisualizers(subscriptionStatus)) {
+      toast.error("That visualizer is a premium style. Upgrade to Plus or Pro to upload with it, or pick a free style.");
+      onUpgrade();
+      return;
+    }
+
     const controller = new AbortController();
     setUploadController(controller);
     setUploadingToYouTube(true);
@@ -1303,6 +1352,7 @@ const UploadStudio = ({
       formData.append('image_rotation', '0');
       formData.append('visualizer_enabled', 'false');
       formData.append('visualizer_settings', '{}');
+      formData.append('visualizer_style', visualizerSettings.mode || '');
     } else {
       formData.append('image_scale', String((imageScaleX + imageScaleY) / 2));
       formData.append('image_scale_x', String(imageScaleX));
@@ -1344,6 +1394,8 @@ const UploadStudio = ({
         if (error.response.data.detail?.feature === 'remove_watermark') {
           toast.error("Watermark removal is Pro only!");
           setRemoveWatermark(false);
+        } else if (error.response.data.detail?.feature === 'premium_visualizer') {
+          toast.error("That visualizer is a premium style. Upgrade to Plus or Pro to upload with it.");
         } else {
           toast.error("Daily upload limit reached!");
         }
@@ -1564,6 +1616,7 @@ const UploadStudio = ({
         />
 
         <VisualizerSettings
+          subscriptionStatus={subscriptionStatus}
           visualizerEnabled={visualizerEnabled}
           setVisualizerEnabled={setVisualizerEnabled}
           visualizerSettings={visualizerSettings}
@@ -1773,6 +1826,7 @@ const UploadStudio = ({
                  studioOpen={studioOpen}
                  previewDims={previewDims}
                  analysis={beatSpectrum}
+                 beatTrack={beatTrack}
                  aspectRatio={videoAspectRatio}
                  backdropRef={previewBackdropRef}
                  audioPreviewUrl={audioPreviewUrl}
@@ -1780,6 +1834,12 @@ const UploadStudio = ({
                  centerVisualizerImageUrl={centerVisualizerImageUrl}
                  spectrumRecordImageUrl={spectrumRecordImageUrl}
                />
+
+               {visualizerEnabled && isPremiumMode(visualizerSettings.mode) && !canUsePremiumVisualizers(subscriptionStatus) ? (
+                  <button type="button" className="viz-pro-chip" onClick={onUpgrade}>
+                     Premium style · Upgrade to upload
+                  </button>
+               ) : null}
 
                {!subscriptionStatus?.is_subscribed && !removeWatermark && (
                   <div className="absolute top-2 left-0 right-0 text-center pointer-events-none">
@@ -1866,13 +1926,16 @@ const UploadStudio = ({
 
          {/* Controls Section: Desktop (Sidebar) vs Mobile (Drawer) */}
          {isMobile ? (
-             <Drawer open={mobileDrawerOpen} onOpenChange={setMobileDrawerOpen}>
-                <DrawerContent className="max-h-[85vh] border-[var(--border-color)] bg-[var(--card-bg)] text-[var(--text-primary)]">
+             // repositionInputs off: the drawer's own keyboard handling moves and resizes it on iPhone
+             // Safari and leaves the field you tapped off screen. Safari's own scrolling, plus the
+             // focus handler below, keeps the field in view instead.
+             <Drawer open={mobileDrawerOpen} onOpenChange={setMobileDrawerOpen} repositionInputs={false}>
+                <DrawerContent className="us-drawer border-[var(--border-color)] bg-[var(--card-bg)] text-[var(--text-primary)]">
                     <DrawerHeader>
                         <DrawerTitle>Upload settings</DrawerTitle>
                         <DrawerDescription>Details, image, video and visualizer</DrawerDescription>
                     </DrawerHeader>
-                    <div className="us-drawer-body px-4 pb-8 overflow-y-auto bg-[var(--card-bg)] text-[var(--text-primary)]">
+                    <div className="us-drawer-body flex-1 min-h-0 px-4 pb-8 overflow-y-auto overscroll-contain bg-[var(--card-bg)] text-[var(--text-primary)]" onFocus={keepFieldInView}>
                        {controlsMarkup}
                     </div>
                 </DrawerContent>
