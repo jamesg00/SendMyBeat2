@@ -5,6 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import StudioSection, { StudioSeg } from "@/components/upload-studio/StudioSection";
+import TitleHelper from "@/components/workflow/TitleHelper";
 
 // Details: what YouTube shows for the video. Title, description template, tags and privacy.
 
@@ -23,6 +24,7 @@ const MetadataEditor = ({
   setUploadDescriptionText,
   privacyStatus,
   setPrivacyStatus,
+  beatName = "",
 }) => {
   const [tagsPreviewOpen, setTagsPreviewOpen] = useState(false);
   const [showDescription, setShowDescription] = useState(false);
@@ -47,6 +49,7 @@ const MetadataEditor = ({
         </span>
         <Input value={uploadTitle} onChange={(e) => setUploadTitle(e.target.value)} placeholder="e.g. FREE Future Type Beat 2026 – “Pluto”" className="us-input us-input--lg" />
       </label>
+      <TitleHelper tagRunId={selectedTagsId} beatName={beatName} title={uploadTitle} onPickTitle={setUploadTitle} />
 
       <div className="us-grid2">
         <div className="us-field">

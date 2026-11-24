@@ -135,6 +135,8 @@ export function DetailsTab() {
         />
       </Field>
 
+      <TitleChecks title={studio.title} runId={run?.id} />
+
       {run ? <TitleIdeas runId={run.id} beatName={beatNameOf(studio.audio?.name)} onPick={(title) => studio.set({ title })} /> : null}
 
       <View style={s.panel}>
@@ -289,11 +291,54 @@ function TitleIdeas({ runId, beatName, onPick }: { runId: string; beatName: stri
             accessibilityHint="Uses this as the video title">
             <Text style={s.ideaTitle}>{idea.title}</Text>
             <Text style={s.mono}>
+              {idea.score != null ? `Score ${idea.score} · ` : ''}
               {idea.keywords.length} keyword{idea.keywords.length === 1 ? '' : 's'} · {idea.length}/100
             </Text>
           </Pressable>
         ))}
       </View>
+    </View>
+  );
+}
+
+// Live checks on the typed title, a moment after typing stops: artist first, length,
+// the run's top keyword, the beat name. Hidden until there is a title, and if the server can't score it.
+function TitleChecks({ title, runId }: { title: string; runId?: string }) {
+  const C = useColors();
+  const s = useStyles();
+  // Keep the last good result on screen while a new check is on its way, so it doesn't flicker.
+  const [result, setResult] = useState<api.TitleScore | null>(null);
+  const trimmed = title.trim();
+
+  useEffect(() => {
+    if (!trimmed) return;
+    let alive = true;
+    const timer = setTimeout(() => {
+      api.scoreTitle(trimmed, runId).then(
+        (r) => alive && setResult(r),
+        () => alive && setResult(null),
+      );
+    }, 400);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [trimmed, runId]);
+
+  if (!trimmed || !result?.checks) return null;
+  const misses = result.checks.filter((c) => !c.ok);
+  return (
+    <View style={[s.panel, s.checks]} accessibilityLabel={`Title score ${result.score}`}>
+      <Text style={s.checkScore}>
+        Title score <Text style={s.checkScoreNum}>{result.score}</Text>
+        {misses.length ? '' : ' · looks good'}
+      </Text>
+      {result.checks.map((c) => (
+        <View key={c.id} style={s.checkRow}>
+          <Text style={[s.checkMark, { color: c.ok ? C.acc : C.t3 }]}>{c.ok ? '✓' : '·'}</Text>
+          <Text style={[s.checkText, { color: c.ok ? C.t3 : C.text }]}>{c.message}</Text>
+        </View>
+      ))}
     </View>
   );
 }
@@ -934,6 +979,12 @@ const useStyles = makeStyles((C) => ({
   idea: { paddingHorizontal: 14, paddingVertical: 11, gap: 3 },
   divider: { borderBottomWidth: 1, borderBottomColor: C.lineSoft },
   ideaTitle: { color: C.text, fontSize: 14.5, lineHeight: 20, ...font() },
+  checks: { paddingHorizontal: 14, paddingVertical: 12, gap: 6 },
+  checkScore: { color: C.t2, fontSize: 13, ...font() },
+  checkScoreNum: { color: C.text, fontSize: 13, fontFamily: F.mono },
+  checkRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
+  checkMark: { width: 14, fontSize: 13, lineHeight: 18, fontFamily: F.mono },
+  checkText: { flex: 1, fontSize: 12.5, lineHeight: 18, ...font() },
   headRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   grid4: { flexDirection: 'row', gap: 8 },
   grid3: { flexDirection: 'row', gap: 8 },

@@ -119,9 +119,17 @@
     -->
         <title>SendMyBeat - AI-Powered Beat Distribution</title>
         
-        <!-- Google AdSense - Async loading (replace with your ca-pub-XXXXXXXXXXXX) -->
-        <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2777610112879824"
-            crossorigin="anonymous"></script>
+        <!-- Google AdSense, async. Not on /viz-embed: the mobile app shows that page inside its
+             Upload Studio, and an ad frame there takes over the preview. -->
+        <script>
+            if (!location.pathname.startsWith("/viz-embed")) {
+                var ads = document.createElement("script");
+                ads.async = true;
+                ads.crossOrigin = "anonymous";
+                ads.src = "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2777610112879824";
+                document.head.appendChild(ads);
+            }
+        </script>
     </head>
     <body>
         <noscript>You need to enable JavaScript to run this app.</noscript>

@@ -144,10 +144,15 @@ export const billingPortal = (returnUrl: string) =>
   api<{ url: string }>(`/subscription/portal?${new URLSearchParams({ return_url: returnUrl }).toString()}`, { method: 'POST' });
 export const tagHistory = () => api<TagRun[]>('/tags/history');
 export const deleteTagRun = (id: string) => api<unknown>(`/tags/history/${id}`, { method: 'DELETE' });
-export type TitleIdea = { title: string; keywords: string[]; coverage: number; length: number };
+export type TitleIdea = { title: string; keywords: string[]; coverage: number; length: number; score?: number };
 /** Video titles built from a run's best keywords (no credit used). */
 export const titleIdeas = (runId: string, beatName: string) =>
   api<{ titles: TitleIdea[] }>(`/tags/history/${runId}/titles?beat_name=${encodeURIComponent(beatName)}`);
+export type TitleCheck = { id: string; ok: boolean; message: string };
+export type TitleScore = { score: number; checks: TitleCheck[] };
+/** Scores a title against the chosen tag run: artist first, length, top keyword, beat name (no credit, no YouTube quota). */
+export const scoreTitle = (title: string, tagId?: string) =>
+  api<TitleScore>('/titles/score', { body: tagId ? { title, tag_id: tagId } : { title } });
 // Starts tag generation; returns either the finished run or a job to follow with pollJob.
 export const startTagGeneration = (query: string) =>
   api<{ job?: { id: string } } & Partial<TagRun>>('/tags/generate', { body: { query, custom_tags: [] } });

@@ -886,6 +886,29 @@ button.adm-btn-danger.adm-btn-danger:hover { background: color-mix(in srgb, var(
   .pro-card-actions { grid-template-columns: 1fr; }
 }
 
+/* Upload Studio › Details: title ideas from the tag run, and live title checks */
+.th { display: grid; gap: 12px; margin-top: -4px; }
+.th-label { font-size: 12.5px; color: var(--c-t3); }
+.th-ideas { display: grid; gap: 8px; }
+.th-chips { display: grid; gap: 6px; }
+.th-chip { all: unset; box-sizing: border-box; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 36px; padding: 6px 12px !important; border-radius: 8px; border: 1px solid var(--c-line); background: var(--c-card2); color: var(--c-t2); font-size: 13px; cursor: pointer; min-width: 0 !important; max-width: none !important; transition: border-color 0.15s var(--ease), color 0.15s var(--ease); }
+.th-chip:hover { color: var(--c-text); border-color: var(--c-t3); }
+.th-chip:focus-visible { outline: 2px solid var(--c-accline); outline-offset: 2px; }
+.th-chip.is-on { color: var(--c-text); border-color: var(--c-accline); }
+.th-chip-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.th-chip-score { flex: none; font: 12px var(--font-mono); color: var(--c-t3); font-variant-numeric: tabular-nums; }
+.th-checks { display: grid; gap: 6px; padding: 12px; border-radius: 10px; background: var(--c-card2); border: 1px solid var(--c-line); }
+.th-score { font-size: 13px; color: var(--c-t2); }
+.th-score b { font: 500 13px var(--font-mono); color: var(--c-text); font-variant-numeric: tabular-nums; }
+.th-allgood { color: var(--c-t3); }
+.th-checks ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.th-checks li { display: grid; grid-template-columns: 16px 1fr; gap: 8px; align-items: start; font-size: 12.5px; line-height: 1.45; }
+.th-checks li svg { margin-top: 2px; }
+.th-checks li.is-ok { color: var(--c-t3); }
+.th-checks li.is-ok svg { color: var(--c-acc); }
+.th-checks li.is-miss { color: var(--c-text); }
+.th-checks li.is-miss svg { color: var(--c-t3); }
+
 /* Shown over the preview when a free member tries a Pro visualizer. */
 .viz-pro-chip { position: absolute; right: 10px; bottom: 10px; z-index: 5; padding: 6px 11px; border-radius: 999px; border: 1px solid rgba(139, 255, 208, 0.45); background: rgba(10, 10, 10, 0.72); color: #8bffd0; font-size: 12px; font-weight: 600; cursor: pointer; backdrop-filter: blur(6px); }
 .viz-pro-chip:hover { background: rgba(10, 10, 10, 0.9); }

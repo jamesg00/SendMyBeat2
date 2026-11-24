@@ -1576,6 +1576,7 @@ const UploadStudio = ({
           setUploadDescriptionText={setUploadDescriptionText}
           privacyStatus={privacyStatus}
           setPrivacyStatus={setPrivacyStatus}
+          beatName={(audioFile?.name || "").replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim()}
         />
 
         <ImageEditorControls
