@@ -70,7 +70,7 @@ const StyleTile = ({ item, active, locked, onPick }) => (
     aria-checked={active}
     className={`vz-style ${active ? "is-active" : ""} ${locked ? "is-locked" : ""}`}
     onClick={onPick}
-    title={locked ? `${item.blurb}. Pro style: Plus or Max` : item.blurb}
+    title={locked ? `${item.blurb}. Premium style: Plus or Pro` : item.blurb}
   >
     {ICON_MODES.has(item.mode) ? (
       <img className="vz-style-icon" src={`/visualizer-icons/${item.mode}.png`} alt="" aria-hidden="true" loading="lazy" draggable="false" />
@@ -81,7 +81,7 @@ const StyleTile = ({ item, active, locked, onPick }) => (
     )}
     <b>{item.name}</b>
     {locked ? (
-      <span className="vz-style-lock" aria-label="Pro">
+      <span className="vz-style-lock" aria-label="Premium">
         <Lock className="h-3 w-3" aria-hidden="true" />
       </span>
     ) : null}
@@ -168,15 +168,15 @@ const VisualizerSettings = ({
                 <StyleTile key={item.mode} item={item} active={s.mode === item.mode} onPick={() => applyVisualizerPreset(item.preset)} />
               ))}
             </div>
-            <p className="us-label vz-pro-label">Pro{proAllowed ? "" : " · Plus and Max"}</p>
-            <div className="vz-styles" role="radiogroup" aria-label="Pro visualizer styles">
+            <p className="us-label vz-pro-label">Premium{proAllowed ? "" : " · Plus and Pro"}</p>
+            <div className="vz-styles" role="radiogroup" aria-label="Premium visualizer styles">
               {proStyles.map((item) => (
                 <StyleTile key={item.mode} item={item} active={s.mode === item.mode} locked={!proAllowed} onPick={() => applyVisualizerPreset(item.preset)} />
               ))}
             </div>
             <p className="us-hint">
               {style.blurb}. Picking a style resets it to its recommended look.
-              {premium && !proAllowed ? " You can try Pro styles here; uploading with one needs Plus or Max." : ""}
+              {premium && !proAllowed ? " You can try premium styles here; uploading with one needs Plus or Pro." : ""}
             </p>
           </Group>
 

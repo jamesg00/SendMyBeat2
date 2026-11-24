@@ -656,7 +656,7 @@ function VisualizerCard() {
         <>
           {[false, true].map((pro) => (
             <View key={String(pro)} style={{ gap: 8 }}>
-              <Text style={ui.sectionLabel}>{pro ? (proAllowed ? 'Pro' : 'Pro · Plus and Max') : 'Free'}</Text>
+              <Text style={ui.sectionLabel}>{pro ? (proAllowed ? 'Premium' : 'Premium · Plus and Pro') : 'Free'}</Text>
               <View style={s.vizGrid}>
                 {VIZ_STYLES.filter((st) => st.pro === pro).map((st) => {
                   const active = st.mode === viz.mode;
@@ -667,7 +667,7 @@ function VisualizerCard() {
                       style={({ pressed }) => [s.vizTile, active && s.vizTileOn, pressed && { opacity: 0.7 }]}
                       accessibilityRole="radio"
                       accessibilityState={{ selected: active }}
-                      accessibilityLabel={`${st.name}${st.pro && !proAllowed ? ', Pro style' : ''}`}>
+                      accessibilityLabel={`${st.name}${st.pro && !proAllowed ? ', premium style' : ''}`}>
                       {st.icon ? (
                         <Image source={{ uri: iconUrl(st.mode) }} style={s.vizIcon} contentFit="contain" />
                       ) : (
@@ -676,7 +676,7 @@ function VisualizerCard() {
                       <Text style={[s.vizName, active && { color: C.text }]} numberOfLines={1}>
                         {st.name}
                       </Text>
-                      {st.pro && !proAllowed ? <Text style={s.vizLock}>PRO</Text> : null}
+                      {st.pro && !proAllowed ? <Text style={s.vizLock}>PAID</Text> : null}
                     </Pressable>
                   );
                 })}
@@ -684,7 +684,7 @@ function VisualizerCard() {
             </View>
           ))}
           {current.pro && !proAllowed ? (
-            <Text style={s.muted}>You can try Pro styles in the preview. Uploading with one needs Plus or Max.</Text>
+            <Text style={s.muted}>You can try premium styles in the preview. Uploading with one needs Plus or Pro.</Text>
           ) : null}
           <Text style={ui.sectionLabel}>{current.pro ? 'Main colour' : 'Colour'}</Text>
           <ColourRow colours={COLOURS} value={viz.color} onChange={(color) => setViz({ color })} />

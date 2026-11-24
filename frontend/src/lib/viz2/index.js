@@ -1,4 +1,4 @@
-// The new visualizers: 13 Pro styles (Plus and Max) and the redrawn NCS, Monstercat, Spectrum and
+// The new visualizers: 13 premium styles (Plus and Pro plans) and the redrawn NCS, Monstercat, Spectrum and
 // Proximity, which stay free. All of them draw from the beat engine's frame (engine.js).
 
 import { STYLES, applyRuntime } from "./styles";

@@ -225,7 +225,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     if (withViz && isProStyle(s.viz.mode)) {
       const sub = getSubscription();
       if (sub && !sub.is_subscribed) {
-        openPaywall('needs_plan', 'Pro visualizers need a Plus or Max plan.');
+        openPaywall('needs_plan', 'Premium visualizers need a Plus or Pro plan.');
         return;
       }
     }

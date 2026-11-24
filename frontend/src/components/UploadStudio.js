@@ -1276,9 +1276,9 @@ const UploadStudio = ({
       return;
     }
 
-    // Pro styles are for Plus and Max. The server checks this too.
+    // Premium styles are for paid plans (Plus, and Pro which is the max plan). The server checks this too.
     if (visualizerEnabled && isPremiumMode(visualizerSettings.mode) && !canUsePremiumVisualizers(subscriptionStatus)) {
-      toast.error("That visualizer is a Pro style. Upgrade to Plus or Max to upload with it, or pick a free style.");
+      toast.error("That visualizer is a premium style. Upgrade to Plus or Pro to upload with it, or pick a free style.");
       onUpgrade();
       return;
     }
@@ -1380,7 +1380,7 @@ const UploadStudio = ({
           toast.error("Watermark removal is Pro only!");
           setRemoveWatermark(false);
         } else if (error.response.data.detail?.feature === 'premium_visualizer') {
-          toast.error("That visualizer is a Pro style. Upgrade to Plus or Max to upload with it.");
+          toast.error("That visualizer is a premium style. Upgrade to Plus or Pro to upload with it.");
         } else {
           toast.error("Daily upload limit reached!");
         }
@@ -1822,7 +1822,7 @@ const UploadStudio = ({
 
                {visualizerEnabled && isPremiumMode(visualizerSettings.mode) && !canUsePremiumVisualizers(subscriptionStatus) ? (
                   <button type="button" className="viz-pro-chip" onClick={onUpgrade}>
-                     Pro style · Upgrade to upload
+                     Premium style · Upgrade to upload
                   </button>
                ) : null}
 

@@ -3806,7 +3806,7 @@ async def _render_youtube_video(
             pass
 
 
-# Pro visualizers (Plus and Max). The browser bakes the video, so the server checks the style it declares.
+# Premium visualizers (paid plans: plus, and max which the app calls Pro). The browser bakes the video, so the server checks the style it declares.
 PREMIUM_VISUALIZER_MODES = frozenset({
     "ridgeline", "ring-ridges", "analyzer-dots", "dot-record", "dot-rings", "jelly-dots", "jelly",
     "waterfall", "dot-terrain", "terrain", "groove", "turntable", "terrain-sun",
@@ -3857,11 +3857,11 @@ async def _build_youtube_upload_job_payload(
                 "feature": "remove_watermark",
             },
         )
-    if str(visualizer_style or "").strip().lower() in PREMIUM_VISUALIZER_MODES and sub_status.get("plan") not in {"plus", "max"}:
+    if str(visualizer_style or "").strip().lower() in PREMIUM_VISUALIZER_MODES and sub_status.get("plan") not in {"plus", "pro", "max"}:
         raise HTTPException(
             status_code=402,
             detail={
-                "message": "Pro visualizers need a Plus or Max plan.",
+                "message": "Premium visualizers need a Plus or Pro plan.",
                 "feature": "premium_visualizer",
                 "code": "needs_plan",
             },

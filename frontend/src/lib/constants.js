@@ -199,7 +199,7 @@ export const VISUALIZER_PRESETS = {
   },
 };
 
-// The 13 Pro styles (Plus and Max plans). Each starts in mint and blue with the logo in the middle.
+// The 13 premium styles (paid plans: Plus, and Pro which is the max plan). Each starts in mint and blue with the logo in the middle.
 const PRO_STYLE_LIST = [
   ["ridgeline", "Ridgeline", "Stacked lines of the spectrum"],
   ["ring-ridges", "Ring Ridges", "Spectrum rings around your logo"],
@@ -234,7 +234,7 @@ for (const [mode] of PRO_STYLE_LIST) {
   };
 }
 
-/** Pro styles are for paying members (Plus or Max). */
+/** Premium styles are for paying members (Plus or Pro). */
 export const canUsePremiumVisualizers = (status) => Boolean(status?.is_subscribed);
 
 // The styles shown in the Visualizer tab, in order. `preset` is applied when you pick one.
