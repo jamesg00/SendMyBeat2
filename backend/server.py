@@ -5278,7 +5278,8 @@ async def login(user_data: UserLogin, request: Request):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
     # Verify password
-    if not await asyncio.to_thread(bcrypt.verify, user_data.password, user_doc['password_hash']):
+    password_hash = user_doc.get('password_hash')
+    if not password_hash or not await asyncio.to_thread(bcrypt.verify, user_data.password, password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
     # Generate token
@@ -9663,9 +9664,11 @@ async def check_thumbnail(
             allowed_types = {"image/jpeg", "image/png", "image/webp"}
             if file.content_type not in allowed_types:
                 raise HTTPException(status_code=400, detail="Invalid image type. Use JPG, PNG, or WEBP.")
-            image_bytes = await file.read()
+            image_bytes = await file.read(MAX_IMAGE_UPLOAD_BYTES + 1)
             if not image_bytes:
                 raise HTTPException(status_code=400, detail="No image provided for thumbnail check.")
+            if len(image_bytes) > MAX_IMAGE_UPLOAD_BYTES:
+                raise HTTPException(status_code=400, detail="Image is too large. Max size is 12MB.")
             image_bytes_b64 = base64.b64encode(image_bytes).decode("utf-8")
             image_mime = file.content_type or image_mime
         elif safe_image_file_id:
@@ -10206,15 +10209,29 @@ async def cancel_my_job(job_id: str, current_user: dict = Depends(get_current_us
     return {"success": True, "cancelled": True, "job": _sanitize_upload_job_doc(updated)}
 
 
+def _public_health_view(snapshot: dict[str, Any]) -> dict[str, Any]:
+    """What anyone on the internet may see. The raw database error (which can name hosts) and the
+    job queue and ops controls stay on the admin ops page."""
+    db_state = snapshot.get("db") if isinstance(snapshot.get("db"), dict) else {}
+    if db_state.get("error"):
+        logging.warning(f"Health check database error: {db_state.get('error')}")
+    return {
+        "status": snapshot.get("status"),
+        "ready": snapshot.get("ready"),
+        "timestamp": snapshot.get("timestamp"),
+        "db": {"ok": bool(db_state.get("ok"))},
+    }
+
+
 @api_router.get("/health")
 async def get_health():
     snapshot = await _build_health_snapshot()
-    return snapshot
+    return _public_health_view(snapshot)
 
 
 @api_router.get("/health/ready")
 async def get_health_ready():
-    snapshot = await _build_health_snapshot()
+    snapshot = _public_health_view(await _build_health_snapshot())
     if not snapshot.get("ready"):
         raise HTTPException(status_code=503, detail=snapshot)
     return snapshot
