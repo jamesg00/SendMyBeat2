@@ -598,7 +598,7 @@ const LandingPage = ({ setIsAuthenticated }) => {
     >
       <span className="lp-glow" aria-hidden="true" />
       <header className="lp-nav">
-        <a href="/" className="smb-wordmark lp-wordmark">SENDMYBEAT</a>
+        <a href="/" className="smb-wordmark smb-wordmark--icon lp-wordmark"><img src="/icon-192.png" className="smb-wordmark-icon" alt="" aria-hidden="true" width="22" height="22" />SENDMYBEAT</a>
         <nav className="lp-links" aria-label="Sections">
           <a href="#how" onClick={scrollTo("how")}>How it works</a>
           <a href="#features" onClick={scrollTo("features")}>Features</a>

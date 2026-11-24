@@ -37,7 +37,7 @@
         {
           "backgroundColor": "#060D09",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 170
         }
       ],
       "expo-secure-store",
@@ -48,7 +48,13 @@
         }
       ],
       "expo-audio",
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#7AE0DD"
+        }
+      ],
       [
         "expo-screen-orientation",
         {

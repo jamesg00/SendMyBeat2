@@ -97,7 +97,8 @@ const AppShell = ({
   return (
     <div className="smb-shell" data-testid="app-shell">
       <aside className="smb-side" aria-label="Main">
-        <a href="/dashboard" className="smb-wordmark smb-side-wordmark" onClick={select("workflow")}>
+        <a href="/dashboard" className="smb-wordmark smb-wordmark--icon smb-side-wordmark" onClick={select("workflow")}>
+          <img src="/icon-192.png" className="smb-wordmark-icon" alt="" aria-hidden="true" width="22" height="22" />
           SENDMYBEAT
         </a>
 
@@ -155,7 +156,7 @@ const AppShell = ({
 
       <div className="smb-main-wrap">
         <header className="smb-topbar">
-          <a href="/dashboard" className="smb-wordmark" onClick={select("workflow")}>SENDMYBEAT</a>
+          <a href="/dashboard" className="smb-wordmark smb-wordmark--icon" onClick={select("workflow")}><img src="/icon-192.png" className="smb-wordmark-icon" alt="" aria-hidden="true" width="22" height="22" />SENDMYBEAT</a>
           <div className="smb-topbar-right">
             {admin ? (
               <a href="/admin/costs" className={`smb-badge smb-admin-chip ${onAdminPage ? "is-active" : ""}`} onClick={openAdmin("/admin/costs")} aria-label="Admin">
