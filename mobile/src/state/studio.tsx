@@ -7,7 +7,7 @@ import { Platform } from 'react-native';
 import * as api from '@/api/endpoints';
 import type { PickedFile, TagRun, UploadJob, YouTubeUploadOptions } from '@/api/endpoints';
 import { getSubscription, openPaywall, requireCredit } from '@/state/billing';
-import { VIZ_DEFAULTS, getBaker, isProStyle, type BakeProgress, type VizSettings } from '@/state/visualizer';
+import { VIZ_DEFAULTS, getBaker, isProStyle, pickStyle, type BakeProgress, type VizSettings } from '@/state/visualizer';
 import { useDraft, type DraftDescription } from '@/state/draft';
 
 // Upload Studio lives here instead of in the screen, so closing the studio keeps the draft and
@@ -28,11 +28,53 @@ export type StudioSettings = {
   format: YouTubeUploadOptions['aspectRatio'];
   fps: YouTubeUploadOptions['renderFps'];
   bg: YouTubeUploadOptions['background'];
-  scale: number;
+  /** Artwork size as a multiple of fitting the frame, per axis (the same as the website's free transform). */
+  scaleX: number;
+  scaleY: number;
+  /** Artwork centre's offset from the frame centre, in half-frames. */
+  posX: number;
+  posY: number;
   rotation: number;
+  flipH: boolean;
+  flipV: boolean;
   noWatermark: boolean;
   viz: VizSettings;
+  /** This upload's description, when you've edited it here; null uses the chosen template as it is. */
+  descText: string | null;
+  /** Added to the end of the description as "BPM: 140 | Key: F minor". */
+  bpm: string;
+  musicKey: string;
+  /** A picture for the middle of the visualizer instead of the artwork (on this phone only). */
+  logo: { uri: string; name: string } | null;
 };
+
+/** The artwork's layout, which the Image tab can undo. */
+export type Transform = Pick<StudioSettings, 'scaleX' | 'scaleY' | 'posX' | 'posY' | 'rotation' | 'flipH' | 'flipV'>;
+export const FIT: Transform = { scaleX: 1, scaleY: 1, posX: 0, posY: 0, rotation: 0, flipH: false, flipV: false };
+
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+/** Keeps a layout inside what the server accepts. */
+export const clampTransform = (t: Transform): Transform => ({
+  ...t,
+  scaleX: clamp(t.scaleX, 0.05, 5),
+  scaleY: clamp(t.scaleY, 0.05, 5),
+  posX: clamp(t.posX, -2, 2),
+  posY: clamp(t.posY, -2, 2),
+  rotation: clamp(t.rotation, -180, 180),
+});
+
+/** The website's beat details line: old BPM/Key lines are taken out and a fresh one goes at the end. */
+export function withBeatMeta(text: string, bpm: string, key: string) {
+  const clean = text
+    .split('\n')
+    .filter((line) => !/^\s*(BPM|Key)\s*:/i.test(line))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  const parts = [bpm.trim() && `BPM: ${bpm.trim()}`, key.trim() && `Key: ${key.trim()}`].filter(Boolean);
+  if (!parts.length) return clean;
+  return clean ? `${clean}\n\n${parts.join(' | ')}` : parts.join(' | ');
+}
 
 type Saved = StudioSettings & {
   audio: FileSlot | null;
@@ -48,10 +90,13 @@ const DEFAULTS: StudioSettings = {
   format: '16:9',
   fps: '2',
   bg: 'black',
-  scale: 1,
-  rotation: 0,
+  ...FIT,
   noWatermark: false,
   viz: VIZ_DEFAULTS,
+  descText: null,
+  bpm: '',
+  musicKey: '',
+  logo: null,
 };
 
 const persist = Platform.OS !== 'web';
@@ -61,14 +106,21 @@ const stateFile = dir ? new File(dir, 'draft.json') : null;
 function loadSaved(): Saved | null {
   try {
     if (!stateFile?.exists) return null;
-    return JSON.parse(stateFile.textSync()) as Saved;
+    const saved = JSON.parse(stateFile.textSync()) as Saved & { scale?: number };
+    // Drafts from before the free transform had one scale for both sides.
+    if (saved.scaleX === undefined && typeof saved.scale === 'number') {
+      saved.scaleX = saved.scale;
+      saved.scaleY = saved.scale;
+    }
+    delete saved.scale;
+    return saved;
   } catch {
     return null;
   }
 }
 
 // Picker results sit in a cache folder iOS can clear, so keep our own copy next to the draft.
-function keepCopy(uri: string, kind: 'beat' | 'artwork', name: string) {
+function keepCopy(uri: string, kind: 'beat' | 'artwork' | 'logo', name: string) {
   if (!dir) return uri;
   try {
     if (!dir.exists) dir.create({ intermediates: true });
@@ -93,9 +145,17 @@ type Studio = StudioSettings & {
   bake: BakeProgress | null;
   set: (patch: Partial<StudioSettings>) => void;
   setViz: (patch: Partial<VizSettings>) => void;
+  /** Picks a visualizer style and resets its look to that style's preset. */
+  pickVizStyle: (mode: string) => void;
   open: () => void;
   pickAudio: () => Promise<void>;
   pickImage: () => Promise<void>;
+  pickLogo: () => Promise<void>;
+  /** The description that goes on YouTube: this upload's text with the BPM and key line. */
+  finalDescription: string;
+  /** Stop the upload that's running. */
+  cancel: () => Promise<void>;
+  cancelling: boolean;
   publish: () => Promise<void>;
   reset: () => void;
   /** Stop the upload if one is running, then clear the draft. */
@@ -111,6 +171,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
   const [saved] = useState(loadSaved);
   const [settings, setSettings] = useState<StudioSettings>(() => ({ ...DEFAULTS, ...saved, viz: { ...VIZ_DEFAULTS, ...saved?.viz } }));
   const [bake, setBake] = useState<BakeProgress | null>(null);
+  const [cancelling, setCancelling] = useState(false);
   const [audio, setAudio] = useState<FileSlot | null>(saved?.audio ?? null);
   const [image, setImage] = useState<FileSlot | null>(saved?.image ?? null);
   // A request cut off by closing the app can't be resumed; a job id can.
@@ -122,6 +183,8 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     return p;
   });
   const restored = useRef(false);
+  const templateId = useRef(saved?.description?.id ?? draft.description.id);
+  const synced = useRef(!saved?.description);
 
   // Bring back the tags and description the saved draft was using.
   useEffect(() => {
@@ -130,6 +193,18 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     if (saved.run) draft.setRun(saved.run);
     if (saved.description) draft.setDescription(saved.description);
   }, [saved, draft]);
+
+  // Choosing another description template starts this upload's text over from it.
+  useEffect(() => {
+    // Wait until the saved draft's template is back before watching for a new one.
+    if (!synced.current) {
+      if (draft.description.id === templateId.current) synced.current = true;
+      return;
+    }
+    if (templateId.current === draft.description.id) return;
+    templateId.current = draft.description.id;
+    setSettings((cur) => (cur.descText === null ? cur : { ...cur, descText: null }));
+  }, [draft.description.id]);
 
   useEffect(() => {
     if (!stateFile || !dir) return;
@@ -154,7 +229,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
         if (job.status === 'succeeded') {
           setPhase({ kind: 'done', url: job.result?.video_url, message: job.result?.message ?? 'Video uploaded to YouTube.' });
         } else if (job.status === 'failed' || job.status === 'cancelled') {
-          setPhase({ kind: 'error', message: job.error ?? 'YouTube upload failed.' });
+          setPhase({ kind: 'error', message: job.status === 'cancelled' ? 'Upload cancelled.' : (job.error ?? 'YouTube upload failed.') });
         } else {
           setPhase((cur) => {
             const log = cur.kind === 'job' ? cur.log : [];
@@ -209,7 +284,23 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     await send({ uri: a.uri, name: `${base}.${ext}`, mimeType, file: a.file }, 'artwork', setImage, api.uploadImage);
   };
 
+  // The logo only goes into the visualizer video made on this phone, so it isn't uploaded.
+  const pickLogo = async () => {
+    const res = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 1,
+      preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
+    });
+    if (res.canceled) return;
+    const a = res.assets[0];
+    const ext = (a.mimeType ?? 'image/jpeg').split('/')[1]?.replace('jpeg', 'jpg') ?? 'jpg';
+    const name = `${(a.fileName ?? 'logo').replace(/\.[^.]+$/, '')}.${ext}`;
+    const uri = a.file ? a.uri : keepCopy(a.uri, 'logo', name);
+    setSettings((cur) => ({ ...cur, logo: { uri, name }, viz: { ...cur.viz, center: 'image' } }));
+  };
+
   const s = settings;
+  const finalDescription = withBeatMeta(s.descText ?? draft.description.content, s.bpm, s.musicKey);
   const missing = !s.title.trim()
     ? 'Add a video title'
     : audio?.status !== 'ready'
@@ -264,12 +355,19 @@ export function StudioProvider({ children }: { children: ReactNode }) {
         tagsId: run?.id,
         privacy: s.privacy,
         audioFileId: audio.fileId,
+        // Sent every time, like the website, so edits made here and the BPM/key line go up with this video.
+        descriptionOverride: finalDescription || undefined,
         imageFileId: baked ? baked.fileId : image.fileId,
         baked: !!baked,
         visualizerStyle: baked ? s.viz.mode : undefined,
         aspectRatio: s.format,
-        imageScale: s.scale,
+        imageScaleX: s.scaleX,
+        imageScaleY: s.scaleY,
+        imagePosX: s.posX,
+        imagePosY: s.posY,
         imageRotation: Math.round(s.rotation),
+        imageFlipH: s.flipH,
+        imageFlipV: s.flipV,
         background: s.bg,
         renderFps: baked ? (baked.fps === 60 ? '60' : '30') : s.fps,
         removeWatermark: s.noWatermark,
@@ -293,6 +391,20 @@ export function StudioProvider({ children }: { children: ReactNode }) {
       if (dir?.exists) dir.delete();
     } catch {
       // nothing to clean up
+    }
+  };
+
+  // Queued jobs stop at once, running ones at their next step; polling then reports it cancelled.
+  const cancel = async () => {
+    if (phase.kind !== 'job' || cancelling) return;
+    setCancelling(true);
+    try {
+      const res = await api.cancelJob(phase.job.id);
+      if (res.job?.status === 'cancelled') setPhase({ kind: 'error', message: 'Upload cancelled.' });
+    } catch (e) {
+      setPhase((cur) => (cur.kind === 'job' ? { ...cur, log: [...cur.log, { at: Date.now(), text: e instanceof Error ? e.message : "Couldn't cancel" }] } : cur));
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -322,12 +434,17 @@ export function StudioProvider({ children }: { children: ReactNode }) {
         const viz = { ...cur.viz, ...patch };
         return { ...cur, viz, fps: viz.enabled && cur.fps === '2' ? '30' : cur.fps };
       }),
+    pickVizStyle: (mode) => setSettings((cur) => ({ ...cur, viz: pickStyle(cur.viz, mode) })),
     // Fresh drafts start with "<search> type beat" as the title.
     open: () => {
       if (!settings.title && draft.run) setSettings((cur) => ({ ...cur, title: `${draft.run!.query} type beat` }));
     },
     pickAudio,
     pickImage,
+    pickLogo,
+    finalDescription,
+    cancel,
+    cancelling,
     publish,
     reset,
     discard,

@@ -3,7 +3,7 @@
     "name": "SendMyBeat",
     "slug": "sendmybeat",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "sendmybeat",
     "userInterfaceStyle": "dark",
@@ -53,6 +53,12 @@
         {
           "icon": "./assets/images/notification-icon.png",
           "color": "#7AE0DD"
+        }
+      ],
+      [
+        "expo-screen-orientation",
+        {
+          "initialOrientation": "PORTRAIT_UP"
         }
       ]
     ],

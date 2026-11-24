@@ -249,8 +249,15 @@ export type YouTubeUploadOptions = {
   audioFileId: string;
   imageFileId: string;
   aspectRatio: '16:9' | '1:1' | '9:16' | '4:5';
-  imageScale: number;
+  /** Artwork width and height as a multiple of fitting the frame. */
+  imageScaleX: number;
+  imageScaleY: number;
+  /** Artwork centre's offset from the frame centre, in half-frames (-2 to 2). */
+  imagePosX: number;
+  imagePosY: number;
   imageRotation: number;
+  imageFlipH: boolean;
+  imageFlipV: boolean;
   background: 'black' | 'white' | 'blurred';
   renderFps: '2' | '30' | '60';
   removeWatermark: boolean;
@@ -264,12 +271,17 @@ export type UploadJob = {
   id: string;
   status: 'queued' | 'processing' | 'succeeded' | 'failed' | 'cancelled' | string;
   progress?: number;
+  /** queued, validate, oauth_refresh, gif_transcode, ffmpeg_render, encoding, youtube_upload, cleanup. */
+  stage?: string;
+  /** Encoding progress 0-100 while the video renders. */
+  encode_progress?: number;
+  cancel_requested?: boolean;
   message?: string;
   error?: string;
   result?: { video_url?: string; message?: string };
 };
 
-// Same form fields the website's UploadStudio sends. With a rendered visualizer video the
+// Same form fields the website's UploadStudio sends (frontend/src/components/UploadStudio.js). With a rendered visualizer video the
 // transforms are neutral, so the server passes the video through and only adds audio.
 export async function startYouTubeUpload(o: YouTubeUploadOptions) {
   const form = new FormData();
@@ -282,19 +294,77 @@ export async function startYouTubeUpload(o: YouTubeUploadOptions) {
   if (o.descriptionOverride) form.append('description_override', o.descriptionOverride);
   form.append('remove_watermark', String(o.removeWatermark));
   form.append('aspect_ratio', o.aspectRatio);
-  const scale = o.baked ? '1' : String(o.imageScale);
-  form.append('image_scale', scale);
-  form.append('image_scale_x', scale);
-  form.append('image_scale_y', scale);
-  form.append('image_pos_x', '0');
-  form.append('image_pos_y', '0');
-  form.append('image_rotation', o.baked ? '0' : String(o.imageRotation));
+  // A rendered visualizer video already has the artwork laid out, so it goes through untouched.
+  const n = (v: number) => String(Math.round(v * 10000) / 10000);
+  if (o.baked) {
+    for (const k of ['image_scale', 'image_scale_x', 'image_scale_y']) form.append(k, '1');
+    for (const k of ['image_pos_x', 'image_pos_y', 'image_rotation']) form.append(k, '0');
+  } else {
+    form.append('image_scale', n((o.imageScaleX + o.imageScaleY) / 2));
+    form.append('image_scale_x', n(o.imageScaleX));
+    form.append('image_scale_y', n(o.imageScaleY));
+    form.append('image_pos_x', n(o.imagePosX));
+    form.append('image_pos_y', n(o.imagePosY));
+    form.append('image_rotation', String(Math.round(o.imageRotation)));
+    form.append('image_flip_h', String(o.imageFlipH));
+    form.append('image_flip_v', String(o.imageFlipV));
+    form.append('image_pos_mode', 'frame');
+  }
   form.append('background_color', o.background);
   form.append('render_fps', o.renderFps);
   form.append('visualizer_enabled', 'false');
   form.append('visualizer_settings', '{}');
   if (o.visualizerStyle) form.append('visualizer_style', o.visualizerStyle);
   return api<{ job?: UploadJob; video_url?: string; message?: string }>('/youtube/upload', { body: form });
+}
+
+// ---- AI checks in Upload Studio, the same two the website runs before an upload.
+export type BeatAnalysis = {
+  overall_score: number;
+  predicted_performance?: string;
+  channel_stage?: string;
+  competition_level?: string;
+  packaging_priority?: string;
+  title_diagnosis?: string;
+  channel_fit?: string;
+  small_channel_strategy?: string;
+  better_title_angles?: string[];
+  tag_strategy?: string;
+  suggestions?: string[];
+  strengths?: string[];
+  weaknesses?: string[];
+};
+export type BeatAnalysisInput = {
+  title: string;
+  tags: string[];
+  description: string;
+  channel_name?: string;
+  subscriber_count?: number;
+  total_videos?: number;
+  recent_avg_views?: number;
+};
+/** Scores the title, tags and description against your channel (Pro). */
+export const analyzeBeat = (input: BeatAnalysisInput) => runJob<BeatAnalysis>('/beat/analyze', input, 2500);
+
+export type ThumbnailCheck = {
+  score: number;
+  verdict?: string;
+  ctr_risk?: string;
+  packaging_priority?: string;
+  hook_alignment?: string;
+  issues?: string[];
+  suggestions?: string[];
+  text_overlay_suggestion?: string;
+  branding_suggestion?: string;
+};
+/** Checks the artwork as a thumbnail for this title, tags and description. */
+export function checkThumbnail(input: { imageFileId: string; title: string; tags: string[]; description: string }) {
+  const form = new FormData();
+  form.append('image_file_id', input.imageFileId);
+  form.append('title', input.title);
+  form.append('tags', input.tags.join(', '));
+  form.append('description', input.description);
+  return runJob<ThumbnailCheck>('/beat/thumbnail-check', form, 2500);
 }
 
 export const uploadJob = (id: string) => api<{ job?: UploadJob }>(`/youtube/upload-jobs/${id}`);
