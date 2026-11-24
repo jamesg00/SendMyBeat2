@@ -34,6 +34,14 @@ type PageMessage =
 
 const CHUNK = 256 * 1024; // base64 characters per message
 
+// The page itself loads; its own frames may use the site or a blank/blob/data address. Everything
+// else (links, ad frames from other sites) is refused, and refused loads are never opened elsewhere.
+export function allowVizLoad(req: Pick<ShouldStartLoadRequest, 'url'> & { isTopFrame?: boolean }) {
+  const url = req.url || '';
+  if (req.isTopFrame === false) return url.startsWith(SITE_URL) || /^(about:blank|about:srcdoc|blob:|data:)/.test(url);
+  return url.startsWith(`${SITE_URL}/viz-embed`);
+}
+
 // The package types WebView as a plain function component, so its ref (a forwardRef) is typed here.
 type WebViewHandle = { injectJavaScript: (script: string) => void };
 
@@ -196,7 +204,9 @@ export function VisualizerPreview({ audio, image, format, bg, layout, viz, logo 
       <WebView
         {...({ ref: web } as object)}
         source={{ uri: `${SITE_URL}/viz-embed` }}
-        originWhitelist={[SITE_URL]}
+        // '*' so the WebView never hands a URL to the phone to open (an ad frame on the page did
+        // that); which loads are allowed is decided below instead.
+        originWhitelist={['*']}
         onMessage={onMessage}
         style={s.web}
         containerStyle={s.web}
@@ -207,8 +217,8 @@ export function VisualizerPreview({ audio, image, format, bg, layout, viz, logo 
         allowsInlineMediaPlayback
         mediaPlaybackRequiresUserAction
         setSupportMultipleWindows={false}
-        // Links inside the page never open; it's only the visualizer.
-        onShouldStartLoadWithRequest={(req: ShouldStartLoadRequest) => req.url.startsWith(`${SITE_URL}/viz-embed`)}
+        // Only the visualizer page loads. Links and other sites' frames (ads) are dropped, never opened.
+        onShouldStartLoadWithRequest={allowVizLoad}
         onError={() => {
           setState('error');
           setError("Couldn't load the visualizer. Check your connection.");
