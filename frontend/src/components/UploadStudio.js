@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import axios from "axios";
 import { toast } from "sonner";
@@ -65,6 +65,21 @@ const UploadStudio = ({
   const [studioDismissed, setStudioDismissed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  // On a phone, once the keyboard has opened, scroll the field that was tapped into the middle of
+  // the drawer so it isn't hidden behind the keyboard or the sticky upload bar.
+  const keepFieldInView = useCallback((event) => {
+    const field = event.target;
+    if (!field?.matches?.("input, textarea, select, [contenteditable='true']")) return;
+    const reveal = () => field.scrollIntoView({ block: "center", behavior: "smooth" });
+    const vv = window.visualViewport;
+    if (vv && vv.height >= window.innerHeight - 60) {
+      // Keyboard not up yet: wait for it, with a fallback in case no resize comes.
+      const timer = window.setTimeout(reveal, 450);
+      vv.addEventListener("resize", () => { window.clearTimeout(timer); reveal(); }, { once: true });
+    } else {
+      window.requestAnimationFrame(reveal);
+    }
+  }, []);
 
   // Files
   const [audioFile, setAudioFile] = useState(null);
@@ -1911,13 +1926,16 @@ const UploadStudio = ({
 
          {/* Controls Section: Desktop (Sidebar) vs Mobile (Drawer) */}
          {isMobile ? (
-             <Drawer open={mobileDrawerOpen} onOpenChange={setMobileDrawerOpen}>
-                <DrawerContent className="max-h-[85vh] border-[var(--border-color)] bg-[var(--card-bg)] text-[var(--text-primary)]">
+             // repositionInputs off: the drawer's own keyboard handling moves and resizes it on iPhone
+             // Safari and leaves the field you tapped off screen. Safari's own scrolling, plus the
+             // focus handler below, keeps the field in view instead.
+             <Drawer open={mobileDrawerOpen} onOpenChange={setMobileDrawerOpen} repositionInputs={false}>
+                <DrawerContent className="us-drawer border-[var(--border-color)] bg-[var(--card-bg)] text-[var(--text-primary)]">
                     <DrawerHeader>
                         <DrawerTitle>Upload settings</DrawerTitle>
                         <DrawerDescription>Details, image, video and visualizer</DrawerDescription>
                     </DrawerHeader>
-                    <div className="us-drawer-body px-4 pb-8 overflow-y-auto bg-[var(--card-bg)] text-[var(--text-primary)]">
+                    <div className="us-drawer-body flex-1 min-h-0 px-4 pb-8 overflow-y-auto overscroll-contain bg-[var(--card-bg)] text-[var(--text-primary)]" onFocus={keepFieldInView}>
                        {controlsMarkup}
                     </div>
                 </DrawerContent>
