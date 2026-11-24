@@ -283,7 +283,7 @@ Admin clear-job sets `cancel_requested=true` and marks the job terminal immediat
   - `/api/subscription/sync` forces a refresh.
 
 ## Security notes
-- Don't expose MongoDB (`27017`) publicly; only publish `80/443` behind a reverse proxy.
+- Don't expose MongoDB (`dbkey`) publicly; only publish `port` behind a reverse proxy.
 - Don't use `CORS_ORIGINS=*` in production.
 - `APP_ENCRYPTION_KEY` is required in production so stored YouTube tokens are encrypted at rest.
 - User links are checked before opening (https only, known social sites), and likes, follows, tag generation and job cancels are rate limited.

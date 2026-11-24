@@ -1,0 +1,2041 @@
+<title>SendMyBeat Visualizer Rounds</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap">
+<style>
+/* Layout: a studio console. Sticky transport on top, rounds stacked newest first, each a two-up grid of live 16:9 stages. Single dark look on purpose (it is a video tool). */
+:root {
+  --ink: #0A0A0A;
+  --panel: #111413;
+  --line: #222826;
+  --paper: #E9F1ED;
+  --muted: #8C9A94;
+  --mint: #8BFFD0;
+  --brand: #2EE59D;
+  --blue: #4C8DFF;
+  --display: "Space Grotesk", "Inter", system-ui, sans-serif;
+  --body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color-scheme: dark;
+}
+html { background: var(--ink); }
+body { background: var(--ink); color: var(--paper); font-family: var(--body); font-size: 15px; line-height: 1.5; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--ink); }
+.wrap { max-width: 1240px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+
+header.top { padding-block: 28px 18px; display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px; }
+.brandline { display: flex; align-items: center; gap: 12px; }
+.brandline svg { width: 34px; height: 34px; flex: none; border-radius: 8px; }
+h1 { font-family: var(--display); font-weight: 600; font-size: clamp(22px, 3.2vw, 30px); letter-spacing: -0.01em; margin: 0; line-height: 1.1; }
+.lede { color: var(--muted); max-width: 62ch; margin: 6px 0 0; font-size: 14px; }
+
+.transport { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: rgba(10,10,10,0.92); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-block: 1px solid var(--line); }
+.transport .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; padding-block: 10px; }
+.group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.btn { font: 500 13px/1 var(--body); color: var(--paper); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 9px 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.btn:hover { border-color: #3a4440; }
+.btn:focus-visible, .seg button:focus-visible, .expand:focus-visible, input:focus-visible + .btn { outline: 2px solid var(--mint); outline-offset: 2px; }
+.btn.primary { background: var(--paper); color: var(--ink); border-color: var(--paper); font-weight: 600; min-width: 128px; justify-content: center; }
+.btn svg { width: 14px; height: 14px; }
+.file { position: relative; }
+.file input { position: absolute; inset: 0; opacity: 0; width: 100%; cursor: pointer; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { font: 500 12px/1 var(--body); color: var(--muted); background: transparent; border: 0; padding: 9px 10px; cursor: pointer; white-space: nowrap; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { color: var(--ink); background: var(--mint); }
+.label { font: 500 11px/1 var(--mono); color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; }
+.now { font: 400 12px/1.2 var(--mono); color: var(--muted); max-width: 26ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lights { display: flex; gap: 10px; align-items: center; margin-left: auto; }
+.light { display: flex; align-items: center; gap: 5px; font: 500 11px/1 var(--mono); color: var(--muted); }
+.light i { width: 9px; height: 9px; border-radius: 50%; background: #1d2421; box-shadow: inset 0 0 0 1px #2c3532; display: block; }
+.light[data-k="kick"] i { --on: var(--mint); }
+.light[data-k="snare"] i { --on: var(--blue); }
+.light[data-k="hat"] i { --on: var(--paper); }
+input[type="range"] { accent-color: var(--mint); width: 90px; }
+.status { font: 400 12px/1.4 var(--body); color: var(--muted); }
+.status.err { color: #ff9b8a; }
+
+section.round { padding-block: 34px 10px; }
+.roundhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; margin-bottom: 6px; }
+.roundhead h2 { font-family: var(--display); font-weight: 600; font-size: 22px; margin: 0; }
+.roundhead .range { font: 500 12px/1 var(--mono); color: var(--mint); letter-spacing: 0.04em; }
+.roundnote { color: var(--muted); margin: 0 0 18px; max-width: 70ch; font-size: 14px; }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px 18px; }
+@media (max-width: 820px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+.tile { min-width: 0; }
+.stage { position: relative; aspect-ratio: 16 / 9; max-width: 100%; border-radius: 4px; overflow: hidden; background-color: var(--ink); background-size: cover; background-position: center; box-shadow: inset 0 0 0 1px var(--line); }
+body.bg-art .stage, body.bg-art .big { background-image: var(--cover); }
+.stage canvas, .big canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.expand { position: absolute; right: 8px; top: 8px; width: 30px; height: 30px; border-radius: 6px; border: 1px solid rgba(233,241,237,0.18); background: rgba(10,10,10,0.55); color: var(--paper); display: grid; place-items: center; cursor: pointer; opacity: 0.0; transition: opacity .15s; }
+.stage:hover .expand, .expand:focus-visible { opacity: 1; }
+@media (hover: none) { .expand { opacity: 0.8; } }
+.expand svg { width: 14px; height: 14px; }
+.meta { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 12px; padding: 10px 2px 0; align-items: baseline; }
+.num { font: 500 20px/1 var(--mono); color: var(--mint); grid-row: span 2; min-width: 2ch; font-variant-numeric: tabular-nums; }
+.meta h3 { font: 600 15px/1.25 var(--display); margin: 0; }
+.meta p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
+
+footer { padding-block: 30px 60px; color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); margin-top: 34px; }
+
+.overlay { position: fixed; inset: 0; z-index: 20; background: rgba(5,6,6,0.94); display: grid; place-items: center; padding: calc(env(safe-area-inset-top, 0px) + 56px) max(16px, env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px) + 24px) max(16px, env(safe-area-inset-left, 0px)); }
+.overlay .big { position: relative; width: min(100%, calc((100vh - 120px) * 16 / 9)); aspect-ratio: 16 / 9; max-width: 100%; background-color: var(--ink); background-size: cover; background-position: center; border-radius: 4px; overflow: hidden; }
+.overlay .bar { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 12px); left: max(16px, env(safe-area-inset-left, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.overlay .bar h3 { margin: 0; font: 600 16px/1.2 var(--display); }
+.overlay .bar h3 span { font-family: var(--mono); color: var(--mint); margin-right: 10px; }
+</style>
+
+<header class="wrap top">
+  <div>
+    <div class="brandline">
+      <svg viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8BFFD0"/><stop offset="1" stop-color="#4C8DFF"/></linearGradient></defs><rect width="64" height="64" fill="#0A0A0A"/><path d="M44 18c-3-3-7-4-12-4-8 0-13 4-13 10 0 14 26 8 26 19 0 5-5 8-12 8-6 0-10-2-13-5" fill="none" stroke="url(#lg)" stroke-width="7" stroke-linecap="round"/></svg>
+      <h1>Visualizer rounds</h1>
+    </div>
+    <p class="lede">New looks for the Upload Studio visualizers. Every one runs on a rebuilt audio engine that picks out kicks, snares and hats as they happen, so motion lands on the hit instead of trailing it.</p>
+  </div>
+</header>
+
+<div class="transport">
+  <div class="wrap">
+    <div class="group">
+      <button class="btn primary" id="play" type="button">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path id="playIcon" d="M4 2.5v11l9-5.5z" fill="currentColor"/></svg>
+        <span id="playLabel">Play demo beat</span>
+      </button>
+      <span class="file btn">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 11V2.5M4.5 6 8 2.5 11.5 6M2.5 11v2.5h11V11" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Load your track
+        <input id="trackFile" type="file" accept="audio/*" aria-label="Load your own track">
+      </span>
+      <div class="seg" role="group" aria-label="Source" id="sourceSeg">
+        <button type="button" data-src="demo" aria-pressed="true">Demo beat</button>
+        <button type="button" data-src="file" aria-pressed="false" disabled id="fileSrcBtn">Your track</button>
+      </div>
+    </div>
+    <div class="group">
+      <span class="label">Behind</span>
+      <div class="seg" role="group" aria-label="Background" id="bgSeg">
+        <button type="button" data-bg="black" aria-pressed="true">Black</button>
+        <button type="button" data-bg="art" aria-pressed="false">Sample cover</button>
+      </div>
+      <span class="file btn" style="padding:8px 10px">Your cover<input id="coverFile" type="file" accept="image/*" aria-label="Load your own cover image"></span>
+    </div>
+    <div class="group">
+      <label class="label" for="vol">Vol</label>
+      <input id="vol" type="range" min="0" max="1" step="0.01" value="0.75">
+    </div>
+    <div class="lights" aria-label="What the engine is hearing">
+      <span class="light" data-k="kick"><i></i>Kick</span>
+      <span class="light" data-k="snare"><i></i>Snare</span>
+      <span class="light" data-k="hat"><i></i>Hat</span>
+    </div>
+    <span class="status" id="status" role="status"></span>
+  </div>
+</div>
+
+<main class="wrap" id="rounds"></main>
+
+<footer class="wrap">Reply in the chat with the numbers you like. The next round builds on your picks.</footer>
+
+<div class="overlay" id="overlay" hidden>
+  <div class="bar">
+    <h3 id="ovTitle"></h3>
+    <button class="btn" id="ovClose" type="button">Close</button>
+  </div>
+  <div class="big" id="ovStage"><canvas id="ovCanvas"></canvas></div>
+</div>
+
+<script>
+"use strict";
+// ---------------------------------------------------------------- palette + helpers
+const C = { ink: [10, 10, 10], paper: [233, 241, 237], mint: [139, 255, 208], brand: [46, 229, 157], blue: [76, 141, 255], deep: [22, 46, 104], dim: [26, 34, 31] };
+const rgba = (c, a = 1) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
+const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+const clamp = (v, lo = 0, hi = 1) => (v < lo ? lo : v > hi ? hi : v);
+const ease = { outCubic: (u) => 1 - Math.pow(1 - u, 3), outQuart: (u) => 1 - Math.pow(1 - u, 4) };
+const TAU = Math.PI * 2;
+
+/** Semi-implicit spring toward target; returns position. */
+function spring(s, target, k, d, dt) {
+  const n = Math.max(1, Math.ceil(dt / 0.004));
+  const h = dt / n;
+  for (let i = 0; i < n; i += 1) {
+    const a = -k * (s.x - target) - d * s.v;
+    s.v += a * h;
+    s.x += s.v * h;
+  }
+  return s.x;
+}
+/** Instant attack, springy release: jumps to `amt` on a hit, then settles back to 0. */
+function punch(s, hit, amt, dt, k = 300, d = 20) {
+  if (hit && amt > s.x) { s.x = amt; s.v = 0; }
+  return spring(s, 0, k, d, dt);
+}
+/** Linear sample of arr between index a and b at x in 0..1. */
+function sampleRange(arr, a, b, x) {
+  const p = a + (b - a) * clamp(x);
+  const i = Math.floor(p);
+  const t = p - i;
+  const v0 = arr[Math.min(arr.length - 1, i)];
+  const v1 = arr[Math.min(arr.length - 1, i + 1)];
+  return v0 + (v1 - v0) * t;
+}
+/** Smooth curve through points [[x,y],...] (open). */
+function smoothLine(c, pts, move = true) {
+  if (move) c.moveTo(pts[0][0], pts[0][1]); else c.lineTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length - 1; i += 1) {
+    const mx = (pts[i][0] + pts[i + 1][0]) / 2;
+    const my = (pts[i][1] + pts[i + 1][1]) / 2;
+    c.quadraticCurveTo(pts[i][0], pts[i][1], mx, my);
+  }
+  const last = pts[pts.length - 1];
+  c.lineTo(last[0], last[1]);
+}
+/** Smooth closed curve through points. */
+function smoothClosed(c, pts) {
+  const n = pts.length;
+  const m0x = (pts[n - 1][0] + pts[0][0]) / 2, m0y = (pts[n - 1][1] + pts[0][1]) / 2;
+  c.moveTo(m0x, m0y);
+  for (let i = 0; i < n; i += 1) {
+    const p = pts[i], q = pts[(i + 1) % n];
+    c.quadraticCurveTo(p[0], p[1], (p[0] + q[0]) / 2, (p[1] + q[1]) / 2);
+  }
+  c.closePath();
+}
+function makeCanvas(w, h) { const cv = document.createElement("canvas"); cv.width = Math.max(1, w); cv.height = Math.max(1, h); return cv; }
+// seeded random so layouts are stable
+function rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+
+// ---------------------------------------------------------------- audio engine
+// Spectrum: one 2048-point analyser with no browser smoothing (about 43 ms window, versus 341 ms now),
+// smoothed here with a 10 ms attack and a 130 ms release. Hits: three filtered taps (low, mid, high),
+// RMS of the last ~21 ms each frame, an onset when energy jumps over its recent floor.
+const NB = 64, F_LO = 32, F_HI = 16000;
+
+class Band {
+  constructor(o) {
+    Object.assign(this, { refractory: 0.12, jump: 1.8, over: 2.2, minRel: 0.1, release: 0.14, envTau: 0.16 }, o);
+    this.slow = 1e-7; this.peak = 1e-5; this.hist = [0, 0, 0]; this.level = 0; this.last = -9; this.hit = false; this.strength = 0; this.env = 0;
+  }
+  update(rms, dt, t) {
+    const e = rms * rms;
+    this.peak = Math.max(e, this.peak * Math.exp(-dt / 5), 1e-7);
+    const floor = Math.min(this.hist[0], this.hist[1], this.hist[2]);
+    this.hit = false;
+    if ((e > floor * this.jump || e > this.slow * this.over) && e > this.peak * this.minRel && t - this.last > this.refractory && e > 1e-6) {
+      this.hit = true;
+      this.last = t;
+      this.strength = clamp(Math.sqrt(e / this.peak) * 1.15, 0.25, 1);
+    }
+    this.slow += (e - this.slow) * (1 - Math.exp(-dt / 0.3));
+    this.hist.shift(); this.hist.push(e);
+    const lvl = Math.sqrt(e / this.peak);
+    this.level = lvl > this.level ? lvl : this.level + (lvl - this.level) * (1 - Math.exp(-dt / this.release));
+    this.env = this.hit ? Math.max(this.env, this.strength) : this.env * Math.exp(-dt / this.envTau);
+  }
+}
+
+const A = {
+  t: 0, dt: 0, sampleRate: 48000,
+  spec: new Float32Array(NB), specFast: new Float32Array(NB), wave: new Float32Array(2048),
+  low: 0, mid: 0, high: 0, energy: 0,
+  kickHit: false, kick: 0, kickStrength: 0, snareHit: false, snare: 0, snareStrength: 0, hatHit: false, hat: 0, hatStrength: 0,
+  live: false,
+};
+
+const Engine = {
+  ctx: null, active: false, source: "demo", buffer: null, bufferNode: null, fileName: "",
+  bands: { low: new Band({ refractory: 0.13, jump: 1.9, minRel: 0.12, envTau: 0.18 }), mid: new Band({ refractory: 0.1, jump: 2.2, minRel: 0.16, envTau: 0.14 }), high: new Band({ refractory: 0.06, jump: 2.0, minRel: 0.12, envTau: 0.08 }) },
+  peakDb: -40,
+  init() {
+    if (this.ctx) return;
+    const ctx = this.ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: "interactive" });
+    A.sampleRate = ctx.sampleRate;
+    this.bus = ctx.createGain();
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -8; comp.knee.value = 6; comp.ratio.value = 6; comp.attack.value = 0.002; comp.release.value = 0.12;
+    this.vol = ctx.createGain();
+    this.vol.gain.value = Number(document.getElementById("vol").value);
+    this.bus.connect(comp); comp.connect(this.vol); this.vol.connect(ctx.destination);
+    // analysis taps sit before the volume, so the visuals don't change with volume
+    this.main = ctx.createAnalyser(); this.main.fftSize = 2048; this.main.smoothingTimeConstant = 0;
+    comp.connect(this.main);
+    this.freq = new Float32Array(this.main.frequencyBinCount);
+    const tap = (filters, size) => {
+      let node = comp;
+      for (const [type, f, q] of filters) { const b = ctx.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = q; node.connect(b); node = b; }
+      const an = ctx.createAnalyser(); an.fftSize = size; an.smoothingTimeConstant = 0; node.connect(an);
+      return { an, buf: new Float32Array(size) };
+    };
+    this.taps = {
+      low: tap([["lowpass", 120, 0.7], ["lowpass", 120, 0.7], ["highpass", 32, 0.7]], 1024),
+      mid: tap([["highpass", 900, 0.7], ["lowpass", 4200, 0.7]], 1024),
+      high: tap([["highpass", 7000, 0.7], ["highpass", 7000, 0.7]], 512),
+    };
+    this.demo = new DemoBeat(ctx, this.bus);
+  },
+  rms(tap) { tap.an.getFloatTimeDomainData(tap.buf); let s = 0; const b = tap.buf; for (let i = 0; i < b.length; i += 1) s += b[i] * b[i]; return Math.sqrt(s / b.length); },
+  update(dt, t) {
+    const live = !!(this.ctx && this.active && this.ctx.state === "running");
+    A.live = live; A.t = t; A.dt = dt;
+    const binHz = (this.ctx ? this.ctx.sampleRate : 48000) / 2048;
+    if (live) { this.main.getFloatFrequencyData(this.freq); this.main.getFloatTimeDomainData(A.wave); } else A.wave.fill(0);
+    const raw = this._raw || (this._raw = new Float32Array(NB));
+    let frameMax = -200;
+    for (let b = 0; b < NB; b += 1) {
+      const f0 = F_LO * Math.pow(F_HI / F_LO, b / NB), f1 = F_LO * Math.pow(F_HI / F_LO, (b + 1) / NB);
+      const fc = Math.sqrt(f0 * f1);
+      let db = -200;
+      if (live) {
+        const k0 = f0 / binHz, k1 = f1 / binHz;
+        if (k1 - k0 < 1.5) { const k = fc / binHz; const i = Math.floor(k), fr = k - i; db = this.freq[i] * (1 - fr) + this.freq[Math.min(this.freq.length - 1, i + 1)] * fr; }
+        else { for (let i = Math.floor(k0); i <= Math.ceil(k1) && i < this.freq.length; i += 1) db = Math.max(db, this.freq[i]); }
+        db = Number.isFinite(db) ? db + 4.5 * Math.log2(fc / 1000) : -200; // music falls off toward the highs; tilt it level
+      }
+      raw[b] = db;
+      if (db > frameMax) frameMax = db;
+    }
+    if (live) { if (frameMax > this.peakDb) this.peakDb += (frameMax - this.peakDb) * 0.4; else this.peakDb = Math.max(-70, this.peakDb - 5 * dt); }
+    const range = 52;
+    const aUp = 1 - Math.exp(-dt / 0.010), aDown = 1 - Math.exp(-dt / 0.13), fDown = Math.exp(-dt / 0.06);
+    let sum = 0;
+    for (let b = 0; b < NB; b += 1) {
+      let v = live ? clamp((raw[b] - (this.peakDb - range)) / range) : 0;
+      v = Math.pow(v, 1.6);
+      const s = A.spec[b];
+      A.spec[b] = s + (v - s) * (v > s ? aUp : aDown);
+      A.specFast[b] = v > A.specFast[b] ? v : A.specFast[b] * fDown;
+      sum += A.spec[b];
+    }
+    A.energy = sum / NB;
+    for (const k of ["low", "mid", "high"]) this.bands[k].update(live ? this.rms(this.taps[k]) : 0, dt, t);
+    const L = this.bands.low, M = this.bands.mid, H = this.bands.high;
+    A.low = L.level; A.mid = M.level; A.high = H.level;
+    A.kickHit = L.hit; A.kick = L.env; A.kickStrength = L.strength;
+    A.snareHit = M.hit; A.snare = M.env; A.snareStrength = M.strength;
+    A.hatHit = H.hit; A.hat = H.env; A.hatStrength = H.strength;
+  },
+  async playDemo() {
+    this.init();
+    this.stopFile();
+    this.source = "demo";
+    if (this.ctx.state !== "running") await this.ctx.resume();
+    this.demo.start();
+    this.active = true;
+  },
+  stopFile() { if (this.bufferNode) { try { this.bufferNode.stop(); } catch (_) {} this.bufferNode.disconnect(); this.bufferNode = null; } },
+  async playFile() {
+    if (!this.buffer) return;
+    this.init();
+    this.demo.stop();
+    this.stopFile();
+    this.source = "file";
+    if (this.ctx.state !== "running") await this.ctx.resume();
+    const n = this.ctx.createBufferSource(); n.buffer = this.buffer; n.loop = true; n.connect(this.bus); n.start();
+    this.bufferNode = n;
+    this.active = true;
+  },
+  async pause() { if (this.ctx && this.ctx.state === "running") await this.ctx.suspend(); this.active = false; },
+  async resume() { if (this.ctx) { await this.ctx.resume(); this.active = true; } },
+};
+
+// ---------------------------------------------------------------- demo beat (140 BPM, half-time trap)
+class DemoBeat {
+  constructor(ctx, out) {
+    this.ctx = ctx; this.out = out; this.bpm = 140; this.timer = null; this.voice808 = null;
+    const len = ctx.sampleRate; this.noise = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = this.noise.getChannelData(0); const r = rng(7); for (let i = 0; i < len; i += 1) d[i] = r() * 2 - 1;
+    this.shaper = ctx.createWaveShaper();
+    const curve = new Float32Array(1024); for (let i = 0; i < 1024; i += 1) { const x = (i / 1023) * 2 - 1; curve[i] = Math.tanh(x * 2.4) / Math.tanh(2.4); }
+    this.shaper.curve = curve;
+    this.gain = ctx.createGain(); this.gain.gain.value = 0.9; this.gain.connect(out);
+    this.shaper.connect(this.gain);
+  }
+  mtof(m) { return 440 * Math.pow(2, (m - 69) / 12); }
+  start() {
+    if (this.timer) return;
+    this.step = 0; this.next = this.ctx.currentTime + 0.08;
+    this.timer = setInterval(() => this.schedule(), 25);
+    this.schedule();
+  }
+  stop() { clearInterval(this.timer); this.timer = null; if (this.voice808) { const t = this.ctx.currentTime; this.voice808.gain.cancelScheduledValues(t); this.voice808.gain.setTargetAtTime(0, t, 0.01); } }
+  schedule() {
+    const spb = 60 / this.bpm / 4;
+    while (this.next < this.ctx.currentTime + 0.12) { this.play(this.step, this.next, spb); this.next += spb; this.step = (this.step + 1) % 64; }
+  }
+  play(step, t, spb) {
+    const bar = Math.floor(step / 16), s = step % 16;
+    const kicks = [[0, 10], [0, 3, 10], [0, 10, 11], [0, 6, 10, 14]][bar];
+    const roots = [29, 29, 34, 32];
+    if (kicks.includes(s)) { this.kick(t); this.bass(t, this.mtof(roots[bar]), bar === 3 && s === 14); }
+    if (s === 8) this.snare(t, 1);
+    if (bar === 3 && s === 15) this.snare(t, 0.35);
+    // hats: eighths, with rolls at the end of bars 2 and 4
+    if (bar === 1 && s >= 12) this.hat(t, s % 2 ? 0.45 : 0.7);
+    else if (bar === 3 && s >= 12) { for (let k = 0; k < 3; k += 1) this.hat(t + (k * spb) / 1.5, 0.35 + k * 0.1); }
+    else if (s % 2 === 0) this.hat(t, s % 4 === 0 ? 0.75 : 0.5);
+    if ((bar === 1 || bar === 3) && s === 6) this.hat(t, 0.5, 0.22);
+    if (s === 0) this.pad(t, [[53, 56, 60], [53, 56, 60], [58, 61, 65], [56, 60, 63]][bar], spb * 16);
+    const mel = { 0: 77, 3: 75, 6: 72, 8: 70, 11: 72, 14: 68 };
+    if (mel[s] !== undefined && bar !== 2) this.pluck(t, this.mtof(mel[s] + (bar === 3 ? -2 : 0)));
+    if (bar === 2 && (s === 0 || s === 6 || s === 12)) this.pluck(t, this.mtof([82, 80, 77][s / 6]));
+  }
+  env(g, t, peak, a, d) { g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(peak, t + a); g.gain.exponentialRampToValueAtTime(0.0008, t + a + d); }
+  kick(t) {
+    const c = this.ctx, o = c.createOscillator(), g = c.createGain();
+    o.type = "sine"; o.frequency.setValueAtTime(190, t); o.frequency.exponentialRampToValueAtTime(48, t + 0.09);
+    this.env(g, t, 1.0, 0.002, 0.3); o.connect(g); g.connect(this.gain); o.start(t); o.stop(t + 0.4);
+    const n = c.createBufferSource(), hp = c.createBiquadFilter(), ng = c.createGain();
+    n.buffer = this.noise; hp.type = "highpass"; hp.frequency.value = 2500; this.env(ng, t, 0.35, 0.001, 0.012);
+    n.connect(hp); hp.connect(ng); ng.connect(this.gain); n.start(t, 0.1); n.stop(t + 0.03);
+  }
+  bass(t, f, glide) {
+    const c = this.ctx;
+    if (this.voice808) { this.voice808.gain.cancelScheduledValues(t); this.voice808.gain.setTargetAtTime(0, t, 0.008); }
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = "sine"; o.frequency.setValueAtTime(f * 1.6, t); o.frequency.exponentialRampToValueAtTime(f, t + 0.05);
+    if (glide) o.frequency.exponentialRampToValueAtTime(f * 1.5, t + 0.25);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.75, t + 0.004); g.gain.setTargetAtTime(0, t + 0.05, 0.28);
+    o.connect(g); g.connect(this.shaper); o.start(t); o.stop(t + 1.6);
+    this.voice808 = g;
+  }
+  snare(t, vel) {
+    const c = this.ctx, n = c.createBufferSource(), bp = c.createBiquadFilter(), g = c.createGain();
+    n.buffer = this.noise; bp.type = "bandpass"; bp.frequency.value = 2600; bp.Q.value = 0.6;
+    this.env(g, t, 0.8 * vel, 0.001, 0.19); n.connect(bp); bp.connect(g); g.connect(this.gain); n.start(t, Math.random() * 0.5); n.stop(t + 0.3);
+    const o = c.createOscillator(), og = c.createGain(); o.type = "triangle"; o.frequency.setValueAtTime(230, t); o.frequency.exponentialRampToValueAtTime(170, t + 0.08);
+    this.env(og, t, 0.45 * vel, 0.001, 0.09); o.connect(og); og.connect(this.gain); o.start(t); o.stop(t + 0.15);
+  }
+  hat(t, vel, decay = 0.035) {
+    const c = this.ctx, n = c.createBufferSource(), hp = c.createBiquadFilter(), g = c.createGain();
+    n.buffer = this.noise; hp.type = "highpass"; hp.frequency.value = 8500;
+    this.env(g, t, 0.32 * vel, 0.0008, decay); n.connect(hp); hp.connect(g); g.connect(this.gain); n.start(t, Math.random() * 0.5); n.stop(t + decay + 0.05);
+  }
+  pad(t, notes, dur) {
+    const c = this.ctx, lp = c.createBiquadFilter(), g = c.createGain();
+    lp.type = "lowpass"; lp.frequency.value = 1100; lp.Q.value = 0.4;
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.05, t + 0.25); g.gain.setValueAtTime(0.05, t + dur - 0.2); g.gain.linearRampToValueAtTime(0, t + dur);
+    lp.connect(g); g.connect(this.gain);
+    for (const m of notes) for (const det of [-7, 7]) { const o = c.createOscillator(); o.type = "sawtooth"; o.frequency.value = this.mtof(m); o.detune.value = det; o.connect(lp); o.start(t); o.stop(t + dur + 0.05); }
+  }
+  pluck(t, f) {
+    const c = this.ctx, o = c.createOscillator(), o2 = c.createOscillator(), lp = c.createBiquadFilter(), g = c.createGain();
+    o.type = "triangle"; o.frequency.value = f; o2.type = "sine"; o2.frequency.value = f * 2;
+    lp.type = "lowpass"; lp.frequency.setValueAtTime(4200, t); lp.frequency.exponentialRampToValueAtTime(900, t + 0.25);
+    this.env(g, t, 0.13, 0.003, 0.32); o.connect(lp); o2.connect(lp); lp.connect(g); g.connect(this.gain);
+    o.start(t); o2.start(t); o.stop(t + 0.4); o2.stop(t + 0.4);
+  }
+}
+
+// ---------------------------------------------------------------- styles
+// Each style: { n, name, line, draw(c, w, h, A, S, dt) }. c is scaled so w and h are CSS pixels.
+// S is that canvas's own state; S.dpr is its pixel ratio. The canvas is transparent behind the drawing.
+
+const ROUNDS = [];
+
+ROUNDS.push({
+  round: 1,
+  note: "Ten different directions, mint and blue from the new logo. Play the demo beat or load one of your own, then expand any of them to see it big.",
+  styles: [
+    {
+      n: 1, name: "Bezel", line: "Watch-bezel ticks around the cover. The ring snaps out on each kick and settles back with a little bounce.",
+      draw(c, w, h, A, S, dt) {
+        S.p = S.p || { x: 0, v: 0 }; S.sn = S.sn || 0;
+        const k = punch(S.p, A.kickHit, 0.55 + A.kickStrength * 0.45, dt, 320, 19);
+        S.sn = A.snareHit ? 1 : S.sn * Math.exp(-dt / 0.22);
+        const cx = w / 2, cy = h / 2, R0 = Math.min(w, h) * 0.24;
+        const R = R0 * (1 + k * 0.09 + A.low * 0.025);
+        // outer scale ring (static reference)
+        c.lineWidth = 1; c.strokeStyle = rgba(C.paper, 0.09);
+        c.beginPath(); c.arc(cx, cy, R0 * 1.92, 0, TAU); c.stroke();
+        // snare: hairline ring that pushes out and fades
+        if (S.sn > 0.02) { c.strokeStyle = rgba(C.blue, S.sn * 0.8); c.lineWidth = 1.25; c.beginPath(); c.arc(cx, cy, R0 * (1.98 + (1 - S.sn) * 0.22), 0, TAU); c.stroke(); }
+        // ticks, mirrored: bass at the bottom, highs meet at the top
+        const half = 64, inner = R + R0 * 0.08;
+        c.lineCap = "butt"; c.lineWidth = Math.max(1.5, R0 * 0.018);
+        const lit = new Path2D(), dim = new Path2D();
+        for (let i = 0; i < half; i += 1) {
+          const x = i / (half - 1);
+          const v = sampleRange(A.spec, 3, 56, x);
+          const len = R0 * 0.05 + v * R0 * 0.78;
+          for (const side of [-1, 1]) {
+            const a = Math.PI / 2 + side * (x * Math.PI * 0.985 + 0.02);
+            const ca = Math.cos(a), sa = Math.sin(a);
+            const p = v > 0.42 ? lit : dim;
+            p.moveTo(cx + ca * inner, cy + sa * inner); p.lineTo(cx + ca * (inner + len), cy + sa * (inner + len));
+          }
+        }
+        c.strokeStyle = rgba(C.paper, 0.5); c.stroke(dim);
+        c.strokeStyle = rgba(C.mint, 0.95); c.stroke(lit);
+        // the disc (cover goes here in the app)
+        c.fillStyle = rgba(C.ink, 0.92); c.beginPath(); c.arc(cx, cy, R, 0, TAU); c.fill();
+        c.strokeStyle = rgba(C.paper, 0.55 + k * 0.4); c.lineWidth = 1.25; c.stroke();
+        c.fillStyle = rgba(C.paper, 0.25); c.font = `500 ${Math.round(R0 * 0.11)}px "IBM Plex Mono", monospace`; c.textAlign = "center"; c.textBaseline = "middle";
+        c.fillText("COVER", cx, cy);
+      },
+    },
+    {
+      n: 2, name: "Ridgeline", line: "Stacked spectrum lines that roll back in time, each hiding the ones behind it. The front line jumps on the kick.",
+      draw(c, w, h, A, S, dt) {
+        const NL = 30, NP = 72, interval = 1 / 30;
+        S.hist = S.hist || []; S.phase = (S.phase || 0) + dt; S.p = S.p || { x: 0, v: 0 };
+        const k = punch(S.p, A.kickHit, 0.4 + A.kickStrength * 0.6, dt, 260, 18);
+        while (S.phase >= interval) {
+          S.phase -= interval;
+          const line = new Float32Array(NP);
+          for (let i = 0; i < NP; i += 1) { const x = i / (NP - 1); const win = Math.pow(Math.sin(Math.PI * x), 1.6); line[i] = sampleRange(A.specFast, 4, 54, Math.abs(x - 0.5) * 2) * win; }
+          S.hist.unshift(line); if (S.hist.length > NL + 1) S.hist.pop();
+        }
+        const frac = S.phase / interval, yTop = h * 0.16, yBot = h * 0.86, gap = (yBot - yTop) / NL;
+        for (let j = Math.min(S.hist.length, NL) - 1; j >= 0; j -= 1) {
+          const line = S.hist[j], age = (j + frac) / NL;
+          const base = yBot - (j + frac) * gap;
+          const narrow = 1 - age * 0.14, xL = w / 2 - w * 0.31 * narrow, xR = w / 2 + w * 0.31 * narrow;
+          const amp = gap * 6.2 * (j === 0 ? 1 + k * 0.45 : 1);
+          const pts = [];
+          for (let i = 0; i < NP; i += 1) pts.push([xL + (xR - xL) * (i / (NP - 1)), base - line[i] * amp]);
+          c.save(); c.globalCompositeOperation = "destination-out"; c.beginPath(); smoothLine(c, pts); c.lineTo(xR, base + 3); c.lineTo(xL, base + 3); c.closePath(); c.fill(); c.restore();
+          c.beginPath(); c.moveTo(xL - w * 0.04 * narrow, base); smoothLine(c, pts, false); c.lineTo(xR + w * 0.04 * narrow, base);
+          c.strokeStyle = rgba(mix(C.mint, C.paper, clamp(age * 4)), clamp(1 - age * 0.9, 0.06, 1));
+          c.lineWidth = j === 0 ? 1.8 + k * 0.8 : 1.5 - age * 0.6; c.lineJoin = "round"; c.stroke();
+        }
+      },
+    },
+    {
+      n: 3, name: "Analyzer", line: "A proper hardware spectrum analyzer: LED segments, peak caps that hold and then drop, real frequency labels.",
+      draw(c, w, h, A, S, dt) {
+        const NBAR = 40, x0 = w * 0.08, x1 = w * 0.92, base = h * 0.82, top = h * 0.14;
+        S.pk = S.pk || Array.from({ length: NBAR }, () => ({ v: 0, hold: 0, vel: 0 }));
+        const colW = (x1 - x0) / NBAR, barW = colW * 0.72, seg = Math.max(3, h * 0.012), segGap = Math.max(1.5, seg * 0.45);
+        const count = Math.floor((base - top) / (seg + segGap));
+        const lmin = Math.log(F_LO), lmax = Math.log(F_HI), b0 = 4, b1 = 60;
+        const unlit = new Path2D(); const litPaths = []; for (let r = 0; r < count; r += 1) litPaths.push(new Path2D());
+        const caps = new Path2D();
+        for (let i = 0; i < NBAR; i += 1) {
+          const v = clamp(sampleRange(A.specFast, b0, b1, i / (NBAR - 1)) * 1.05);
+          const p = S.pk[i];
+          if (v >= p.v) { p.v = v; p.hold = 0.45; p.vel = 0; } else if (p.hold > 0) p.hold -= dt; else { p.vel += 2.4 * dt; p.v = Math.max(0, p.v - p.vel * dt); }
+          const x = x0 + i * colW + (colW - barW) / 2, litN = Math.round(v * count);
+          for (let r = 0; r < count; r += 1) { const y = base - (r + 1) * (seg + segGap) + segGap; (r < litN ? litPaths[r] : unlit).rect(x, y, barW, seg); }
+          const pr = Math.min(count - 1, Math.round(p.v * count));
+          if (p.v > 0.02) caps.rect(x, base - (pr + 1) * (seg + segGap) + segGap, barW, seg);
+        }
+        c.fillStyle = rgba(C.paper, 0.05); c.fill(unlit);
+        for (let r = 0; r < count; r += 1) { const t = r / Math.max(1, count - 1); c.fillStyle = rgba(mix(C.mint, C.blue, Math.pow(t, 0.9)), 1); c.fill(litPaths[r]); }
+        c.fillStyle = rgba(C.paper, 0.9); c.fill(caps);
+        // axis
+        c.fillStyle = rgba(C.paper, 0.4); c.font = `400 ${Math.max(9, Math.round(h * 0.03))}px "IBM Plex Mono", monospace`; c.textAlign = "center"; c.textBaseline = "top";
+        const fAt = (b) => Math.exp(lmin + (lmax - lmin) * (b / NB));
+        for (const [f, label] of [[50, "50"], [100, "100"], [250, "250"], [1000, "1k"], [4000, "4k"], [10000, "10k"]]) {
+          const b = (Math.log(f) - lmin) / (lmax - lmin) * NB; const xi = (b - b0) / (b1 - b0) * (NBAR - 1);
+          if (xi < 0 || xi > NBAR - 1) continue;
+          c.fillText(label, x0 + xi * colW + colW / 2, base + h * 0.03);
+        }
+        void fAt;
+        c.fillStyle = rgba(C.paper, 0.12); c.fillRect(x0, base + h * 0.012, x1 - x0, 1);
+      },
+    },
+    {
+      n: 4, name: "Phosphor", line: "An oscilloscope on the actual waveform, triggered so it holds still, with a short phosphor afterglow.",
+      draw(c, w, h, A, S, dt) {
+        const dpr = S.dpr;
+        if (!S.buf || S.buf.width !== Math.round(w * dpr) || S.buf.height !== Math.round(h * dpr)) { S.buf = makeCanvas(Math.round(w * dpr), Math.round(h * dpr)); S.bc = S.buf.getContext("2d"); S.amp = 0.05; }
+        S.p = S.p || { x: 0, v: 0 };
+        const k = punch(S.p, A.kickHit, 0.6 + A.kickStrength * 0.4, dt, 360, 24);
+        const bc = S.bc; bc.setTransform(dpr, 0, 0, dpr, 0, 0);
+        bc.globalCompositeOperation = "destination-out"; bc.fillStyle = `rgba(0,0,0,${1 - Math.exp(-dt / 0.07)})`; bc.fillRect(0, 0, w, h);
+        bc.globalCompositeOperation = "source-over";
+        // graticule
+        const gx0 = w * 0.06, gx1 = w * 0.94, gy0 = h * 0.1, gy1 = h * 0.9, cy = h / 2;
+        c.strokeStyle = rgba(C.paper, 0.07); c.lineWidth = 1; c.beginPath();
+        for (let i = 0; i <= 10; i += 1) { const x = gx0 + (gx1 - gx0) * i / 10; c.moveTo(Math.round(x) + 0.5, gy0); c.lineTo(Math.round(x) + 0.5, gy1); }
+        for (let i = 0; i <= 8; i += 1) { const y = gy0 + (gy1 - gy0) * i / 8; c.moveTo(gx0, Math.round(y) + 0.5); c.lineTo(gx1, Math.round(y) + 0.5); }
+        c.stroke();
+        c.strokeStyle = rgba(C.paper, 0.18); c.beginPath();
+        for (let i = 0; i <= 50; i += 1) { const x = gx0 + (gx1 - gx0) * i / 50; c.moveTo(x, cy - 3); c.lineTo(x, cy + 3); }
+        c.stroke();
+        const span = 1536, wave = A.wave;
+        let trig = 1, peak = 0;
+        for (let i = 0; i < wave.length; i += 1) { const a = Math.abs(wave[i]); if (a > peak) peak = a; }
+        S.amp = Math.max(peak, S.amp * Math.exp(-dt / 2), 0.02);
+        for (let i = 2; i < 512; i += 1) { if (wave[i - 2] < 0 && wave[i - 1] < 0 && wave[i] >= 0 && wave[i + 3] > 0) { trig = i; break; } }
+        bc.beginPath();
+        const gain = (gy1 - gy0) * 0.46 / S.amp;
+        for (let i = 0; i < span; i += 2) { const x = gx0 + (gx1 - gx0) * (i / span); const y = cy - wave[trig + i] * gain; if (i === 0) bc.moveTo(x, y); else bc.lineTo(x, y); }
+        bc.strokeStyle = rgba(mix(C.mint, C.paper, k * 0.7), 0.95); bc.lineWidth = 1.4 + k * 1.2; bc.lineJoin = "round"; bc.stroke();
+        c.drawImage(S.buf, 0, 0, w, h);
+        c.fillStyle = rgba(C.paper, 0.38); c.font = `400 ${Math.max(9, Math.round(h * 0.028))}px "IBM Plex Mono", monospace`; c.textAlign = "right"; c.textBaseline = "bottom";
+        c.fillText(`${((span / A.sampleRate) * 100).toFixed(1)} ms/div`, gx1, gy1 + h * 0.07);
+      },
+    },
+    {
+      n: 5, name: "Dot Matrix", line: "A grid of LED dots lit by the spectrum. The bottom rows flash across the full width on a kick.",
+      draw(c, w, h, A, S, dt) {
+        const cols = 44, rows = 17;
+        S.pk = S.pk || new Float32Array(cols); S.p = S.p || { x: 0, v: 0 };
+        const k = punch(S.p, A.kickHit, A.kickStrength, dt, 420, 30);
+        const cell = Math.min((w * 0.86) / cols, (h * 0.78) / rows), r = cell * 0.31;
+        const gx = (w - cell * cols) / 2 + cell / 2, gy = (h + cell * rows) / 2 - cell / 2;
+        const off = new Path2D(), on = new Path2D(), top = new Path2D(), cap = new Path2D(), flash = new Path2D();
+        for (let i = 0; i < cols; i += 1) {
+          const v = clamp(sampleRange(A.specFast, 3, 58, i / (cols - 1)));
+          const n = Math.round(v * rows);
+          S.pk[i] = n >= S.pk[i] ? n : Math.max(0, S.pk[i] - dt * 14);
+          const pkRow = Math.floor(S.pk[i]);
+          for (let j = 0; j < rows; j += 1) {
+            const x = gx + i * cell, y = gy - j * cell;
+            let p = off;
+            if (j < n) p = j >= rows - 4 ? top : on;
+            else if (j === pkRow && pkRow > 0) p = cap;
+            else if (j < 2 && k > 0.05) p = flash;
+            p.moveTo(x + r, y); p.arc(x, y, r, 0, TAU);
+          }
+        }
+        c.fillStyle = rgba(C.mint, 0.07); c.fill(off);
+        c.fillStyle = rgba(C.mint, 0.25 + k * 0.6); c.fill(flash);
+        c.fillStyle = rgba(C.mint, 1); c.fill(on);
+        c.fillStyle = rgba(C.blue, 1); c.fill(top);
+        c.fillStyle = rgba(C.paper, 0.85); c.fill(cap);
+      },
+    },
+    {
+      n: 6, name: "Ripples", line: "Only the hits. Each kick sends out a ring, snares send a fainter blue pair, hats tick around the orbit.",
+      draw(c, w, h, A, S, dt) {
+        S.rings = S.rings || []; S.ticks = S.ticks || []; S.p = S.p || { x: 0, v: 0 }; S.r = S.r || rng(11);
+        const t = A.t, cx = w / 2, cy = h / 2, r0 = Math.min(w, h) * 0.08, Rmax = Math.hypot(w, h) * 0.52;
+        if (A.kickHit) S.rings.push({ t0: t, kind: 0, s: A.kickStrength });
+        if (A.snareHit) S.rings.push({ t0: t, kind: 1, s: A.snareStrength });
+        if (A.hatHit) S.ticks.push({ t0: t, a: S.r() * TAU, s: A.hatStrength });
+        const k = punch(S.p, A.kickHit, 0.5 + A.kickStrength * 0.5, dt, 340, 22);
+        const orbit = r0 * 2.6;
+        c.strokeStyle = rgba(C.paper, 0.08); c.lineWidth = 1; c.beginPath(); c.arc(cx, cy, orbit, 0, TAU); c.stroke();
+        S.rings = S.rings.filter((g) => t - g.t0 < (g.kind ? 0.8 : 1.25));
+        for (const g of S.rings) {
+          const life = g.kind ? 0.8 : 1.25, u = (t - g.t0) / life;
+          const fade = Math.pow(1 - u, 1.6) * (0.35 + g.s * 0.65);
+          if (g.kind === 0) {
+            const rr = r0 + (Rmax - r0) * ease.outCubic(u);
+            c.strokeStyle = rgba(C.paper, fade); c.lineWidth = 0.6 + (1 - u) * 2.6; c.beginPath(); c.arc(cx, cy, rr, 0, TAU); c.stroke();
+          } else {
+            const rr = r0 * 1.4 + (Rmax * 0.55 - r0) * ease.outQuart(u);
+            c.strokeStyle = rgba(C.blue, fade * 0.9); c.lineWidth = 1;
+            c.beginPath(); c.arc(cx, cy, rr, 0, TAU); c.stroke();
+            c.beginPath(); c.arc(cx, cy, rr * 0.93, 0, TAU); c.stroke();
+          }
+        }
+        S.ticks = S.ticks.filter((g) => t - g.t0 < 0.3);
+        c.lineCap = "round";
+        for (const g of S.ticks) {
+          const u = (t - g.t0) / 0.3, ca = Math.cos(g.a), sa = Math.sin(g.a), len = r0 * 0.35 * (1 - u * 0.5);
+          c.strokeStyle = rgba(C.paper, (1 - u) * 0.8 * (0.4 + g.s * 0.6)); c.lineWidth = 1.5;
+          c.beginPath(); c.moveTo(cx + ca * orbit, cy + sa * orbit); c.lineTo(cx + ca * (orbit + len), cy + sa * (orbit + len)); c.stroke();
+        }
+        c.fillStyle = rgba(C.mint, 1); c.beginPath(); c.arc(cx, cy, r0 * (0.38 + k * 0.3 + A.low * 0.08), 0, TAU); c.fill();
+      },
+    },
+    {
+      n: 7, name: "Jelly", line: "A soft shape held by springs. Each point chases its frequency band and overshoots, so it wobbles like it has weight.",
+      draw(c, w, h, A, S, dt) {
+        const N = 56, cx = w / 2, cy = h / 2, R0 = Math.min(w, h) * 0.2;
+        if (!S.pts) { S.pts = Array.from({ length: N }, () => ({ x: 0, v: 0 })); S.echo = new Float32Array(N); S.p = { x: 0, v: 0 }; }
+        const k = punch(S.p, A.kickHit, 0.5 + A.kickStrength * 0.5, dt, 300, 18);
+        const pts = [], echo = [];
+        for (let i = 0; i < N; i += 1) {
+          const x = Math.abs((i / N) * 2 - 1); // mirrored: bass at the bottom, highs at the top
+          const v = sampleRange(A.spec, 3, 50, 1 - x);
+          const s = S.pts[i];
+          if (A.kickHit) s.v += R0 * 3.2 * A.kickStrength * (0.6 + (1 - x) * 0.6);
+          spring(s, v * R0 * 0.62, 520, 16, dt);
+          const r = R0 * (1 + k * 0.06) + s.x;
+          S.echo[i] += (r - S.echo[i]) * (1 - Math.exp(-dt / 0.12));
+          const a = Math.PI / 2 + (i / N) * TAU;
+          pts.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]);
+          echo.push([cx + Math.cos(a) * S.echo[i] * 1.07, cy + Math.sin(a) * S.echo[i] * 1.07]);
+        }
+        c.beginPath(); smoothClosed(c, echo); c.strokeStyle = rgba(C.paper, 0.32); c.lineWidth = 1; c.stroke();
+        const g = c.createLinearGradient(cx - R0, cy - R0, cx + R0, cy + R0);
+        g.addColorStop(0, rgba(C.mint, 1)); g.addColorStop(1, rgba(C.blue, 1));
+        c.beginPath(); smoothClosed(c, pts); c.fillStyle = g; c.fill();
+      },
+    },
+    {
+      n: 8, name: "Horizon", line: "One line across the frame. Bass grows from the middle out, with a dim reflection underneath. Wide, quiet, good over photos.",
+      draw(c, w, h, A, S, dt) {
+        S.p = S.p || { x: 0, v: 0 };
+        const k = punch(S.p, A.kickHit, 0.5 + A.kickStrength * 0.5, dt, 300, 20);
+        const M = 70, cx = w / 2, cy = h * 0.56, span = w * 0.44, H = h * 0.34;
+        const step = span / M, lw = Math.max(1.2, step * 0.38);
+        const up = new Path2D(), upLit = new Path2D(), down = new Path2D();
+        for (let i = 0; i < M; i += 1) {
+          const v = sampleRange(A.spec, 3, 58, i / (M - 1));
+          const hh = 1 + v * H * (1 + (i < 6 ? k * 0.25 : 0));
+          for (const side of [-1, 1]) {
+            const x = cx + side * (i + 0.5) * step;
+            (v > 0.5 ? upLit : up).moveTo(x, cy - 2); (v > 0.5 ? upLit : up).lineTo(x, cy - 2 - hh);
+            down.moveTo(x, cy + 3); down.lineTo(x, cy + 3 + hh * 0.38);
+          }
+        }
+        c.lineCap = "butt"; c.lineWidth = lw;
+        c.strokeStyle = rgba(C.paper, 0.14); c.stroke(down);
+        c.strokeStyle = rgba(C.paper, 0.78); c.stroke(up);
+        c.strokeStyle = rgba(C.mint, 1); c.stroke(upLit);
+        const bw = w * (0.47 + k * 0.025);
+        c.fillStyle = rgba(mix(C.paper, C.mint, k), 0.4 + k * 0.6);
+        c.fillRect(cx - bw, cy - 0.5 - k * 1.2, bw * 2, 1 + k * 2.4);
+        c.fillRect(cx - bw, cy - 6, 1, 12); c.fillRect(cx + bw - 1, cy - 6, 1, 12);
+      },
+    },
+    {
+      n: 9, name: "Shockwave", line: "A field of still dots. Kicks push a wave out from the middle, snares pull one back in, hats make it shimmer.",
+      draw(c, w, h, A, S, dt) {
+        if (!S.grid || S.gw !== w || S.gh !== h) {
+          S.gw = w; S.gh = h; S.grid = []; const r = rng(3);
+          const sp = w / 36;
+          for (let y = sp / 2; y < h; y += sp) for (let x = sp / 2; x < w; x += sp) S.grid.push([x, y, r() * TAU]);
+          S.waves = S.waves || [];
+        }
+        const t = A.t, cx = w / 2, cy = h / 2, diag = Math.hypot(w, h) / 2;
+        if (A.kickHit) S.waves.push({ t0: t, s: A.kickStrength, dir: 1 });
+        if (A.snareHit) S.waves.push({ t0: t, s: A.snareStrength * 0.7, dir: -1 });
+        S.waves = S.waves.filter((g) => t - g.t0 < 1.4);
+        const width = w * 0.045, ampPx = w * 0.022, jit = A.high * w * 0.0016;
+        const base = new Path2D(), hot = new Path2D(), warm = new Path2D();
+        for (const [x, y, ph] of S.grid) {
+          const dx = x - cx, dy = y - cy, d = Math.hypot(dx, dy) || 1;
+          let off = 0;
+          for (const g of S.waves) {
+            const age = t - g.t0, rw = age * diag * 1.15, q = (d - rw) / width;
+            off += g.dir * g.s * ampPx * Math.exp(-q * q) * Math.exp(-age / 0.7);
+          }
+          const px = x + (dx / d) * off + Math.cos(ph + t * 23) * jit, py = y + (dy / d) * off + Math.sin(ph * 1.7 + t * 19) * jit;
+          const m = Math.abs(off) / ampPx, rad = w * 0.0016 * (1 + m * 1.4);
+          const p = m > 0.45 ? hot : m > 0.12 ? warm : base;
+          p.moveTo(px + rad, py); p.arc(px, py, rad, 0, TAU);
+        }
+        c.fillStyle = rgba(C.paper, 0.3); c.fill(base);
+        c.fillStyle = rgba(C.paper, 0.75); c.fill(warm);
+        c.fillStyle = rgba(C.mint, 1); c.fill(hot);
+      },
+    },
+    {
+      n: 10, name: "Groove", line: "A spinning record that cuts the spectrum into its grooves as it plays: bass on the inside, highs on the rim.",
+      draw(c, w, h, A, S, dt) {
+        const dpr = S.dpr, R = Math.min(w, h) * 0.42, rin = R * 0.3, size = Math.round(R * 2 * dpr);
+        if (!S.disc || S.disc.width !== size) {
+          S.disc = makeCanvas(size, size); S.dc = S.disc.getContext("2d"); S.theta = 0;
+          const d = S.dc; d.setTransform(dpr, 0, 0, dpr, R * dpr, R * dpr);
+          d.fillStyle = "rgb(17,20,21)"; d.beginPath(); d.arc(0, 0, R, 0, TAU); d.fill();
+          d.strokeStyle = "rgba(233,241,237,0.035)"; d.lineWidth = 1;
+          for (let r = rin; r < R; r += 3) { d.beginPath(); d.arc(0, 0, r, 0, TAU); d.stroke(); }
+        }
+        S.p = S.p || { x: 0, v: 0 };
+        const k = punch(S.p, A.kickHit, 0.5 + A.kickStrength * 0.5, dt, 300, 20);
+        const prev = S.theta; S.theta += dt * TAU / 3.4;
+        if (A.live) {
+          const d = S.dc, K = 44, a0 = -Math.PI / 2 + prev - 0.003, a1 = -Math.PI / 2 + S.theta + 0.003;
+          d.setTransform(dpr, 0, 0, dpr, R * dpr, R * dpr);
+          for (let i = 0; i < K; i += 1) {
+            const r0 = rin + (R - rin) * (i / K), r1 = rin + (R - rin) * ((i + 1) / K) - 0.6;
+            const v = sampleRange(A.spec, 3, 58, i / (K - 1));
+            const col = v < 0.35 ? mix([17, 20, 21], C.deep, v / 0.35) : v < 0.62 ? mix(C.deep, C.blue, (v - 0.35) / 0.27) : v < 0.86 ? mix(C.blue, C.mint, (v - 0.62) / 0.24) : mix(C.mint, C.paper, (v - 0.86) / 0.14);
+            d.fillStyle = rgba(col, 1); d.beginPath(); d.arc(0, 0, r1, a0, a1); d.arc(0, 0, r0, a1, a0, true); d.closePath(); d.fill();
+          }
+        }
+        const cx = w / 2, cy = h / 2, sc = 1 + k * 0.025;
+        c.save(); c.translate(cx, cy); c.scale(sc, sc); c.rotate(-S.theta);
+        c.beginPath(); c.arc(0, 0, R, 0, TAU); c.clip();
+        c.drawImage(S.disc, -R, -R, R * 2, R * 2);
+        // label
+        c.fillStyle = rgba(C.ink, 1); c.beginPath(); c.arc(0, 0, rin * 0.92, 0, TAU); c.fill();
+        c.strokeStyle = rgba(C.paper, 0.35); c.lineWidth = 1; c.stroke();
+        c.fillStyle = rgba(C.mint, 0.9); c.beginPath(); c.arc(0, -rin * 0.6, rin * 0.07, 0, TAU); c.fill();
+        c.fillStyle = rgba(C.paper, 0.85); c.beginPath(); c.arc(0, 0, rin * 0.08, 0, TAU); c.fill();
+        c.restore();
+        // stylus head, fixed at 12 o'clock
+        c.strokeStyle = rgba(mix(C.paper, C.mint, k), 0.6 + k * 0.4); c.lineWidth = 1.5 + k;
+        c.beginPath(); c.moveTo(cx, cy - R * sc - h * 0.04); c.lineTo(cx, cy - rin * sc); c.stroke();
+      },
+    },
+  ],
+});
+
+ROUNDS.push({
+  round: 2,
+  note: "Built from your round 1 picks: 2, 3, 4, 5, 7, 9 and 10. Some push one pick further, some cross two of them (the line under each says which).",
+  styles: [
+    {
+      n: 11, name: "Ridgeline Deep", line: "From 2. More lines fading from mint to blue with depth. Each kick leaves a bright line that rolls back through the stack.",
+      draw(c, w, h, A, S, dt) {
+        const NL = 44, NP = 84, interval = 1 / 36;
+        S.hist = S.hist || []; S.phase = (S.phase || 0) + dt; S.p = S.p || { x: 0, v: 0 }; S.mark = S.mark || 0;
+        const k = punch(S.p, A.kickHit, 0.4 + A.kickStrength * 0.6, dt, 260, 18);
+        if (A.kickHit) S.mark = A.kickStrength;
+        while (S.phase >= interval) {
+          S.phase -= interval;
+          const line = new Float32Array(NP);
+          for (let i = 0; i < NP; i += 1) { const x = i / (NP - 1); const win = Math.pow(Math.sin(Math.PI * x), 1.5); line[i] = sampleRange(A.specFast, 4, 56, Math.abs(x - 0.5) * 2) * win; }
+          S.hist.unshift({ line, kick: S.mark }); S.mark = 0;
+          if (S.hist.length > NL + 1) S.hist.pop();
+        }
+        const frac = S.phase / interval, yTop = h * 0.12, yBot = h * 0.88, gap = (yBot - yTop) / NL;
+        for (let j = Math.min(S.hist.length, NL) - 1; j >= 0; j -= 1) {
+          const { line, kick } = S.hist[j], age = (j + frac) / NL;
+          const base = yBot - (j + frac) * gap;
+          const narrow = 1 - age * 0.2, xL = w / 2 - w * 0.36 * narrow, xR = w / 2 + w * 0.36 * narrow;
+          const amp = gap * 7.5 * (1 - age * 0.25) * (j === 0 ? 1 + k * 0.5 : 1);
+          const pts = [];
+          for (let i = 0; i < NP; i += 1) pts.push([xL + (xR - xL) * (i / (NP - 1)), base - line[i] * amp]);
+          c.save(); c.globalCompositeOperation = "destination-out"; c.beginPath(); smoothLine(c, pts); c.lineTo(xR, base + 2); c.lineTo(xL, base + 2); c.closePath(); c.fill(); c.restore();
+          if (j === 0) {
+            const g = c.createLinearGradient(0, base - amp, 0, base);
+            g.addColorStop(0, rgba(C.mint, 0.16)); g.addColorStop(1, rgba(C.mint, 0));
+            c.beginPath(); smoothLine(c, pts); c.lineTo(xR, base); c.lineTo(xL, base); c.closePath(); c.fillStyle = g; c.fill();
+          }
+          c.beginPath(); c.moveTo(xL - w * 0.05 * narrow, base); smoothLine(c, pts, false); c.lineTo(xR + w * 0.05 * narrow, base);
+          let col = mix(C.mint, C.blue, clamp(age * 1.3)), alpha = clamp(1 - age * 0.8, 0.1, 1), lw = j === 0 ? 1.9 + k * 0.8 : 1.4 - age * 0.5;
+          if (kick > 0.2) { col = mix(col, C.paper, 0.75); alpha = clamp(alpha + 0.25); lw += 0.7; }
+          c.strokeStyle = rgba(col, alpha); c.lineWidth = lw; c.lineJoin = "round"; c.stroke();
+        }
+      },
+    },
+    {
+      n: 12, name: "Terrain", line: "Crosses 2 and 3. The spectrum's history laid out as a landscape in perspective, the newest row at the front.",
+      draw(c, w, h, A, S, dt) {
+        const NL = 26, NP = 44, interval = 1 / 24;
+        S.hist = S.hist || []; S.phase = (S.phase || 0) + dt; S.p = S.p || { x: 0, v: 0 };
+        const k = punch(S.p, A.kickHit, 0.4 + A.kickStrength * 0.6, dt, 260, 18);
+        while (S.phase >= interval) {
+          S.phase -= interval;
+          const line = new Float32Array(NP);
+          for (let i = 0; i < NP; i += 1) { const x = i / (NP - 1); line[i] = sampleRange(A.specFast, 3, 56, x) * (0.35 + 0.65 * Math.pow(Math.sin(Math.PI * x), 0.6)); }
+          S.hist.unshift(line); if (S.hist.length > NL + 1) S.hist.pop();
+        }
+        const frac = S.phase / interval, rows = [];
+        const n = Math.min(S.hist.length, NL);
+        for (let j = 0; j < n; j += 1) {
+          const z = (j + frac) / NL, persp = 1 / (1 + z * 2.2);
+          const base = h * 0.42 + (h * 0.5) * persp, half = w * 0.48 * persp, amp = h * 0.34 * persp * (j === 0 ? 1 + k * 0.4 : 1);
+          const pts = [];
+          for (let i = 0; i < NP; i += 1) pts.push([w / 2 - half + (2 * half) * (i / (NP - 1)), base - S.hist[j][i] * amp]);
+          rows.push({ pts, base, z });
+        }
+        c.lineJoin = "round";
+        for (let j = n - 1; j >= 0; j -= 1) {
+          const { pts, base, z } = rows[j];
+          c.save(); c.globalCompositeOperation = "destination-out"; c.beginPath(); c.moveTo(pts[0][0], base + 1); for (const p of pts) c.lineTo(p[0], p[1]); c.lineTo(pts[NP - 1][0], base + 1); c.closePath(); c.fill(); c.restore();
+          if (j < n - 1) {
+            const back = rows[j + 1].pts; c.beginPath();
+            for (let i = 0; i < NP; i += 3) { c.moveTo(pts[i][0], pts[i][1]); c.lineTo(back[i][0], back[i][1]); }
+            c.strokeStyle = rgba(C.blue, 0.35 * (1 - z)); c.lineWidth = 1; c.stroke();
+          }
+          c.beginPath(); for (let i = 0; i < NP; i += 1) i ? c.lineTo(pts[i][0], pts[i][1]) : c.moveTo(pts[i][0], pts[i][1]);
+          c.strokeStyle = rgba(j === 0 ? C.mint : mix(C.mint, C.blue, clamp(z * 1.6)), clamp(1 - z * 0.85, 0.08, 1)); c.lineWidth = j === 0 ? 1.8 + k : 1.2; c.stroke();
+        }
+      },
+    },
+    {
+      n: 13, name: "Analyzer Pro", line: "From 3. Finer segments, a dB scale, a floor reflection, and a slow average curve on top like a mixing plugin.",
+      draw(c, w, h, A, S, dt) {
+        const NBAR = 56, x0 = w * 0.1, x1 = w * 0.94, base = h * 0.74, top = h * 0.1;
+        S.pk = S.pk || Array.from({ length: NBAR }, () => ({ v: 0, hold: 0, vel: 0 })); S.avg = S.avg || new Float32Array(NBAR);
+        const colW = (x1 - x0) / NBAR, barW = colW * 0.66, seg = Math.max(2, h * 0.0075), segGap = Math.max(1.2, seg * 0.5);
+        const count = Math.floor((base - top) / (seg + segGap));
+        const b0 = 4, b1 = 60, lmin = Math.log(F_LO), lmax = Math.log(F_HI);
+        const unlit = new Path2D(), refl = new Path2D(), caps = new Path2D(), lit = []; for (let r = 0; r < count; r += 1) lit.push(new Path2D());
+        const curve = [];
+        for (let i = 0; i < NBAR; i += 1) {
+          const v = clamp(sampleRange(A.specFast, b0, b1, i / (NBAR - 1)) * 1.05);
+          const a = S.avg[i]; S.avg[i] = a + (v - a) * (1 - Math.exp(-dt / (v > a ? 0.18 : 0.7)));
+          const p = S.pk[i];
+          if (v >= p.v) { p.v = v; p.hold = 0.5; p.vel = 0; } else if (p.hold > 0) p.hold -= dt; else { p.vel += 2.2 * dt; p.v = Math.max(0, p.v - p.vel * dt); }
+          const x = x0 + i * colW + (colW - barW) / 2, litN = Math.round(v * count);
+          for (let r = 0; r < count; r += 1) { const y = base - (r + 1) * (seg + segGap) + segGap; (r < litN ? lit[r] : unlit).rect(x, y, barW, seg); }
+          const rn = Math.round(litN * 0.3);
+          for (let r = 0; r < rn; r += 1) refl.rect(x, base + h * 0.02 + r * (seg + segGap), barW, seg);
+          const pr = Math.min(count - 1, Math.round(p.v * count));
+          if (p.v > 0.02) caps.rect(x, base - (pr + 1) * (seg + segGap) + segGap, barW, seg);
+          curve.push([x + barW / 2, base - S.avg[i] * (base - top)]);
+        }
+        // dB grid
+        c.font = `400 ${Math.max(9, Math.round(h * 0.026))}px "IBM Plex Mono", monospace`; c.textAlign = "right"; c.textBaseline = "middle";
+        for (const [db, frac] of [[0, 1], [-12, 0.75], [-24, 0.5], [-36, 0.25]]) {
+          const y = Math.round(base - frac * (base - top)) + 0.5;
+          c.fillStyle = rgba(C.paper, 0.06); c.fillRect(x0, y, x1 - x0, 1);
+          c.fillStyle = rgba(C.paper, 0.38); c.fillText(String(db), x0 - w * 0.015, y);
+        }
+        c.fillStyle = rgba(C.paper, 0.045); c.fill(unlit);
+        for (let r = 0; r < count; r += 1) { c.fillStyle = rgba(mix(C.mint, C.blue, r / Math.max(1, count - 1)), 1); c.fill(lit[r]); }
+        c.fillStyle = rgba(C.mint, 0.12); c.fill(refl);
+        c.fillStyle = rgba(C.paper, 0.9); c.fill(caps);
+        c.beginPath(); smoothLine(c, curve); c.strokeStyle = rgba(C.paper, 0.7); c.lineWidth = 1.5; c.stroke();
+        c.lineTo(curve[curve.length - 1][0], base); c.lineTo(curve[0][0], base); c.closePath();
+        const g = c.createLinearGradient(0, top, 0, base); g.addColorStop(0, rgba(C.paper, 0.1)); g.addColorStop(1, rgba(C.paper, 0)); c.fillStyle = g; c.fill();
+        c.textAlign = "center"; c.textBaseline = "top"; c.fillStyle = rgba(C.paper, 0.38);
+        for (const [f, label] of [[50, "50"], [100, "100"], [250, "250"], [1000, "1k"], [4000, "4k"], [10000, "10k"]]) {
+          const b = (Math.log(f) - lmin) / (lmax - lmin) * NB, xi = (b - b0) / (b1 - b0) * (NBAR - 1);
+          if (xi >= 0 && xi <= NBAR - 1) c.fillText(label, x0 + xi * colW + colW / 2, h * 0.9);
+        }
+      },
+    },
+    {
+      n: 14, name: "Goniometer", line: "From 4. The waveform plotted against itself a moment later, so the sound draws its own shape, with phosphor afterglow.",
+      draw(c, w, h, A, S, dt) {
+        const dpr = S.dpr;
+        if (!S.buf || S.buf.width !== Math.round(w * dpr) || S.buf.height !== Math.round(h * dpr)) { S.buf = makeCanvas(Math.round(w * dpr), Math.round(h * dpr)); S.bc = S.buf.getContext("2d"); S.amp = 0.05; }
+        S.p = S.p || { x: 0, v: 0 };
+        const k = punch(S.p, A.kickHit, 0.6 + A.kickStrength * 0.4, dt, 360, 24);
+        const bc = S.bc; bc.setTransform(dpr, 0, 0, dpr, 0, 0);
+        bc.globalCompositeOperation = "destination-out"; bc.fillStyle = `rgba(0,0,0,${1 - Math.exp(-dt / 0.12)})`; bc.fillRect(0, 0, w, h);
+        bc.globalCompositeOperation = "source-over";
+        const cx = w / 2, cy = h / 2, R = Math.min(w, h) * 0.42;
+        c.strokeStyle = rgba(C.paper, 0.08); c.lineWidth = 1; c.beginPath(); c.arc(cx, cy, R, 0, TAU); c.moveTo(cx - R, cy); c.lineTo(cx + R, cy); c.moveTo(cx, cy - R); c.lineTo(cx, cy + R); c.stroke();
+        c.strokeStyle = rgba(C.paper, 0.04); c.beginPath(); c.arc(cx, cy, R * 0.5, 0, TAU); c.stroke();
+        const wave = A.wave, d = 36;
+        let peak = 0; for (let i = 0; i < wave.length; i += 1) peak = Math.max(peak, Math.abs(wave[i]));
+        S.amp = Math.max(peak, S.amp * Math.exp(-dt / 2), 0.02);
+        const g = (R * 0.68) / S.amp, s2 = Math.SQRT1_2;
+        bc.beginPath();
+        for (let i = 0; i < wave.length - d; i += 2) {
+          const a = wave[i], b = wave[i + d], x = cx + (a - b) * s2 * g * 1.6, y = cy - (a + b) * s2 * g;
+          if (i === 0) bc.moveTo(x, y); else bc.lineTo(x, y);
+        }
+        bc.strokeStyle = rgba(mix(C.mint, C.paper, k * 0.6), 0.75); bc.lineWidth = 1 + k; bc.lineJoin = "round"; bc.stroke();
+        c.drawImage(S.buf, 0, 0, w, h);
+      },
+    },
+    {
+      n: 15, name: "Halo Scope", line: "Crosses 4 and 10. The waveform wrapped around the cover like a scope bent into a ring. The ring snaps out on the kick.",
+      draw(c, w, h, A, S, dt) {
+        const dpr = S.dpr;
+        if (!S.buf || S.buf.width !== Math.round(w * dpr) || S.buf.height !== Math.round(h * dpr)) { S.buf = makeCanvas(Math.round(w * dpr), Math.round(h * dpr)); S.bc = S.buf.getContext("2d"); S.amp = 0.05; }
+        S.p = S.p || { x: 0, v: 0 };
+        const k = punch(S.p, A.kickHit, 0.6 + A.kickStrength * 0.4, dt, 320, 20);
+        const bc = S.bc; bc.setTransform(dpr, 0, 0, dpr, 0, 0);
+        bc.globalCompositeOperation = "destination-out"; bc.fillStyle = `rgba(0,0,0,${1 - Math.exp(-dt / 0.09)})`; bc.fillRect(0, 0, w, h);
+        bc.globalCompositeOperation = "source-over";
+        const cx = w / 2, cy = h / 2, R0 = Math.min(w, h) * 0.27, R = R0 * (1 + k * 0.08);
+        const wave = A.wave, N = 1440;
+        let peak = 0; for (let i = 0; i < wave.length; i += 1) peak = Math.max(peak, Math.abs(wave[i]));
+        S.amp = Math.max(peak, S.amp * Math.exp(-dt / 2), 0.02);
+        let trig = 1; for (let i = 2; i < 512; i += 1) if (wave[i - 2] < 0 && wave[i - 1] < 0 && wave[i] >= 0 && wave[i + 3] > 0) { trig = i; break; }
+        const gain = (R0 * 0.32) / S.amp;
+        bc.beginPath();
+        for (let i = 0; i <= N; i += 3) {
+          const j = Math.min(wave.length - 1, trig + Math.min(i, N - 1) * (wave.length - 520) / N | 0);
+          const a = -Math.PI / 2 + (i / N) * TAU, r = R + R0 * 0.1 + wave[j] * gain;
+          const x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r;
+          if (i === 0) bc.moveTo(x, y); else bc.lineTo(x, y);
+        }
+        bc.closePath();
+        bc.strokeStyle = rgba(mix(C.mint, C.paper, k * 0.6), 0.95); bc.lineWidth = 1.4 + k * 1.2; bc.lineJoin = "round"; bc.stroke();
+        c.strokeStyle = rgba(C.paper, 0.07); c.lineWidth = 1; c.beginPath(); c.arc(cx, cy, R0 * 1.42, 0, TAU); c.stroke();
+        c.drawImage(S.buf, 0, 0, w, h);
+        c.fillStyle = rgba(C.ink, 0.92); c.beginPath(); c.arc(cx, cy, R, 0, TAU); c.fill();
+        c.strokeStyle = rgba(C.paper, 0.45 + k * 0.4); c.lineWidth = 1.25; c.stroke();
+        c.fillStyle = rgba(C.paper, 0.25); c.font = `500 ${Math.round(R0 * 0.12)}px "IBM Plex Mono", monospace`; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText("COVER", cx, cy);
+      },
+    },
+    {
+      n: 16, name: "Dot Record", line: "Crosses 5 and 10. LED dots in rings around the cover, lit outward by the spectrum. The inner ring flashes on the kick.",
+      draw(c, w, h, A, S, dt) {
+        const cx = w / 2, cy = h / 2, R = Math.min(w, h) * 0.45, rin = R * 0.36, rings = 13, bins = 48;
+        S.pk = S.pk || new Float32Array(bins); S.p = S.p || { x: 0, v: 0 };
+        const k = punch(S.p, A.kickHit, A.kickStrength, dt, 420, 30);
+        const vals = new Float32Array(bins);
+        for (let b = 0; b < bins; b += 1) { const v = clamp(sampleRange(A.specFast, 3, 56, b / (bins - 1))); vals[b] = v * rings; S.pk[b] = vals[b] >= S.pk[b] ? vals[b] : Math.max(0, S.pk[b] - dt * 11); }
+        const step = (R - rin) / rings, dotR = step * 0.3;
+        const off = new Path2D(), on = new Path2D(), outer = new Path2D(), cap = new Path2D(), flash = new Path2D();
+        for (let j = 0; j < rings; j += 1) {
+          const r = rin + step * (j + 0.5), n = Math.max(12, Math.round((TAU * r) / (step * 1.05)));
+          for (let i = 0; i < n; i += 1) {
+            const a = Math.PI / 2 + (i / n) * TAU, x = Math.abs((i / n) * 2 - 1);
+            const b = Math.min(bins - 1, Math.round(x * (bins - 1)));
+            let p = off;
+            if (j < vals[b]) p = j >= rings - 3 ? outer : on;
+            else if (j === Math.floor(S.pk[b]) && S.pk[b] > 1) p = cap;
+            else if (j < 1 && k > 0.05) p = flash;
+            const px = cx + Math.cos(a) * r, py = cy + Math.sin(a) * r;
+            p.moveTo(px + dotR, py); p.arc(px, py, dotR, 0, TAU);
+          }
+        }
+        c.fillStyle = rgba(C.mint, 0.07); c.fill(off);
+        c.fillStyle = rgba(C.mint, 0.3 + k * 0.7); c.fill(flash);
+        c.fillStyle = rgba(C.mint, 1); c.fill(on);
+        c.fillStyle = rgba(C.blue, 1); c.fill(outer);
+        c.fillStyle = rgba(C.paper, 0.85); c.fill(cap);
+        c.fillStyle = rgba(C.ink, 0.92); c.beginPath(); c.arc(cx, cy, rin * 0.86, 0, TAU); c.fill();
+        c.strokeStyle = rgba(C.paper, 0.4); c.lineWidth = 1.25; c.stroke();
+        c.fillStyle = rgba(C.paper, 0.25); c.font = `500 ${Math.round(rin * 0.2)}px "IBM Plex Mono", monospace`; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText("COVER", cx, cy);
+      },
+    },
+    {
+      n: 17, name: "Waterfall", line: "Crosses 5 and 2. A dot-matrix spectrogram scrolling left: bass at the bottom, time running across. Kicks leave a mark underneath.",
+      draw(c, w, h, A, S, dt) {
+        const cols = 64, rows = 22, interval = 1 / 24;
+        S.cols = S.cols || []; S.phase = (S.phase || 0) + dt; S.mark = S.mark || 0;
+        if (A.kickHit) S.mark = 1;
+        while (S.phase >= interval) {
+          S.phase -= interval;
+          const col = new Float32Array(rows);
+          for (let j = 0; j < rows; j += 1) col[j] = clamp(sampleRange(A.specFast, 3, 58, j / (rows - 1)));
+          S.cols.push({ col, kick: S.mark }); S.mark = 0;
+          if (S.cols.length > cols + 1) S.cols.shift();
+        }
+        const cell = Math.min((w * 0.9) / cols, (h * 0.78) / (rows + 1.5)), r = cell * 0.32, frac = S.phase / interval;
+        const x0 = (w - cell * cols) / 2 + cell / 2, y0 = (h + cell * (rows + 1.5)) / 2 - cell * 1.5;
+        const levels = [new Path2D(), new Path2D(), new Path2D(), new Path2D(), new Path2D()], marks = new Path2D();
+        const n = S.cols.length;
+        for (let i = 0; i < n; i += 1) {
+          const { col, kick } = S.cols[i];
+          const x = x0 + (cols - (n - 1 - i) - frac) * cell - cell;
+          if (x < x0 - cell * 0.5 || x > x0 + cell * (cols - 0.5)) continue;
+          for (let j = 0; j < rows; j += 1) {
+            const v = col[j], y = y0 - j * cell, lvl = v < 0.12 ? 0 : v < 0.3 ? 1 : v < 0.5 ? 2 : v < 0.72 ? 3 : 4;
+            levels[lvl].moveTo(x + r, y); levels[lvl].arc(x, y, r, 0, TAU);
+          }
+          if (kick) { marks.moveTo(x + r, y0 + cell * 1.2); marks.arc(x, y0 + cell * 1.2, r, 0, TAU); }
+        }
+        const fills = [rgba(C.mint, 0.06), rgba(C.blue, 0.45), rgba(C.blue, 0.9), rgba(C.mint, 0.95), rgba(C.paper, 1)];
+        for (let l = 0; l < 5; l += 1) { c.fillStyle = fills[l]; c.fill(levels[l]); }
+        c.fillStyle = rgba(C.mint, 1); c.fill(marks);
+      },
+    },
+    {
+      n: 18, name: "Jelly Layers", line: "From 7. Three spring shapes: bass is the filled core, mids the middle outline, highs a fine outer edge. Each hit hits its own layer.",
+      draw(c, w, h, A, S, dt) {
+        const cx = w / 2, cy = h / 2, R0 = Math.min(w, h) * 0.16;
+        const layers = [
+          { key: "low", N: 44, b0: 2, b1: 18, base: 1, len: 0.55, k: 480, d: 15 },
+          { key: "mid", N: 64, b0: 16, b1: 40, base: 1.55, len: 0.38, k: 700, d: 18 },
+          { key: "high", N: 88, b0: 36, b1: 60, base: 1.95, len: 0.28, k: 1100, d: 22 },
+        ];
+        if (!S.L) { S.L = layers.map((l) => Array.from({ length: l.N }, () => ({ x: 0, v: 0 }))); S.p = { x: 0, v: 0 }; S.r = rng(5); }
+        const kp = punch(S.p, A.kickHit, 0.5 + A.kickStrength * 0.5, dt, 300, 18);
+        const shapes = layers.map((l, li) => {
+          const pts = [];
+          for (let i = 0; i < l.N; i += 1) {
+            const x = Math.abs((i / l.N) * 2 - 1), v = sampleRange(A.spec, l.b0, l.b1, 1 - x), s = S.L[li][i];
+            if (li === 0 && A.kickHit) s.v += R0 * 3.4 * A.kickStrength * (0.5 + (1 - x) * 0.7);
+            if (li === 1 && A.snareHit) s.v += R0 * 2.2 * A.snareStrength * (0.6 + S.r() * 0.8);
+            if (li === 2 && A.hatHit) s.v += R0 * 1.2 * A.hatStrength * (S.r() - 0.3);
+            spring(s, v * R0 * l.len, l.k, l.d, dt);
+            const r = R0 * l.base * (1 + kp * (li === 0 ? 0.08 : 0.03)) + s.x, a = Math.PI / 2 + (i / l.N) * TAU;
+            pts.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]);
+          }
+          return pts;
+        });
+        c.beginPath(); smoothClosed(c, shapes[2]); c.strokeStyle = rgba(C.paper, 0.45); c.lineWidth = 1; c.stroke();
+        c.beginPath(); smoothClosed(c, shapes[1]); c.strokeStyle = rgba(C.mint, 0.9); c.lineWidth = 1.6; c.stroke();
+        const g = c.createLinearGradient(cx - R0, cy - R0, cx + R0, cy + R0); g.addColorStop(0, rgba(C.mint, 1)); g.addColorStop(1, rgba(C.blue, 1));
+        c.beginPath(); smoothClosed(c, shapes[0]); c.fillStyle = g; c.fill();
+      },
+    },
+    {
+      n: 19, name: "Shock Mesh", line: "Crosses 9 and 2. The dot field becomes a woven mesh of lines that bends as kick waves pass out and snare waves pull in.",
+      draw(c, w, h, A, S, dt) {
+        const t = A.t, cx = w / 2, cy = h / 2, diag = Math.hypot(w, h) / 2;
+        S.waves = S.waves || [];
+        if (A.kickHit) S.waves.push({ t0: t, s: A.kickStrength, dir: 1 });
+        if (A.snareHit) S.waves.push({ t0: t, s: A.snareStrength * 0.7, dir: -1 });
+        S.waves = S.waves.filter((g) => t - g.t0 < 1.4);
+        const width = w * 0.05, ampPx = w * 0.026, sp = w / 28, sub = sp / 3, jit = A.high * w * 0.0012;
+        const disp = (x, y) => {
+          const dx = x - cx, dy = y - cy, d = Math.hypot(dx, dy) || 1;
+          let off = 0;
+          for (const g of S.waves) { const age = t - g.t0, q = (d - age * diag * 1.15) / width; off += g.dir * g.s * ampPx * Math.exp(-q * q) * Math.exp(-age / 0.7); }
+          return [x + (dx / d) * off + Math.sin(x * 0.3 + t * 21) * jit, y + (dy / d) * off + Math.cos(y * 0.3 + t * 17) * jit, Math.abs(off) / ampPx];
+        };
+        const cool = new Path2D(), hot = new Path2D();
+        const run = (pts) => {
+          cool.moveTo(pts[0][0], pts[0][1]);
+          for (let i = 1; i < pts.length; i += 1) {
+            cool.lineTo(pts[i][0], pts[i][1]);
+            if (pts[i][2] > 0.25 || pts[i - 1][2] > 0.25) { hot.moveTo(pts[i - 1][0], pts[i - 1][1]); hot.lineTo(pts[i][0], pts[i][1]); }
+          }
+        };
+        for (let y = sp / 2; y < h; y += sp) { const pts = []; for (let x = 0; x <= w + 0.1; x += sub) pts.push(disp(x, y)); run(pts); }
+        for (let x = sp / 2; x < w; x += sp) { const pts = []; for (let y = 0; y <= h + 0.1; y += sub) pts.push(disp(x, y)); run(pts); }
+        c.lineWidth = 1; c.strokeStyle = rgba(C.paper, 0.16); c.stroke(cool);
+        c.lineWidth = 1.5; c.strokeStyle = rgba(C.mint, 0.95); c.stroke(hot);
+      },
+    },
+    {
+      n: 20, name: "Groove Label", line: "From 10. A bigger label so your cover reads clearly, finer grooves in mint and blue only, and a tonearm that lights on the kick.",
+      draw(c, w, h, A, S, dt) {
+        const dpr = S.dpr, R = Math.min(w, h) * 0.43, rin = R * 0.47, size = Math.round(R * 2 * dpr);
+        if (!S.disc || S.disc.width !== size) {
+          S.disc = makeCanvas(size, size); S.dc = S.disc.getContext("2d"); S.theta = 0;
+          const d = S.dc; d.setTransform(dpr, 0, 0, dpr, R * dpr, R * dpr);
+          d.fillStyle = "rgb(15,18,19)"; d.beginPath(); d.arc(0, 0, R, 0, TAU); d.fill();
+          d.strokeStyle = "rgba(233,241,237,0.03)"; d.lineWidth = 1;
+          for (let r = rin; r < R; r += 2) { d.beginPath(); d.arc(0, 0, r, 0, TAU); d.stroke(); }
+        }
+        S.p = S.p || { x: 0, v: 0 };
+        const k = punch(S.p, A.kickHit, 0.5 + A.kickStrength * 0.5, dt, 300, 20);
+        const prev = S.theta; S.theta += dt * TAU / 3.4;
+        if (A.live) {
+          const d = S.dc, K = 36, a0 = -Math.PI / 2 + prev - 0.003, a1 = -Math.PI / 2 + S.theta + 0.003;
+          d.setTransform(dpr, 0, 0, dpr, R * dpr, R * dpr);
+          for (let i = 0; i < K; i += 1) {
+            const r0 = rin + (R - rin) * (i / K) + 0.4, r1 = rin + (R - rin) * ((i + 1) / K) - 0.4;
+            const v = sampleRange(A.spec, 3, 58, i / (K - 1));
+            const col = v < 0.4 ? mix([15, 18, 19], C.deep, v / 0.4) : v < 0.7 ? mix(C.deep, C.blue, (v - 0.4) / 0.3) : mix(C.blue, C.mint, (v - 0.7) / 0.3);
+            d.fillStyle = rgba(col, 1); d.beginPath(); d.arc(0, 0, r1, a0, a1); d.arc(0, 0, r0, a1, a0, true); d.closePath(); d.fill();
+          }
+        }
+        const cx = w / 2 - w * 0.04, cy = h / 2, sc = 1 + k * 0.02;
+        c.save(); c.translate(cx, cy); c.scale(sc, sc); c.rotate(-S.theta);
+        c.beginPath(); c.arc(0, 0, R, 0, TAU); c.clip();
+        c.drawImage(S.disc, -R, -R, R * 2, R * 2);
+        c.fillStyle = rgba(C.ink, 1); c.beginPath(); c.arc(0, 0, rin * 0.94, 0, TAU); c.fill();
+        c.strokeStyle = rgba(C.paper, 0.3); c.lineWidth = 1; c.stroke();
+        c.fillStyle = rgba(C.paper, 0.25); c.font = `500 ${Math.round(rin * 0.16)}px "IBM Plex Mono", monospace`; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText("COVER", 0, 0);
+        c.fillStyle = rgba(C.paper, 0.85); c.beginPath(); c.arc(0, rin * 0.5, rin * 0.035, 0, TAU); c.fill();
+        c.restore();
+        // write line at 12 o'clock and the tonearm resting on it
+        c.strokeStyle = rgba(mix(C.paper, C.mint, k), 0.25 + k * 0.6); c.lineWidth = 1 + k; c.beginPath(); c.moveTo(cx, cy - R * sc); c.lineTo(cx, cy - rin * sc); c.stroke();
+        const px = cx + R * 1.18, py = cy - R * 0.78, sx = cx + R * 0.06, sy = cy - R * 0.9;
+        c.strokeStyle = rgba(mix(C.paper, C.mint, k), 0.55 + k * 0.4); c.lineWidth = 2; c.lineCap = "round";
+        c.beginPath(); c.moveTo(px, py); c.lineTo(px - R * 0.08, py + R * 0.55); c.lineTo(sx + R * 0.1, sy + R * 0.08); c.lineTo(sx, sy); c.stroke();
+        c.fillStyle = rgba(C.paper, 0.6); c.beginPath(); c.arc(px, py, R * 0.05, 0, TAU); c.fill();
+      },
+    },
+  ],
+});
+
+// ---- shared pieces for round 3 on
+/** Offscreen buffer that fades by itself (phosphor afterglow). Returns its context, already faded. */
+function phosphorBuf(S, w, h, tau, dt) {
+  const dpr = S.dpr, W = Math.round(w * dpr), H = Math.round(h * dpr);
+  if (!S.buf || S.buf.width !== W || S.buf.height !== H) { S.buf = makeCanvas(W, H); S.bc = S.buf.getContext("2d"); S.amp = 0.05; }
+  const bc = S.bc; bc.setTransform(dpr, 0, 0, dpr, 0, 0);
+  bc.globalCompositeOperation = "destination-out"; bc.fillStyle = `rgba(0,0,0,${1 - Math.exp(-dt / tau)})`; bc.fillRect(0, 0, w, h);
+  bc.globalCompositeOperation = "source-over";
+  return bc;
+}
+/** Placeholder disc where the beat's cover sits in the app. */
+function coverDisc(c, cx, cy, r, k = 0) {
+  c.fillStyle = rgba(C.ink, 0.94); c.beginPath(); c.arc(cx, cy, r, 0, TAU); c.fill();
+  c.strokeStyle = rgba(C.paper, 0.4 + k * 0.4); c.lineWidth = 1.25; c.stroke();
+  c.fillStyle = rgba(C.paper, 0.25); c.font = `500 ${Math.max(8, Math.round(r * 0.22))}px "IBM Plex Mono", monospace`; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText("COVER", cx, cy);
+}
+/** Mint and blue only: dark, deep blue, blue, mint. */
+function grooveColor(v) {
+  return v < 0.4 ? mix([15, 18, 19], C.deep, v / 0.4) : v < 0.7 ? mix(C.deep, C.blue, (v - 0.4) / 0.3) : mix(C.blue, C.mint, clamp((v - 0.7) / 0.3));
+}
+/** Record disc that cuts the spectrum into its grooves at 12 o'clock. Returns rotation. */
+function grooveDisc(S, A, dt, R, rin, K) {
+  const dpr = S.dpr, size = Math.round(R * 2 * dpr);
+  if (!S.disc || S.disc.width !== size) {
+    S.disc = makeCanvas(size, size); S.dc = S.disc.getContext("2d"); S.theta = S.theta || 0;
+    const d = S.dc; d.setTransform(dpr, 0, 0, dpr, R * dpr, R * dpr);
+    d.fillStyle = "rgb(15,18,19)"; d.beginPath(); d.arc(0, 0, R, 0, TAU); d.fill();
+    d.strokeStyle = "rgba(233,241,237,0.03)"; d.lineWidth = 1;
+    for (let r = rin; r < R; r += 2) { d.beginPath(); d.arc(0, 0, r, 0, TAU); d.stroke(); }
+  }
+  const prev = S.theta; S.theta += dt * TAU / 3.4;
+  if (A.live) {
+    const d = S.dc, a0 = -Math.PI / 2 + prev - 0.003, a1 = -Math.PI / 2 + S.theta + 0.003;
+    d.setTransform(dpr, 0, 0, dpr, R * dpr, R * dpr);
+    for (let i = 0; i < K; i += 1) {
+      const r0 = rin + (R - rin) * (i / K) + 0.4, r1 = rin + (R - rin) * ((i + 1) / K) - 0.4;
+      d.fillStyle = rgba(grooveColor(sampleRange(A.spec, 3, 58, i / (K - 1))), 1);
+      d.beginPath(); d.arc(0, 0, r1, a0, a1); d.arc(0, 0, r0, a1, a0, true); d.closePath(); d.fill();
+    }
+  }
+  return S.theta;
+}
+function drawDisc(c, S, cx, cy, R, sc) {
+  c.save(); c.translate(cx, cy); c.scale(sc, sc); c.rotate(-S.theta);
+  c.beginPath(); c.arc(0, 0, R, 0, TAU); c.clip(); c.drawImage(S.disc, -R, -R, R * 2, R * 2); c.restore();
+}
+/** Trigger index: first clean rising zero crossing in the first quarter of the buffer. */
+function scopeTrigger(wave) { for (let i = 2; i < 512; i += 1) if (wave[i - 2] < 0 && wave[i - 1] < 0 && wave[i] >= 0 && wave[i + 3] > 0) return i; return 1; }
+function wavePeak(S, wave, dt) { let p = 0; for (let i = 0; i < wave.length; i += 1) p = Math.max(p, Math.abs(wave[i])); S.amp = Math.max(p, (S.amp || 0.05) * Math.exp(-dt / 2), 0.02); return S.amp; }
+/** Spectrum history: pushes a snapshot every interval; returns fraction toward the next one. */
+function specHistory(S, A, dt, interval, keep, make) {
+  S.hist = S.hist || []; S.phase = (S.phase || 0) + dt;
+  if (A.kickHit) S.mark = Math.max(S.mark || 0, A.kickStrength);
+  while (S.phase >= interval) { S.phase -= interval; S.hist.unshift({ v: make(), kick: S.mark || 0 }); S.mark = 0; if (S.hist.length > keep) S.hist.pop(); }
+  return S.phase / interval;
+}
+
+ROUNDS.push({
+  round: 3,
+  note: "Built from your round 2 picks: 11, 12, 13, 15, 16, 17, 18 and 20. Three families are forming: around the cover (record, dots, jelly, halo), history over time (ridgeline, terrain, waterfall), and the analyzer. This round refines each and crosses a few.",
+  styles: [
+    {
+      n: 21, name: "Groove Halo", line: "Crosses 20 and 15. The record with the live waveform ringing around its rim. Both snap on the kick.",
+      draw(c, w, h, A, S, dt) {
+        S.p = S.p || { x: 0, v: 0 };
+        const k = punch(S.p, A.kickHit, 0.5 + A.kickStrength * 0.5, dt, 300, 20);
+        const cx = w / 2, cy = h / 2, R = Math.min(w, h) * 0.34, rin = R * 0.47;
+        grooveDisc(S, A, dt, R, rin, 34);
+        const bc = phosphorBuf(S, w, h, 0.09, dt), wave = A.wave, amp = wavePeak(S, wave, dt), trig = scopeTrigger(wave);
+        const N = 1440, base = R * (1.13 + k * 0.05), gain = (R * 0.11) / amp;
+        bc.beginPath();
+        for (let i = 0; i <= N; i += 3) {
+          const j = Math.min(wave.length - 1, (trig + Math.min(i, N - 1) * (wave.length - 520) / N) | 0);
+          const a = -Math.PI / 2 + (i / N) * TAU, r = base + wave[j] * gain;
+          i ? bc.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r) : bc.moveTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+        }
+        bc.closePath(); bc.strokeStyle = rgba(mix(C.mint, C.paper, k * 0.6), 0.9); bc.lineWidth = 1.3 + k; bc.stroke();
+        c.drawImage(S.buf, 0, 0, w, h);
+        drawDisc(c, S, cx, cy, R, 1 + k * 0.02);
+        coverDisc(c, cx, cy, rin * 0.94, 0);
+        c.strokeStyle = rgba(mix(C.paper, C.mint, k), 0.25 + k * 0.6); c.lineWidth = 1 + k; c.beginPath(); c.moveTo(cx, cy - R); c.lineTo(cx, cy - rin); c.stroke();
+      },
+    },
+    {
+      n: 22, name: "Dot Record Pro", line: "From 16. Denser dots that shade from mint at the cover to blue at the rim, with peak dots that hang and fall.",
+      draw(c, w, h, A, S, dt) {
+        const R = Math.min(w, h) * 0.46, rin = R * 0.36, rings = 17, bins = 64, cx = w / 2, cy = h / 2;
+        S.pk = S.pk || new Float32Array(bins); S.p = S.p || { x: 0, v: 0 };
+        const k = punch(S.p, A.kickHit, 0.5 + A.kickStrength * 0.5, dt, 340, 22);
+        const vals = new Float32Array(bins);
+        for (let b = 0; b < bins; b += 1) { vals[b] = clamp(sampleRange(A.specFast, 3, 56, b / (bins - 1))) * rings; S.pk[b] = vals[b] >= S.pk[b] ? vals[b] : Math.max(0, S.pk[b] - dt * 10); }
+        const step = (R - rin) / rings, sc = 1 + k * 0.035;
+        const off = new Path2D(), cap = new Path2D(), lit = Array.from({ length: rings }, () => new Path2D());
+        for (let j = 0; j < rings; j += 1) {
+          const r = (rin + step * (j + 0.5)) * sc, n = Math.max(12, Math.round((TAU * r) / (step * 1.0))), dotR = step * (0.26 + (j < 2 ? k * 0.12 : 0));
+          for (let i = 0; i < n; i += 1) {
+            const a = Math.PI / 2 + (i / n) * TAU, b = Math.min(bins - 1, Math.round(Math.abs((i / n) * 2 - 1) * (bins - 1)));
+            const p = j < vals[b] ? lit[j] : (j === Math.floor(S.pk[b]) && S.pk[b] > 1 ? cap : off);
+            const px = cx + Math.cos(a) * r, py = cy + Math.sin(a) * r;
+            p.moveTo(px + dotR, py); p.arc(px, py, dotR, 0, TAU);
+          }
+        }
+        c.fillStyle = rgba(C.mint, 0.06); c.fill(off);
+        for (let j = 0; j < rings; j += 1) { c.fillStyle = rgba(mix(C.mint, C.blue, j / (rings - 1)), 1); c.fill(lit[j]); }
+        c.fillStyle = rgba(C.paper, 0.85); c.fill(cap);
+        coverDisc(c, cx, cy, rin * 0.86 * sc, k);
+      },
+    },
+    {
+      n: 23, name: "Jelly Cover", line: "From 18. The three spring layers wrapped around the cover: bass swells the band right at its edge, mids and highs ripple outside.",
+      draw(c, w, h, A, S, dt) {
+        const cx = w / 2, cy = h / 2, Rc = Math.min(w, h) * 0.17;
+        const layers = [
+          { N: 48, b0: 2, b1: 18, base: 1.12, len: 0.5, k: 480, d: 15 },
+          { N: 72, b0: 16, b1: 40, base: 1.62, len: 0.34, k: 700, d: 18 },
+          { N: 96, b0: 36, b1: 60, base: 1.98, len: 0.24, k: 1100, d: 22 },
+        ];
+        if (!S.L) { S.L = layers.map((l) => Array.from({ length: l.N }, () => ({ x: 0, v: 0 }))); S.p = { x: 0, v: 0 }; S.r = rng(9); }
+        const kp = punch(S.p, A.kickHit, 0.5 + A.kickStrength * 0.5, dt, 300, 18);
+        const shapes = layers.map((l, li) => {
+          const pts = [];
+          for (let i = 0; i < l.N; i += 1) {
+            const x = Math.abs((i / l.N) * 2 - 1), v = sampleRange(A.spec, l.b0, l.b1, 1 - x), s = S.L[li][i];
+            if (li === 0 && A.kickHit) s.v += Rc * 3 * A.kickStrength * (0.5 + (1 - x) * 0.7);
+            if (li === 1 && A.snareHit) s.v += Rc * 2 * A.snareStrength * (0.6 + S.r() * 0.8);
+            if (li === 2 && A.hatHit) s.v += Rc * 1.1 * A.hatStrength * (S.r() - 0.3);
+            spring(s, v * Rc * l.len, l.k, l.d, dt);
+            const r = Rc * l.base * (1 + kp * (li === 0 ? 0.07 : 0.025)) + s.x, a = Math.PI / 2 + (i / l.N) * TAU;
+            pts.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]);
+          }
+          return pts;
+        });
+        c.beginPath(); smoothClosed(c, shapes[2]); c.strokeStyle = rgba(C.paper, 0.45); c.lineWidth = 1; c.stroke();
+        c.beginPath(); smoothClosed(c, shapes[1]); c.strokeStyle = rgba(C.mint, 0.9); c.lineWidth = 1.6; c.stroke();
+        const g = c.createLinearGradient(cx - Rc * 1.5, cy - Rc * 1.5, cx + Rc * 1.5, cy + Rc * 1.5); g.addColorStop(0, rgba(C.mint, 1)); g.addColorStop(1, rgba(C.blue, 1));
+        c.beginPath(); smoothClosed(c, shapes[0]); c.fillStyle = g; c.fill();
+        coverDisc(c, cx, cy, Rc * (1 + kp * 0.05), kp);
+      },
+    },
+    {
+      n: 24, name: "Waterfall Fine", line: "From 17. Smaller dots, twice the detail, smooth shading from blue to mint to white. Each kick leaves a faint column.",
+      draw(c, w, h, A, S, dt) {
+        const cols = 96, rows = 32;
+        const frac = specHistory(S, A, dt, 1 / 30, cols + 1, () => { const col = new Float32Array(rows); for (let j = 0; j < rows; j += 1) col[j] = clamp(sampleRange(A.specFast, 3, 59, j / (rows - 1))); return col; });
+        const cell = Math.min((w * 0.92) / cols, (h * 0.8) / (rows + 1.5)), r = cell * 0.33;
+        const x1 = (w + cell * cols) / 2 - cell / 2, y0 = (h + cell * (rows + 1.5)) / 2 - cell * 1.5;
+        const L = 8, paths = Array.from({ length: L }, () => new Path2D()), marks = new Path2D(), cols2 = new Path2D();
+        S.hist.forEach((e, i) => {
+          const x = x1 - (i + frac) * cell + cell;
+          if (x < x1 - cell * (cols - 0.5) || x > x1 + cell * 0.5) return;
+          for (let j = 0; j < rows; j += 1) { const v = e.v[j], lvl = v < 0.1 ? 0 : Math.min(L - 1, 1 + Math.floor(((v - 0.1) / 0.9) * (L - 1))); paths[lvl].moveTo(x + r, y0 - j * cell); paths[lvl].arc(x, y0 - j * cell, r, 0, TAU); }
+          if (e.kick) { cols2.rect(x - cell * 0.45, y0 - (rows - 0.5) * cell, cell * 0.9, rows * cell); marks.moveTo(x + r, y0 + cell * 1.2); marks.arc(x, y0 + cell * 1.2, r, 0, TAU); }
+        });
+        c.fillStyle = rgba(C.mint, 0.05); c.fill(cols2);
+        for (let l = 0; l < L; l += 1) {
+          const t = l / (L - 1);
+          c.fillStyle = l === 0 ? rgba(C.mint, 0.05) : rgba(t < 0.6 ? mix(C.deep, C.blue, t / 0.6) : t < 0.9 ? mix(C.blue, C.mint, (t - 0.6) / 0.3) : mix(C.mint, C.paper, (t - 0.9) / 0.1), 0.35 + t * 0.65);
+          c.fill(paths[l]);
+        }
+        c.fillStyle = rgba(C.mint, 1); c.fill(marks);
+      },
+    },
+    {
+      n: 25, name: "Dot Terrain", line: "Crosses 17 and 12. The waterfall tipped into perspective: a field of dots that rises with the music and rolls away from you.",
+      draw(c, w, h, A, S, dt) {
+        const NL = 30, NP = 52;
+        S.p = S.p || { x: 0, v: 0 };
+        const k = punch(S.p, A.kickHit, 0.4 + A.kickStrength * 0.6, dt, 260, 18);
+        const frac = specHistory(S, A, dt, 1 / 24, NL + 1, () => { const l = new Float32Array(NP); for (let i = 0; i < NP; i += 1) { const x = i / (NP - 1); l[i] = sampleRange(A.specFast, 3, 56, x) * (0.35 + 0.65 * Math.pow(Math.sin(Math.PI * x), 0.6)); } return l; });
+        const L = 6, paths = Array.from({ length: L }, () => new Path2D());
+        for (let j = Math.min(S.hist.length, NL) - 1; j >= 0; j -= 1) {
+          const z = (j + frac) / NL, persp = 1 / (1 + z * 2.2), base = h * 0.42 + h * 0.5 * persp, half = w * 0.5 * persp, amp = h * 0.36 * persp * (j === 0 ? 1 + k * 0.4 : 1);
+          const r = Math.max(0.6, w * 0.0026 * persp * 1.6), row = S.hist[j].v;
+          for (let i = 0; i < NP; i += 1) {
+            const v = row[i], x = w / 2 - half + 2 * half * (i / (NP - 1)), y = base - v * amp;
+            const lvl = Math.min(L - 1, Math.floor(v * L * (1 - z * 0.5)));
+            paths[lvl].moveTo(x + r, y); paths[lvl].arc(x, y, r, 0, TAU);
+          }
+        }
+        for (let l = 0; l < L; l += 1) { const t = l / (L - 1); c.fillStyle = rgba(t < 0.5 ? mix(C.deep, C.blue, t * 2) : mix(C.blue, C.mint, (t - 0.5) * 2), 0.35 + t * 0.65); c.fill(paths[l]); }
+      },
+    },
+    {
+      n: 26, name: "Ring Ridges", line: "Crosses 11 and the cover styles. The ridgeline bent into circles: each ring is a moment of the spectrum, spreading out from the cover.",
+      draw(c, w, h, A, S, dt) {
+        const NL = 20, N = 120, cx = w / 2, cy = h / 2, Rc = Math.min(w, h) * 0.15, gap = (Math.min(w, h) * 0.47 - Rc * 1.2) / NL;
+        S.p = S.p || { x: 0, v: 0 };
+        const k = punch(S.p, A.kickHit, 0.5 + A.kickStrength * 0.5, dt, 300, 20);
+        const frac = specHistory(S, A, dt, 1 / 20, NL + 1, () => { const l = new Float32Array(N); for (let i = 0; i < N; i += 1) l[i] = sampleRange(A.specFast, 3, 54, 1 - Math.abs((i / N) * 2 - 1)); return l; });
+        c.lineJoin = "round";
+        for (let j = Math.min(S.hist.length, NL) - 1; j >= 0; j -= 1) {
+          const { v, kick } = S.hist[j], age = (j + frac) / NL, base = Rc * 1.2 + (j + frac) * gap, amp = gap * 3.2 * (j === 0 ? 1 + k * 0.5 : 1);
+          const pts = [];
+          for (let i = 0; i < N; i += 1) { const a = Math.PI / 2 + (i / N) * TAU, r = base + v[i] * amp; pts.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]); }
+          c.save(); c.globalCompositeOperation = "destination-out"; c.beginPath(); smoothClosed(c, pts); c.fill(); c.restore();
+          let col = mix(C.mint, C.blue, clamp(age * 1.3)), alpha = clamp(1 - age * 0.85, 0.08, 1), lw = j === 0 ? 1.8 + k : 1.3 - age * 0.5;
+          if (kick > 0.2) { col = mix(col, C.paper, 0.75); alpha = clamp(alpha + 0.2); lw += 0.6; }
+          c.beginPath(); smoothClosed(c, pts); c.strokeStyle = rgba(col, alpha); c.lineWidth = lw; c.stroke();
+        }
+        coverDisc(c, cx, cy, Rc * (1 + k * 0.05), k);
+      },
+    },
+    {
+      n: 27, name: "Analyzer Dots", line: "Crosses 13 and 17. The pro analyzer built from round LED dots, with its slow average curve and dB scale.",
+      draw(c, w, h, A, S, dt) {
+        const NBAR = 48, x0 = w * 0.1, x1 = w * 0.94, base = h * 0.8, top = h * 0.1;
+        S.pk = S.pk || new Float32Array(NBAR); S.avg = S.avg || new Float32Array(NBAR);
+        const colW = (x1 - x0) / NBAR, rows = Math.floor((base - top) / colW), r = colW * 0.32;
+        const off = new Path2D(), cap = new Path2D(), lit = Array.from({ length: rows }, () => new Path2D()), curve = [];
+        for (let i = 0; i < NBAR; i += 1) {
+          const v = clamp(sampleRange(A.specFast, 4, 60, i / (NBAR - 1)) * 1.05);
+          const a = S.avg[i]; S.avg[i] = a + (v - a) * (1 - Math.exp(-dt / (v > a ? 0.18 : 0.7)));
+          const n = v * rows; S.pk[i] = n >= S.pk[i] ? n : Math.max(0, S.pk[i] - dt * 12);
+          const x = x0 + (i + 0.5) * colW;
+          for (let j = 0; j < rows; j += 1) {
+            const y = base - (j + 0.5) * colW, p = j < Math.round(n) ? lit[j] : (j === Math.floor(S.pk[i]) && S.pk[i] > 1 ? cap : off);
+            p.moveTo(x + r, y); p.arc(x, y, r, 0, TAU);
+          }
+          curve.push([x, base - S.avg[i] * rows * colW]);
+        }
+        c.font = `400 ${Math.max(9, Math.round(h * 0.026))}px "IBM Plex Mono", monospace`; c.textAlign = "right"; c.textBaseline = "middle"; c.fillStyle = rgba(C.paper, 0.38);
+        for (const [db, f] of [[0, 1], [-12, 0.75], [-24, 0.5], [-36, 0.25]]) c.fillText(String(db), x0 - w * 0.015, base - f * rows * colW);
+        c.fillStyle = rgba(C.mint, 0.06); c.fill(off);
+        for (let j = 0; j < rows; j += 1) { c.fillStyle = rgba(mix(C.mint, C.blue, j / Math.max(1, rows - 1)), 1); c.fill(lit[j]); }
+        c.fillStyle = rgba(C.paper, 0.9); c.fill(cap);
+        c.beginPath(); smoothLine(c, curve); c.strokeStyle = rgba(C.paper, 0.75); c.lineWidth = 1.5; c.stroke();
+      },
+    },
+    {
+      n: 28, name: "Terrain Night", line: "From 12. A denser landscape shaded by height, blue in the valleys and mint on the peaks, with a faint horizon.",
+      draw(c, w, h, A, S, dt) {
+        const NL = 32, NP = 56;
+        S.p = S.p || { x: 0, v: 0 };
+        const k = punch(S.p, A.kickHit, 0.4 + A.kickStrength * 0.6, dt, 260, 18);
+        const frac = specHistory(S, A, dt, 1 / 26, NL + 1, () => { const l = new Float32Array(NP); for (let i = 0; i < NP; i += 1) { const x = i / (NP - 1); l[i] = sampleRange(A.specFast, 3, 56, x) * (0.35 + 0.65 * Math.pow(Math.sin(Math.PI * x), 0.6)); } return l; });
+        const horizon = h * 0.42 + h * 0.5 / 3.2;
+        c.fillStyle = rgba(C.mint, 0.22); c.fillRect(0, Math.round(horizon) - 0.5, w, 1);
+        const rows = [], n = Math.min(S.hist.length, NL);
+        for (let j = 0; j < n; j += 1) {
+          const z = (j + frac) / NL, persp = 1 / (1 + z * 2.2), base = h * 0.42 + h * 0.5 * persp, half = w * 0.52 * persp, amp = h * 0.36 * persp * (j === 0 ? 1 + k * 0.4 : 1), pts = [];
+          for (let i = 0; i < NP; i += 1) pts.push([w / 2 - half + 2 * half * (i / (NP - 1)), base - S.hist[j].v[i] * amp]);
+          rows.push({ pts, base, amp, z });
+        }
+        c.lineJoin = "round";
+        for (let j = n - 1; j >= 0; j -= 1) {
+          const { pts, base, amp, z } = rows[j];
+          c.save(); c.globalCompositeOperation = "destination-out"; c.beginPath(); c.moveTo(pts[0][0], base + 1); for (const p of pts) c.lineTo(p[0], p[1]); c.lineTo(pts[NP - 1][0], base + 1); c.closePath(); c.fill(); c.restore();
+          if (j < n - 1) { const back = rows[j + 1].pts; c.beginPath(); for (let i = 0; i < NP; i += 2) { c.moveTo(pts[i][0], pts[i][1]); c.lineTo(back[i][0], back[i][1]); } c.strokeStyle = rgba(C.blue, 0.3 * (1 - z)); c.lineWidth = 1; c.stroke(); }
+          const g = c.createLinearGradient(0, base - amp * 0.8, 0, base);
+          const fade = clamp(1 - z * 0.85, 0.08, 1);
+          g.addColorStop(0, rgba(C.mint, fade)); g.addColorStop(1, rgba(C.blue, fade * 0.8));
+          c.beginPath(); for (let i = 0; i < NP; i += 1) i ? c.lineTo(pts[i][0], pts[i][1]) : c.moveTo(pts[i][0], pts[i][1]);
+          c.strokeStyle = g; c.lineWidth = j === 0 ? 2 + k : 1.2; c.stroke();
+        }
+      },
+    },
+    {
+      n: 29, name: "Groove Dots", line: "Crosses 20 and 16. The record again, but the grooves are cut as dots that grow with each frequency's loudness.",
+      draw(c, w, h, A, S, dt) {
+        const dpr = S.dpr, R = Math.min(w, h) * 0.43, rin = R * 0.47, K = 26, size = Math.round(R * 2 * dpr);
+        S.p = S.p || { x: 0, v: 0 };
+        const k = punch(S.p, A.kickHit, 0.5 + A.kickStrength * 0.5, dt, 300, 20);
+        if (!S.disc || S.disc.width !== size) {
+          S.disc = makeCanvas(size, size); S.dc = S.disc.getContext("2d"); S.theta = 0; S.acc = 0;
+          const d = S.dc; d.setTransform(dpr, 0, 0, dpr, R * dpr, R * dpr); d.fillStyle = "rgb(14,17,18)"; d.beginPath(); d.arc(0, 0, R, 0, TAU); d.fill();
+        }
+        const stepR = (R - rin) / K, stepA = (stepR * 1.05) / R;
+        S.theta += dt * TAU / 3.4; S.acc += dt * TAU / 3.4;
+        const d = S.dc; d.setTransform(dpr, 0, 0, dpr, R * dpr, R * dpr);
+        while (S.acc >= stepA) {
+          S.acc -= stepA;
+          const a = -Math.PI / 2 + S.theta - S.acc;
+          d.fillStyle = "rgb(14,17,18)"; d.beginPath(); d.arc(0, 0, R, a - stepA * 0.5, a + stepA * 0.5); d.arc(0, 0, rin, a + stepA * 0.5, a - stepA * 0.5, true); d.closePath(); d.fill();
+          if (!A.live) continue;
+          for (let i = 0; i < K; i += 1) {
+            const v = sampleRange(A.spec, 3, 58, i / (K - 1)), rr = rin + stepR * (i + 0.5), dr = stepR * 0.44 * Math.sqrt(v);
+            if (dr < 0.3) continue;
+            d.fillStyle = rgba(v > 0.7 ? mix(C.blue, C.mint, (v - 0.7) / 0.3) : mix(C.deep, C.blue, v / 0.7), 1);
+            d.beginPath(); d.arc(Math.cos(a) * rr, Math.sin(a) * rr, dr, 0, TAU); d.fill();
+          }
+        }
+        const cx = w / 2, cy = h / 2;
+        drawDisc(c, S, cx, cy, R, 1 + k * 0.02);
+        coverDisc(c, cx, cy, rin * 0.94, 0);
+        c.strokeStyle = rgba(mix(C.paper, C.mint, k), 0.25 + k * 0.6); c.lineWidth = 1 + k; c.beginPath(); c.moveTo(cx, cy - R); c.lineTo(cx, cy - rin); c.stroke();
+      },
+    },
+    {
+      n: 30, name: "Halo Layers", line: "Crosses 15 and 18. The waveform ring around the cover rides on springs, so bass hits swell it and the waveform shivers on top.",
+      draw(c, w, h, A, S, dt) {
+        const cx = w / 2, cy = h / 2, Rc = Math.min(w, h) * 0.2, N = 96;
+        if (!S.sp) { S.sp = Array.from({ length: N }, () => ({ x: 0, v: 0 })); S.out = Array.from({ length: 120 }, () => ({ x: 0, v: 0 })); S.p = { x: 0, v: 0 }; S.r = rng(13); }
+        const k = punch(S.p, A.kickHit, 0.5 + A.kickStrength * 0.5, dt, 300, 20);
+        for (let i = 0; i < N; i += 1) {
+          const x = Math.abs((i / N) * 2 - 1), s = S.sp[i];
+          if (A.kickHit) s.v += Rc * 2.6 * A.kickStrength * (0.5 + (1 - x) * 0.7);
+          spring(s, sampleRange(A.spec, 2, 30, 1 - x) * Rc * 0.35, 520, 16, dt);
+        }
+        const bc = phosphorBuf(S, w, h, 0.08, dt), wave = A.wave, amp = wavePeak(S, wave, dt), trig = scopeTrigger(wave), M = 1200, gain = (Rc * 0.13) / amp;
+        const spx = S.sp.map((s) => s.x);
+        bc.beginPath();
+        for (let i = 0; i <= M; i += 3) {
+          const t = Math.min(i, M - 1) / M, j = Math.min(wave.length - 1, (trig + t * (wave.length - 520)) | 0);
+          const base = Rc * 1.25 + sampleRange(spx, 0, N - 1, t);
+          const a = Math.PI / 2 + t * TAU, r = base + wave[j] * gain;
+          i ? bc.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r) : bc.moveTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+        }
+        bc.closePath(); bc.strokeStyle = rgba(mix(C.mint, C.paper, k * 0.5), 0.92); bc.lineWidth = 1.4 + k; bc.stroke();
+        const outer = [];
+        for (let i = 0; i < 120; i += 1) {
+          const x = Math.abs((i / 120) * 2 - 1), s = S.out[i];
+          if (A.hatHit) s.v += Rc * 1.0 * A.hatStrength * (S.r() - 0.3);
+          spring(s, sampleRange(A.spec, 34, 60, 1 - x) * Rc * 0.25, 1100, 22, dt);
+          const r = Rc * 1.95 + s.x, a = Math.PI / 2 + (i / 120) * TAU; outer.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]);
+        }
+        c.beginPath(); smoothClosed(c, outer); c.strokeStyle = rgba(C.paper, 0.4); c.lineWidth = 1; c.stroke();
+        c.drawImage(S.buf, 0, 0, w, h);
+        coverDisc(c, cx, cy, Rc * (1 + k * 0.05), k);
+      },
+    },
+  ],
+});
+
+
+// ---- shared pieces for round 4
+/** Perspective spectrum landscape: rows[0] is the front row. */
+function terrainRows(S, A, dt, w, h, NL, NP, rate, wide = 0.52) {
+  S.p = S.p || { x: 0, v: 0 };
+  const k = punch(S.p, A.kickHit, 0.4 + A.kickStrength * 0.6, dt, 260, 18);
+  const frac = specHistory(S, A, dt, 1 / rate, NL + 1, () => {
+    const l = new Float32Array(NP);
+    for (let i = 0; i < NP; i += 1) { const x = i / (NP - 1); l[i] = sampleRange(A.specFast, 3, 56, x) * (0.35 + 0.65 * Math.pow(Math.sin(Math.PI * x), 0.6)); }
+    return l;
+  });
+  const rows = [], n = Math.min(S.hist.length, NL);
+  for (let j = 0; j < n; j += 1) {
+    const z = (j + frac) / NL, persp = 1 / (1 + z * 2.2), base = h * 0.42 + h * 0.5 * persp, half = w * wide * persp;
+    const amp = h * 0.36 * persp * (j === 0 ? 1 + k * 0.4 : 1), vals = S.hist[j].v, pts = [];
+    for (let i = 0; i < NP; i += 1) pts.push([w / 2 - half + 2 * half * (i / (NP - 1)), base - vals[i] * amp]);
+    rows.push({ pts, vals, base, amp, z, persp, kick: S.hist[j].kick });
+  }
+  return { rows, k, horizon: h * 0.42 + h * 0.5 / 3.2 };
+}
+/** Round 3's Terrain Night lines, back to front with hidden-line occlusion. */
+function drawTerrain(c, rows, k, NP, extra) {
+  c.lineJoin = "round";
+  for (let j = rows.length - 1; j >= 0; j -= 1) {
+    const { pts, base, amp, z } = rows[j];
+    c.save(); c.globalCompositeOperation = "destination-out"; c.beginPath(); c.moveTo(pts[0][0], base + 1); for (const p of pts) c.lineTo(p[0], p[1]); c.lineTo(pts[NP - 1][0], base + 1); c.closePath(); c.fill(); c.restore();
+    if (j < rows.length - 1) { const back = rows[j + 1].pts; c.beginPath(); for (let i = 0; i < NP; i += 2) { c.moveTo(pts[i][0], pts[i][1]); c.lineTo(back[i][0], back[i][1]); } c.strokeStyle = rgba(C.blue, 0.3 * (1 - z)); c.lineWidth = 1; c.stroke(); }
+    const fade = clamp(1 - z * 0.85, 0.08, 1), g = c.createLinearGradient(0, base - amp * 0.8, 0, base);
+    g.addColorStop(0, rgba(C.mint, fade)); g.addColorStop(1, rgba(C.blue, fade * 0.8));
+    c.beginPath(); for (let i = 0; i < NP; i += 1) i ? c.lineTo(pts[i][0], pts[i][1]) : c.moveTo(pts[i][0], pts[i][1]);
+    c.strokeStyle = g; c.lineWidth = j === 0 ? 2 + k : 1.2; c.stroke();
+    if (extra) extra(rows[j], j);
+  }
+}
+/** Ramp used across round 4: deep blue, blue, mint, and a little white at the very top. */
+function ramp(v) {
+  return v < 0.55 ? mix(C.deep, C.blue, v / 0.55) : v < 0.88 ? mix(C.blue, C.mint, (v - 0.55) / 0.33) : mix(C.mint, C.paper, clamp((v - 0.88) / 0.12) * 0.7);
+}
+/** Record whose grooves are dots cut at 12 o'clock. Draw with drawDisc. */
+function grooveDots(S, A, dt, R, rin, K, colorFn) {
+  const dpr = S.dpr, size = Math.round(R * 2 * dpr), bg = "rgb(14,17,18)";
+  if (!S.disc || S.disc.width !== size) {
+    S.disc = makeCanvas(size, size); S.dc = S.disc.getContext("2d"); S.theta = 0; S.acc = 0;
+    const d = S.dc; d.setTransform(dpr, 0, 0, dpr, R * dpr, R * dpr); d.fillStyle = bg; d.beginPath(); d.arc(0, 0, R, 0, TAU); d.fill();
+  }
+  const stepR = (R - rin) / K, stepA = (stepR * 1.05) / R, d = S.dc;
+  S.theta += dt * TAU / 3.4; S.acc += dt * TAU / 3.4;
+  d.setTransform(dpr, 0, 0, dpr, R * dpr, R * dpr);
+  while (S.acc >= stepA) {
+    S.acc -= stepA;
+    const a = -Math.PI / 2 + S.theta - S.acc;
+    d.fillStyle = bg; d.beginPath(); d.arc(0, 0, R, a - stepA * 0.5, a + stepA * 0.5); d.arc(0, 0, rin, a + stepA * 0.5, a - stepA * 0.5, true); d.closePath(); d.fill();
+    if (!A.live) continue;
+    for (let i = 0; i < K; i += 1) {
+      const v = sampleRange(A.spec, 3, 58, i / (K - 1)), rr = rin + stepR * (i + 0.5), dr = stepR * 0.44 * Math.sqrt(v);
+      if (dr < 0.3) continue;
+      d.fillStyle = rgba(colorFn(v), 1); d.beginPath(); d.arc(Math.cos(a) * rr, Math.sin(a) * rr, dr, 0, TAU); d.fill();
+    }
+  }
+}
+function grooveDotColor(v) { return v > 0.7 ? mix(C.blue, C.mint, (v - 0.7) / 0.3) : mix(C.deep, C.blue, v / 0.7); }
+/** Dot record (round 3 #22): rings of dots around the cover, bins mirrored left and right. */
+function dotRecord(c, S, A, dt, cx, cy, R, rin, rings, bins, opts = {}) {
+  S.pk = S.pk || new Float32Array(bins); S.p = S.p || { x: 0, v: 0 };
+  const k = punch(S.p, A.kickHit, 0.5 + A.kickStrength * 0.5, dt, 340, 22);
+  const vals = new Float32Array(bins);
+  for (let b = 0; b < bins; b += 1) { vals[b] = clamp(sampleRange(A.specFast, 3, 56, b / (bins - 1))) * rings; S.pk[b] = vals[b] >= S.pk[b] ? vals[b] : Math.max(0, S.pk[b] - dt * 10); }
+  const step = (R - rin) / rings, sc = 1 + k * 0.035;
+  const off = new Path2D(), cap = new Path2D(), lit = Array.from({ length: rings }, () => new Path2D()), part = [];
+  for (let j = 0; j < rings; j += 1) {
+    const r = (rin + step * (j + 0.5)) * sc, n = Math.max(12, Math.round((TAU * r) / step)), dotR = step * (opts.dot || 0.26);
+    for (let i = 0; i < n; i += 1) {
+      const a = Math.PI / 2 + (i / n) * TAU, b = Math.min(bins - 1, Math.round(Math.abs((i / n) * 2 - 1) * (bins - 1)));
+      const px = cx + Math.cos(a) * r, py = cy + Math.sin(a) * r, v = vals[b];
+      let p;
+      if (j < Math.floor(v)) p = lit[j];
+      else if (opts.soft && j === Math.floor(v) && v % 1 > 0.08) { part.push([px, py, dotR, j, v % 1]); continue; }
+      else p = j === Math.floor(S.pk[b]) && S.pk[b] > 1 ? cap : off;
+      p.moveTo(px + dotR, py); p.arc(px, py, dotR, 0, TAU);
+    }
+  }
+  const col = opts.color || ((j) => mix(C.mint, C.blue, j / (rings - 1)));
+  c.fillStyle = rgba(C.mint, 0.06); c.fill(off);
+  for (let j = 0; j < rings; j += 1) { c.fillStyle = rgba(j < 2 && opts.flash ? mix(col(j), C.paper, k) : col(j), 1); c.fill(lit[j]); }
+  for (const [px, py, dr, j, f] of part) { c.fillStyle = rgba(col(j), f); c.beginPath(); c.arc(px, py, dr, 0, TAU); c.fill(); }
+  c.fillStyle = rgba(C.paper, 0.85); c.fill(cap);
+  return { k, sc };
+}
+
+ROUNDS.push({
+  round: 4,
+  note: "Built from your round 3 picks: 22, 23, 24, 25, 28 and 29. Dots, the record, the jelly and the landscape all made it through, so this round sharpens each and tries a few crossings. From here, try to pick fewer: the ones you'd actually ship.",
+  styles: [
+    {
+      n: 31, name: "Dot Record Fine", line: "From 22. More, smaller dots. The top dot of each column fades in as the level rises, so the edge moves smoothly instead of stepping.",
+      draw(c, w, h, A, S, dt) {
+        const R = Math.min(w, h) * 0.47, rin = R * 0.34, cx = w / 2, cy = h / 2;
+        const { k, sc } = dotRecord(c, S, A, dt, cx, cy, R, rin, 22, 72, { dot: 0.27, soft: true, flash: true });
+        coverDisc(c, cx, cy, rin * 0.86 * sc, k);
+      },
+    },
+    {
+      n: 32, name: "Dot Ring Waterfall", line: "Crosses 22 and 24. The waterfall wrapped around the cover: each ring of dots is a moment of the spectrum, drifting outward as it ages.",
+      draw(c, w, h, A, S, dt) {
+        const R = Math.min(w, h) * 0.47, rin = R * 0.36, NR = 15, bins = 48, cx = w / 2, cy = h / 2, step = (R - rin) / NR;
+        S.p = S.p || { x: 0, v: 0 };
+        const k = punch(S.p, A.kickHit, 0.5 + A.kickStrength * 0.5, dt, 300, 20);
+        const frac = specHistory(S, A, dt, 1 / 16, NR + 1, () => { const l = new Float32Array(bins); for (let b = 0; b < bins; b += 1) l[b] = clamp(sampleRange(A.specFast, 3, 56, b / (bins - 1))); return l; });
+        const L = 6;
+        S.hist.forEach((e, j) => {
+          const r = rin + step * (j + frac + 0.5);
+          if (r > R) return;
+          const n = Math.max(12, Math.round((TAU * r) / step)), age = (j + frac) / NR, paths = Array.from({ length: L }, () => new Path2D()), off = new Path2D();
+          for (let i = 0; i < n; i += 1) {
+            const a = Math.PI / 2 + (i / n) * TAU, b = Math.min(bins - 1, Math.round(Math.abs((i / n) * 2 - 1) * (bins - 1))), v = e.v[b];
+            const px = cx + Math.cos(a) * r, py = cy + Math.sin(a) * r;
+            if (v < 0.1) { off.moveTo(px + 0.7, py); off.arc(px, py, 0.7, 0, TAU); continue; }
+            const dr = step * (0.18 + 0.26 * Math.sqrt(v)) * (j === 0 ? 1 + k * 0.4 : 1), lvl = Math.min(L - 1, Math.floor(v * L));
+            paths[lvl].moveTo(px + dr, py); paths[lvl].arc(px, py, dr, 0, TAU);
+          }
+          const fade = clamp(1 - age * 0.75, 0.15, 1);
+          c.fillStyle = rgba(C.mint, 0.06 * fade); c.fill(off);
+          for (let l = 0; l < L; l += 1) { const col = ramp((l + 0.5) / L); c.fillStyle = rgba(e.kick > 0.2 ? mix(col, C.paper, 0.45) : col, fade); c.fill(paths[l]); }
+        });
+        coverDisc(c, cx, cy, rin * 0.86 * (1 + k * 0.04), k);
+      },
+    },
+    {
+      n: 33, name: "Jelly Cover Dots", line: "Crosses 23 and the dots. The bass core stays a solid jelly around the cover, but the mid and high layers become strings of dots.",
+      draw(c, w, h, A, S, dt) {
+        const cx = w / 2, cy = h / 2, Rc = Math.min(w, h) * 0.17;
+        const layers = [
+          { N: 48, b0: 2, b1: 18, base: 1.12, len: 0.5, k: 480, d: 15 },
+          { N: 120, b0: 16, b1: 40, base: 1.62, len: 0.34, k: 700, d: 18 },
+          { N: 168, b0: 36, b1: 60, base: 2.0, len: 0.24, k: 1100, d: 22 },
+        ];
+        if (!S.L) { S.L = layers.map((l) => Array.from({ length: l.N }, () => ({ x: 0, v: 0 }))); S.p = { x: 0, v: 0 }; S.r = rng(21); }
+        const kp = punch(S.p, A.kickHit, 0.5 + A.kickStrength * 0.5, dt, 300, 18);
+        const shapes = layers.map((l, li) => {
+          const pts = [];
+          for (let i = 0; i < l.N; i += 1) {
+            const x = Math.abs((i / l.N) * 2 - 1), v = sampleRange(A.spec, l.b0, l.b1, 1 - x), s = S.L[li][i];
+            if (li === 0 && A.kickHit) s.v += Rc * 3 * A.kickStrength * (0.5 + (1 - x) * 0.7);
+            if (li === 1 && A.snareHit) s.v += Rc * 2 * A.snareStrength * (0.6 + S.r() * 0.8);
+            if (li === 2 && A.hatHit) s.v += Rc * 1.1 * A.hatStrength * (S.r() - 0.3);
+            spring(s, v * Rc * l.len, l.k, l.d, dt);
+            const r = Rc * l.base * (1 + kp * (li === 0 ? 0.07 : 0.025)) + s.x, a = Math.PI / 2 + (i / l.N) * TAU;
+            pts.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r, s.x]);
+          }
+          return pts;
+        });
+        const dots = (pts, col, base, gain) => { for (const [x, y, e] of pts) { const r = base + Math.max(0, e) * gain; c.fillStyle = rgba(col, clamp(0.45 + Math.max(0, e) / (Rc * 0.25))); c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill(); } };
+        dots(shapes[2], C.paper, 0.9, 0.06);
+        dots(shapes[1], C.mint, 1.3, 0.08);
+        const g = c.createLinearGradient(cx - Rc * 1.5, cy - Rc * 1.5, cx + Rc * 1.5, cy + Rc * 1.5); g.addColorStop(0, rgba(C.mint, 1)); g.addColorStop(1, rgba(C.blue, 1));
+        c.beginPath(); smoothClosed(c, shapes[0]); c.fillStyle = g; c.fill();
+        coverDisc(c, cx, cy, Rc * (1 + kp * 0.05), kp);
+      },
+    },
+    {
+      n: 34, name: "Jelly Solo", line: "From 23, stripped back. One bigger jelly around the cover with a thin outline that trails it, so every kick wobbles and settles.",
+      draw(c, w, h, A, S, dt) {
+        const cx = w / 2, cy = h / 2, Rc = Math.min(w, h) * 0.2, N = 64;
+        if (!S.a) { S.a = Array.from({ length: N }, () => ({ x: 0, v: 0 })); S.b = Array.from({ length: N }, () => ({ x: 0, v: 0 })); S.p = { x: 0, v: 0 }; S.r = rng(5); }
+        const kp = punch(S.p, A.kickHit, 0.5 + A.kickStrength * 0.5, dt, 300, 18);
+        const front = [], echo = [];
+        for (let i = 0; i < N; i += 1) {
+          const x = Math.abs((i / N) * 2 - 1), v = sampleRange(A.spec, 2, 40, 1 - x), s = S.a[i], e = S.b[i];
+          if (A.kickHit) s.v += Rc * 3.4 * A.kickStrength * (0.55 + (1 - x) * 0.6);
+          if (A.snareHit) s.v += Rc * 1.2 * A.snareStrength * (S.r() - 0.2);
+          spring(s, v * Rc * 0.55, 420, 13, dt);
+          spring(e, s.x, 90, 9, dt);
+          const a = Math.PI / 2 + (i / N) * TAU, r0 = Rc * 1.14 * (1 + kp * 0.06);
+          front.push([cx + Math.cos(a) * (r0 + s.x), cy + Math.sin(a) * (r0 + s.x)]);
+          echo.push([cx + Math.cos(a) * (r0 + e.x + Rc * 0.18), cy + Math.sin(a) * (r0 + e.x + Rc * 0.18)]);
+        }
+        c.beginPath(); smoothClosed(c, echo); c.strokeStyle = rgba(C.paper, 0.4); c.lineWidth = 1; c.stroke();
+        const g = c.createRadialGradient(cx, cy, Rc, cx, cy, Rc * 1.9); g.addColorStop(0, rgba(C.blue, 1)); g.addColorStop(1, rgba(C.mint, 1));
+        c.beginPath(); smoothClosed(c, front); c.fillStyle = g; c.fill();
+        coverDisc(c, cx, cy, Rc * (1 + kp * 0.05), kp);
+      },
+    },
+    {
+      n: 35, name: "Waterfall Sized", line: "From 24. The dots grow with loudness as well as brightening, so quiet parts recede and hits stand up off the grid.",
+      draw(c, w, h, A, S, dt) {
+        const cols = 84, rows = 28;
+        const frac = specHistory(S, A, dt, 1 / 30, cols + 1, () => { const col = new Float32Array(rows); for (let j = 0; j < rows; j += 1) col[j] = clamp(sampleRange(A.specFast, 3, 59, j / (rows - 1))); return col; });
+        const cell = Math.min((w * 0.92) / cols, (h * 0.8) / (rows + 1.5));
+        const x1 = (w + cell * cols) / 2 - cell / 2, y0 = (h + cell * (rows + 1.5)) / 2 - cell * 1.5;
+        const L = 7, paths = Array.from({ length: L }, () => new Path2D()), off = new Path2D(), marks = new Path2D();
+        S.hist.forEach((e, i) => {
+          const x = x1 - (i + frac) * cell + cell;
+          if (x < x1 - cell * (cols - 0.5) || x > x1 + cell * 0.5) return;
+          for (let j = 0; j < rows; j += 1) {
+            const v = e.v[j], y = y0 - j * cell;
+            if (v < 0.12) { off.moveTo(x + cell * 0.1, y); off.arc(x, y, cell * 0.1, 0, TAU); continue; }
+            const r = cell * (0.14 + 0.32 * Math.sqrt(v)), lvl = Math.min(L - 1, Math.floor(v * L));
+            paths[lvl].moveTo(x + r, y); paths[lvl].arc(x, y, r, 0, TAU);
+          }
+          if (e.kick) { const r = cell * 0.3; marks.moveTo(x + r, y0 + cell * 1.2); marks.arc(x, y0 + cell * 1.2, r, 0, TAU); }
+        });
+        c.fillStyle = rgba(C.mint, 0.08); c.fill(off);
+        for (let l = 0; l < L; l += 1) { c.fillStyle = rgba(ramp((l + 0.5) / L), 0.5 + (l / (L - 1)) * 0.5); c.fill(paths[l]); }
+        c.fillStyle = rgba(C.mint, 1); c.fill(marks);
+      },
+    },
+    {
+      n: 36, name: "Dot Terrain Dense", line: "From 25. Twice the dots, sized by loudness and distance, with the front row lifting on each kick.",
+      draw(c, w, h, A, S, dt) {
+        const NL = 40, NP = 72;
+        const { rows } = terrainRows(S, A, dt, w, h, NL, NP, 26, 0.5);
+        const L = 8, paths = Array.from({ length: L }, () => new Path2D());
+        for (let j = rows.length - 1; j >= 0; j -= 1) {
+          const { pts, vals, z, persp } = rows[j];
+          for (let i = 0; i < NP; i += 1) {
+            const v = vals[i], r = Math.max(0.5, w * 0.0032 * persp * (0.45 + v)), lvl = Math.min(L - 1, Math.floor(v * L * (1 - z * 0.45)));
+            paths[lvl].moveTo(pts[i][0] + r, pts[i][1]); paths[lvl].arc(pts[i][0], pts[i][1], r, 0, TAU);
+          }
+        }
+        for (let l = 0; l < L; l += 1) { const t = l / (L - 1); c.fillStyle = rgba(ramp(t), 0.3 + t * 0.7); c.fill(paths[l]); }
+      },
+    },
+    {
+      n: 37, name: "Terrain Dots", line: "Crosses 28 and 25. The night landscape, with a dot lighting up on every peak that clears the ridge.",
+      draw(c, w, h, A, S, dt) {
+        const NP = 56;
+        const { rows, k, horizon } = terrainRows(S, A, dt, w, h, 32, NP, 26);
+        c.fillStyle = rgba(C.mint, 0.22); c.fillRect(0, Math.round(horizon) - 0.5, w, 1);
+        drawTerrain(c, rows, k, NP, (row) => {
+          const fade = clamp(1 - row.z * 0.85, 0.1, 1), r = Math.max(0.8, 2.6 * row.persp);
+          for (let i = 1; i < NP - 1; i += 1) {
+            const v = row.vals[i];
+            if (v < 0.42 || v < row.vals[i - 1] || v < row.vals[i + 1]) continue;
+            c.fillStyle = rgba(v > 0.75 ? C.paper : C.mint, fade); c.beginPath(); c.arc(row.pts[i][0], row.pts[i][1] - r * 1.6, r, 0, TAU); c.fill();
+          }
+        });
+      },
+    },
+    {
+      n: 38, name: "Groove Dots Pro", line: "From 29. A bigger record with finer dot grooves that run to white on the loudest moments, and a tonearm that lights on the kick.",
+      draw(c, w, h, A, S, dt) {
+        const R = Math.min(w, h) * 0.45, rin = R * 0.44, cx = w / 2, cy = h / 2;
+        S.p = S.p || { x: 0, v: 0 };
+        const k = punch(S.p, A.kickHit, 0.5 + A.kickStrength * 0.5, dt, 300, 20);
+        grooveDots(S, A, dt, R, rin, 34, ramp);
+        drawDisc(c, S, cx, cy, R, 1 + k * 0.02);
+        c.strokeStyle = rgba(C.paper, 0.12); c.lineWidth = 1; c.beginPath(); c.arc(cx, cy, rin * 0.98, 0, TAU); c.stroke();
+        coverDisc(c, cx, cy, rin * 0.9, 0);
+        c.strokeStyle = rgba(mix(C.paper, C.mint, k), 0.25 + k * 0.6); c.lineWidth = 1 + k * 1.5; c.beginPath(); c.moveTo(cx, cy - R * 1.02); c.lineTo(cx, cy - rin * 1.02); c.stroke();
+        c.fillStyle = rgba(mix(C.paper, C.mint, k), 0.5 + k * 0.5); c.beginPath(); c.arc(cx, cy - R * 1.02, 2 + k * 2, 0, TAU); c.fill();
+      },
+    },
+    {
+      n: 39, name: "Turntable", line: "Crosses 29 and 25. The dot record seen at an angle, like it's spinning on a deck, with the cover as the label.",
+      draw(c, w, h, A, S, dt) {
+        const R = Math.min(w * 0.42, h * 0.95), rin = R * 0.4, tilt = 0.42, cx = w / 2, cy = h * 0.55;
+        S.p = S.p || { x: 0, v: 0 };
+        const k = punch(S.p, A.kickHit, 0.5 + A.kickStrength * 0.5, dt, 300, 20);
+        grooveDots(S, A, dt, R, rin, 30, grooveDotColor);
+        const sc = 1 + k * 0.015;
+        c.fillStyle = "rgb(8,10,11)"; c.beginPath(); c.ellipse(cx, cy + R * 0.05, R * sc, R * tilt * sc, 0, 0, TAU); c.fill();
+        c.save(); c.translate(cx, cy); c.scale(sc, sc * tilt); c.rotate(-S.theta);
+        c.beginPath(); c.arc(0, 0, R, 0, TAU); c.clip(); c.drawImage(S.disc, -R, -R, R * 2, R * 2); c.restore();
+        c.save(); c.translate(cx, cy); c.scale(1, tilt);
+        c.fillStyle = rgba(C.ink, 0.95); c.beginPath(); c.arc(0, 0, rin * 0.9 * sc, 0, TAU); c.fill();
+        c.strokeStyle = rgba(C.paper, 0.4 + k * 0.4); c.lineWidth = 1.25; c.stroke(); c.restore();
+        const hx = cx, hy = cy - tilt * (R + rin) * 0.5;
+        c.strokeStyle = rgba(mix(C.paper, C.mint, k), 0.35 + k * 0.5); c.lineWidth = 1.5 + k; c.lineCap = "round";
+        c.beginPath(); c.moveTo(cx + R * 1.05, cy - R * tilt * 0.9); c.lineTo(cx + R * 0.55, hy - R * 0.02); c.lineTo(hx + R * 0.05, hy); c.stroke();
+        c.fillStyle = rgba(mix(C.paper, C.mint, k), 0.6 + k * 0.4); c.beginPath(); c.arc(cx + R * 1.05, cy - R * tilt * 0.9, 3, 0, TAU); c.fill();
+      },
+    },
+    {
+      n: 40, name: "Terrain Sun", line: "Crosses 28 and the cover styles. The landscape with your cover as a sun sitting on the horizon. The hills pass in front of it and it swells on the kick.",
+      draw(c, w, h, A, S, dt) {
+        const NP = 56;
+        const { rows, k, horizon } = terrainRows(S, A, dt, w, h, 32, NP, 26);
+        const r = h * 0.17 * (1 + k * 0.05), sy = horizon - r * 0.55;
+        c.strokeStyle = rgba(C.mint, 0.18); c.lineWidth = 1;
+        for (let i = 1; i <= 3; i += 1) { c.beginPath(); c.arc(w / 2, sy, r * (1 + i * 0.16 + k * 0.05), 0, TAU); c.globalAlpha = 1 - i * 0.28; c.stroke(); }
+        c.globalAlpha = 1;
+        coverDisc(c, w / 2, sy, r, k);
+        c.fillStyle = rgba(C.mint, 0.3); c.fillRect(0, Math.round(horizon) - 0.5, w, 1);
+        drawTerrain(c, rows, k, NP);
+      },
+    },
+  ],
+});
+
+
+// ---- round 5: the eight free styles, redrawn on the new engine. One colour (the user's; white here), no glow.
+const U = C.paper;
+/** `n` values from bass (index 0) up; the first few take the strongest of their neighbours so the bass is one peak. */
+function bandRow(src, n, b0 = 3, b1 = 54, hold = 0.1) {
+  const out = new Float32Array(n);
+  for (let i = 0; i < n; i += 1) out[i] = clamp(sampleRange(src, b0, b1, n === 1 ? 0 : i / (n - 1)));
+  let m = 0;
+  for (let i = Math.max(1, Math.floor(n * hold)); i >= 0; i -= 1) { m = Math.max(m, out[i]); out[i] = m; }
+  return out;
+}
+/** Peaks that jump with the value, hold briefly, then fall under gravity. */
+function gravityPeaks(S, vals, dt, g, hold = 0.12) {
+  const n = vals.length;
+  if (!S.pk || S.pk.length !== n) { S.pk = new Float32Array(n); S.pv = new Float32Array(n); S.ph = new Float32Array(n); }
+  for (let i = 0; i < n; i += 1) {
+    if (vals[i] >= S.pk[i]) { S.pk[i] = vals[i]; S.pv[i] = 0; S.ph[i] = hold; }
+    else if (S.ph[i] > 0) S.ph[i] -= dt;
+    else { S.pv[i] += g * dt; S.pk[i] = Math.max(vals[i], S.pk[i] - S.pv[i] * dt); }
+  }
+  return S.pk;
+}
+
+ROUNDS.push({
+  round: 5,
+  note: "Your eight free styles, redone in the same order as the Style tiles: NCS, Monstercat, Spectrum, Proximity, Trap, Wave, Mirror and Dots. Same idea as each one you have now, rebuilt on the new beat engine, with no glow, no halo and no rainbow. They draw in one colour, the user's pick (white here), so they read as clean and stay clearly apart from the Pro set.",
+  styles: [
+    {
+      n: 41, name: "NCS", line: "Bars around your logo. Thin, square-ended bars from a hairline ring, with a small tick that marks each bar's peak and falls back.",
+      draw(c, w, h, A, S, dt) {
+        const cx = w / 2, cy = h / 2, m = Math.min(w, h), n = 48, maxLen = m * 0.2;
+        S.p = S.p || { x: 0, v: 0 };
+        const k = punch(S.p, A.kickHit, 0.5 + A.kickStrength * 0.5, dt, 320, 20);
+        const ring = m * 0.19 * (1 + k * 0.04), start = ring + 5;
+        const vals = bandRow(A.specFast, n, 3, 54);
+        const pk = gravityPeaks(S, vals, dt, 2.2);
+        c.lineCap = "butt"; c.lineWidth = Math.max(1.2, ((Math.PI * ring) / n) * 0.42);
+        const bars = new Path2D(), ticks = new Path2D();
+        for (let side = -1; side <= 1; side += 2) for (let i = 0; i < n; i += 1) {
+          const a = -Math.PI / 2 + side * ((i + 0.5) / n) * Math.PI, dx = Math.cos(a), dy = Math.sin(a);
+          const len = 2 + vals[i] * maxLen, pl = 2 + pk[i] * maxLen + 4;
+          bars.moveTo(cx + dx * start, cy + dy * start); bars.lineTo(cx + dx * (start + len), cy + dy * (start + len));
+          if (pk[i] > 0.04) { ticks.moveTo(cx + dx * pl, cy + dy * pl); ticks.lineTo(cx + dx * (pl + 2), cy + dy * (pl + 2)); }
+        }
+        c.strokeStyle = rgba(U, 0.92); c.stroke(bars);
+        c.strokeStyle = rgba(U, 0.55); c.stroke(ticks);
+        c.strokeStyle = rgba(U, 0.22 + k * 0.4); c.lineWidth = 1; c.beginPath(); c.arc(cx, cy, ring + 2, 0, TAU); c.stroke();
+        coverDisc(c, cx, cy, ring, k);
+      },
+    },
+    {
+      n: 42, name: "Monstercat", line: "Tight bars along the bottom, bass on the left. Flat tops, a hairline under the row, and motion that lands on the hit.",
+      draw(c, w, h, A, S, dt) {
+        const count = 64, slot = w / count, gap = Math.max(1, slot * 0.24), base = h * 0.9, maxH = h * 0.44;
+        const raw = bandRow(A.spec, count, 2, 58, 0.06), vals = new Float32Array(count);
+        for (let i = 0; i < count; i += 1) vals[i] = raw[Math.max(0, i - 1)] * 0.25 + raw[i] * 0.5 + raw[Math.min(count - 1, i + 1)] * 0.25;
+        const p = new Path2D();
+        for (let i = 0; i < count; i += 1) { const bh = Math.max(1.5, vals[i] * maxH); p.rect(i * slot + gap / 2, base - bh, slot - gap, bh); }
+        c.fillStyle = rgba(U, 0.95); c.fill(p);
+        c.fillStyle = rgba(U, 0.25); c.fillRect(0, base + 3, w, 1);
+      },
+    },
+    {
+      n: 43, name: "Spectrum", line: "Bars with a reflection, bass in the middle. Each cap hangs for a moment then drops under gravity; the reflection is drawn in fine scan lines.",
+      draw(c, w, h, A, S, dt) {
+        const side = 34, span = w * 0.8, left = (w - span) / 2, baseline = h * 0.62, maxUp = h * 0.38, slotW = span / (side * 2), barW = Math.max(1.5, slotW * 0.52);
+        const vals = bandRow(A.specFast, side, 3, 54);
+        const pk = gravityPeaks(S, vals, dt, 2.6, 0.18);
+        const bars = new Path2D(), caps = new Path2D(), refl = new Path2D();
+        const put = (slotIndex, v, p) => {
+          const x = left + slotIndex * slotW + (slotW - barW) / 2, bh = Math.max(1.5, v * maxUp), r = barW / 2;
+          bars.moveTo(x, baseline); bars.lineTo(x, baseline - bh + r); bars.arc(x + r, baseline - bh + r, r, Math.PI, 0); bars.lineTo(x + barW, baseline); bars.closePath();
+          if (p > 0.03) caps.rect(x, baseline - p * maxUp - 5, barW, 1.5);
+          for (let y = 3; y < bh * 0.45; y += 3) refl.rect(x, baseline + y, barW, 1);
+        };
+        for (let i = 0; i < side; i += 1) { put(side - 1 - i, vals[i], pk[i]); put(side + i, vals[i], pk[i]); }
+        c.fillStyle = rgba(U, 0.95); c.fill(bars);
+        c.fillStyle = rgba(U, 0.8); c.fill(caps);
+        const g = c.createLinearGradient(0, baseline, 0, baseline + maxUp * 0.45); g.addColorStop(0, rgba(U, 0.28)); g.addColorStop(1, rgba(U, 0));
+        c.fillStyle = g; c.fill(refl);
+        c.fillStyle = rgba(U, 0.4); c.fillRect(left, baseline, span, 1);
+      },
+    },
+    {
+      n: 44, name: "Proximity", line: "Thin lines from the centre line, bass in the middle. One-pixel strokes with a dot at each end; the centre line brightens on the kick.",
+      draw(c, w, h, A, S, dt) {
+        const half = 56, span = w * 0.72, left = (w - span) / 2, mid = h * 0.5, maxHalf = h * 0.27, slotW = span / (half * 2);
+        S.p = S.p || { x: 0, v: 0 };
+        const k = punch(S.p, A.kickHit, 0.5 + A.kickStrength * 0.5, dt, 300, 22);
+        const vals = bandRow(A.specFast, half, 3, 56);
+        const lines = new Path2D(), ends = new Path2D();
+        const put = (slot, v) => {
+          const x = left + (slot + 0.5) * slotW, len = 1 + v * maxHalf;
+          lines.moveTo(x, mid - len); lines.lineTo(x, mid + len);
+          if (v > 0.06) { ends.moveTo(x + 1.3, mid - len); ends.arc(x, mid - len, 1.3, 0, TAU); ends.moveTo(x + 1.3, mid + len); ends.arc(x, mid + len, 1.3, 0, TAU); }
+        };
+        for (let i = 0; i < half; i += 1) { put(half - 1 - i, vals[i]); put(half + i, vals[i]); }
+        c.strokeStyle = rgba(U, 0.7); c.lineWidth = 1; c.stroke(lines);
+        c.fillStyle = rgba(U, 0.75 + A.hat * 0.25); c.fill(ends);
+        const ext = span * (0.5 + k * 0.08);
+        c.fillStyle = rgba(U, 0.2 + k * 0.6); c.fillRect(w / 2 - ext, mid - 0.5, ext * 2, 1);
+      },
+    },
+    {
+      n: 45, name: "Trap", line: "A solid shape swelling around your logo. Two thin outlines hold the last peaks and sink back, so you can see where the hit reached.",
+      draw(c, w, h, A, S, dt) {
+        const cx = w / 2, cy = h / 2, m = Math.min(w, h), N = 96, maxLen = m * 0.17;
+        S.p = S.p || { x: 0, v: 0 };
+        if (!S.t1) { S.t1 = new Float32Array(N); S.t2 = new Float32Array(N); }
+        const k = punch(S.p, A.kickHit, 0.5 + A.kickStrength * 0.5, dt, 300, 18);
+        const Rc = m * 0.19 * (1 + k * 0.05);
+        const v = new Float32Array(N);
+        for (let i = 0; i < N; i += 1) v[i] = sampleRange(A.spec, 2, 40, 1 - Math.abs((i / N) * 2 - 1));
+        for (let pass = 0; pass < 3; pass += 1) { const o = v.slice(); for (let i = 0; i < N; i += 1) v[i] = o[(i + N - 1) % N] * 0.25 + o[i] * 0.5 + o[(i + 1) % N] * 0.25; }
+        const shape = [], o1 = [], o2 = [];
+        for (let i = 0; i < N; i += 1) {
+          const r = Rc + 3 + Math.pow(v[i], 1.2) * maxLen;
+          S.t1[i] = Math.max(r, S.t1[i] - dt * maxLen * 0.9); S.t2[i] = Math.max(r, S.t2[i] - dt * maxLen * 0.35);
+          const a = Math.PI / 2 + (i / N) * TAU, ca = Math.cos(a), sa = Math.sin(a);
+          shape.push([cx + ca * r, cy + sa * r]); o1.push([cx + ca * (S.t1[i] + 3), cy + sa * (S.t1[i] + 3)]); o2.push([cx + ca * (S.t2[i] + 6), cy + sa * (S.t2[i] + 6)]);
+        }
+        c.lineWidth = 1;
+        c.beginPath(); smoothClosed(c, o2); c.strokeStyle = rgba(U, 0.18); c.stroke();
+        c.beginPath(); smoothClosed(c, o1); c.strokeStyle = rgba(U, 0.4); c.stroke();
+        c.beginPath(); smoothClosed(c, shape); c.fillStyle = rgba(U, 0.92); c.fill();
+        coverDisc(c, cx, cy, Rc, k);
+      },
+    },
+    {
+      n: 46, name: "Wave", line: "Rippling ribbons. Three thin lines whose ripple height follows the music; every kick nudges the ripple forward so it moves in time.",
+      draw(c, w, h, A, S, dt) {
+        const P = 160, mid = h * 0.52, maxAmp = h * 0.22;
+        S.ph = S.ph || [0, 1.3, 2.6]; S.p = S.p || { x: 0, v: 0 };
+        const k = punch(S.p, A.kickHit, 0.5 + A.kickStrength * 0.5, dt, 240, 16);
+        const lines = [[1, 1.9, 0.95], [1.2, 1.1, 0.5], [1.4, 1, 0.25]];
+        c.lineJoin = "round"; c.lineCap = "round";
+        for (let j = 2; j >= 0; j -= 1) {
+          if (A.live) S.ph[j] += dt * (1.4 + j * 0.6) + (A.kickHit ? 0.7 : 0);
+          const [scale, lw, alpha] = lines[j], pts = [];
+          for (let s = 0; s <= P; s += 1) {
+            const x = s / P, v = sampleRange(A.spec, 3, 50, Math.abs(x - 0.5) * 2), edge = Math.sin(Math.PI * x);
+            pts.push([x * w, mid + Math.sin(x * TAU * 3 + S.ph[j]) * v * maxAmp * scale * edge * (1 + k * 0.35)]);
+          }
+          c.beginPath(); smoothLine(c, pts); c.strokeStyle = rgba(U, alpha); c.lineWidth = lw; c.stroke();
+        }
+      },
+    },
+    {
+      n: 47, name: "Mirror", line: "Bars top and bottom, bass in the middle. Narrow bars with a cap on each that holds the peak and drops.",
+      draw(c, w, h, A, S, dt) {
+        const half = 44, slotW = w / (half * 2), barW = Math.max(1.5, slotW * 0.56), maxLen = h * 0.26;
+        const vals = bandRow(A.specFast, half, 3, 54);
+        const pk = gravityPeaks(S, vals, dt, 2.4, 0.15);
+        const bars = new Path2D(), caps = new Path2D();
+        const put = (slot, v, p) => {
+          const x = slot * slotW + (slotW - barW) / 2, len = Math.max(1.5, v * maxLen);
+          bars.rect(x, h - len, barW, len); bars.rect(x, 0, barW, len);
+          if (p > 0.03) { const pl = p * maxLen + 4; caps.rect(x, h - pl - 1.5, barW, 1.5); caps.rect(x, pl, barW, 1.5); }
+        };
+        for (let i = 0; i < half; i += 1) { put(half - 1 - i, vals[i], pk[i]); put(half + i, vals[i], pk[i]); }
+        c.fillStyle = rgba(U, 0.92); c.fill(bars);
+        c.fillStyle = rgba(U, 0.6); c.fill(caps);
+      },
+    },
+    {
+      n: 48, name: "Dots", line: "Rays of dots around your logo. Dots get smaller toward the tip, the top dot fades in with the level, and a peak dot falls back down each ray.",
+      draw(c, w, h, A, S, dt) {
+        const cx = w / 2, cy = h / 2, m = Math.min(w, h), n = 30, gap = m * 0.024, maxDots = Math.floor((m * 0.22) / gap);
+        S.p = S.p || { x: 0, v: 0 };
+        const k = punch(S.p, A.kickHit, 0.5 + A.kickStrength * 0.5, dt, 320, 20);
+        const ring = m * 0.19 * (1 + k * 0.04);
+        const vals = bandRow(A.specFast, n, 3, 54);
+        const pk = gravityPeaks(S, vals, dt, 1.6, 0.12);
+        const lit = new Path2D(), cap = new Path2D(), part = [];
+        for (let side = -1; side <= 1; side += 2) for (let i = 0; i < n; i += 1) {
+          const a = -Math.PI / 2 + side * ((i + 0.5) / n) * Math.PI, dx = Math.cos(a), dy = Math.sin(a), L = vals[i] * maxDots, P = Math.floor(pk[i] * maxDots);
+          for (let d = 0; d < maxDots; d += 1) {
+            const r = gap * 0.3 * (1 - (d / maxDots) * 0.5), R = ring + gap * 0.9 + d * gap, x = cx + dx * R, y = cy + dy * R;
+            if (d < Math.floor(L) || d === 0) { lit.moveTo(x + r, y); lit.arc(x, y, r, 0, TAU); }
+            else if (d === Math.floor(L)) part.push([x, y, r, L % 1]);
+            else if (d === P && P > 1) { cap.moveTo(x + r, y); cap.arc(x, y, r, 0, TAU); }
+          }
+        }
+        c.fillStyle = rgba(U, 0.95); c.fill(lit);
+        for (const [x, y, r, f] of part) { c.fillStyle = rgba(U, f * 0.95); c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill(); }
+        c.fillStyle = rgba(U, 0.45); c.fill(cap);
+        coverDisc(c, cx, cy, ring, k);
+      },
+    },
+  ],
+});
+
+
+// ---------------------------------------------------------------- page wiring
+const tiles = [];
+const roundsEl = document.getElementById("rounds");
+const expandIcon = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5 9 7M2.5 13.5 7 9" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const allStyles = new Map();
+for (const r of ROUNDS.slice().sort((a, b) => b.round - a.round)) {
+  const sec = document.createElement("section"); sec.className = "round";
+  const first = r.styles[0].n, last = r.styles[r.styles.length - 1].n;
+  sec.innerHTML = `<div class="roundhead"><h2>Round ${r.round}</h2><span class="range">${first}–${last}</span></div><p class="roundnote"></p><div class="grid"></div>`;
+  sec.querySelector(".roundnote").textContent = r.note;
+  const grid = sec.querySelector(".grid");
+  for (const st of r.styles) {
+    allStyles.set(st.n, st);
+    const art = document.createElement("article"); art.className = "tile";
+    art.innerHTML = `<div class="stage"><canvas></canvas><button class="expand" type="button" aria-label="Expand ${st.n}">${expandIcon}</button></div><div class="meta"><span class="num">${st.n}</span><h3></h3><p></p></div>`;
+    art.querySelector("h3").textContent = st.name; art.querySelector("p").textContent = st.line;
+    grid.appendChild(art);
+    const tile = { style: st, canvas: art.querySelector("canvas"), S: {}, visible: true };
+    tiles.push(tile);
+    art.querySelector(".expand").addEventListener("click", () => openOverlay(st));
+  }
+  roundsEl.appendChild(sec);
+}
+if ("IntersectionObserver" in window) {
+  const io = new IntersectionObserver((entries) => { for (const e of entries) { const t = tiles.find((x) => x.canvas === e.target); if (t) t.visible = e.isIntersecting; } }, { rootMargin: "120px" });
+  for (const t of tiles) io.observe(t.canvas);
+}
+
+// overlay
+const overlay = document.getElementById("overlay"), ovCanvas = document.getElementById("ovCanvas");
+let ovTile = null;
+function openOverlay(st) {
+  ovTile = { style: st, canvas: ovCanvas, S: {}, visible: true };
+  document.getElementById("ovTitle").innerHTML = `<span>${st.n}</span>`;
+  document.getElementById("ovTitle").append(document.createTextNode(st.name));
+  overlay.hidden = false; document.getElementById("ovClose").focus();
+}
+function closeOverlay() { overlay.hidden = true; ovTile = null; }
+document.getElementById("ovClose").addEventListener("click", closeOverlay);
+overlay.addEventListener("click", (e) => { if (e.target === overlay) closeOverlay(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !overlay.hidden) closeOverlay(); });
+
+function drawTile(tile, dt) {
+  const cv = tile.canvas, rect = cv.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const W = Math.round(rect.width * dpr), H = Math.round(rect.height * dpr);
+  if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+  const c = cv.getContext("2d");
+  c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, W, H);
+  c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  tile.S.dpr = dpr;
+  try { tile.style.draw(c, rect.width, rect.height, A, tile.S, dt); } catch (err) { if (!tile.err) { tile.err = true; console.error(tile.style.n, err); } }
+}
+
+// transport
+const playBtn = document.getElementById("play"), playLabel = document.getElementById("playLabel"), playIcon = document.getElementById("playIcon"), statusEl = document.getElementById("status");
+const PLAY_D = "M4 2.5v11l9-5.5z", PAUSE_D = "M4 2.5h3v11H4zM9 2.5h3v11H9z";
+let started = false;
+function setPlaying(on) {
+  playIcon.setAttribute("d", on ? PAUSE_D : PLAY_D);
+  playLabel.textContent = on ? "Pause" : Engine.source === "file" ? "Play your track" : "Play demo beat";
+}
+function setStatus(text, err = false) { statusEl.textContent = text; statusEl.classList.toggle("err", err); }
+playBtn.addEventListener("click", async () => {
+  try {
+    if (!started) { started = true; if (Engine.source === "file" && Engine.buffer) await Engine.playFile(); else await Engine.playDemo(); setPlaying(true); setStatus(""); return; }
+    if (Engine.active) { await Engine.pause(); setPlaying(false); } else { await Engine.resume(); setPlaying(true); }
+  } catch (err) { setStatus("Sound couldn't start in this browser.", true); console.error(err); }
+});
+const srcButtons = document.querySelectorAll("#sourceSeg button");
+function markSource(src) { srcButtons.forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.src === src))); }
+srcButtons.forEach((b) => b.addEventListener("click", async () => {
+  if (b.disabled) return;
+  try {
+    if (b.dataset.src === "file") await Engine.playFile(); else await Engine.playDemo();
+    started = true; markSource(b.dataset.src); setPlaying(true);
+  } catch (err) { setStatus("Sound couldn't start in this browser.", true); }
+}));
+document.getElementById("trackFile").addEventListener("change", async (e) => {
+  const file = e.target.files && e.target.files[0]; if (!file) return;
+  setStatus("Reading your track…");
+  try {
+    Engine.init();
+    const bytes = await file.arrayBuffer();
+    Engine.buffer = await new Promise((res, rej) => { const p = Engine.ctx.decodeAudioData(bytes, res, rej); if (p && p.catch) p.catch(rej); });
+    Engine.fileName = file.name;
+    const fb = document.getElementById("fileSrcBtn"); fb.disabled = false; fb.textContent = file.name.length > 22 ? file.name.slice(0, 20) + "…" : file.name; fb.title = file.name;
+    await Engine.playFile(); started = true; markSource("file"); setPlaying(true); setStatus("");
+  } catch (err) { setStatus("That file couldn't be read. Try an MP3, WAV or M4A.", true); console.error(err); }
+  e.target.value = "";
+});
+document.getElementById("vol").addEventListener("input", (e) => { if (Engine.vol) Engine.vol.gain.value = Number(e.target.value); });
+
+// background behind the visualizers
+function makeSampleCover() {
+  const cv = makeCanvas(960, 540), g = cv.getContext("2d"), r = rng(42);
+  const bg = g.createLinearGradient(0, 0, 960, 540); bg.addColorStop(0, "#0d1416"); bg.addColorStop(1, "#151a24"); g.fillStyle = bg; g.fillRect(0, 0, 960, 540);
+  const blob = (x, y, rad, col) => { const rg = g.createRadialGradient(x, y, 0, x, y, rad); rg.addColorStop(0, col); rg.addColorStop(1, "rgba(0,0,0,0)"); g.fillStyle = rg; g.fillRect(0, 0, 960, 540); };
+  blob(220, 380, 360, "rgba(32,96,92,0.55)"); blob(760, 160, 380, "rgba(52,70,138,0.5)"); blob(610, 420, 160, "rgba(150,88,52,0.35)");
+  for (let i = 0; i < 26; i += 1) blob(r() * 960, 280 + r() * 260, 8 + r() * 26, `rgba(255,${190 + r() * 50 | 0},${120 + r() * 60 | 0},${0.12 + r() * 0.2})`);
+  const img = g.getImageData(0, 0, 960, 540), d = img.data;
+  for (let i = 0; i < d.length; i += 4) { const n = (r() - 0.5) * 18; d[i] += n; d[i + 1] += n; d[i + 2] += n; }
+  g.putImageData(img, 0, 0);
+  return cv.toDataURL("image/jpeg", 0.86);
+}
+const sampleCover = makeSampleCover();
+const bgButtons = document.querySelectorAll("#bgSeg button");
+function setBg(mode, url) {
+  document.body.classList.toggle("bg-art", mode !== "black");
+  document.documentElement.style.setProperty("--cover", `url("${url || sampleCover}")`);
+  bgButtons.forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.bg === mode)));
+}
+bgButtons.forEach((b) => b.addEventListener("click", () => setBg(b.dataset.bg)));
+document.getElementById("coverFile").addEventListener("change", (e) => {
+  const f = e.target.files && e.target.files[0]; if (!f) return;
+  setBg("custom", URL.createObjectURL(f));
+});
+
+// main loop
+const lights = { kick: document.querySelector('.light[data-k="kick"] i'), snare: document.querySelector('.light[data-k="snare"] i'), hat: document.querySelector('.light[data-k="hat"] i') };
+let lastTs = 0;
+function frame(ts) {
+  const t = ts / 1000, dt = lastTs ? Math.min(0.05, t - lastTs) : 1 / 60; lastTs = t;
+  Engine.update(dt, t);
+  for (const [k, el] of Object.entries(lights)) { const v = A[k]; el.style.background = v > 0.04 ? `color-mix(in srgb, var(--on) ${Math.round(clamp(v) * 100)}%, #1d2421)` : ""; }
+  if (ovTile) drawTile(ovTile, dt);
+  else for (const tile of tiles) if (tile.visible) drawTile(tile, dt);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>

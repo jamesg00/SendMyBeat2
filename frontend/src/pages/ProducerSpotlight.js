@@ -1061,7 +1061,7 @@ export default function ProducerSpotlight() {
     <div className="min-h-screen dashboard-parallax-bg">
       <SpotlightParticles />
       <header className="spotlight-public-nav">
-        <a href="/" className="smb-wordmark">SENDMYBEAT</a>
+        <a href="/" className="smb-wordmark smb-wordmark--icon"><img src="/icon-192.png" className="smb-wordmark-icon" alt="" aria-hidden="true" width="22" height="22" />SENDMYBEAT</a>
         <Button onClick={() => navigate("/")} className="smb-btn smb-btn--pri smb-btn--sm">
           Log in
         </Button>

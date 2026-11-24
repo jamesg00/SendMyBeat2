@@ -43,6 +43,7 @@ async function pickEncoderConfig(width, height, fps, bitrate) {
 /**
  * @param {object} job
  * @param {import("./offlineAnalysis").OfflineAnalyser} job.analyser  analysis of the decoded beat
+ * @param {import("./viz2/track").BeatTrack} [job.beatTrack]  beat-engine frames for the new styles
  * @param {object} job.options        drawing options (buildVisualizerOptions)
  * @param {[number, number]} job.size       output size in pixels
  * @param {[number, number]} job.designSize layout size the visualizer is designed in
@@ -54,7 +55,7 @@ async function pickEncoderConfig(width, height, fps, bitrate) {
  * @param {AbortSignal} [job.signal]
  * @returns {Promise<{ blob: Blob, frames: number, fps: number, width: number, height: number, codec: string, seconds: number }>}
  */
-export async function exportVisualizerVideo({ analyser, options, size, designSize, fps, duration, drawBackdrop, onProgress, signal }) {
+export async function exportVisualizerVideo({ analyser, beatTrack, options, size, designSize, fps, duration, drawBackdrop, onProgress, signal }) {
   if (!canExportOffline()) throw new Error("This browser can't encode video.");
   const [width, height] = size;
   const totalFrames = Math.max(1, Math.ceil(duration * fps));
@@ -84,6 +85,7 @@ export async function exportVisualizerVideo({ analyser, options, size, designSiz
     sampleRate: analyser.sampleRate,
     fill: (out) => analyser.fillStep(step, out),
   });
+  if (beatTrack) viz.setBeatProvider((A) => beatTrack.fillStep(step, A));
   await Promise.all([waitForImage(viz.centerImage), waitForImage(viz.recordImage)]);
 
   const composite = document.createElement("canvas");

@@ -32,7 +32,7 @@ export async function decodeBeat(file) {
 
 // ---- radix-2 FFT with tables shared by every analyser of the same size
 const tableCache = new Map();
-function tablesFor(size) {
+export function tablesFor(size) {
   let tables = tableCache.get(size);
   if (tables) return tables;
   const bits = Math.log2(size);
@@ -58,7 +58,7 @@ function tablesFor(size) {
   return tables;
 }
 
-function fft(re, im, tables) {
+export function fft(re, im, tables) {
   const n = re.length;
   const { cos, sin } = tables;
   for (let size = 2; size <= n; size <<= 1) {

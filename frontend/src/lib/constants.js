@@ -199,14 +199,53 @@ export const VISUALIZER_PRESETS = {
   },
 };
 
+// The 13 premium styles (paid plans: Plus, and Pro which is the max plan). Each starts in mint and blue with the logo in the middle.
+const PRO_STYLE_LIST = [
+  ["ridgeline", "Ridgeline", "Stacked lines of the spectrum"],
+  ["ring-ridges", "Ring Ridges", "Spectrum rings around your logo"],
+  ["analyzer-dots", "Analyzer Dots", "Columns of dots with falling peaks"],
+  ["dot-record", "Dot Record", "A record of dots that spins"],
+  ["dot-rings", "Dot Rings", "Rings of dots around your logo"],
+  ["jelly-dots", "Jelly Dots", "A wobbling ring of dots"],
+  ["jelly", "Jelly", "A soft ring that wobbles on the beat"],
+  ["waterfall", "Waterfall", "The spectrum scrolling down"],
+  ["dot-terrain", "Dot Terrain", "A field of dots in 3D"],
+  ["terrain", "Terrain", "Mountains made of your beat"],
+  ["groove", "Groove", "A record groove that ripples"],
+  ["turntable", "Turntable", "A spinning deck with your logo"],
+  ["terrain-sun", "Terrain Sun", "Mountains under a sun"],
+];
+
+for (const [mode] of PRO_STYLE_LIST) {
+  VISUALIZER_PRESETS[`pro-${mode}`] = {
+    mode,
+    intensity: 1,
+    spectrumColor: "#8bffd0",
+    particleColor: "#4c8dff",
+    fillCenter: "image",
+    fillCenterColor: "#ffffff",
+    spectrumBorderEnabled: true,
+    particleEnabled: false,
+    trailsEnabled: false,
+    multiColorReactive: false,
+    shakeIntensity: 0,
+    fxFlash: false,
+    centerImageSpin: false,
+  };
+}
+
+/** Premium styles are for paying members (Plus or Pro). */
+export const canUsePremiumVisualizers = (status) => Boolean(status?.is_subscribed);
+
 // The styles shown in the Visualizer tab, in order. `preset` is applied when you pick one.
 export const VISUALIZER_STYLES = [
-  { mode: "circle", preset: "ncs-clean", name: "NCS", blurb: "Bars around your logo" },
-  { mode: "monstercat", preset: "monstercat-tight", name: "Monstercat", blurb: "Tight bars along the bottom" },
-  { mode: "spectrum", preset: "spectrum-analyzer", name: "Spectrum", blurb: "Bars with a reflection" },
-  { mode: "proximity", preset: "proximity", name: "Proximity", blurb: "Thin glowing lines" },
+  { mode: "circle", preset: "ncs-clean", name: "NCS", blurb: "Bars around your logo, with a soft afterimage" },
+  { mode: "monstercat", preset: "monstercat-tight", name: "Monstercat", blurb: "Bars along the bottom with falling caps" },
+  { mode: "spectrum", preset: "spectrum-analyzer", name: "Spectrum", blurb: "A clean line of the spectrum" },
+  { mode: "proximity", preset: "proximity", name: "Proximity", blurb: "Lines that bend toward the beat" },
   { mode: "blob", preset: "trap-blob", name: "Trap", blurb: "Colour blob around your logo" },
   { mode: "wave", preset: "wave", name: "Wave", blurb: "Rippling ribbons" },
   { mode: "mirror", preset: "mirror-bars", name: "Mirror", blurb: "Bars top and bottom" },
   { mode: "dots", preset: "dot-ring", name: "Dots", blurb: "Rays of dots" },
+  ...PRO_STYLE_LIST.map(([mode, name, blurb]) => ({ mode, preset: `pro-${mode}`, name, blurb, premium: true })),
 ];
