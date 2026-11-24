@@ -416,6 +416,23 @@ const routes = [
     if (m[1] === "upload1") { uploadCancelled = true; return { success: true, cancelled: false, job: { id: "upload1", status: "processing", progress: 42, message: "Cancelling…", cancel_requested: true } }; }
     return { cancelled: jobs.delete(m[1]) };
   }],
+  // Description builder: a small stand-in for services/description_builder.py.
+  ["POST", /^\/descriptions\/generate$/, (m, body) => {
+    const item = history.find((r) => r.id === body.tag_id);
+    if (!item) return [404, { detail: "Tag run not found." }];
+    const artist = item.query.split(" x ")[0].replace(/\b\w/g, (c) => c.toUpperCase());
+    const beat = String(body.beat_name || "").trim().toUpperCase();
+    const template = (descriptions.find((d) => d.id === body.template_id) || {}).content || "";
+    const hashtags = [`#${artist.toLowerCase().replace(/[^a-z0-9]/g, "")}typebeat`, `#${artist.toLowerCase().replace(/[^a-z0-9]/g, "")}`, "#typebeat", "#darktraptypebeat"];
+    const content = [
+      `${artist} type beat | dark trap beat | pluggnb type beat${beat ? ` - "${beat}"` : ""}`,
+      "Buy or lease: https://beatstars.com/jamesbeats",
+      `${beat ? `"${beat}" is a` : "A"} dark trap ${artist} type beat. Made for artists who want a ${artist} sound.`,
+      template,
+      hashtags.join(" "),
+    ].filter(Boolean).join("\n\n");
+    return { content, hashtags, bytes: new TextEncoder().encode(content).length, warnings: [] };
+  }],
   ["GET", /^\/descriptions$/, () => descriptions],
   ["POST", /^\/descriptions$/, (m, body) => {
     const d = { id: `d${Date.now()}`, ...body };
@@ -430,7 +447,8 @@ const routes = [
     descriptions = descriptions.filter((x) => x.id !== m[1]);
     return { ok: true };
   }],
-  ["GET", /^\/youtube\/status$/, () => ({ connected: true, email: "jamesbeats@example.com", name: "jamesbeats", profile_picture: svg("J", "#7a1f1f", "#200606") })],
+  ["GET", /^\/youtube\/status$/, () => ({ connected: true, email: "jamesbeats@example.com", name: "jamesbeats", profile_picture: svg("J", "#7a1f1f", "#200606"), playlists_allowed: false, custom_thumbnails_allowed: null })],
+  ["GET", /^\/youtube\/auth-url$/, () => ({ auth_url: "/dashboard?mock=youtube-consent" })],
   ["POST", /^\/youtube\/analytics$/, () => startJob(8, analytics)],
   ["POST", /^\/upload\/(audio|image)$/, (m) => ({ file_id: `mock-${m[1]}`, media_kind: m[1] })],
   ["POST", /^\/youtube\/upload$/, () => ({ job: { id: "upload1", status: "queued", progress: 0 } })],

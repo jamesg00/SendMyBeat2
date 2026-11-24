@@ -912,3 +912,49 @@ button.adm-btn-danger.adm-btn-danger:hover { background: color-mix(in srgb, var(
 /* Shown over the preview when a free member tries a Pro visualizer. */
 .viz-pro-chip { position: absolute; right: 10px; bottom: 10px; z-index: 5; padding: 6px 11px; border-radius: 999px; border: 1px solid rgba(139, 255, 208, 0.45); background: rgba(10, 10, 10, 0.72); color: #8bffd0; font-size: 12px; font-weight: 600; cursor: pointer; backdrop-filter: blur(6px); }
 .viz-pro-chip:hover { background: rgba(10, 10, 10, 0.9); }
+
+/* Upload Studio › Details: build a description from the tag run */
+.db-build { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.db-build .us-pill-btn:disabled { opacity: 0.5; cursor: default; }
+.db-hint { font-size: 12.5px; color: var(--c-t3); min-width: 0; }
+.db-notes { display: grid; gap: 4px; padding: 10px 12px; border-radius: 10px; background: var(--c-card2); border: 1px solid var(--c-line); font: 12px var(--font-mono); color: var(--c-t3); }
+.db-warn { font: 12.5px var(--font-sans, inherit); color: var(--c-text); }
+
+/* Upload Studio › Details: publishing extras (schedule, playlist, thumbnail, language) */
+.po { display: grid; border-radius: 12px; border: 1px solid var(--c-line); background: var(--c-card2); }
+.po-row { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 12px; padding: 12px 14px; }
+.po-row + .po-row { border-top: 1px solid var(--c-line); }
+.po-icon { color: var(--c-t3); padding-top: 1px; }
+.po-body { display: grid; gap: 6px; min-width: 0; }
+.po-title { font-size: 13.5px; color: var(--c-text); }
+.po-switch { display: inline-flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--c-text); cursor: pointer; width: fit-content; }
+.po-switch input { width: 16px; height: 16px; accent-color: var(--c-acc); cursor: pointer; }
+.po-switch input:disabled { cursor: default; }
+.po-switch input:disabled + span { color: var(--c-t3); }
+.po-hint { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--c-t3); }
+.po-hint.is-error { color: var(--c-danger, #ff6b6b); }
+.po-date, .po-select { max-width: 260px; }
+.po-link { all: unset; padding: 0 !important; min-width: 0 !important; min-height: 0 !important; height: auto !important; background: none !important; color: var(--c-acc); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.po-link:focus-visible { outline: 2px solid var(--c-accline); outline-offset: 2px; }
+.po-pick { width: fit-content; }
+.po-pick:disabled { opacity: 0.5; cursor: default; }
+.po-file { display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; }
+.po-file-name { font-size: 13px; color: var(--c-t2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.po-icon-btn { all: unset; display: inline-grid; place-items: center; width: 24px !important; height: 24px !important; min-width: 0 !important; min-height: 0 !important; padding: 0 !important; border-radius: 6px; color: var(--c-t3); cursor: pointer; }
+.po-icon-btn:hover { color: var(--c-text); background: var(--c-line); }
+.po-icon-btn:focus-visible { outline: 2px solid var(--c-accline); outline-offset: 2px; }
+
+/* AI checks › thumbnail at phone search size */
+.ts-small { display: flex; gap: 12px; align-items: flex-start; padding: 8px; border-radius: 8px; border: 1px solid var(--c-line); }
+.ts-small img { flex: none; width: 168px; height: 94px; border-radius: 4px; object-fit: cover; image-rendering: auto; }
+.ts-small-body { display: grid; gap: 4px; font-size: 12px; min-width: 0; }
+.ts-small ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
+.ts-small li.is-ok { color: var(--c-t3); }
+.ts-small li.is-miss { color: var(--c-text); }
+@media (max-width: 480px) { .ts-small { flex-direction: column; } }
+/* The site's global input and button rules stretch these; pin them back. */
+.po-switch { display: inline-flex !important; flex-direction: row !important; align-items: center !important; }
+.po-switch input[type="checkbox"] { flex: none !important; width: 16px !important; height: 16px !important; min-width: 0 !important; min-height: 0 !important; margin: 0 !important; padding: 0 !important; appearance: auto !important; -webkit-appearance: checkbox !important; }
+.po-switch span { white-space: nowrap; }
+.po-pick { font-size: 12.5px !important; height: 30px !important; min-height: 0 !important; padding: 0 12px !important; }
+.po-link { font-size: inherit !important; font-weight: inherit !important; }

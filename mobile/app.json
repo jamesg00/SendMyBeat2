@@ -7,13 +7,13 @@
     "icon": "./assets/images/icon.png",
     "scheme": "sendmybeat",
     "userInterfaceStyle": "dark",
-    "backgroundColor": "#060D09",
+    "backgroundColor": "#0A0A0A",
     "ios": {
       "icon": "./assets/images/icon.png"
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#060D09",
+        "backgroundColor": "#0A0A0A",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -35,9 +35,14 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#060D09",
+          "backgroundColor": "#0A0A0A",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 170
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "dark": {
+            "backgroundColor": "#0A0A0A",
+            "image": "./assets/images/splash-icon.png"
+          }
         }
       ],
       "expo-secure-store",

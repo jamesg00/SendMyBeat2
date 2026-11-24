@@ -1,7 +1,7 @@
 import Slider from '@react-native-community/slider';
 import { Image } from 'expo-image';
 import { useEffect, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Pressable, Switch, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 
 import * as api from '@/api/endpoints';
@@ -12,7 +12,7 @@ import { usePlan } from '@/components/pros';
 import { Button, ListGroup, ListRow, Segmented } from '@/components/ui';
 import { openPaywall, requirePro, useSubscription } from '@/state/billing';
 import { useDraft } from '@/state/draft';
-import { FIT, clampTransform, useStudio, type FileSlot, type Transform } from '@/state/studio';
+import { FIT, clampTransform, scheduleProblem, useStudio, type FileSlot, type Transform } from '@/state/studio';
 import {
   COLOURS,
   COLOURS_2,
@@ -119,8 +119,9 @@ export function DetailsTab() {
   return (
     <>
       <View style={s.panel}>
-        <FileRow label="Beat" hint="mp3 · wav · m4a · flac · ogg" slot={studio.audio} onPick={studio.pickAudio} />
-        <FileRow label="Artwork" hint="jpg · png · webp · gif" slot={studio.image} onPick={studio.pickImage} last />
+        {/* Short hints: longer lists were cut off next to the Choose button on phones. */}
+        <FileRow label="Beat" hint="mp3 · wav · flac" slot={studio.audio} onPick={studio.pickAudio} />
+        <FileRow label="Artwork" hint="jpg · png · gif" slot={studio.image} onPick={studio.pickImage} last />
       </View>
 
       <Field label="Title" right={`${studio.title.length}/100`}>
@@ -212,6 +213,7 @@ export function DetailsTab() {
           accessibilityLabel="This video's description"
         />
       </Field>
+      {run ? <BuildDescription runId={run.id} beatName={beatNameOf(studio.audio?.name)} templateId={description.saved ? description.id : null} /> : null}
 
       <View style={s.two}>
         <Field label="BPM" style={{ flex: 1 }}>
@@ -243,8 +245,208 @@ export function DetailsTab() {
       </Field>
       <Text style={s.hint}>{privacy.hint}</Text>
 
+      <PublishOptions hasRun={!!run} />
+
       {studio.active ? <Button title="Start over" variant="plain" size="sm" onPress={studio.reset} /> : null}
     </>
+  );
+}
+
+// Builds this video's description from the tag run (no credit): keywords, buy link, hashtags,
+// then the chosen template. It lands in the box above, where it can still be edited.
+function BuildDescription({ runId, beatName, templateId }: { runId: string; beatName: string; templateId: string | null }) {
+  const s = useStyles();
+  const studio = useStudio();
+  const [busy, setBusy] = useState(false);
+  const [notes, setNotes] = useState<api.BuiltDescription | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const build = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const built = await api.buildDescription({ tagId: runId, beatName, templateId });
+      studio.set({ descText: built.content });
+      setNotes(built);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't build the description.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <View style={{ gap: 6 }}>
+      <Button title={busy ? 'Building…' : 'Build from your tag run'} variant="secondary" size="sm" onPress={busy ? undefined : build} />
+      <Text style={s.hint}>
+        {error ??
+          (notes
+            ? [`${notes.hashtags.length} hashtags · ${notes.bytes}/5000 bytes`, ...notes.warnings].join('\n')
+            : 'Keywords, your buy link and hashtags on top, your template under it. No credits used.')}
+      </Text>
+    </View>
+  );
+}
+
+const LANGUAGES = [
+  { value: '', label: 'Not set' },
+  { value: 'en', label: 'English' },
+  { value: 'es', label: 'Spanish' },
+  { value: 'pt', label: 'Portuguese' },
+  { value: 'fr', label: 'French' },
+  { value: 'de', label: 'German' },
+  { value: 'ja', label: 'Japanese' },
+  { value: 'ko', label: 'Korean' },
+];
+const SCHEDULE_HOURS = [9, 12, 15, 17, 18, 20, 22];
+const hourLabel = (h: number) => `${h % 12 || 12} ${h < 12 ? 'AM' : 'PM'}`;
+const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+
+// Publishing extras: schedule, artist playlist, custom thumbnail and language. Times are this
+// phone's local time; the server gets UTC and checks it again (15 minutes to 180 days out).
+function PublishOptions({ hasRun }: { hasRun: boolean }) {
+  const C = useColors();
+  const s = useStyles();
+  const studio = useStudio();
+  const yt = useRequest(api.youtubeStatus);
+  const playlistsAllowed = !!yt.data?.playlists_allowed;
+  const thumbsAllowed = yt.data?.custom_thumbnails_allowed !== false;
+  // "Now" is kept in state (renders stay pure) and moves on each minute, so passed times grey out.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+  const at = studio.publishAt ? new Date(studio.publishAt) : null;
+  const days = Array.from({ length: 8 }, (_, i) => {
+    const d = new Date(now);
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() + i);
+    return d;
+  });
+  const choose = (day: Date, hour: number) => {
+    const next = new Date(day);
+    next.setHours(hour, 0, 0, 0);
+    studio.set({ publishAt: next.toISOString() });
+  };
+  const soonest = now + 15 * 60 * 1000;
+  const firstOpenHour = (day: Date) => SCHEDULE_HOURS.find((h) => new Date(day).setHours(h, 0, 0, 0) > soonest);
+  const toggleSchedule = (on: boolean) => {
+    if (!on) return studio.set({ publishAt: null });
+    choose(days[1], 18); // tomorrow, 6 PM
+  };
+  const problem = scheduleProblem(studio.publishAt, now);
+
+  return (
+    <View style={{ gap: 8 }}>
+      <Text style={s.label}>Publishing</Text>
+      <View style={s.panel}>
+        <View style={[s.optRow, s.divider]}>
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text style={s.optTitle}>Schedule it</Text>
+            <Text style={s.hint}>
+              {at
+                ? problem ?? `Goes public ${at.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}, ${hourLabel(at.getHours())}. Private until then.`
+                : 'Off: it goes out as soon as it’s uploaded.'}
+            </Text>
+          </View>
+          <Switch value={!!at} onValueChange={toggleSchedule} accessibilityLabel="Schedule it" />
+        </View>
+        {at ? (
+          <View style={[s.optPick, s.divider]}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.chipScroll} contentContainerStyle={s.chipRow}>
+              {days.map((d, i) => {
+                const open = firstOpenHour(d);
+                const on = dayKey(d) === dayKey(at);
+                return (
+                  <OptChip
+                    key={dayKey(d)}
+                    label={i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : `${d.toLocaleDateString(undefined, { weekday: 'short' })} ${d.getDate()}`}
+                    on={on}
+                    disabled={open === undefined}
+                    onPress={() => choose(d, SCHEDULE_HOURS.includes(at.getHours()) && new Date(d).setHours(at.getHours(), 0, 0, 0) > soonest ? at.getHours() : open!)}
+                  />
+                );
+              })}
+            </ScrollView>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.chipScroll} contentContainerStyle={s.chipRow}>
+              {SCHEDULE_HOURS.map((h) => (
+                <OptChip
+                  key={h}
+                  label={hourLabel(h)}
+                  on={at.getHours() === h}
+                  disabled={new Date(at).setHours(h, 0, 0, 0) <= soonest}
+                  onPress={() => choose(at, h)}
+                />
+              ))}
+            </ScrollView>
+          </View>
+        ) : null}
+
+        <View style={[s.optRow, s.divider]}>
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text style={[s.optTitle, !playlistsAllowed && { color: C.t3 }]}>Add to the artist’s playlist</Text>
+            <Text style={s.hint}>
+              {!playlistsAllowed
+                ? 'Allow playlists once on the website (Upload Studio › Details), then come back.'
+                : hasRun
+                  ? 'Files it under “Artist Type Beats”, making the playlist the first time.'
+                  : 'Pick a tag run so it knows which artist.'}
+            </Text>
+          </View>
+          <Switch
+            value={playlistsAllowed && studio.playlist}
+            onValueChange={(playlist) => studio.set({ playlist })}
+            disabled={!playlistsAllowed}
+            accessibilityLabel="Add to the artist's playlist"
+          />
+        </View>
+
+        {thumbsAllowed ? (
+          <View style={[s.optRow, s.divider]}>
+            <View style={{ flex: 1, gap: 2 }}>
+              <Text style={s.optTitle}>Custom thumbnail</Text>
+              <Text style={[s.hint, studio.thumb?.status === 'error' && { color: C.danger }]} numberOfLines={2}>
+                {!studio.thumb
+                  ? 'Optional. Without one, YouTube picks a frame.'
+                  : studio.thumb.status === 'uploading'
+                    ? 'Uploading…'
+                    : studio.thumb.status === 'error'
+                      ? (studio.thumb.error ?? 'Upload failed')
+                      : studio.thumb.name}
+              </Text>
+            </View>
+            {studio.thumb ? (
+              <Button title="Remove" variant="plain" size="sm" onPress={() => studio.set({ thumb: null })} />
+            ) : (
+              <Button title="Choose" variant="secondary" size="sm" onPress={studio.pickThumb} />
+            )}
+          </View>
+        ) : null}
+
+        <View style={s.optPick}>
+          <Text style={s.optTitle}>Language</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.chipScroll} contentContainerStyle={s.chipRow}>
+            {LANGUAGES.map((l) => (
+              <OptChip key={l.value || 'none'} label={l.label} on={studio.language === l.value} onPress={() => studio.set({ language: l.value })} />
+            ))}
+          </ScrollView>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function OptChip({ label, on, disabled, onPress }: { label: string; on: boolean; disabled?: boolean; onPress: () => void }) {
+  const s = useStyles();
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityState={{ selected: on, disabled }}
+      hitSlop={4}
+      style={({ pressed }) => [s.optChip, on && s.optChipOn, disabled && { opacity: 0.35 }, pressed && { opacity: 0.6 }]}>
+      <Text style={[s.optChipText, on && s.optChipTextOn]}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -980,6 +1182,16 @@ const useStyles = makeStyles((C) => ({
   divider: { borderBottomWidth: 1, borderBottomColor: C.lineSoft },
   ideaTitle: { color: C.text, fontSize: 14.5, lineHeight: 20, ...font() },
   checks: { paddingHorizontal: 14, paddingVertical: 12, gap: 6 },
+  optRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 12, minHeight: 56 },
+  optPick: { paddingHorizontal: 14, paddingVertical: 12, gap: 10 },
+  optTitle: { color: C.text, fontSize: 15, ...font() },
+  chipRow: { gap: 8, paddingHorizontal: 14 },
+  // Chip rows scroll edge to edge of the panel instead of stopping at its padding.
+  chipScroll: { marginHorizontal: -14 },
+  optChip: { height: 34, paddingHorizontal: 13, borderRadius: 999, borderWidth: 1, borderColor: C.line, justifyContent: 'center' },
+  optChipOn: { borderColor: C.text, backgroundColor: C.text },
+  optChipText: { color: C.t2, fontSize: 13.5, ...font('500') },
+  optChipTextOn: { color: C.bg },
   checkScore: { color: C.t2, fontSize: 13, ...font() },
   checkScoreNum: { color: C.text, fontSize: 13, fontFamily: F.mono },
   checkRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },

@@ -340,6 +340,65 @@ class TestYouTubeUpload(unittest.IsolatedAsyncioTestCase):
         self.assertIn("youtube.com/watch?v=yt_video_123", final_kwargs["result"]["video_url"])
         mock_consume_upload_credit.assert_awaited_once_with(self.user_id)
 
+    async def _run_upload_job(self, payload, *, thumbnail_error=None):
+        """Run one upload job with YouTube mocked; returns (final job update kwargs, the YouTube mock)."""
+        job = {"id": "job_extras", "user_id": self.user_id, "payload": {
+            "title": "My Beat", "audio_file_id": "audio_1", "image_file_id": "image_1",
+            "description": "d", "privacy_status": "public", "tags": ["beat"], **payload,
+        }}
+        self.mock_db.uploads.find_one = AsyncMock(side_effect=[
+            {"id": "audio_1", "user_id": self.user_id, "file_type": "audio", "file_path": "audio.mp3"},
+            {"id": "image_1", "user_id": self.user_id, "file_type": "image", "file_path": "image.jpg"},
+            {"id": "thumb_1", "user_id": self.user_id, "file_type": "image", "file_path": "thumb.jpg"},
+        ])
+        self.mock_db.youtube_connections.update_one = AsyncMock()
+        update_job = AsyncMock()
+        with tempfile.TemporaryDirectory() as temp_dir, \
+             patch("backend.server._update_upload_job", update_job), \
+             patch("backend.server._assert_job_not_cancel_requested", new_callable=AsyncMock), \
+             patch("backend.server.ensure_has_upload_credit", new_callable=AsyncMock), \
+             patch("backend.server.consume_upload_credit", new_callable=AsyncMock), \
+             patch("backend.server._record_upload_outcome", new_callable=AsyncMock), \
+             patch("backend.server.refresh_youtube_token", new_callable=AsyncMock, return_value=MagicMock()), \
+             patch("backend.server._render_youtube_video", new_callable=AsyncMock) as mock_render, \
+             patch("backend.server.MediaFileUpload"), \
+             patch("backend.server.media_storage") as storage, \
+             patch("backend.server.publish_extras_service.prepare_thumbnail", return_value=b"jpeg"), \
+             patch("backend.server.build") as mock_build:
+            rendered_path = Path(temp_dir) / "rendered.mp4"
+            rendered_path.write_bytes(b"video")
+            mock_render.return_value = rendered_path
+            storage.exists.return_value = True
+            storage.read_bytes.return_value = b"image"
+            request = MagicMock()
+            request.next_chunk.side_effect = [(None, {"id": "yt_video_123"})]
+            youtube = MagicMock()
+            youtube.videos().insert.return_value = request
+            if thumbnail_error:
+                youtube.thumbnails().set.return_value.execute.side_effect = thumbnail_error
+            mock_build.return_value = youtube
+            await server._process_youtube_upload_job(job)
+        return update_job.await_args_list[-1].kwargs, youtube
+
+    async def test_scheduled_upload_is_private_until_publish_at(self):
+        final, youtube = await self._run_upload_job({"privacy_status": "public", "publish_at": "2026-12-01T18:00:00Z"})
+        body = youtube.videos().insert.call_args.kwargs["body"]
+        self.assertEqual(body["status"], {"privacyStatus": "private", "publishAt": "2026-12-01T18:00:00Z"})
+        self.assertEqual(final["status"], "succeeded")
+        self.assertEqual(final["result"]["scheduled_for"], "2026-12-01T18:00:00Z")
+
+    async def test_failed_thumbnail_still_marks_upload_succeeded_with_warning(self):
+        error = Exception("forbidden")
+        error.resp = MagicMock(status=403)
+        final, youtube = await self._run_upload_job({"thumbnail_file_id": "thumb_1"}, thumbnail_error=error)
+        self.assertEqual(final["status"], "succeeded")
+        self.assertEqual(final["result"]["video_id"], "yt_video_123")
+        self.assertFalse(final["result"]["thumbnail_set"])
+        self.assertTrue(any("custom thumbnails" in w for w in final["result"]["warnings"]))
+        self.mock_db.youtube_connections.update_one.assert_awaited_once_with(
+            {"user_id": self.user_id}, {"$set": {"custom_thumbnails_allowed": False}}
+        )
+
     async def test_process_youtube_upload_job_failure_marks_job_failed(self):
         job = {
             "id": "job_fail",

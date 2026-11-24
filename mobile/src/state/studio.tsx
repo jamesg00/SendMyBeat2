@@ -19,7 +19,7 @@ export type Phase =
   | { kind: 'idle' }
   | { kind: 'sending' }
   | { kind: 'job'; job: UploadJob; startedAt: number; log: LogLine[] }
-  | { kind: 'done'; url?: string; message: string }
+  | { kind: 'done'; url?: string; message: string; warnings?: string[] }
   | { kind: 'error'; message: string };
 
 export type StudioSettings = {
@@ -46,6 +46,14 @@ export type StudioSettings = {
   musicKey: string;
   /** A picture for the middle of the visualizer instead of the artwork (on this phone only). */
   logo: { uri: string; name: string } | null;
+  /** Publish later (ISO time); null publishes as soon as it's uploaded. */
+  publishAt: string | null;
+  /** Add it to the artist's playlist. */
+  playlist: boolean;
+  /** Language code for YouTube, or '' for not set. */
+  language: string;
+  /** A custom thumbnail, uploaded like the artwork. */
+  thumb: FileSlot | null;
 };
 
 /** The artwork's layout, which the Image tab can undo. */
@@ -97,7 +105,21 @@ const DEFAULTS: StudioSettings = {
   bpm: '',
   musicKey: '',
   logo: null,
+  publishAt: null,
+  playlist: false,
+  language: '',
+  thumb: null,
 };
+
+/** Why a publish time can't be used, or null when it's fine (15 minutes to 180 days out). */
+export function scheduleProblem(iso: string | null, now = Date.now()) {
+  if (!iso) return null;
+  const at = new Date(iso).getTime();
+  if (Number.isNaN(at)) return 'Pick a date and time.';
+  if (at < now + 15 * 60 * 1000) return 'Schedule it at least 15 minutes from now.';
+  if (at > now + 180 * 24 * 3600 * 1000) return 'Schedule it within the next 180 days.';
+  return null;
+}
 
 const persist = Platform.OS !== 'web';
 const dir = persist ? new Directory(Paths.document, 'studio') : null;
@@ -151,6 +173,8 @@ type Studio = StudioSettings & {
   pickAudio: () => Promise<void>;
   pickImage: () => Promise<void>;
   pickLogo: () => Promise<void>;
+  /** Picks and uploads a custom thumbnail. */
+  pickThumb: () => Promise<void>;
   /** The description that goes on YouTube: this upload's text with the BPM and key line. */
   finalDescription: string;
   /** Stop the upload that's running. */
@@ -227,7 +251,12 @@ export function StudioProvider({ children }: { children: ReactNode }) {
         const { job } = await api.uploadJob(jobId);
         if (!job) return;
         if (job.status === 'succeeded') {
-          setPhase({ kind: 'done', url: job.result?.video_url, message: job.result?.message ?? 'Video uploaded to YouTube.' });
+          setPhase({
+            kind: 'done',
+            url: job.result?.video_url,
+            message: job.result?.message ?? 'Video uploaded to YouTube.',
+            warnings: job.result?.warnings?.length ? job.result.warnings : undefined,
+          });
         } else if (job.status === 'failed' || job.status === 'cancelled') {
           setPhase({ kind: 'error', message: job.status === 'cancelled' ? 'Upload cancelled.' : (job.error ?? 'YouTube upload failed.') });
         } else {
@@ -299,6 +328,28 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     setSettings((cur) => ({ ...cur, logo: { uri, name }, viz: { ...cur.viz, center: 'image' } }));
   };
 
+  // A custom thumbnail goes up like the artwork; YouTube gets it after the video is in.
+  const pickThumb = async () => {
+    const res = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 1,
+      preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
+    });
+    if (res.canceled) return;
+    const a = res.assets[0];
+    const mimeType = a.mimeType === 'image/png' || a.mimeType === 'image/webp' ? a.mimeType : 'image/jpeg';
+    const ext = mimeType.split('/')[1].replace('jpeg', 'jpg');
+    const name = `${(a.fileName ?? 'thumbnail').replace(/\.[^.]+$/, '')}.${ext}`;
+    const slot = (thumb: FileSlot) => setSettings((cur) => ({ ...cur, thumb }));
+    slot({ name, uri: a.uri, status: 'uploading' });
+    try {
+      const { file_id } = await api.uploadImage({ uri: a.uri, name, mimeType, file: a.file });
+      slot({ name, uri: a.uri, fileId: file_id, status: 'ready' });
+    } catch (e) {
+      slot({ name, uri: a.uri, status: 'error', error: e instanceof Error ? e.message : 'Upload failed' });
+    }
+  };
+
   const s = settings;
   const finalDescription = withBeatMeta(s.descText ?? draft.description.content, s.bpm, s.musicKey);
   const missing = !s.title.trim()
@@ -307,7 +358,9 @@ export function StudioProvider({ children }: { children: ReactNode }) {
       ? 'Add your beat'
       : image?.status !== 'ready'
         ? 'Add artwork'
-        : null;
+        : s.thumb?.status === 'uploading'
+          ? 'Wait for the thumbnail to upload'
+          : scheduleProblem(s.publishAt);
 
   const publish = async () => {
     if (missing || !audio?.fileId || !image?.fileId || bake) return;
@@ -371,6 +424,10 @@ export function StudioProvider({ children }: { children: ReactNode }) {
         background: s.bg,
         renderFps: baked ? (baked.fps === 60 ? '60' : '30') : s.fps,
         removeWatermark: s.noWatermark,
+        publishAt: s.publishAt ?? undefined,
+        playlistMode: s.playlist ? 'artist' : 'none',
+        thumbnailFileId: s.thumb?.status === 'ready' ? s.thumb.fileId : undefined,
+        defaultLanguage: s.language || undefined,
       });
       if (res.job?.id) {
         const now = Date.now();
@@ -442,6 +499,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     pickAudio,
     pickImage,
     pickLogo,
+    pickThumb,
     finalDescription,
     cancel,
     cancelling,
