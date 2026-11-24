@@ -12,7 +12,8 @@ import { buildBeatTrack } from "@/lib/viz2/track";
 // The app talks to the page with injectJavaScript, calling window.__smbViz.receive(message):
 //   { type: "audio", index, count, data }  one base64 chunk of the beat (decoded after the last)
 //   { type: "cover", dataUrl }             the artwork
-//   { type: "settings", settings, aspect, background, scale, rotation }
+//   { type: "settings", settings, aspect, background, scale, scaleX, scaleY, posX, posY, flipH, flipV, rotation }
+//   { type: "logo", dataUrl }              a picture for the middle of the visualizer (null: use the artwork)
 //   { type: "time", t, playing }           where the app's player is
 //   { type: "bake", fps, token }           render the video and upload it with the user's token
 //   { type: "cancel" }
@@ -32,40 +33,93 @@ const send = (message) => {
 
 const BG = { black: "#000000", white: "#ffffff" };
 
-/** Website settings from the app's few choices: the style's preset, then the app's colours. */
+// The app's names for the look and effect controls, and the website setting each one sets.
+const APP_KEYS = {
+  center: "fillCenter",
+  centerColor: "fillCenterColor",
+  outline: "spectrumBorderEnabled",
+  zoom: "fxZoomPulse",
+  vignette: "fxVignette",
+  flash: "fxFlash",
+  stars: "particleEnabled",
+  shake: "shakeIntensity",
+  rainbow: "multiColorReactive",
+  brightness: "backgroundOpacity",
+};
+
+/** Website settings from the app's choices: the style's preset, then whatever the app set. */
 function settingsFrom(app = {}) {
   const style = VISUALIZER_STYLES.find((item) => item.mode === app.mode) || VISUALIZER_STYLES[0];
-  return {
+  const out = {
     ...DEFAULT_VISUALIZER_SETTINGS,
     ...(VISUALIZER_PRESETS[style.preset] || {}),
     mode: style.mode,
     ...(app.color ? { spectrumColor: app.color } : {}),
     ...(app.color2 ? { particleColor: app.color2 } : {}),
     ...(app.intensity ? { intensity: app.intensity } : {}),
+    // App versions from before the look controls send none of them; they always had the artwork in the middle.
     fillCenter: "image",
-    fxZoomPulse: app.zoom ?? 0.4,
+    fxZoomPulse: 0.4,
   };
+  for (const [key, setting] of Object.entries(APP_KEYS)) {
+    if (app[key] !== undefined && app[key] !== null) out[setting] = app[key];
+  }
+  if (out.multiColorReactive) out.spectrumRgb = true;
+  return out;
 }
 
-/** Background and artwork, the way the server lays out a plain upload (artwork fit at 78% height). */
-function paintBackdrop(ctx, w, h, cover, look) {
-  ctx.fillStyle = BG[look.background] || "#000000";
-  ctx.fillRect(0, 0, w, h);
-  if (!cover || !cover.complete || !cover.naturalWidth) return;
-  if (look.background === "blurred") {
+const num = (v, fallback) => (Number.isFinite(Number(v)) ? Number(v) : fallback);
+
+/**
+ * Background and artwork, the same way the website's Upload Studio renders a visualizer video and
+ * the server lays out a plain upload: the artwork fits the whole frame, then it's scaled, moved
+ * (in half-frames from the centre), rotated and flipped.
+ */
+function paintBackdrop(ctx, w, h, cover, look, opacity = 1) {
+  const ready = cover && cover.complete && cover.naturalWidth;
+  if (look.background === "blurred" && ready) {
+    ctx.fillStyle = "#000000";
+    ctx.fillRect(0, 0, w, h);
+    const s = Math.max(w / cover.naturalWidth, h / cover.naturalHeight) * 1.08;
     ctx.save();
-    ctx.filter = `blur(${Math.round(Math.min(w, h) * 0.03)}px)`;
-    const s = Math.max(w / cover.naturalWidth, h / cover.naturalHeight) * 1.1;
+    ctx.globalAlpha = 0.72;
+    // 18px at 1080p, like the website, scaled to this canvas.
+    ctx.filter = `blur(${Math.max(1, Math.round((18 * Math.min(w, h)) / 1080))}px)`;
     ctx.drawImage(cover, (w - cover.naturalWidth * s) / 2, (h - cover.naturalHeight * s) / 2, cover.naturalWidth * s, cover.naturalHeight * s);
     ctx.restore();
+    ctx.filter = "none";
+  } else {
+    ctx.fillStyle = BG[look.background] || "#000000";
+    ctx.fillRect(0, 0, w, h);
   }
-  const box = Math.min(w, h * 0.78) * (look.scale || 1);
-  const s = Math.min(box / cover.naturalWidth, box / cover.naturalHeight);
+  if (!ready) return;
+  const fit = Math.min(w / cover.naturalWidth, h / cover.naturalHeight);
+  const artW = cover.naturalWidth * fit * look.scaleX;
+  const artH = cover.naturalHeight * fit * look.scaleY;
   ctx.save();
-  ctx.translate(w / 2, h / 2);
+  ctx.globalAlpha = opacity;
+  ctx.translate(w / 2 + look.posX * w * 0.5, h / 2 + look.posY * h * 0.5);
   if (look.rotation) ctx.rotate((look.rotation * Math.PI) / 180);
-  ctx.drawImage(cover, (-cover.naturalWidth * s) / 2, (-cover.naturalHeight * s) / 2, cover.naturalWidth * s, cover.naturalHeight * s);
+  ctx.scale(look.flipH ? -1 : 1, look.flipV ? -1 : 1);
+  ctx.drawImage(cover, -artW / 2, -artH / 2, artW, artH);
   ctx.restore();
+  ctx.globalAlpha = 1;
+}
+
+/** The layout from a settings message, keeping what it leaves out. */
+function lookFrom(message, prev) {
+  const scale = num(message.scale, null);
+  return {
+    aspect: message.aspect || prev.aspect,
+    background: message.background || prev.background,
+    scaleX: num(message.scaleX, scale ?? prev.scaleX),
+    scaleY: num(message.scaleY, scale ?? prev.scaleY),
+    posX: num(message.posX, prev.posX),
+    posY: num(message.posY, prev.posY),
+    rotation: num(message.rotation, prev.rotation),
+    flipH: message.flipH ?? prev.flipH,
+    flipV: message.flipV ?? prev.flipV,
+  };
 }
 
 export default function VizEmbed() {
@@ -77,7 +131,8 @@ export default function VizEmbed() {
     analysis: null,
     track: null,
     cover: null,
-    look: { aspect: "16:9", background: "black", scale: 1, rotation: 0 },
+    logo: null,
+    look: { aspect: "16:9", background: "black", scaleX: 1, scaleY: 1, posX: 0, posY: 0, rotation: 0, flipH: false, flipV: false },
     settings: settingsFrom(),
     clock: { t: 0, playing: false, at: 0 },
     viz: null,
@@ -97,12 +152,13 @@ export default function VizEmbed() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     el.width = Math.max(1, Math.floor(el.clientWidth * dpr));
     el.height = Math.max(1, Math.floor(el.clientHeight * dpr));
-    paintBackdrop(el.getContext("2d"), el.width, el.height, store.current.cover, store.current.look);
+    const st = store.current;
+    paintBackdrop(el.getContext("2d"), el.width, el.height, st.cover, st.look, st.settings.backgroundOpacity ?? 1);
   };
 
   const applySettings = () => {
     const st = store.current;
-    const options = buildVisualizerOptions(st.settings, { imagePreviewUrl: st.cover?.src || "", centerVisualizerImageUrl: st.cover?.src || "" });
+    const options = buildVisualizerOptions(st.settings, { imagePreviewUrl: st.cover?.src || "", centerVisualizerImageUrl: st.logo || st.cover?.src || "" });
     if (!st.viz) st.viz = new AudioVisualizer(canvasRef.current, options);
     else st.viz.setOptions(options);
     const viz = st.viz;
@@ -183,12 +239,12 @@ export default function VizEmbed() {
     const result = await exportVisualizerVideo({
       analyser: st.analysis.clone(),
       beatTrack: st.track,
-      options: buildVisualizerOptions(st.settings, { imagePreviewUrl: st.cover?.src || "", centerVisualizerImageUrl: st.cover?.src || "" }),
+      options: buildVisualizerOptions(st.settings, { imagePreviewUrl: st.cover?.src || "", centerVisualizerImageUrl: st.logo || st.cover?.src || "" }),
       size,
       designSize: designSizeFor(st.look.aspect),
       fps: exportFps,
       duration: st.analysis.duration,
-      drawBackdrop: (ctx, w, h) => paintBackdrop(ctx, w, h, st.cover, st.look),
+      drawBackdrop: (ctx, w, h) => paintBackdrop(ctx, w, h, st.cover, st.look, st.settings.backgroundOpacity ?? 1),
       onProgress: (v) => progress("rendering", v),
       signal: abort.signal,
     });
@@ -229,17 +285,25 @@ export default function VizEmbed() {
           img.src = message.dataUrl;
           break;
         }
-        case "settings":
-          st.settings = settingsFrom(message.settings);
-          st.look = {
-            aspect: message.aspect || st.look.aspect,
-            background: message.background || st.look.background,
-            scale: message.scale ?? st.look.scale,
-            rotation: message.rotation ?? st.look.rotation,
-          };
-          setLayoutKey((k) => k + 1);
+        case "logo":
+          st.logo = typeof message.dataUrl === "string" && message.dataUrl.startsWith("data:image/") ? message.dataUrl : null;
           applySettings();
           break;
+        case "settings": {
+          const next = settingsFrom(message.settings);
+          const look = lookFrom(message, st.look);
+          const restyle = !st.viz || JSON.stringify(next) !== JSON.stringify(st.settings) || look.aspect !== st.look.aspect;
+          st.settings = next;
+          st.look = look;
+          // Dragging the artwork only moves the backdrop; the visualizer is rebuilt when its look changes.
+          if (restyle) {
+            setLayoutKey((k) => k + 1);
+            applySettings();
+          } else {
+            redrawBackdrop();
+          }
+          break;
+        }
         case "time":
           st.clock = { t: Number(message.t) || 0, playing: Boolean(message.playing), at: performance.now() };
           break;

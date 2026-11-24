@@ -6,8 +6,8 @@ import type { ShouldStartLoadRequest } from 'react-native-webview/lib/WebViewTyp
 
 import { currentToken } from '@/api/client';
 import type { YouTubeUploadOptions } from '@/api/endpoints';
-import type { FileSlot } from '@/state/studio';
-import { SITE_URL, onPlayer, setBaker, type BakeProgress, type VizSettings } from '@/state/visualizer';
+import type { FileSlot, Transform } from '@/state/studio';
+import { SITE_URL, lookOf, onPlayer, setBaker, type BakeProgress, type VizSettings } from '@/state/visualizer';
 import { F, makeStyles } from '@/theme';
 
 // The live visualizer over the preview, drawn by the website's /viz-embed page in a WebView. It
@@ -19,9 +19,10 @@ type Props = {
   image: FileSlot | null;
   format: YouTubeUploadOptions['aspectRatio'];
   bg: YouTubeUploadOptions['background'];
-  scale: number;
-  rotation: number;
+  layout: Transform;
   viz: VizSettings;
+  /** A picture for the middle instead of the artwork. */
+  logo: { uri: string; name: string } | null;
 };
 
 type PageMessage =
@@ -41,7 +42,7 @@ const mimeOf = (name: string) => {
   return ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : ext === 'gif' ? 'image/gif' : 'image/jpeg';
 };
 
-export function VisualizerPreview({ audio, image, format, bg, scale, rotation, viz }: Props) {
+export function VisualizerPreview({ audio, image, format, bg, layout, viz, logo }: Props) {
   const s = useStyles();
   const web = useRef<WebViewHandle>(null);
   const [ready, setReady] = useState(false);
@@ -53,18 +54,34 @@ export function VisualizerPreview({ audio, image, format, bg, scale, rotation, v
     web.current?.injectJavaScript(`window.__smbViz && window.__smbViz.receive(${JSON.stringify(message)}); true;`);
   };
 
-  // Settings and layout, every time they change.
+  // Settings and layout, every time they change. The look goes over as resolved values, so the
+  // page never has to guess a style's defaults.
+  const look = lookOf(viz);
+  const settings = { mode: viz.mode, color: viz.color, color2: viz.color2, intensity: viz.intensity, ...look };
+  const key = JSON.stringify([settings, format, bg, layout]);
   useEffect(() => {
     if (!ready) return;
-    post({
-      type: 'settings',
-      settings: { mode: viz.mode, color: viz.color, color2: viz.color2, intensity: viz.intensity },
-      aspect: format,
-      background: bg,
-      scale,
-      rotation,
-    });
-  }, [ready, viz.mode, viz.color, viz.color2, viz.intensity, format, bg, scale, rotation]);
+    post({ type: 'settings', settings, aspect: format, background: bg, scale: (layout.scaleX + layout.scaleY) / 2, ...layout });
+    // key covers everything the message carries
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, key]);
+
+  // A logo for the middle, or back to the artwork.
+  useEffect(() => {
+    if (!ready) return;
+    if (!logo?.uri) {
+      post({ type: 'logo', dataUrl: null });
+      return;
+    }
+    let alive = true;
+    new File(logo.uri).base64().then(
+      (data) => alive && post({ type: 'logo', dataUrl: `data:${mimeOf(logo.name)};base64,${data}` }),
+      () => {},
+    );
+    return () => {
+      alive = false;
+    };
+  }, [ready, logo?.uri, logo?.name]);
 
   // The artwork.
   useEffect(() => {

@@ -3,7 +3,7 @@
     "name": "SendMyBeat",
     "slug": "sendmybeat",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "sendmybeat",
     "userInterfaceStyle": "dark",
@@ -48,7 +48,13 @@
         }
       ],
       "expo-audio",
-      "expo-notifications"
+      "expo-notifications",
+      [
+        "expo-screen-orientation",
+        {
+          "initialOrientation": "PORTRAIT_UP"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
