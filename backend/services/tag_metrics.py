@@ -12,16 +12,23 @@ from datetime import datetime, timezone
 from statistics import median
 from typing import Any, Callable
 
-from . import tag_outcomes
+from . import tag_outcomes, youtube_quota
 
 logger = logging.getLogger(__name__)
 
 TAG_MIN_PUBLISH_SCORE = int(os.environ.get("TAG_MIN_PUBLISH_SCORE", "58"))
 TAG_METRICS_MAX_LOOKUPS = int(os.environ.get("TAG_METRICS_MAX_LOOKUPS", "40"))
 TAG_METRICS_CACHE_TTL_SECONDS = int(os.environ.get("TAG_METRICS_CACHE_TTL_SECONDS", str(14 * 24 * 3600)))
-# YouTube API units one tag generation may spend (artist lookup included). A search costs 100.
-TAG_QUOTA_BUDGET_UNITS = int(os.environ.get("TAG_QUOTA_BUDGET_UNITS", "300"))
+# Searches stand in their own daily bucket (a call count), so a run's budget is counted in calls.
+# TAG_QUOTA_BUDGET_UNITS is the older setting in 100-unit charges and still works if it's set.
 YOUTUBE_SEARCH_COST = 100
+TAG_QUOTA_BUDGET_UNITS = int(os.environ.get("TAG_QUOTA_BUDGET_UNITS", "300"))
+# YouTube searches one tag run may make, the artist lookup included.
+TAG_SEARCH_CALL_BUDGET = int(
+    os.environ.get("TAG_SEARCH_CALL_BUDGET", str(max(0, TAG_QUOTA_BUDGET_UNITS // YOUTUBE_SEARCH_COST)))
+)
+# One search.list call.
+SEARCH_CALL = 1
 # Competition for tags we never searched: neither rewarded nor ruled out.
 UNKNOWN_COMPETITION = 50.0
 # Demand for tags autocomplete couldn't tell us about (same value as tag_autocomplete.UNKNOWN_DEMAND).
@@ -77,20 +84,80 @@ def _content_tokens(tag: str) -> set[str]:
     return {token for token in normalize_tag_key(tag).split() if token not in _FILLER_TOKENS}
 
 
+# A few tags spell the artist the way people mistype them; those searches still find the video.
+MISSPELLING_SLOTS_MIN = 2
+MISSPELLING_SLOTS_MAX = 4
+# Autocomplete demand a misspelling needs before it earns a slot (a real, if smaller, search).
+MISSPELLING_MIN_DEMAND = 20.0
+
+
+def artist_misspellings(artist_name: str, limit: int = 6) -> list[str]:
+    """Common ways people mistype an artist's name, most likely first. Never the real spelling.
+
+    Joined words ("kencarson"), a doubled letter typed once ("travis scot"), a final i/y swap
+    ("playboy carti"), and ph/ck spelled as they sound. Demand from autocomplete decides which
+    of these are worth a tag; this only proposes them.
+    """
+    name = normalize_tag_key(artist_name)
+    if not name or len(name.replace(" ", "")) < 3:
+        return []
+    words = name.split()
+    variants: list[str] = []
+
+    def add(candidate: str) -> None:
+        candidate = normalize_tag_key(candidate)
+        if candidate and candidate != name and candidate not in variants:
+            variants.append(candidate)
+
+    if len(words) > 1:
+        add("".join(words))
+    for i, word in enumerate(words):
+        collapsed = re.sub(r"([a-z])\1", r"\1", word)
+        if collapsed != word:
+            add(" ".join(words[:i] + [collapsed] + words[i + 1:]))
+    for i, word in enumerate(words):
+        if len(word) >= 3 and word[-1] in "iy":
+            swapped = word[:-1] + ("y" if word[-1] == "i" else "i")
+            add(" ".join(words[:i] + [swapped] + words[i + 1:]))
+    for pattern, replacement in (("ph", "f"), ("ck", "k")):
+        if pattern in name:
+            add(name.replace(pattern, replacement))
+    return variants[:limit]
+
+
+def misspelling_tags(artist_name: str, limit: int = 6) -> list[str]:
+    """`<misspelled artist> type beat` candidates for a tag run."""
+    return [f"{variant} type beat" for variant in artist_misspellings(artist_name, limit)]
+
+
 def select_tag_set(
     entries: list[dict[str, Any]],
     *,
     artist_name: str = "",
     limit: int = YOUTUBE_TAGS_CHAR_LIMIT,
+    misspellings: list[dict[str, Any]] | None = None,
 ) -> list[str]:
     """Choose the set of tags that best fills YouTube's character limit.
 
     The best tag always goes in. After that each pick weighs a tag's score (squared, so quality
     leads), how much new it adds (word overlap with tags already chosen), whether its kind already
     has its share of the space, and its length (mildly, so more good tags fit). Returned best first.
+
+    `misspellings` (entries like the others, best first) get 2 to 4 slots of their own: up to four
+    go in where they fit, and if fewer than two fit, the weakest regular tags make room for two.
     """
+    misspelling_entries: list[dict[str, Any]] = []
+    misspelling_keys: set[str] = set()
+    for entry in misspellings or []:
+        tag = str(entry.get("tag") or "").strip()
+        key = normalize_tag_key(tag)
+        if tag and key not in misspelling_keys:
+            misspelling_keys.add(key)
+            misspelling_entries.append({"tag": tag, "score": float(entry.get("score") or 0), "bucket": "core"})
+    misspelling_entries = misspelling_entries[:MISSPELLING_SLOTS_MAX]
+
     pool: list[dict[str, Any]] = []
-    seen: set[str] = set()
+    seen: set[str] = set(misspelling_keys)
     for entry in entries:
         tag = str(entry.get("tag") or "").strip()
         key = normalize_tag_key(tag)
@@ -135,8 +202,38 @@ def select_tag_set(
             break
         take(best)
 
+    if misspelling_entries:
+        _fit_misspellings(picked, misspelling_entries, limit)
+
     picked.sort(key=lambda item: -item["score"])
     return [item["tag"] for item in picked]
+
+
+def _fit_misspellings(picked: list[dict[str, Any]], misspellings: list[dict[str, Any]], limit: int) -> None:
+    """Add up to four misspellings where they fit; drop the weakest regular tags to fit two."""
+    want_min = min(MISSPELLING_SLOTS_MIN, len(misspellings))
+
+    def fits(item: dict[str, Any]) -> bool:
+        return youtube_tags_char_count([*(p["tag"] for p in picked), item["tag"]]) <= limit
+
+    added = 0
+    for item in misspellings:
+        if added >= MISSPELLING_SLOTS_MAX:
+            break
+        if fits(item):
+            picked.append({**item, "misspelling": True})
+            added += 1
+    # Too full for two: make room by dropping the weakest regular tags, never the anchor.
+    remaining = [item for item in misspellings if not any(p["tag"] == item["tag"] for p in picked)]
+    while added < want_min and remaining:
+        regular = [p for p in picked[TAG_SET_ANCHORS:] if not p.get("misspelling")]
+        if not regular:
+            break
+        if fits(remaining[0]):
+            picked.append({**remaining.pop(0), "misspelling": True})
+            added += 1
+            continue
+        picked.remove(min(regular, key=lambda p: p["score"]))
 
 
 def fit_tags_to_char_limit(tags: list[str], limit: int = YOUTUBE_TAGS_CHAR_LIMIT) -> list[str]:
@@ -510,14 +607,15 @@ async def score_tags_with_youtube_proxy(
 
     1. Demand for every tag from YouTube autocomplete (`demand_lookup`, no API quota).
     2. Competition from cached YouTube searches; the best few uncached tags are searched while
-       `quota_budget` (remaining API units, shared with the caller) allows.
+       `quota_budget` (search calls left in this run, shared with the caller) and the project's
+       daily search count both allow.
     3. Relevance from `relevance_scorer`.
     4. A few points up or down from `track_record`: how the tag's past SendMyBeat uploads did.
     """
     min_score = TAG_MIN_PUBLISH_SCORE if min_score is None else int(min_score)
     max_lookups = TAG_METRICS_MAX_LOOKUPS if max_lookups is None else int(max_lookups)
     cache_ttl = TAG_METRICS_CACHE_TTL_SECONDS if cache_ttl_seconds is None else int(cache_ttl_seconds)
-    budget = quota_budget if quota_budget is not None else [TAG_QUOTA_BUDGET_UNITS]
+    budget = quota_budget if quota_budget is not None else [TAG_SEARCH_CALL_BUDGET]
     kept_counts = kept_counts or {}
     removed_counts = removed_counts or {}
     source_map = source_map or {}
@@ -559,6 +657,7 @@ async def score_tags_with_youtube_proxy(
 
     # Spend the remaining YouTube budget on the most promising tags we have no competition data for.
     api_calls = 0
+    daily_cap_reached = False
     if youtube is not None:
         unsearched = [(tag, source) for tag, source in ordered if normalize_tag_key(tag) not in metrics_by_key]
         unsearched.sort(
@@ -568,10 +667,14 @@ async def score_tags_with_youtube_proxy(
             )
         )
         for tag, _source in unsearched:
-            if api_calls >= max_lookups or budget[0] < YOUTUBE_SEARCH_COST:
+            if api_calls >= max_lookups or budget[0] < SEARCH_CALL:
+                break
+            # Every user shares the project's daily searches; near the cap, score from the cache.
+            if not await youtube_quota.try_use_searches(db, SEARCH_CALL):
+                daily_cap_reached = True
                 break
             metrics = await asyncio.to_thread(fetch_tag_youtube_metrics, youtube, tag, False)
-            budget[0] -= YOUTUBE_SEARCH_COST
+            budget[0] -= SEARCH_CALL
             api_calls += 1
             if metrics.get("searched"):
                 metrics_by_key[normalize_tag_key(tag)] = metrics
@@ -617,7 +720,8 @@ async def score_tags_with_youtube_proxy(
         "min_publish_score": min_score,
         "max_lookups": max_lookups,
         "api_calls": api_calls,
-        "quota_units_left": budget[0],
+        "search_calls_left": budget[0],
+        "daily_search_cap_reached": daily_cap_reached,
         "cache_hits": cache_hits,
         "candidates_considered": len(ordered),
         "candidates_scored": len(scored_by_key),

@@ -368,6 +368,37 @@ const routes = [
     history = history.filter((r) => r.id !== m[1]);
     return { ok: true };
   }],
+  // Title ideas and title checks: a small stand-in for services/tag_titles.py.
+  ["GET", /^\/tags\/history\/([^/]+)\/titles$/, (m) => {
+    const item = history.find((r) => r.id === m[1]);
+    if (!item) return [404, { detail: "Tag generation not found" }];
+    const artist = item.query.split(" x ")[0].replace(/\b\w/g, (c) => c.toUpperCase());
+    const titles = [
+      `${artist} Type Beat - "BEAT NAME"`,
+      `${artist} Type Beat - "BEAT NAME" | Dark Trap Instrumental`,
+      `${artist} x Hinoni Type Beat - "BEAT NAME"`,
+      `${artist} Type Beat 2026 - "BEAT NAME"`,
+    ].map((title, i) => ({ title, keywords: [], covers: [], coverage: 90 - i * 10, length: title.length, score: [80, 100, 75, 70][i] }));
+    return { titles };
+  }],
+  ["POST", /^\/titles\/score$/, (m, body) => {
+    const title = String(body.title || "").trim();
+    const item = history.find((r) => r.id === body.tag_id);
+    const artist = item ? item.query.split(" x ")[0] : "";
+    const head = title.toLowerCase().slice(0, 40);
+    const leads = artist ? head.includes(artist) && head.includes("type beat") : head.includes("type beat");
+    const checks = [
+      { id: "artist_first", ok: leads, message: leads ? "Artist and 'type beat' in the first 40 characters" : "Start with the artist and 'Type Beat' so searchers see it first" },
+      { id: "length", ok: title.length <= 100, message: `${title.length} of 100 characters` },
+      ...(item ? [{ id: "top_keyword", ok: title.toLowerCase().includes("dark trap"), message: title.toLowerCase().includes("dark trap") ? "Uses 'dark trap', your run's top sound keyword" : "Add 'dark trap', your run's top sound keyword" }] : []),
+      { id: "beat_name", ok: /["“][^"“”]+["”]/.test(title), message: /["“][^"“”]+["”]/.test(title) ? "Beat name in quotes" : 'Add the beat name in quotes, like "Neon"' },
+      { id: "characters", ok: !/[<>]/.test(title), message: /[<>]/.test(title) ? "Remove < and >, YouTube rejects titles with them" : "No characters YouTube rejects" },
+    ];
+    const weights = { artist_first: 40, length: 15, top_keyword: 20, beat_name: 15, characters: 10 };
+    const total = checks.reduce((s, c) => s + weights[c.id], 0);
+    const earned = checks.filter((c) => c.ok).reduce((s, c) => s + weights[c.id], 0);
+    return { score: title ? Math.round((100 * earned) / total) : 0, checks };
+  }],
   ["POST", /^\/tags\/generate$/, (m, body) => {
     const made = run(`r${Date.now()}`, body.query, 0);
     history = [made, ...history];

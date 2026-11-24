@@ -117,7 +117,7 @@ def _youtube():
 @pytest.mark.asyncio
 async def test_scoring_never_spends_more_than_the_budget():
     youtube = _youtube()
-    budget = [300]
+    budget = [3]
     tags = [(f"artist type beat {i}", "youtube") for i in range(30)]
     scored, stats = await tag_metrics.score_tags_with_youtube_proxy(
         youtube=youtube,
@@ -138,7 +138,7 @@ async def test_scoring_never_spends_more_than_the_budget():
 @pytest.mark.asyncio
 async def test_budget_already_spent_on_the_artist_lookup_leaves_one_search():
     youtube = _youtube()
-    budget = [100]
+    budget = [1]
     await tag_metrics.score_tags_with_youtube_proxy(
         youtube=youtube,
         db=_metrics_db(),

@@ -53,6 +53,7 @@ try:
     from backend.services import tag_autocomplete as tag_autocomplete_service  # noqa: F401
     from backend.services import tag_outcomes as tag_outcomes_service  # noqa: F401
     from backend.services import tag_titles as tag_titles_service  # noqa: F401
+    from backend.services import youtube_quota as youtube_quota_service  # noqa: F401
     from backend.services import pros as pros_service  # noqa: F401
     from backend.models_spotlight import (
         ProducerProfile,
@@ -69,6 +70,7 @@ except ImportError:
     from services import tag_autocomplete as tag_autocomplete_service
     from services import tag_outcomes as tag_outcomes_service
     from services import tag_titles as tag_titles_service
+    from services import youtube_quota as youtube_quota_service
     from services import pros as pros_service
     from models_spotlight import (
         ProducerProfile,
@@ -6282,7 +6284,8 @@ def _fetch_artist_context_from_youtube_api(youtube: Any, artist_name: str) -> di
 
 
 ARTIST_CONTEXT_CACHE_TTL_SECONDS = 7 * 24 * 3600
-ARTIST_CONTEXT_SEARCH_COST = 2 * tag_metrics_service.YOUTUBE_SEARCH_COST
+# The artist lookup makes two searches (the artist's videos and "<artist> type beat").
+ARTIST_CONTEXT_SEARCH_COST = 2 * tag_metrics_service.SEARCH_CALL
 
 
 async def _artist_context_with_cache(youtube: Any, artist_name: str, quota_budget: list[int]) -> dict[str, Any]:
@@ -6298,6 +6301,8 @@ async def _artist_context_with_cache(youtube: Any, artist_name: str, quota_budge
                 return cached["context"]
     if quota_budget[0] < ARTIST_CONTEXT_SEARCH_COST:
         raise RuntimeError("No YouTube quota left in this generation's budget for the artist lookup")
+    if not await youtube_quota_service.try_use_searches(db, ARTIST_CONTEXT_SEARCH_COST):
+        raise RuntimeError("SendMyBeat's YouTube searches for today are used up; using the web fallback")
     context = await asyncio.to_thread(_fetch_artist_context_from_youtube_api, youtube, artist_name)
     quota_budget[0] -= ARTIST_CONTEXT_SEARCH_COST
     if context.get("top_video_titles") or context.get("type_beat_search_results"):
@@ -7055,8 +7060,14 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
             "soundcloud": "missing",
         }
         youtube = None
-        # YouTube API units this generation may spend, shared by the artist lookup and tag scoring.
-        quota_budget = [tag_metrics_service.TAG_QUOTA_BUDGET_UNITS]
+        # YouTube searches this generation may make, shared by the artist lookup and tag scoring.
+        quota_budget = [tag_metrics_service.TAG_SEARCH_CALL_BUDGET]
+        searches_left_today = await youtube_quota_service.tag_searches_left(db)
+        if searches_left_today <= 0:
+            # Near the project's daily search cap: score demand from autocomplete and competition
+            # from the cache only, and look the artist up on the web instead of the API.
+            quota_budget = [0]
+        source_status["youtube_quota"] = "autocomplete_only" if searches_left_today <= 0 else "ok"
         try:
             # Get user's YouTube credentials if available for search
             user = await db.users.find_one({"id": current_user['id']})
@@ -7208,6 +7219,37 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
             pre_scored_all,
             min_score=min_publish_score,
         )
+
+        # Misspelled artist names ("kencarson type beat"): demand from autocomplete only, no search.
+        misspelling_entries: list[dict[str, Any]] = []
+        misspelling_candidates = [
+            tag for tag in tag_metrics_service.misspelling_tags(artist_name)
+            if _tag_exact_key(tag) not in excluded_tag_keys
+        ]
+        if misspelling_candidates:
+            try:
+                misspelling_scored, _ = await tag_metrics_service.score_tags_with_youtube_proxy(
+                    youtube=None,
+                    db=db,
+                    tags_with_sources=[(tag, "misspelling") for tag in misspelling_candidates],
+                    query=request.query,
+                    artist_name=artist_name,
+                    beat_tokens=beat_tokens,
+                    relevance_scorer=_score_tag_candidate,
+                    min_score=0,
+                    demand_lookup=tag_autocomplete_service.autocomplete_demand,
+                )
+                misspelling_entries = sorted(
+                    (
+                        entry for entry in misspelling_scored
+                        if (entry.get("breakdown") or {}).get("demand_source") == "autocomplete"
+                        and float((entry.get("breakdown") or {}).get("demand") or 0) >= tag_metrics_service.MISSPELLING_MIN_DEMAND
+                    ),
+                    key=lambda entry: -float((entry.get("breakdown") or {}).get("demand") or 0),
+                )
+            except Exception as exc:
+                logging.warning("Misspelling demand lookup failed: %s", exc)
+        source_status["misspellings"] = {"proposed": len(misspelling_candidates), "searched_by_people": len(misspelling_entries)}
         tag_metrics_stats["dropped_low_score"] = max(0, len(pre_scored_all) - len(qualified_scored))
         tag_metrics_stats["effective_min_score"] = effective_min_score
         tag_metrics_stats["qualified_candidates"] = len(qualified_scored)
@@ -7403,9 +7445,12 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
         final_tags = final_tags[:max_publish_tags]
         # Pick the set that best fills YouTube's 500 characters: the best tags first, then a mix of
         # core, crossover, sound and long-tail tags without near-repeats. Never over the limit.
+        for entry in misspelling_entries:
+            scored_by_key[_tag_exact_key(entry.get("tag", ""))] = entry
         final_tags = tag_metrics_service.select_tag_set(
             [{"tag": tag, "score": (scored_by_key.get(_tag_exact_key(tag)) or {}).get("score") or 0} for tag in final_tags],
             artist_name=artist_name,
+            misspellings=misspelling_entries,
         )
         kept_keys = {_tag_exact_key(tag) for tag in final_tags}
         selected_tags_debug = [entry for entry in selected_tags_debug if _tag_exact_key(entry.get("tag", "")) in kept_keys]
@@ -7673,21 +7718,61 @@ async def update_tag_history(tag_id: str, request: TagHistoryUpdateRequest, curr
     return TagGenerationResponse(**_sanitize_tag_generation_doc(updated, current_user))
 
 
-@api_router.get("/tags/history/{tag_id}/titles")
-async def suggest_titles_for_run(tag_id: str, beat_name: str = "", current_user: dict = Depends(get_current_user)):
-    """Video title ideas from this run's best keywords (no AI credit, no YouTube quota)."""
+async def _title_run_context(tag_id: str, user_id: str) -> tuple[str, list[dict[str, Any]]]:
+    """The artist and scored tags of one of the user's tag runs, for title ideas and checks."""
     run = await db.tag_generations.find_one(
-        {"id": tag_id, "user_id": current_user["id"]}, {"_id": 0, "query": 1, "tags": 1, "scored_tags": 1}
+        {"id": tag_id, "user_id": user_id}, {"_id": 0, "query": 1, "tags": 1, "scored_tags": 1}
     )
     if not run:
         raise HTTPException(status_code=404, detail="Tag generation not found")
     scored = run.get("scored_tags") or [{"tag": tag, "score": 0} for tag in run.get("tags") or []]
-    titles = tag_titles_service.suggest_titles(
-        artist=_normalize_artist_query(run.get("query", "")),
-        scored_tags=scored,
-        beat_name=beat_name[:60],
+    return _normalize_artist_query(run.get("query", "")), scored
+
+
+@api_router.get("/tags/history/{tag_id}/titles")
+async def suggest_titles_for_run(
+    tag_id: str,
+    beat_name: str = "",
+    title: str = "",
+    current_user: dict = Depends(get_current_user),
+):
+    """Video title ideas from this run's best keywords (no AI credit, no YouTube quota).
+    With `title`, also returns the checks for that title."""
+    artist, scored = await _title_run_context(tag_id, current_user["id"])
+    titles = tag_titles_service.suggest_titles(artist=artist, scored_tags=scored, beat_name=beat_name[:60])
+    response: dict[str, Any] = {"titles": titles}
+    if title.strip():
+        result = tag_titles_service.score_title(
+            title[:200],
+            artist=artist,
+            top_keyword=tag_titles_service.top_sound_keyword(artist=artist, scored_tags=scored),
+        )
+        response["score"] = result["score"]
+        response["checks"] = result["checks"]
+    return response
+
+
+class TitleScoreRequest(BaseModel):
+    title: str = Field(..., max_length=300)
+    tag_id: Optional[str] = None
+
+
+@api_router.post("/titles/score")
+async def score_video_title(request: TitleScoreRequest, current_user: dict = Depends(get_current_user)):
+    """Score a title and list what to fix. A pure check: no credit, no YouTube quota.
+    With `tag_id`, the checks use that run's artist and top sound keyword."""
+    _enforce_action_rate_limit(
+        f"title_score:{current_user['id']}",
+        limit=120,
+        window_seconds=60,
+        detail_message="Too many title checks. Try again in a minute.",
     )
-    return {"titles": titles}
+    artist, top_keyword = "", ""
+    if request.tag_id:
+        artist, scored = await _title_run_context(request.tag_id, current_user["id"])
+        top_keyword = tag_titles_service.top_sound_keyword(artist=artist, scored_tags=scored)
+    result = tag_titles_service.score_title(request.title, artist=artist, top_keyword=top_keyword)
+    return {"score": result["score"], "checks": result["checks"]}
 
 
 @api_router.delete("/tags/history/{tag_id}")
