@@ -671,6 +671,14 @@ button.adm-btn-danger.adm-btn-danger:hover { background: color-mix(in srgb, var(
 /* In the phone drawer the drawer already pads the sides. */
 .us-drawer-body .us-panel { padding: 4px 0 0; }
 .us-drawer-body .us-upload-bar { margin: 6px -16px 0; padding: 12px 16px 16px; }
+/* The phone drawer: 85% of the visible screen, which on phones changes as the browser bars move. */
+.us-drawer { max-height: 85vh; max-height: 85dvh; }
+/* iPhone Safari zooms the page into any field under 16px when it's tapped, which throws the drawer
+   around as the keyboard opens. Phones and tablets get 16px fields in the studio. */
+@media (pointer: coarse) {
+  .us-drawer-body input, .us-drawer-body textarea, .us-drawer-body select,
+  .us-side input, .us-side textarea, .us-side select { font-size: 16px !important; }
+}
 
 /* ---- Upload Studio: Visualizer tab, and layouts that follow the panel's width (not the window's) */
 .us-sec { container-type: inline-size; container-name: studio; }
