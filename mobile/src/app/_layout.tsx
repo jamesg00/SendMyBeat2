@@ -3,12 +3,11 @@ import { useFonts } from 'expo-font';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
-import { View } from 'react-native';
+import { useCallback, useEffect } from 'react';
 
 import { AuthProvider, useAuth } from '@/api/auth';
 import { setPaywallHandler } from '@/api/client';
-import { LaunchSplash, SPLASH_BG, markAppReady } from '@/components/launch-splash';
+import { LaunchIntro } from '@/components/launch-intro';
 import { ThemeTransition } from '@/components/theme-transition';
 import { openPaywall, useFreePlanPrompt, type PaywallReason } from '@/state/billing';
 import { DraftProvider } from '@/state/draft';
@@ -19,14 +18,10 @@ import { F, useColors } from '@/theme';
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  // The launch art sits over the app until it's ready, then fades (see launch-splash.tsx).
   return (
-    <View style={{ flex: 1, backgroundColor: SPLASH_BG }}>
-      <AuthProvider>
-        <Session />
-      </AuthProvider>
-      <LaunchSplash />
-    </View>
+    <AuthProvider>
+      <Session />
+    </AuthProvider>
   );
 }
 
@@ -67,12 +62,10 @@ function RootStack() {
   const { ready, user } = useAuth();
   const loaded = fontsLoaded && ready;
 
-  useEffect(() => {
-    if (!loaded) return;
-    // The native splash and the in-app one look the same, so hiding one shows the other; it then fades.
-    SplashScreen.hideAsync();
-    markAppReady();
-  }, [loaded]);
+  // The native splash hides once the intro, which starts on the same picture, is on screen.
+  const hideSplash = useCallback(() => {
+    SplashScreen.hideAsync().catch(() => {});
+  }, []);
 
   // A 402 from anything that needs a plan opens the plans.
   useEffect(() => {
@@ -113,6 +106,7 @@ function RootStack() {
           <Stack.Screen name="auth" options={{ presentation: 'modal' }} />
         </Stack.Protected>
       </Stack>
+      <LaunchIntro onShown={hideSplash} />
     </ThemeProvider>
   );
 }
