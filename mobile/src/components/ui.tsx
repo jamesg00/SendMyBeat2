@@ -16,8 +16,11 @@ import {
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
+import { useFocusEffect } from 'expo-router';
 import Svg, { Path, Rect } from 'react-native-svg';
 
+import { Wallpaper } from '@/components/wallpaper';
+import { useWallpaperId, wallpaperColors } from '@/state/wallpaper';
 import { F, R, display, font, makeStyles, useColors } from '@/theme';
 
 export function Screen({
@@ -42,13 +45,26 @@ export function Screen({
   const C = useColors();
   const styles = useUiStyles();
   const insets = useSafeAreaInsets();
+  // The picked wallpaper sits behind the content (dark themes only), and only animates while
+  // this tab is the one on screen.
+  const wallpaperId = useWallpaperId();
+  const wallColors = wallpaperColors(C);
+  const [focused, setFocused] = useState(true);
+  useFocusEffect(
+    useCallback(() => {
+      setFocused(true);
+      return () => setFocused(false);
+    }, []),
+  );
+  const wall = wallpaperId && wallColors ? <Wallpaper id={wallpaperId} colors={wallColors} active={focused} /> : null;
   // The scroll view starts below the status bar so the pull-to-refresh spinner shows under it,
   // not hidden behind the clock.
   return (
     <View style={{ flex: 1, backgroundColor: C.bg, paddingTop: insets.top }}>
+      {wall}
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={[styles.screen, { paddingTop: 12 }]}
+        contentContainerStyle={[styles.screen, { paddingTop: 12 }, wall ? { backgroundColor: 'transparent' } : null]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           onRefresh ? (
