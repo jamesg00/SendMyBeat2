@@ -4,7 +4,8 @@ import { Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-na
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Polyline, Text as SvgText } from 'react-native-svg';
 
-import { AppIcon, Button, JobProgress, Meter, PlayPauseIcon, useUiStyles } from '@/components/ui';
+import { LandingRender } from '@/components/landing-render';
+import { AppIcon, Button, JobProgress, Meter, useUiStyles } from '@/components/ui';
 import { F, R, display, font, makeStyles, useColors } from '@/theme';
 
 // The first screen before signing in: what SendMyBeat does, previews of each part of the app
@@ -98,8 +99,8 @@ export default function LandingScreen() {
         <TagEditorPreview />
       </Feature>
 
-      <Feature n="02" title="Upload Studio" body="Pick your beat and cover art, hear it under the preview, and send it to YouTube as a video.">
-        <StudioPreview />
+      <Feature n="02" title="Upload Studio" body="Pick your beat and cover art, choose a visualizer, hear it under the preview, and send it to YouTube as a video.">
+        <LandingRender />
       </Feature>
 
       <Feature n="03" title="Analytics" body="Views per upload, plus which titles are working. Included with Pro.">
@@ -209,42 +210,6 @@ function TagEditorPreview() {
           <Text style={s.mono}>{chars} / 500</Text>
         </View>
       </View>
-    </View>
-  );
-}
-
-function StudioPreview() {
-  const C = useColors();
-  const s = useStyles();
-  const bars = Array.from({ length: 40 }, (_, i) => 0.35 + 0.3 * Math.abs(Math.sin(i * 0.9)) + 0.3 * Math.abs(Math.sin(i * 0.37)));
-  return (
-    <View style={s.panel} accessible accessibilityLabel="Example Upload Studio: video preview, waveform player and the render settings">
-      <View style={s.video}>
-        <View style={s.cover}>
-          <Text style={s.mono}>cover.jpg</Text>
-        </View>
-        <Text style={s.videoBadge}>16:9 · 2 fps</Text>
-      </View>
-      <View style={s.player}>
-        <View style={s.playBtn}>
-          <PlayPauseIcon playing size={11} />
-        </View>
-        <View style={{ flex: 1, gap: 6 }}>
-          <View style={s.wave}>
-            {bars.map((h, i) => (
-              <View key={i} style={[s.waveBar, { height: `${Math.min(1, h) * 100}%`, backgroundColor: i < 11 ? C.text : C.wave }]} />
-            ))}
-          </View>
-          <View style={s.rowBetween}>
-            <Text style={[s.time, { color: C.text }]}>0:42</Text>
-            <Text style={s.time}>2:58</Text>
-          </View>
-        </View>
-      </View>
-      <View style={s.uploadBtn}>
-        <Text style={s.uploadText}>Upload to YouTube</Text>
-      </View>
-      <Text style={[s.time, { textAlign: 'center' }]}>mp4 · 1920×1080 · 2 fps · public</Text>
     </View>
   );
 }
@@ -375,48 +340,6 @@ const useStyles = makeStyles((C) => ({
   chipText: { color: C.text, fontFamily: F.mono, fontSize: 12 },
   chipX: { color: C.t3, fontSize: 13, ...font() },
   chipMore: { paddingHorizontal: 9, paddingVertical: 6, borderRadius: R.chip, borderWidth: 1, borderColor: C.lineSoft },
-
-  video: {
-    aspectRatio: 16 / 9,
-    borderRadius: R.ctl,
-    borderWidth: 1,
-    borderColor: C.lineSoft,
-    backgroundColor: C.bg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cover: {
-    height: '74%',
-    aspectRatio: 1,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: C.line,
-    backgroundColor: C.card2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  videoBadge: {
-    position: 'absolute',
-    left: 8,
-    top: 8,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 5,
-    borderWidth: 1,
-    borderColor: C.line,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    color: C.t2,
-    fontSize: 10.5,
-    fontFamily: F.mono,
-    overflow: 'hidden',
-  },
-  player: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  playBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: C.primary, alignItems: 'center', justifyContent: 'center' },
-  wave: { height: 26, flexDirection: 'row', alignItems: 'center', gap: 2 },
-  waveBar: { flex: 1, borderRadius: 1 },
-  time: { color: C.t3, fontSize: 11, fontFamily: F.mono },
-  uploadBtn: { height: 44, borderRadius: R.card, backgroundColor: C.primary, alignItems: 'center', justifyContent: 'center' },
-  uploadText: { color: C.onPrimary, fontSize: 15, ...font('600') },
 
   bigNum: { color: C.text, fontSize: 30, letterSpacing: -1, ...font('600') },
 

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
 import { toast } from "sonner";
-import { ArrowRight, BarChart3, Check, FileText, Pause, Play, Sparkles, Star, Tags, Upload, Users } from "lucide-react";
+import { ArrowRight, BarChart3, Check, FileText, Sparkles, Star, Tags, Upload, Users } from "lucide-react";
 import { API } from "@/App";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { setAuthToken } from "@/lib/auth";
 import { resolvePalette, useTheme } from "@/lib/ThemeContext";
 import "@/pages/LandingPage.css";
+import RenderPreview from "@/pages/landing/RenderPreview";
 
 // The page before signing in. It explains the app by letting you use small working copies of it:
 // a tag run you can start, the four steps you can click through, a style-match slider, a plan
@@ -294,7 +295,6 @@ function TagLab() {
 const VIEWS = [820, 1060, 740, 1290, 1010, 1180, 1590, 2100];
 
 function StepPreview({ id }) {
-  const [playing, setPlaying] = useState(true);
   const [picked, setPicked] = useState(VIEWS.length - 1);
 
   if (id === "generate") {
@@ -337,36 +337,7 @@ function StepPreview({ id }) {
       </div>
     );
   }
-  if (id === "upload") {
-    return (
-      <div className="lp-prev">
-        <div className="lp-video">
-          <div className="lp-video-cover" aria-hidden="true">
-            <span>VAMP</span>
-            <small>ken carson type beat</small>
-          </div>
-          <span className="lp-video-badge smb-mono">16:9 · 1080p</span>
-        </div>
-        <div className="lp-player">
-          <button type="button" className="lp-play" onClick={() => setPlaying((p) => !p)} aria-label={playing ? "Pause the preview" : "Play the preview"}>
-            {playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
-          </button>
-          <span className="smb-mono lp-time">0:42</span>
-          <div className={`lp-wave ${playing ? "is-playing" : ""}`} aria-hidden="true">
-            {Array.from({ length: 72 }, (_, i) => (
-              <i key={i} className={i < 18 ? "is-played" : ""} style={{ height: `${22 + 70 * Math.abs(Math.sin(i * 0.7) * Math.cos(i * 0.23))}%`, animationDelay: `${(i % 11) * 0.08}s` }} />
-            ))}
-          </div>
-          <span className="smb-mono lp-time">2:58</span>
-        </div>
-        <div className="lp-prev-rows">
-          <div><span>Title</span><b>ken carson type beat – “vamp”</b></div>
-          <div><span>Tags</span><b>ken carson · 64 tags</b></div>
-          <div><span>Privacy</span><b>Public</b></div>
-        </div>
-      </div>
-    );
-  }
+  if (id === "upload") return <RenderPreview />;
   const max = 2400;
   const avg = VIEWS.reduce((a, b) => a + b, 0) / VIEWS.length;
   const w = 360;

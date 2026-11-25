@@ -140,11 +140,11 @@
 .lp-rank { display: flex; gap: 12px; align-items: center; padding: 8px 0; border-top: 1px solid var(--c-line-soft); font-size: 13.5px; animation: lp-pop 0.4s var(--ease) both; }
 .lp-rank:first-child { border-top: 0; }
 .lp-rank .smb-bar { margin: 5px 0; }
-.lp-video { position: relative; aspect-ratio: 16 / 9; border-radius: 12px; border: 1px solid var(--c-line); background: radial-gradient(120% 90% at 50% 0%, #1a1f2b, #050608 70%); display: grid; place-items: center; overflow: hidden; }
-.lp-video-cover { width: 30%; aspect-ratio: 1; display: grid; align-content: end; gap: 2px; padding: 10px; border-radius: 8px; background: linear-gradient(150deg, #2ee59d 0%, #0d6b47 45%, #06120d 100%); box-shadow: 0 18px 40px -12px rgba(0, 0, 0, 0.8); color: #fff; }
-.lp-video-cover span { font-family: var(--font-display); font-size: 20px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; }
-.lp-video-cover small { font: 9.5px var(--font-mono); opacity: 0.8; }
-.lp-video-badge { position: absolute; top: 10px; left: 10px; padding: 3px 8px; border-radius: 6px; background: rgba(0, 0, 0, 0.55); font-size: 11px; color: #d6d6d6; }
+.lp-video { position: relative; aspect-ratio: 16 / 9; border-radius: 12px; border: 1px solid var(--c-line); background: #05080a; overflow: hidden; isolation: isolate; }
+/* Blurred art, the background Upload Studio offers: the cover, scaled up and softened. */
+.lp-video-bg { position: absolute; inset: -12%; width: 124%; height: 124%; object-fit: cover; filter: blur(28px) saturate(1.2) brightness(0.55); z-index: -1; }
+.lp-video-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.lp-video-badge { position: absolute; z-index: 1; top: 10px; left: 10px; padding: 3px 8px; border-radius: 6px; background: rgba(0, 0, 0, 0.55); font-size: 11px; color: #d6d6d6; }
 .lp-player { display: flex; align-items: center; gap: 10px; padding: 8px 12px 8px 8px; border: 1px solid var(--c-line); border-radius: 999px; background: var(--c-card2); }
 .lp-play { flex: none; box-sizing: border-box; width: 30px !important; min-width: 30px; max-width: 30px; height: 30px !important; padding: 0 !important; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--c-pri); color: var(--c-onpri); cursor: pointer; transition: transform 0.2s var(--ease); }
 .lp-play:hover { transform: scale(1.08); }
@@ -460,4 +460,22 @@
 }
 @media (max-width: 360px) {
   .lp-wordmark { font-size: 0; gap: 0; }
+}
+
+/* Visualizer picker under the render. */
+.lp-viz-pick { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.lp-viz { display: grid; justify-items: center; gap: 6px; min-height: 44px; padding: 8px 4px 7px; border: 1px solid var(--c-line); border-radius: 9px; background: var(--c-card2); color: var(--c-t2); font-size: 12.5px; line-height: 1.1; cursor: pointer; transition: border-color 0.2s var(--ease), color 0.2s var(--ease), background-color 0.2s var(--ease); }
+.lp-viz img { width: 100%; max-width: 52px; height: 26px; object-fit: contain; opacity: 0.6; transition: opacity 0.2s var(--ease); }
+.lp-viz span { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.lp-viz .lp-pro { height: 16px; margin-left: 0; padding: 0 4px; font-size: 9.5px; font-style: normal; }
+.lp-viz:hover { color: var(--c-text); border-color: color-mix(in srgb, var(--c-text) 25%, transparent); }
+.lp-viz:hover img { opacity: 0.85; }
+.lp-viz.is-active { color: var(--c-text); border-color: var(--c-accline); background: color-mix(in srgb, var(--c-acc) 8%, var(--c-card2)); }
+.lp-viz.is-active img { opacity: 1; }
+.lp-viz:focus-visible { outline: 2px solid var(--c-acc); outline-offset: 2px; }
+.lp-viz-note { margin: -4px 0 0; font-size: 12.5px; color: var(--c-t3); }
+@media (max-width: 480px) {
+  .lp-viz-pick { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; margin: 0 -2px; padding: 0 2px 2px; scrollbar-width: none; }
+  .lp-viz-pick::-webkit-scrollbar { display: none; }
+  .lp-viz { flex: 0 0 31%; scroll-snap-align: start; }
 }
