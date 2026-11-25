@@ -27,7 +27,7 @@ export default function AppearanceScreen() {
 
   return (
     <View style={s.root}>
-      {paying && wallpaper && wallColors ? <Wallpaper id={wallpaper} colors={wallColors} active /> : null}
+      {paying && wallpaper ? <Wallpaper id={wallpaper} colors={wallColors} active /> : null}
       <ScrollView style={{ flex: 1 }} contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 32 }]}>
         <View style={s.topBar}>
           <Pressable onPress={() => router.back()} hitSlop={10} style={s.done} accessibilityRole="button">
@@ -50,16 +50,19 @@ export default function AppearanceScreen() {
           <Text style={s.sectionTitle} accessibilityRole="header">
             Wallpaper
           </Text>
-          <Text style={s.sub}>
-            {wallColors
-              ? 'Animated, behind your main tabs, in your theme’s colors.'
-              : 'Wallpapers show with the dark themes. Pick one now and it appears when you switch.'}
-          </Text>
+          <Text style={s.sub}>Animated, behind your main tabs, in your theme’s colors. Light themes get a light version.</Text>
         </View>
         <View style={s.wallGrid} accessibilityRole="radiogroup">
           <WallpaperCard id={null} label="None" selected={!paying || wallpaper === null} locked={false} />
           {WALLPAPERS.map((w) => (
-            <WallpaperCard key={w.id} id={w.id} label={w.label} preview={w.preview} selected={paying && w.id === wallpaper} locked={!paying} />
+            <WallpaperCard
+              key={w.id}
+              id={w.id}
+              label={w.label}
+              preview={C.dark ? w.preview : w.previewLight}
+              selected={paying && w.id === wallpaper}
+              locked={!paying}
+            />
           ))}
         </View>
         {!paying ? (

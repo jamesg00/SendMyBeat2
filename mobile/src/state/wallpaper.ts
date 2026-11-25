@@ -7,7 +7,8 @@ import type { Palette, ThemeId } from '@/theme';
 
 // Animated wallpapers behind the main tabs, picked on the Appearance screen. They were chosen
 // from 100 concepts (the round 10 finals, 91 to 100) and drawn on a canvas in a WebView, in the
-// active theme's colors. Light themes keep a plain background, since the wallpapers are dark.
+// active theme's colors. Light themes get a light version: the same scene drawn dark and then
+// flipped light by a CSS filter on the canvas (invert, then turn the hues back round).
 
 export type WallpaperId =
   | 'crossing'
@@ -22,17 +23,77 @@ export type WallpaperId =
   | 'valley-fireflies';
 
 /** The gallery, in order. `n` is the concept's number on the wallpaper page. */
-export const WALLPAPERS: { id: WallpaperId; label: string; n: number; preview: number }[] = [
-  { id: 'crossing', label: 'Crossing', n: 91, preview: require('@/assets/wallpapers/crossing.jpg') },
-  { id: 'valley-stars', label: 'Valley Stars', n: 92, preview: require('@/assets/wallpapers/valley-stars.jpg') },
-  { id: 'dot-hills', label: 'Dot Hills', n: 93, preview: require('@/assets/wallpapers/dot-hills.jpg') },
-  { id: 'firefly-send', label: 'Firefly Send', n: 94, preview: require('@/assets/wallpapers/firefly-send.jpg') },
-  { id: 'firefly-hills', label: 'Firefly Hills', n: 95, preview: require('@/assets/wallpapers/firefly-hills.jpg') },
-  { id: 'hills-under-stars', label: 'Under the Stars', n: 96, preview: require('@/assets/wallpapers/hills-under-stars.jpg') },
-  { id: 'valley-crossing', label: 'Valley Crossing', n: 97, preview: require('@/assets/wallpapers/valley-crossing.jpg') },
-  { id: 'firefly-rising', label: 'Rising', n: 98, preview: require('@/assets/wallpapers/firefly-rising.jpg') },
-  { id: 'starlit-crossing', label: 'Starlit Crossing', n: 99, preview: require('@/assets/wallpapers/starlit-crossing.jpg') },
-  { id: 'valley-fireflies', label: 'Valley Fireflies', n: 100, preview: require('@/assets/wallpapers/valley-fireflies.jpg') },
+export const WALLPAPERS: { id: WallpaperId; label: string; n: number; preview: number; previewLight: number }[] = [
+  {
+    id: 'crossing',
+    label: 'Crossing',
+    n: 91,
+    preview: require('@/assets/wallpapers/crossing.jpg'),
+    previewLight: require('@/assets/wallpapers/crossing-light.jpg'),
+  },
+  {
+    id: 'valley-stars',
+    label: 'Valley Stars',
+    n: 92,
+    preview: require('@/assets/wallpapers/valley-stars.jpg'),
+    previewLight: require('@/assets/wallpapers/valley-stars-light.jpg'),
+  },
+  {
+    id: 'dot-hills',
+    label: 'Dot Hills',
+    n: 93,
+    preview: require('@/assets/wallpapers/dot-hills.jpg'),
+    previewLight: require('@/assets/wallpapers/dot-hills-light.jpg'),
+  },
+  {
+    id: 'firefly-send',
+    label: 'Firefly Send',
+    n: 94,
+    preview: require('@/assets/wallpapers/firefly-send.jpg'),
+    previewLight: require('@/assets/wallpapers/firefly-send-light.jpg'),
+  },
+  {
+    id: 'firefly-hills',
+    label: 'Firefly Hills',
+    n: 95,
+    preview: require('@/assets/wallpapers/firefly-hills.jpg'),
+    previewLight: require('@/assets/wallpapers/firefly-hills-light.jpg'),
+  },
+  {
+    id: 'hills-under-stars',
+    label: 'Under the Stars',
+    n: 96,
+    preview: require('@/assets/wallpapers/hills-under-stars.jpg'),
+    previewLight: require('@/assets/wallpapers/hills-under-stars-light.jpg'),
+  },
+  {
+    id: 'valley-crossing',
+    label: 'Valley Crossing',
+    n: 97,
+    preview: require('@/assets/wallpapers/valley-crossing.jpg'),
+    previewLight: require('@/assets/wallpapers/valley-crossing-light.jpg'),
+  },
+  {
+    id: 'firefly-rising',
+    label: 'Rising',
+    n: 98,
+    preview: require('@/assets/wallpapers/firefly-rising.jpg'),
+    previewLight: require('@/assets/wallpapers/firefly-rising-light.jpg'),
+  },
+  {
+    id: 'starlit-crossing',
+    label: 'Starlit Crossing',
+    n: 99,
+    preview: require('@/assets/wallpapers/starlit-crossing.jpg'),
+    previewLight: require('@/assets/wallpapers/starlit-crossing-light.jpg'),
+  },
+  {
+    id: 'valley-fireflies',
+    label: 'Valley Fireflies',
+    n: 100,
+    preview: require('@/assets/wallpapers/valley-fireflies.jpg'),
+    previewLight: require('@/assets/wallpapers/valley-fireflies-light.jpg'),
+  },
 ];
 
 /** The two colors each theme's wallpaper glows in, like the concept page's palette chips. The
@@ -46,13 +107,40 @@ const GLOW: Partial<Record<ThemeId, [string, string]>> = {
 };
 const ICON_GLOW: [string, string] = ['#8BFFD0', '#4C8DFF'];
 
-export type WallpaperColors = { bg: string; a: string; b: string };
+/** `bg`, `a` and `b` are what the scene is drawn with; `screen` is the theme's background behind
+ *  it. With `light`, the canvas is flipped by LIGHT_FILTER, so `bg` is the dark color that the
+ *  filter turns into `screen`. */
+export type WallpaperColors = { bg: string; a: string; b: string; screen: string; light: boolean };
 
-/** The wallpaper's colors for a palette, or null where wallpapers are off (light themes). */
-export function wallpaperColors(C: Palette): WallpaperColors | null {
-  if (!C.dark) return null;
+/** CSS invert(1) then hue-rotate(180deg): dark becomes light and each hue stays roughly itself
+ *  (the icon's mint comes out deep teal, its blue stays blue). */
+export const LIGHT_FILTER = 'invert(1) hue-rotate(180deg)';
+// hue-rotate(180deg) as the CSS spec's matrix. It is its own inverse.
+const HUE_180 = [
+  [-0.574, 1.43, 0.144],
+  [0.426, 0.43, 0.144],
+  [0.426, 1.43, -0.856],
+];
+
+/** The color that LIGHT_FILTER turns into `hex` (#rrggbb). */
+function unfilter(hex: string): string {
+  const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  return (
+    '#' +
+    HUE_180.map((row) => {
+      const v = 255 - (row[0] * c[0] + row[1] * c[1] + row[2] * c[2]);
+      return Math.round(Math.min(255, Math.max(0, v)))
+        .toString(16)
+        .padStart(2, '0');
+    }).join('')
+  );
+}
+
+/** The wallpaper's colors for a palette. Light themes get the light version in the icon's colors. */
+export function wallpaperColors(C: Palette): WallpaperColors {
   const [a, b] = GLOW[C.id] ?? ICON_GLOW;
-  return { bg: C.bg, a, b };
+  if (!C.dark) return { bg: unfilter(C.bg), a, b, screen: C.bg, light: true };
+  return { bg: C.bg, a, b, screen: C.bg, light: false };
 }
 
 // ---- chosen wallpaper (saved on the device, like the theme)
@@ -113,12 +201,16 @@ export type WallpaperConfig = { n: number; colors: WallpaperColors; paused: bool
  *  in through window.__smbWall.set(config). */
 export function wallpaperHtml(initial: WallpaperConfig): string {
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<style>html,body{margin:0;height:100%;overflow:hidden;background:${initial.colors.bg}}canvas{display:block;width:100%;height:100%}</style></head>
+<style>html,body{margin:0;height:100%;overflow:hidden;background:${initial.colors.screen}}canvas{display:block;width:100%;height:100%}</style></head>
 <body><canvas id="c"></canvas><script>
 ${WALLPAPER_DRAW_JS}
 (function(){
   var cfg = ${JSON.stringify(initial)};
   var c = document.getElementById('c'), g = c.getContext('2d');
+  function look() {
+    c.style.filter = c.style.webkitFilter = cfg.colors.light ? '${LIGHT_FILTER}' : 'none';
+    document.body.style.background = cfg.colors.screen;
+  }
   var w = 0, h = 0, dpr = 1, t = 6, last = 0, drawn = false, raf = 0;
   function size() {
     dpr = Math.min(window.devicePixelRatio || 1, 1.5);
@@ -149,8 +241,8 @@ ${WALLPAPER_DRAW_JS}
   }
   function kick() { if (!raf) raf = requestAnimationFrame(frame); }
   window.addEventListener('resize', function () { size(); kick(); });
-  window.__smbWall = { set: function (next) { var redraw = next.n !== cfg.n || JSON.stringify(next.colors) !== JSON.stringify(cfg.colors); cfg = next; if (redraw) drawn = false; kick(); } };
-  size(); kick();
+  window.__smbWall = { set: function (next) { var redraw = next.n !== cfg.n || JSON.stringify(next.colors) !== JSON.stringify(cfg.colors); cfg = next; if (redraw) { drawn = false; look(); } kick(); } };
+  look(); size(); kick();
 })();
 </script></body></html>`;
 }
