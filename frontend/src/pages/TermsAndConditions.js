@@ -73,10 +73,10 @@ const TermsAndConditions = () => {
                 4. Subscription Plans and Payments
               </h2>
               <p className="mb-2">
-                <strong>Free Plan:</strong> Users receive 2 free AI tag generations and 2 free YouTube uploads per day.
+                <strong>Free Plan:</strong> New accounts receive 3 free AI generations and 3 free YouTube uploads, one time. These free credits do not renew. Visitors without an account may use the free tag generator once.
               </p>
               <p className="mb-2">
-                <strong>Pro Plan:</strong> Subscribers receive unlimited AI tag generations and YouTube uploads.
+                <strong>Paid Plans:</strong> Plus subscribers receive 50 AI generations and 50 YouTube uploads per month. Pro subscribers receive 100 of each per month, plus the Pro features.
               </p>
               <p>
                 All subscription fees are processed securely through Stripe. Subscriptions automatically renew unless cancelled. Refunds may be issued at our discretion in accordance with applicable consumer protection laws.

@@ -221,6 +221,8 @@
 .lp-field input { height: 44px; }
 .lp-auth-switch { text-align: center; font-size: 14px; color: var(--c-t2); }
 .lp-auth-switch button { background: none; border: 0; padding: 0; font: inherit; color: var(--c-text); font-weight: 600; cursor: pointer; text-decoration: underline; }
+.lp-google { display: inline-flex; align-items: center; justify-content: center; gap: 10px; }
+.lp-auth-or { font-size: 13px; text-align: center; margin: 2px 0 -4px; }
 
 @keyframes lp-pop { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes lp-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.15; } }
@@ -480,3 +482,5 @@
   .lp-viz-pick::-webkit-scrollbar { display: none; }
   .lp-viz { flex: 0 0 31%; scroll-snap-align: start; }
 }
+.lp-free-link { margin-top: 14px; font-size: 14px; }
+.lp-free-link a { color: var(--c-text); text-decoration: underline; }

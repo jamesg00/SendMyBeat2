@@ -47,12 +47,27 @@ def paid(plan, *, version=2, status='active', **extra):
 
 
 @pytest.mark.asyncio
-async def test_free_accounts_get_no_credits_and_are_offered_the_trial():
+async def test_free_accounts_get_three_one_time_credits_and_no_card_trial():
     status = await status_for({'id': 'u1', 'daily_usage_date': '2999-01-01'})
-    assert status['plan'] == 'free' and status['credits_remaining'] == 0 and status['upload_credits_remaining'] == 0
-    assert status['trial_available'] is True and status['pro_access'] is False
+    assert status['plan'] == 'free' and status['credits_remaining'] == 3 and status['upload_credits_remaining'] == 3
+    assert status['counter'] == 'starter' and status['resets_at'] is None
+    assert status['trial_available'] is False and status['pro_access'] is False
+
+
+@pytest.mark.asyncio
+async def test_used_up_free_credits_point_to_a_plan():
+    status = await status_for({'id': 'u1', 'free_ai_used': 3, 'free_upload_used': 3})
+    assert status['credits_remaining'] == 0 and status['upload_credits_remaining'] == 0
     detail = server._paywall_detail(status, 'generations')
-    assert detail['code'] == 'needs_plan' and 'free trial' in detail['message']
+    assert detail['code'] == 'needs_plan' and 'Pick a plan' in detail['message']
+
+
+@pytest.mark.asyncio
+async def test_the_card_trial_comes_back_only_when_turned_on():
+    with patch.object(server, 'TRIAL_ENABLED', True):
+        status = await status_for({'id': 'u1'})
+    assert status['trial_available'] is True
+    assert 'free trial' in server._paywall_detail({**status, 'credits_total': 0, 'upload_credits_total': 0}, 'generations')['message']
 
 
 @pytest.mark.asyncio
@@ -87,7 +102,7 @@ async def test_admins_get_pro_features_but_keep_their_plans_credits():
         admin_plus = await status_for(paid('plus'))
         admin_free = await status_for({'id': 'u1', 'daily_usage_date': '2999-01-01'})
     assert admin_plus['pro_access'] is True and admin_plus['credits_total'] == 50
-    assert admin_free['pro_access'] is True and admin_free['credits_total'] == 0
+    assert admin_free['pro_access'] is True and admin_free['credits_total'] == server.FREE_STARTER_AI_CREDITS
     assert (await status_for(paid('plus')))['pro_access'] is False
 
 
@@ -106,13 +121,23 @@ def request(**kw):
 async def test_the_trial_is_offered_once():
     for user_doc, expect_trial in (({'id': 'u1'}, True), ({'id': 'u1', 'trial_used': True}, False)):
         db, create = checkout_mocks(user_doc)
-        with patch.object(server, 'db', db), patch.object(server.stripe.checkout.Session, 'create', create):
+        with patch.object(server, 'db', db), patch.object(server.stripe.checkout.Session, 'create', create), \
+             patch.object(server, 'TRIAL_ENABLED', True):
             res = await server.create_checkout_session(request(plan='plus', trial=True), current_user={'id': 'u1', 'email': 'a@b.c'})
         assert res['checkout_url']
         sub_data = create.call_args.kwargs['subscription_data']
         assert ('trial_period_days' in sub_data) is expect_trial
         assert sub_data['metadata']['plan_version'] == str(server.PLAN_VERSION)
         assert create.call_args.kwargs['line_items'][0]['price'] == 'price_saved'
+
+
+@pytest.mark.asyncio
+async def test_no_card_trial_when_the_trial_is_off():
+    db, create = checkout_mocks({'id': 'u1'})
+    with patch.object(server, 'db', db), patch.object(server.stripe.checkout.Session, 'create', create), \
+         patch.object(server, 'TRIAL_ENABLED', False):
+        await server.create_checkout_session(request(plan='plus', trial=True), current_user={'id': 'u1', 'email': 'a@b.c'})
+    assert 'trial_period_days' not in create.call_args.kwargs['subscription_data']
 
 
 @pytest.mark.asyncio

@@ -22,15 +22,15 @@ const TAG_STEPS = [
   'Scoring and ranking tags…',
 ];
 
-// Limits are TRIAL_DAILY_*, PLUS_V2_MONTHLY_* and PRO_V2_MONTHLY_* in backend/server.py; the
+// Limits are FREE_STARTER_*, PLUS_V2_MONTHLY_* and PRO_V2_MONTHLY_* in backend/server.py; the
 // website's plans (frontend/src/pages/LandingPage.js) say the same. Paying happens in the app.
 const PLANS = [
   {
-    name: 'Free trial',
+    name: 'Free',
     price: '$0',
     per: '',
-    badge: '3 days',
-    lines: ['3 AI generations a day', '3 YouTube uploads a day', 'Then Plus at $5/mo. Cancel anytime'],
+    badge: 'No card',
+    lines: ['3 AI generations to try it', '3 YouTube uploads to try it', "One-time credits that don't renew", 'Then Plus at $5/mo. Cancel anytime'],
   },
   {
     name: 'Plus',
@@ -87,7 +87,7 @@ export default function LandingScreen() {
       <View style={{ gap: 10 }}>
         <Button title="Get started" onPress={() => openAuth('register')} />
         <Button title="Log in" variant="secondary" onPress={() => openAuth('login')} />
-        <Text style={s.fine}>3-day free trial · cancel anytime</Text>
+        <Text style={s.fine}>3 free credits · no card needed</Text>
       </View>
 
       <TagRunDemo />
@@ -114,7 +114,7 @@ export default function LandingScreen() {
       <View style={{ gap: 12 }}>
         <View style={{ gap: 6 }}>
           <Text style={ui.sectionLabel}>Pricing</Text>
-          <Text style={s.h2}>Try it free for 3 days.</Text>
+          <Text style={s.h2}>Try it free, no card needed.</Text>
         </View>
         {PLANS.map((p) => (
           <View key={p.name} style={s.plan} accessible accessibilityLabel={`${p.name} plan, ${p.price}${p.per ? ' a month' : ''}. ${p.lines.join('. ')}.`}>

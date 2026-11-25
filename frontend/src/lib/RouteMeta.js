@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useLocation } from "react-router-dom";
+import { SEO_PAGES } from "@/lib/seoPages";
 
 // The site is one HTML file, so without this every page shares the homepage's title,
 // description and canonical link, and search engines treat /about, /spotlight and the
@@ -8,7 +9,7 @@ import { useLocation } from "react-router-dom";
 const SITE = "https://www.sendmybeat.com";
 const HOME_TITLE = "SendMyBeat: tags, video and upload for type-beat producers";
 const HOME_DESCRIPTION =
-  "SendMyBeat turns a finished beat into a YouTube upload: tags that rank, a description, a visualizer video and the upload itself. Try it free for 3 days.";
+  "SendMyBeat turns a finished beat into a YouTube upload: tags that rank, a description, a visualizer video and the upload itself. Try it free, no card needed.";
 
 export const PUBLIC_PAGES = {
   "/": { title: HOME_TITLE, description: HOME_DESCRIPTION },
@@ -28,6 +29,11 @@ export const PUBLIC_PAGES = {
     title: "Terms and Conditions | SendMyBeat",
     description: "The terms for using SendMyBeat.",
   },
+  "/free-tag-generator": {
+    title: "Free YouTube Tag Generator for Type Beats | SendMyBeat",
+    description: "Generate YouTube tags for your type beat free, no sign-up. Tags come from live YouTube searches and are sized for the 500-character limit.",
+  },
+  ...Object.fromEntries(Object.entries(SEO_PAGES).map(([path, p]) => [path, { title: p.title, description: p.description }])),
 };
 
 function setMeta(attr, key, content) {

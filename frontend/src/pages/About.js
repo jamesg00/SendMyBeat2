@@ -90,7 +90,7 @@ const About = () => {
                     <div>
                       <h3 className="policy-title mb-1.5 text-sm font-semibold sm:mb-2 sm:text-base md:text-lg">Flexible Plans</h3>
                       <p className="text-xs sm:text-sm">
-                        Start free with 2 daily AI generations and 2 YouTube uploads, or upgrade to Pro for unlimited access. No commitments, cancel anytime.
+                        Start free with 3 AI generations and 3 YouTube uploads, no card needed. They're one-time credits. After that, Plus is $5 a month for 50 of each and Pro is $10 a month for 100 of each. Cancel anytime.
                       </p>
                     </div>
                   </div>
@@ -115,7 +115,7 @@ const About = () => {
                 Who We Are
               </h2>
               <p className="text-sm sm:text-base md:text-lg leading-relaxed">
-                We're a team passionate about music technology and empowering independent creators. We believe that great music deserves to be heard, and we're committed to providing tools that level the playing field for producers of all sizes. Whether you're just starting out or you're an established producer, SendMyBeat.com is designed to help you grow your audience and increase your reach.
+                SendMyBeat is built by a producer who cares about music technology and independent creators. We believe that great music deserves to be heard, and we're committed to providing tools that level the playing field for producers of all sizes. Whether you're just starting out or you're an established producer, SendMyBeat.com is designed to help you grow your audience and increase your reach.
               </p>
             </section>
 
@@ -150,15 +150,15 @@ const About = () => {
                 Get Started Today
               </h2>
               <p className="mb-4 text-sm leading-relaxed sm:mb-6 sm:text-base md:text-lg">
-                Join thousands of music producers who are already maximizing their beat discoverability with SendMyBeat.com. Start with our free plan and experience the power of AI-optimized content management. Upgrade to Pro whenever you're ready for unlimited access.
+                Try one free tag run without an account, or sign up and get 3 free generations and 3 free uploads. When you need more, pick Plus or Pro.
               </p>
               <div className="flex justify-center px-2">
                 <Button
-                  onClick={() => navigate('/dashboard')}
+                  onClick={() => navigate('/free-tag-generator')}
                   size="lg"
                   className="matrix-btn w-full sm:w-auto text-sm sm:text-base md:text-lg px-6 sm:px-8 py-5 sm:py-6"
                 >
-                  Go to Dashboard
+                  Try the free tag generator
                 </Button>
               </div>
             </section>
