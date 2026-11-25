@@ -68,6 +68,13 @@ export const DEFAULT_VISUALIZER_SETTINGS = {
   fxZoomPulse: 0,
   fxFlash: false,
   fxVignette: false,
+  // New styles: a soft dark outline so they read on any artwork, plus glow, opacity, line
+  // thickness and size. The outline can't be seen on a plain black background.
+  vizShadow: 0.5,
+  vizGlow: 0,
+  vizOpacity: 1,
+  vizThickness: 1,
+  vizSize: 1,
 };
 
 export const VISUALIZER_PRESETS = {

@@ -70,4 +70,10 @@ export const buildVisualizerOptions = (s, { imagePreviewUrl = "", centerVisualiz
   fxZoomPulse: s.fxZoomPulse ?? 0,
   fxFlash: Boolean(s.fxFlash),
   fxVignette: Boolean(s.fxVignette),
+  // New styles: readability and look (see v2Effects in AudioVisualizer).
+  vizShadow: s.vizShadow ?? 0,
+  vizGlow: s.vizGlow ?? 0,
+  vizOpacity: s.vizOpacity ?? 1,
+  vizThickness: s.vizThickness ?? 1,
+  vizSize: s.vizSize ?? 1,
 });

@@ -202,6 +202,20 @@ const VisualizerSettings = ({
               </Row>
             ) : null}
             <Slider label="Reactivity" value={s.intensity} min={0.5} max={2} step={0.05} onChange={(v) => set({ intensity: v })} format={(v) => `${v.toFixed(2)}×`} />
+            {v2 ? (
+              <>
+                <Slider label="Shadow behind it" value={s.vizShadow ?? 0} min={0} max={1} step={0.05} onChange={(v) => set({ vizShadow: v })} format={(v) => (v ? pct(v) : "Off")} />
+                <p className="us-hint">A soft dark outline that keeps it readable on busy or bright artwork.</p>
+                <div className="vz-two">
+                  <Slider label="Glow" value={s.vizGlow ?? 0} min={0} max={1} step={0.05} onChange={(v) => set({ vizGlow: v })} format={(v) => (v ? pct(v) : "Off")} />
+                  <Slider label="Opacity" value={s.vizOpacity ?? 1} min={0.2} max={1} step={0.05} onChange={(v) => set({ vizOpacity: v })} format={pct} />
+                </div>
+                <div className="vz-two">
+                  <Slider label="Line thickness" value={s.vizThickness ?? 1} min={0.5} max={3} step={0.1} onChange={(v) => set({ vizThickness: v })} format={(v) => `${v.toFixed(1)}×`} />
+                  <Slider label="Size" value={s.vizSize ?? 1} min={0.5} max={1.5} step={0.05} onChange={(v) => set({ vizSize: v })} format={pct} />
+                </div>
+              </>
+            ) : null}
             {ring ? (
               <div className="vz-two">
                 <Slider label="Logo size" value={s.radius} min={0.1} max={0.34} step={0.01} onChange={(v) => set({ radius: v })} format={pct} />

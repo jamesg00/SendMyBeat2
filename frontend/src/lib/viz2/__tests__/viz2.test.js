@@ -178,3 +178,44 @@ describe("AudioVisualizer with the new styles", () => {
     expect(viz.getZoom()).toBeGreaterThanOrEqual(1);
   });
 });
+
+describe("visualizer effects (shadow, glow, opacity, thickness, size)", () => {
+  it("clamps the settings and only uses a layer when an effect is on", async () => {
+    const { v2Effects } = await import("../../AudioVisualizer");
+    expect(v2Effects({}).layered).toBe(false);
+    expect(v2Effects({ vizSize: 1.2 }).layered).toBe(false);
+    expect(v2Effects({ vizShadow: 0.5 }).layered).toBe(true);
+    const fx = v2Effects({ vizShadow: 9, vizGlow: -1, vizOpacity: 0, vizThickness: 10, vizSize: 0 });
+    expect(fx).toMatchObject({ shadow: 1, glow: 0, opacity: 0.1, thickness: 3, size: 0.5 });
+  });
+
+  it("draws every effect over a beat without NaN", async () => {
+    window.matchMedia = jest.fn().mockImplementation(() => ({ matches: false, addListener: () => {}, removeListener: () => {} }));
+    global.Path2D = class {
+      moveTo() {}
+      lineTo() {}
+      arc() {}
+      rect() {}
+      closePath() {}
+      ellipse() {}
+      quadraticCurveTo() {}
+      bezierCurveTo() {}
+    };
+    const layer = mockContext();
+    const realCreate = Document.prototype.createElement.bind(document);
+    jest.spyOn(document, "createElement").mockImplementation((tag) => (tag === "canvas" ? { width: 1, height: 1, getContext: () => layer.ctx } : realCreate(tag)));
+    const AudioVisualizer = (await import("../../AudioVisualizer")).default;
+    const track = await buildBeatTrack(syntheticBeat(3, 6));
+    const { ctx, bad } = mockContext();
+    const canvas = { width: 960, height: 540, clientWidth: 960, clientHeight: 540, getContext: () => ctx, style: {}, getBoundingClientRect: () => ({ width: 960, height: 540 }) };
+    const viz = new AudioVisualizer(canvas, { mode: "ridgeline", spectrumColor: "139, 255, 208", particleColor: "76, 141, 255", vizShadow: 0.8, vizGlow: 0.5, vizOpacity: 0.7, vizThickness: 2, vizSize: 0.8 });
+    viz.setDesignSize(960, 540);
+    viz.setOutputSize(960, 540);
+    let step = 0;
+    viz.setBeatProvider((A) => track.fillStep(step, A));
+    for (; step < 60; step += 1) viz.renderFrame(1 / 60);
+    expect(viz.v2Layer).toBeTruthy();
+    expect(bad).toEqual([]);
+    expect(layer.bad).toEqual([]);
+  });
+});
