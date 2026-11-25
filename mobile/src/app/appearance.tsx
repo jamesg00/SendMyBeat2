@@ -1,38 +1,93 @@
+import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 
 import { useUiStyles } from '@/components/ui';
+import { Wallpaper } from '@/components/wallpaper';
+import { setWallpaper, useWallpaperId, wallpaperColors, WALLPAPERS, type WallpaperId } from '@/state/wallpaper';
 import { F, font, makeStyles, PALETTES, setTheme, THEMES, useColors, useThemeId, type Palette, type ThemeId } from '@/theme';
 
 // The theme gallery, like the Clippr desktop app's Appearance page. Picking one cross-fades the
-// whole app to it; the choice is kept on this device.
+// whole app to it; the choice is kept on this device. Below it, the animated wallpapers for the
+// main tabs; the picked one also plays behind this screen.
 export default function AppearanceScreen() {
   const s = useStyles();
   const ui = useUiStyles();
+  const C = useColors();
   const insets = useSafeAreaInsets();
   const current = useThemeId();
+  const wallpaper = useWallpaperId();
+  const wallColors = wallpaperColors(C);
 
   return (
-    <ScrollView style={s.root} contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 32 }]}>
-      <View style={s.topBar}>
-        <Pressable onPress={() => router.back()} hitSlop={10} style={s.done} accessibilityRole="button">
-          <Text style={s.doneText}>Done</Text>
-        </Pressable>
+    <View style={s.root}>
+      {wallpaper && wallColors ? <Wallpaper id={wallpaper} colors={wallColors} active /> : null}
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 32 }]}>
+        <View style={s.topBar}>
+          <Pressable onPress={() => router.back()} hitSlop={10} style={s.done} accessibilityRole="button">
+            <Text style={s.doneText}>Done</Text>
+          </Pressable>
+        </View>
+        <View style={{ gap: 6 }}>
+          <Text style={ui.largeTitle} accessibilityRole="header">
+            Appearance
+          </Text>
+          <Text style={s.sub}>Eleven looks. The whole app changes as you pick one.</Text>
+        </View>
+        <View style={s.grid} accessibilityRole="radiogroup">
+          {THEMES.map((theme) => (
+            <ThemeCard key={theme.id} id={theme.id} label={theme.label} selected={theme.id === current} />
+          ))}
+        </View>
+
+        <View style={{ gap: 6, marginTop: 8 }}>
+          <Text style={s.sectionTitle} accessibilityRole="header">
+            Wallpaper
+          </Text>
+          <Text style={s.sub}>
+            {wallColors
+              ? 'Animated, behind your main tabs, in your theme’s colors.'
+              : 'Wallpapers show with the dark themes. Pick one now and it appears when you switch.'}
+          </Text>
+        </View>
+        <View style={s.wallGrid} accessibilityRole="radiogroup">
+          <WallpaperCard id={null} label="None" selected={wallpaper === null} />
+          {WALLPAPERS.map((w) => (
+            <WallpaperCard key={w.id} id={w.id} label={w.label} preview={w.preview} selected={w.id === wallpaper} />
+          ))}
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function WallpaperCard({ id, label, preview, selected }: { id: WallpaperId | null; label: string; preview?: number; selected: boolean }) {
+  const s = useStyles();
+  const C = useColors();
+  return (
+    <Pressable
+      onPress={() => setWallpaper(id)}
+      style={({ pressed }) => [s.wallCard, selected && { borderColor: C.acc, borderWidth: 2, padding: 5 }, pressed && { transform: [{ scale: 0.97 }] }]}
+      accessibilityRole="radio"
+      accessibilityState={{ checked: selected }}
+      accessibilityLabel={id ? `${label} wallpaper` : 'No wallpaper'}>
+      <View style={s.wallPreview}>
+        {preview ? (
+          <Image source={preview} style={{ flex: 1 }} contentFit="cover" accessibilityIgnoresInvertColors />
+        ) : (
+          <View style={{ flex: 1, backgroundColor: C.bg, alignItems: 'center', justifyContent: 'center' }}>
+            <Svg width={22} height={22} viewBox="0 0 22 22" accessibilityElementsHidden importantForAccessibility="no">
+              <Path d="M4 4 L18 18 M18 4 L4 18" stroke={C.t3} strokeWidth={1.6} strokeLinecap="round" />
+            </Svg>
+          </View>
+        )}
       </View>
-      <View style={{ gap: 6 }}>
-        <Text style={ui.largeTitle} accessibilityRole="header">
-          Appearance
-        </Text>
-        <Text style={s.sub}>Eleven looks. The whole app changes as you pick one.</Text>
-      </View>
-      <View style={s.grid} accessibilityRole="radiogroup">
-        {THEMES.map((theme) => (
-          <ThemeCard key={theme.id} id={theme.id} label={theme.label} selected={theme.id === current} />
-        ))}
-      </View>
-    </ScrollView>
+      <Text style={s.wallLabel} numberOfLines={1}>
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -104,4 +159,19 @@ const useStyles = makeStyles((C) => ({
   labelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 2, minHeight: 20 },
   label: { color: C.text, fontSize: 13.5, ...font('600') },
   mono: { color: C.t3, fontSize: 11, fontFamily: F.mono },
+  sectionTitle: { color: C.text, fontSize: 20, ...font('600') },
+  wallGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  wallCard: {
+    flexBasis: '30%',
+    flexGrow: 1,
+    maxWidth: '32%',
+    padding: 6,
+    gap: 6,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: C.line,
+    backgroundColor: C.card,
+  },
+  wallPreview: { aspectRatio: 0.58, borderRadius: 9, overflow: 'hidden' },
+  wallLabel: { color: C.text, fontSize: 12.5, textAlign: 'center', ...font('600') },
 }));
