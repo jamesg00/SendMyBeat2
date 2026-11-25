@@ -19,6 +19,13 @@ import { F, R, font, makeStyles, THEMES, useColors, useThemeId } from '@/theme';
 
 const VERIFICATION: Record<string, string> = { none: 'Get verified', pending: 'Under review', approved: 'Verified ✓', rejected: 'Try again' };
 
+const newFeedback = (summary: api.AdminInboxSummary | null) => {
+  const bugs = summary?.bugs.new ?? 0;
+  const ideas = summary?.ideas.new ?? 0;
+  const parts = [bugs ? `${bugs} bug${bugs === 1 ? '' : 's'}` : '', ideas ? `${ideas} idea${ideas === 1 ? '' : 's'}` : ''].filter(Boolean);
+  return parts.length ? `${parts.join(', ')} new` : undefined;
+};
+
 const site = (path: string) => WebBrowser.openBrowserAsync(`https://www.sendmybeat.com${path}`);
 
 export default function ProfileScreen() {
@@ -31,12 +38,17 @@ export default function ProfileScreen() {
   const descriptions = useRequest(api.descriptions);
   const me = useRequest(api.myProducer);
   const reloadMe = me.reload;
+  // Admins see how many bug reports, ideas and verification requests are new.
+  const isAdmin = !!user?.is_admin;
+  const inbox = useRequest(() => (isAdmin ? api.adminInboxSummary() : Promise.resolve(null)));
+  const refreshInbox = inbox.refresh;
   // Coming back from Edit profile shows the new picture and details.
   useFocusEffect(
     useCallback(() => {
       reloadMe();
       void refreshSubscription();
-    }, [reloadMe]),
+      void refreshInbox();
+    }, [reloadMe, refreshInbox]),
   );
 
   const plan = planName(sub);
@@ -112,8 +124,21 @@ export default function ProfileScreen() {
           <ListRow left={<AppIcon size={28} />} title="App icon" value={iconName} onPress={() => router.push('/app-icon')} />
           <ListRow left={<Tile icon="heart" />} title="Support SendMyBeat" onPress={() => router.push('/support')} last={!user?.is_admin} />
           {user?.is_admin ? <ListRow title="Admin · Pros photos and channels" onPress={() => router.push('/admin-pros')} /> : null}
-          {user?.is_admin ? <ListRow title="Admin · Verification requests" onPress={() => router.push('/admin-verify')} /> : null}
-          {user?.is_admin ? <ListRow title="Admin · Feedback" onPress={() => router.push('/admin-feedback')} last /> : null}
+          {user?.is_admin ? (
+            <ListRow
+              title="Admin · Verification requests"
+              value={inbox.data?.verification.pending ? `${inbox.data.verification.pending} waiting` : undefined}
+              onPress={() => router.push('/admin-verify')}
+            />
+          ) : null}
+          {user?.is_admin ? (
+            <ListRow
+              title="Admin · Bug reports and ideas"
+              value={newFeedback(inbox.data)}
+              onPress={() => router.push('/admin-feedback')}
+              last
+            />
+          ) : null}
         </ListGroup>
       </View>
 

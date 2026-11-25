@@ -8,6 +8,7 @@ import LandingPage from "@/pages/LandingPage";
 import Dashboard from "@/pages/Dashboard";
 import AdminCosts from "@/pages/AdminCosts";
 import AdminUsers from "@/pages/AdminUsers";
+import AdminInbox from "@/pages/AdminInbox";
 import ProducerSpotlight from "@/pages/ProducerSpotlight";
 import ProPage from "@/pages/ProPage";
 import ProPlanPage from "@/pages/ProPlanPage";
@@ -177,6 +178,10 @@ function MainApp() {
             <Route
               path="/admin/users"
               element={adminRoute(<AdminUsers />)}
+            />
+            <Route
+              path="/admin/inbox"
+              element={adminRoute(<AdminInbox />)}
             />
             <Route
               path="/dashboard"

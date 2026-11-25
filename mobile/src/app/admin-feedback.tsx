@@ -11,8 +11,10 @@ import { Button, Segmented } from '@/components/ui';
 import { F, R, display, font, makeStyles, useColors } from '@/theme';
 
 // Admins only: bug reports and feature ideas from producers, newest first.
+// The numbers on Bugs and Ideas count the new ones nobody has looked at yet.
 
 type Filter = 'open' | 'fixed' | 'closed';
+type KindFilter = 'all' | 'bug' | 'idea';
 const IN_FILTER: Record<Filter, FeedbackStatus[]> = { open: ['new', 'planned'], fixed: ['fixed'], closed: ['closed'] };
 
 export default function AdminFeedbackScreen() {
@@ -22,6 +24,7 @@ export default function AdminFeedbackScreen() {
   const { user } = useAuth();
   const list = useRequest(api.allFeedback);
   const [filter, setFilter] = useState<Filter>('open');
+  const [kind, setKind] = useState<KindFilter>('all');
 
   if (!user?.is_admin) {
     return (
@@ -31,9 +34,11 @@ export default function AdminFeedbackScreen() {
     );
   }
 
-  const all = list.data?.items ?? [];
+  const items = list.data?.items ?? [];
+  const all = kind === 'all' ? items : items.filter((f) => f.kind === kind);
   const shown = all.filter((f) => IN_FILTER[filter].includes(f.status));
   const count = (f: Filter) => all.filter((x) => IN_FILTER[f].includes(x.status)).length;
+  const fresh = (k: 'bug' | 'idea') => items.filter((x) => x.kind === k && x.status === 'new').length;
   const setStatus = (id: string, status: FeedbackStatus) =>
     list.setData((cur) => ({ items: (cur?.items ?? []).map((x) => (x.id === id ? { ...x, status } : x)) }));
 
@@ -43,10 +48,19 @@ export default function AdminFeedbackScreen() {
         <Pressable onPress={() => router.back()} hitSlop={10} accessibilityRole="button">
           <Text style={s.topAction}>Close</Text>
         </Pressable>
-        <Text style={s.topTitle}>Admin · Feedback</Text>
+        <Text style={s.topTitle}>Admin · Bugs and ideas</Text>
         <View style={{ width: 60 }} />
       </View>
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: insets.bottom + 40, gap: 12 }}>
+        <Segmented
+          value={kind}
+          onChange={setKind}
+          options={[
+            { value: 'all', label: 'All' },
+            { value: 'bug', label: `Bugs ${fresh('bug') || ''}`.trim() },
+            { value: 'idea', label: `Ideas ${fresh('idea') || ''}`.trim() },
+          ]}
+        />
         <Segmented
           value={filter}
           onChange={setFilter}

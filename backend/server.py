@@ -9923,17 +9923,29 @@ async def review_verification_application(
     return await _profile_with_role_tag(updated)
 
 
-@api_router.get("/producers/verification/pending")
-async def list_verification_applications(current_user: dict = Depends(get_current_user)):
-    """Admin-only: verification requests waiting for review, oldest first."""
-    if not _is_admin_user(current_user):
-        raise HTTPException(status_code=403, detail="Only admins can review verification applications.")
-    docs = await db.producer_profiles.find(
-        {"verification_status": "pending"},
-        {"_id": 0, "user_id": 1, "username": 1, "avatar_url": 1, "verification_applied_at": 1, "verification_application": 1},
-    ).sort("verification_applied_at", 1).to_list(100)
+VERIFICATION_LIST_STATUSES = {"pending", "approved", "rejected"}
+
+
+async def _verification_applications(status: str) -> list[dict]:
+    """Verification requests by status. Pending ones come oldest first, the rest newest first."""
+    if status == "all":
+        query: dict[str, Any] = {"verification_status": {"$in": sorted(VERIFICATION_LIST_STATUSES)}}
+    elif status in VERIFICATION_LIST_STATUSES:
+        query = {"verification_status": status}
+    else:
+        raise HTTPException(status_code=400, detail="Status must be pending, approved, rejected or all.")
+    if status != "pending":
+        # Past decisions only for profiles that actually applied (not ones approved some other way).
+        query["verification_application"] = {"$exists": True}
+    projection = {
+        "_id": 0, "user_id": 1, "username": 1, "avatar_url": 1, "verification_status": 1,
+        "verification_note": 1, "verification_applied_at": 1, "verified_at": 1, "updated_at": 1,
+        "verification_application": 1,
+    }
+    direction = 1 if status == "pending" else -1
+    docs = await db.producer_profiles.find(query, projection).sort("verification_applied_at", direction).to_list(200)
     for doc in docs:
-        for key in ("verification_applied_at",):
+        for key in ("verification_applied_at", "verified_at", "updated_at"):
             if isinstance(doc.get(key), datetime):
                 doc[key] = doc[key].isoformat()
         application = doc.get("verification_application") or {}
@@ -9941,7 +9953,23 @@ async def list_verification_applications(current_user: dict = Depends(get_curren
             application["submitted_at"] = application["submitted_at"].isoformat()
         pro = pros_service.BY_ID.get(application.get("pro_id"))
         doc["pro_name"] = pro["name"] if pro else None
-    return {"applications": docs}
+    return docs
+
+
+@api_router.get("/producers/verification/pending")
+async def list_verification_applications(current_user: dict = Depends(get_current_user)):
+    """Admin-only: verification requests waiting for review, oldest first."""
+    if not _is_admin_user(current_user):
+        raise HTTPException(status_code=403, detail="Only admins can review verification applications.")
+    return {"applications": await _verification_applications("pending")}
+
+
+@api_router.get("/admin/verification")
+async def admin_list_verification(status: str = "pending", current_user: dict = Depends(get_current_user)):
+    """Admins: verification requests by status (pending, approved, rejected or all)."""
+    if not _is_admin_user(current_user):
+        raise HTTPException(status_code=403, detail="Only admins can review verification applications.")
+    return {"applications": await _verification_applications(status)}
 
 # ============ Feedback: bug reports and feature ideas ============
 
@@ -9994,8 +10022,8 @@ async def my_feedback(current_user: dict = Depends(get_current_user)):
 
 
 @api_router.get("/admin/feedback")
-async def list_feedback(status: str = "open", current_user: dict = Depends(get_current_user)):
-    """Admins: bug reports and ideas, newest first. `open` means new or planned."""
+async def list_feedback(status: str = "open", kind: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    """Admins: bug reports and ideas, newest first. `open` means new or planned; `kind` is bug or idea."""
     if not _is_admin_user(current_user):
         raise HTTPException(status_code=403, detail="Only admins can read feedback.")
     query: dict[str, Any] = {}
@@ -10003,8 +10031,30 @@ async def list_feedback(status: str = "open", current_user: dict = Depends(get_c
         query["status"] = {"$in": ["new", "planned"]}
     elif status in {"new", "planned", "fixed", "closed"}:
         query["status"] = status
+    if kind in {"bug", "idea"}:
+        query["kind"] = kind
     docs = await db.feedback.find(query, {"_id": 0}).sort("created_at", -1).to_list(200)
     return {"items": docs}
+
+
+@api_router.get("/admin/inbox/summary")
+async def admin_inbox_summary(current_user: dict = Depends(get_current_user)):
+    """Admins: how many bug reports, ideas and verification requests are waiting, for the tab counts."""
+    if not _is_admin_user(current_user):
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    open_statuses = {"$in": ["new", "planned"]}
+    bugs_new, bugs_open, ideas_new, ideas_open, verification_pending = await asyncio.gather(
+        db.feedback.count_documents({"kind": "bug", "status": "new"}),
+        db.feedback.count_documents({"kind": "bug", "status": open_statuses}),
+        db.feedback.count_documents({"kind": "idea", "status": "new"}),
+        db.feedback.count_documents({"kind": "idea", "status": open_statuses}),
+        db.producer_profiles.count_documents({"verification_status": "pending"}),
+    )
+    return {
+        "bugs": {"new": bugs_new, "open": bugs_open},
+        "ideas": {"new": ideas_new, "open": ideas_open},
+        "verification": {"pending": verification_pending},
+    }
 
 
 @api_router.patch("/admin/feedback/{feedback_id}")
