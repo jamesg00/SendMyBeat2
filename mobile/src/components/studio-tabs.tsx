@@ -785,6 +785,16 @@ export function VizTab() {
               </>
             ) : null}
             <SliderField label="Reactivity" value={viz.intensity} display={`${viz.intensity.toFixed(2)}×`} min={0.5} max={2} step={0.05} onChange={(intensity) => setViz({ intensity })} />
+            {!legacy ? (
+              <>
+                <SliderField label="Shadow behind it" value={look.shadow} display={look.shadow ? `${Math.round(look.shadow * 100)}%` : 'Off'} min={0} max={1} step={0.05} onChange={(shadow) => setViz({ shadow })} />
+                <Text style={s.hint}>A soft dark outline that keeps it readable on busy or bright artwork.</Text>
+                <SliderField label="Glow" value={look.glow} display={look.glow ? `${Math.round(look.glow * 100)}%` : 'Off'} min={0} max={1} step={0.05} onChange={(glow) => setViz({ glow })} />
+                <SliderField label="Opacity" value={look.opacity} display={`${Math.round(look.opacity * 100)}%`} min={0.2} max={1} step={0.05} onChange={(opacity) => setViz({ opacity })} />
+                <SliderField label="Line thickness" value={look.thickness} display={`${look.thickness.toFixed(1)}×`} min={0.5} max={3} step={0.1} onChange={(thickness) => setViz({ thickness })} />
+                <SliderField label="Size" value={look.size} display={`${Math.round(look.size * 100)}%`} min={0.5} max={1.5} step={0.05} onChange={(size) => setViz({ size })} />
+              </>
+            ) : null}
           </Group>
 
           {center ? (

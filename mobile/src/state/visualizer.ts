@@ -23,6 +23,16 @@ export type VizLook = {
   shake: number;
   flash: boolean;
   rainbow: boolean;
+  /** New styles only: a soft dark outline so they read on any artwork, 0 to 1. */
+  shadow: number;
+  /** New styles only: glow in the main colour, 0 to 1. */
+  glow: number;
+  /** New styles only: 0.2 to 1. */
+  opacity: number;
+  /** New styles only: line thickness, 0.5x to 3x. */
+  thickness: number;
+  /** New styles only: size, 0.5x to 1.5x. */
+  size: number;
 };
 
 export type VizSettings = Partial<VizLook> & {
@@ -89,6 +99,11 @@ const BASE_LOOK: VizLook = {
   shake: 1,
   flash: false,
   rainbow: false,
+  shadow: 0.5,
+  glow: 0,
+  opacity: 1,
+  thickness: 1,
+  size: 1,
 };
 const PRO_LOOK: Partial<VizLook> = { center: 'image', outline: true, stars: false, shake: 0, flash: false, rainbow: false };
 const STYLE_LOOK: Record<string, Partial<VizLook>> = {
@@ -119,7 +134,9 @@ export function presetColours(mode: string) {
 }
 /** Picking a style resets it to its recommended look, like the website. */
 export function pickStyle(viz: VizSettings, mode: string): VizSettings {
-  return { enabled: viz.enabled, mode, intensity: 1, ...presetColours(mode) };
+  // Shadow, glow, opacity, thickness and size are about your artwork, so they stay when you switch.
+  const keep = { shadow: viz.shadow, glow: viz.glow, opacity: viz.opacity, thickness: viz.thickness, size: viz.size };
+  return { enabled: viz.enabled, mode, intensity: 1, ...presetColours(mode), ...keep };
 }
 export const iconUrl = (mode: string) => `${SITE_URL}/visualizer-icons/${mode}.png`;
 

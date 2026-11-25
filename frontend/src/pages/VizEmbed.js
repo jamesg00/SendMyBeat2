@@ -45,6 +45,11 @@ const APP_KEYS = {
   shake: "shakeIntensity",
   rainbow: "multiColorReactive",
   brightness: "backgroundOpacity",
+  shadow: "vizShadow",
+  glow: "vizGlow",
+  opacity: "vizOpacity",
+  thickness: "vizThickness",
+  size: "vizSize",
 };
 
 /** Website settings from the app's choices: the style's preset, then whatever the app set. */

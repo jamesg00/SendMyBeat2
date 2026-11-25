@@ -120,6 +120,45 @@ const DEFAULT_OPTIONS = {
   },
 };
 
+
+const clampNum = (value, min, max, fallback) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
+};
+
+/** The new styles' adjustable effects, from the drawing options, clamped to their ranges. */
+export function v2Effects(o = {}) {
+  const fx = {
+    shadow: clampNum(o.vizShadow, 0, 1, 0),
+    glow: clampNum(o.vizGlow, 0, 1, 0),
+    opacity: clampNum(o.vizOpacity, 0.1, 1, 1),
+    thickness: clampNum(o.vizThickness, 0.5, 3, 1),
+    size: clampNum(o.vizSize, 0.5, 1.5, 1),
+  };
+  fx.layered = fx.shadow > 0 || fx.glow > 0 || fx.opacity < 1 || fx.thickness !== 1;
+  return fx;
+}
+
+/** Make `ctx.lineWidth = x` store x * scale.k, so every style's lines get thicker or thinner. */
+function scaleLineWidths(ctx, scale) {
+  let proto = Object.getPrototypeOf(ctx);
+  let desc = null;
+  while (proto && !desc) {
+    desc = Object.getOwnPropertyDescriptor(proto, "lineWidth");
+    proto = Object.getPrototypeOf(proto);
+  }
+  if (!desc || !desc.set || !desc.get) return;
+  Object.defineProperty(ctx, "lineWidth", {
+    configurable: true,
+    get() {
+      return desc.get.call(this) / (scale.k || 1);
+    },
+    set(value) {
+      desc.set.call(this, value * (scale.k || 1));
+    },
+  });
+}
+
 export default class AudioVisualizer {
   constructor(canvas, options = {}) {
     this.canvas = canvas;
@@ -1106,9 +1145,26 @@ export default class AudioVisualizer {
     if (!this.v2State[mode]) this.v2State[mode] = {};
     const state = this.v2State[mode];
     state.dpr = this.pixelScale || 1;
-    c.save();
-    drawV2(c, mode, w, h, out, state, dt, {
-      primary: rgbArray(o.spectrumColor),
+    const fx = v2Effects(o);
+    const primary = rgbArray(o.spectrumColor);
+    // Shadow, glow, opacity and thickness need the visualizer on a layer of its own, which is then
+    // laid over the artwork in one go. Size alone, or no effects, draws straight onto the canvas.
+    const layer = fx.layered ? this.v2LayerFor(fx.thickness) : null;
+    const target = layer ? layer.ctx : c;
+    if (layer) {
+      target.setTransform(1, 0, 0, 1, 0, 0);
+      target.clearRect(0, 0, layer.canvas.width, layer.canvas.height);
+      const scale = this.pixelScale || 1;
+      target.setTransform(scale, 0, 0, scale, 0, 0);
+    }
+    target.save();
+    if (fx.size !== 1) {
+      target.translate(w / 2, h / 2);
+      target.scale(fx.size, fx.size);
+      target.translate(-w / 2, -h / 2);
+    }
+    drawV2(target, mode, w, h, out, state, dt, {
+      primary,
       secondary: rgbArray(o.particleColor),
       user: rgbArray(o.spectrumColor),
       cover: this.centerImage,
@@ -1118,12 +1174,80 @@ export default class AudioVisualizer {
       radius: o.radius,
       reach: o.maxBarLength,
     });
-    c.restore();
-    c.globalCompositeOperation = "source-over";
-    c.globalAlpha = 1;
+    target.restore();
+    target.globalCompositeOperation = "source-over";
+    target.globalAlpha = 1;
+    if (layer) this.compositeV2(layer.canvas, fx, primary);
     // The artwork zoom follows the kick.
     this.framePulse = this.lerp(this.framePulse || 0, out.kick, 18, dt);
     if (o.fxVignette) this.drawVignette();
+  }
+
+  /**
+   * A canvas the size of this one for the new styles' effects, or null where none can be made
+   * (tests, very old browsers). Its context multiplies every line width by `thickness`.
+   */
+  v2LayerFor(thickness) {
+    const W = this.canvas.width;
+    const H = this.canvas.height;
+    if (this.v2Layer === undefined) {
+      let canvas = null;
+      try {
+        canvas = typeof OffscreenCanvas !== "undefined" ? new OffscreenCanvas(W, H) : document.createElement("canvas");
+      } catch {
+        canvas = null;
+      }
+      const ctx = canvas && typeof canvas.getContext === "function" ? canvas.getContext("2d") : null;
+      this.v2Layer = ctx ? { canvas, ctx, lineScale: { k: 1 } } : null;
+      if (this.v2Layer) scaleLineWidths(ctx, this.v2Layer.lineScale);
+    }
+    const layer = this.v2Layer;
+    if (!layer) return null;
+    if (layer.canvas.width !== W || layer.canvas.height !== H) {
+      layer.canvas.width = W;
+      layer.canvas.height = H;
+    }
+    layer.lineScale.k = thickness;
+    return layer;
+  }
+
+  /** Lay the effects layer over the artwork: dark halo first, then the visualizer with its glow. */
+  compositeV2(layerCanvas, fx, primary) {
+    const c = this.ctx;
+    const W = this.canvas.width;
+    const H = this.canvas.height;
+    // Blur sizes follow the canvas height, so the preview and a 1080p video look the same.
+    const unit = Math.min(W, H) / 540;
+    c.save();
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.globalCompositeOperation = "source-over";
+    if (fx.shadow > 0) {
+      // A soft dark outline behind every line and dot, so the visualizer reads on busy or bright
+      // artwork. The layer itself is drawn off the canvas and only its shadow lands on it.
+      const away = W + 64;
+      c.globalAlpha = fx.opacity;
+      c.shadowColor = `rgba(0, 0, 0, ${0.5 + fx.shadow * 0.45})`;
+      c.shadowOffsetX = away;
+      c.shadowOffsetY = 0;
+      c.shadowBlur = unit * (1.5 + fx.shadow * 7);
+      c.drawImage(layerCanvas, -away, 0);
+      if (fx.shadow > 0.5) {
+        c.shadowBlur = unit * (0.75 + fx.shadow * 2.5);
+        c.drawImage(layerCanvas, -away, 0);
+      }
+      c.shadowOffsetX = 0;
+    }
+    if (fx.glow > 0) {
+      const [r, g, b] = primary || [255, 255, 255];
+      c.shadowColor = `rgba(${r}, ${g}, ${b}, ${0.55 + fx.glow * 0.4})`;
+      c.shadowBlur = unit * (2 + fx.glow * 12);
+    } else {
+      c.shadowColor = "rgba(0, 0, 0, 0)";
+      c.shadowBlur = 0;
+    }
+    c.globalAlpha = fx.opacity;
+    c.drawImage(layerCanvas, 0, 0);
+    c.restore();
   }
 
   /** Advance the simulation by dt seconds and draw one frame. */
