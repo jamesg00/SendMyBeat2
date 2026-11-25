@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
-import { BarChart3, DollarSign, Layers, LogOut, Settings, Shield, Star, Users } from "lucide-react";
+import { BarChart3, DollarSign, Inbox, Layers, LogOut, Settings, Shield, Star, Users } from "lucide-react";
 import { API } from "@/App";
 import { getAuthToken } from "@/lib/auth";
 
@@ -48,6 +48,7 @@ const loadMe = () => {
 const ADMIN_LINKS = [
   { id: "admin-costs", path: "/admin/costs", label: "Ops and costs", Icon: DollarSign },
   { id: "admin-users", path: "/admin/users", label: "Users", Icon: Users },
+  { id: "admin-inbox", path: "/admin/inbox", label: "Inbox", Icon: Inbox },
 ];
 
 export const planLabelFor = (subscription) => {
@@ -87,7 +88,7 @@ const AppShell = ({
     if (onAdmin) onAdmin(path);
     else window.location.assign(path);
   };
-  const onAdminPage = active === "admin-costs" || active === "admin-users";
+  const onAdminPage = ADMIN_LINKS.some((link) => link.id === active);
 
   const select = (id) => (event) => {
     if (event) event.preventDefault();

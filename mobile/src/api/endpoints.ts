@@ -186,6 +186,9 @@ export type VerificationApplication = {
   verification_applied_at?: string;
   verification_application?: Partial<VerificationRequest> & { submitted_at?: string };
   pro_name?: string | null;
+  verification_status?: 'pending' | 'approved' | 'rejected';
+  verification_note?: string | null;
+  verified_at?: string | null;
 };
 export type FeedbackKind = 'bug' | 'idea';
 export type FeedbackStatus = 'new' | 'planned' | 'fixed' | 'closed';
@@ -210,6 +213,15 @@ export const updateFeedback = (id: string, status: FeedbackStatus) =>
   api<{ ok: true }>(`/admin/feedback/${encodeURIComponent(id)}`, { method: 'PATCH', body: { status } });
 
 export const pendingVerifications = () => api<{ applications: VerificationApplication[] }>('/producers/verification/pending');
+// Every request, waiting or decided. Falls back to the waiting list on a server that doesn't have it yet.
+export const allVerifications = () =>
+  api<{ applications: VerificationApplication[] }>('/admin/verification?status=all').catch(() => pendingVerifications());
+export type AdminInboxSummary = {
+  bugs: { new: number; open: number };
+  ideas: { new: number; open: number };
+  verification: { pending: number };
+};
+export const adminInboxSummary = () => api<AdminInboxSummary>('/admin/inbox/summary');
 export const reviewVerification = (userId: string, action: 'approve' | 'reject', note?: string) =>
   api<Producer>('/producers/verification/review', { body: { user_id: userId, action, note } });
 export type ProfileUpdate = { bio?: string; tags?: string[]; social_links?: Record<string, string> };

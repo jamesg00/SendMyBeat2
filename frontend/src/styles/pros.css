@@ -478,6 +478,30 @@ button.adm-btn-danger.adm-btn-danger:hover { background: color-mix(in srgb, var(
 .adm-icon-btn { width: 34px; height: 34px; padding: 0 !important; justify-content: center; }
 .adm .adm-id { padding: 0 !important; height: auto !important; background: none !important; border: 0 !important; justify-content: flex-start; }
 .adm-users td:nth-child(2) { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+/* Admin inbox: bug reports, ideas and verification requests. */
+.adm button.adm-inbox-tile { font: inherit; color: inherit; text-align: left; cursor: pointer; width: 100%; white-space: normal !important; min-width: 0 !important; }
+.adm-inbox-tile.is-active { border-color: var(--c-accline) !important; box-shadow: inset 0 0 0 1px var(--c-accline); }
+.adm-inbox-tile:focus-visible { outline: 2px solid var(--c-accline); outline-offset: 2px; }
+.adm-inbox-head { flex-wrap: wrap; row-gap: 8px; }
+.adm-error-inline { display: flex; align-items: center; gap: 8px; color: var(--c-danger); font-size: 14px; }
+.adm-inbox-list { display: grid; gap: 10px; }
+.adm-inbox-item { display: grid; gap: 10px; padding: 14px; border-radius: 12px; border: 1px solid var(--c-line); background: var(--c-card2); min-width: 0; }
+.adm-inbox-meta, .adm-inbox-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.adm-inbox-who { display: grid; gap: 2px; min-width: 0; max-width: 100%; }
+.adm-inbox-message { margin: 0; font-size: 14.5px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.adm-inbox-device { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.adm-inbox-status { display: inline-flex; align-items: center; gap: 8px; }
+.adm-select { height: 32px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--c-line); background: var(--c-card); color: var(--c-text); font-size: 13px; cursor: pointer; }
+.adm-select:focus-visible { outline: 2px solid var(--c-accline); outline-offset: 1px; }
+.adm-select:disabled { opacity: 0.6; cursor: wait; }
+.adm-inbox-fields { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 14px; margin: 0; font-size: 14px; }
+.adm-inbox-fields dt { font: 500 11px var(--font-mono); letter-spacing: 0.04em; text-transform: uppercase; color: var(--c-t3); padding-top: 2px; }
+.adm-inbox-fields dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.adm-inbox-link { color: var(--c-text); text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .adm-inbox-fields { grid-template-columns: 1fr; gap: 2px; }
+  .adm-inbox-fields dd { margin-bottom: 6px; }
+}
 
 /* Recent runs: about six rows tall, the rest scrolls; a fade at the bottom hints there's more. */
 .wf-runs--scroll { max-height: 296px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--c-line) transparent; -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(180deg, #000 calc(100% - 28px), transparent); padding-bottom: 20px; }

@@ -8,18 +8,22 @@ import * as api from '@/api/endpoints';
 import type { VerificationApplication } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
 import { Avatar, openWebLink } from '@/components/producer';
-import { Button, confirmAction } from '@/components/ui';
+import { Button, confirmAction, Segmented } from '@/components/ui';
 import { F, display, font, makeStyles, useColors } from '@/theme';
 
-// Admins only: verification requests waiting for review. Approving a claim from the Pros list
-// also links that Pros page to the producer's profile.
+// Admins only: verification requests, waiting or already decided. Approving a claim from the
+// Pros list also links that Pros page to the producer's profile.
+
+type Filter = 'pending' | 'approved' | 'rejected';
+const statusOf = (a: VerificationApplication): Filter => a.verification_status ?? 'pending';
 
 export default function AdminVerifyScreen() {
   const s = useStyles();
   const C = useColors();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const list = useRequest(api.pendingVerifications);
+  const list = useRequest(api.allVerifications);
+  const [filter, setFilter] = useState<Filter>('pending');
 
   if (!user?.is_admin) {
     return (
@@ -29,7 +33,13 @@ export default function AdminVerifyScreen() {
     );
   }
 
-  const apps = list.data?.applications ?? [];
+  const all = list.data?.applications ?? [];
+  const apps = all.filter((a) => statusOf(a) === filter);
+  const count = (f: Filter) => all.filter((a) => statusOf(a) === f).length;
+  const decided = (userId: string, status: Filter) =>
+    list.setData((cur) => ({
+      applications: (cur?.applications ?? []).map((x) => (x.user_id === userId ? { ...x, verification_status: status } : x)),
+    }));
   return (
     <View style={s.root}>
       <View style={s.topBar}>
@@ -40,18 +50,27 @@ export default function AdminVerifyScreen() {
         <View style={{ width: 60 }} />
       </View>
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: insets.bottom + 40, gap: 12 }}>
+        <Segmented
+          value={filter}
+          onChange={setFilter}
+          options={[
+            { value: 'pending', label: `Waiting ${count('pending')}` },
+            { value: 'approved', label: `Approved ${count('approved')}` },
+            { value: 'rejected', label: `Rejected ${count('rejected')}` },
+          ]}
+        />
         {list.loading && !list.data ? <ActivityIndicator color={C.t2} style={{ alignSelf: 'flex-start' }} /> : null}
         {list.error ? <Text style={s.error}>{list.error}</Text> : null}
-        {list.data && !apps.length ? <Text style={s.sub}>No requests waiting.</Text> : null}
+        {list.data && !apps.length ? <Text style={s.sub}>{filter === 'pending' ? 'No requests waiting.' : 'Nothing here yet.'}</Text> : null}
         {apps.map((a) => (
-          <Request key={a.user_id} app={a} onDone={() => list.setData((cur) => ({ applications: (cur?.applications ?? []).filter((x) => x.user_id !== a.user_id) }))} />
+          <Request key={a.user_id} app={a} onDone={(status) => decided(a.user_id, status)} />
         ))}
       </ScrollView>
     </View>
   );
 }
 
-function Request({ app, onDone }: { app: VerificationApplication; onDone: () => void }) {
+function Request({ app, onDone }: { app: VerificationApplication; onDone: (status: Filter) => void }) {
   const s = useStyles();
   const C = useColors();
   const [busy, setBusy] = useState(false);
@@ -63,7 +82,7 @@ function Request({ app, onDone }: { app: VerificationApplication; onDone: () => 
     setError(null);
     try {
       await api.reviewVerification(app.user_id, action);
-      onDone();
+      onDone(action === 'approve' ? 'approved' : 'rejected');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save that.');
     } finally {
@@ -94,15 +113,23 @@ function Request({ app, onDone }: { app: VerificationApplication; onDone: () => 
       {a.notable_work ? <Text style={s.sub}>{a.notable_work}</Text> : null}
       {a.reason ? <Text style={[s.sub, { color: C.text }]}>{a.reason}</Text> : null}
       {error ? <Text style={s.error}>{error}</Text> : null}
-      <View style={{ flexDirection: 'row', gap: 8 }}>
-        <Button title="Approve" size="sm" onPress={busy ? undefined : () => void review('approve')} />
-        <Button
-          title="Reject"
-          size="sm"
-          variant="secondary"
-          onPress={busy ? undefined : () => confirmAction('Reject this request?', 'They can send a new one later.', 'Reject', () => void review('reject'))}
-        />
-      </View>
+      {statusOf(app) !== 'pending' ? (
+        <Text style={s.mono}>
+          {statusOf(app) === 'approved' ? 'Approved' : 'Rejected'}
+          {app.verification_note ? ` · ${app.verification_note}` : ''}
+        </Text>
+      ) : null}
+      {statusOf(app) === 'pending' ? (
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <Button title="Approve" size="sm" onPress={busy ? undefined : () => void review('approve')} />
+          <Button
+            title="Reject"
+            size="sm"
+            variant="secondary"
+            onPress={busy ? undefined : () => confirmAction('Reject this request?', 'They can send a new one later.', 'Reject', () => void review('reject'))}
+          />
+        </View>
+      ) : null}
     </View>
   );
 }
