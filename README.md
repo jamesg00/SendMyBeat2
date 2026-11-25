@@ -1,42 +1,75 @@
 <p align="center">
-  <img src="docs/icon.png" width="128" alt="SendMyBeat icon: five mint equalizer bars forming a play arrow" />
+  <img src="docs/icon.png" width="128" alt="SendMyBeat icon: a mint-to-blue S with a send arrow and a drum-pad trail" />
 </p>
 
 # SendMyBeat
 
 **Tags, descriptions and YouTube uploads for beat producers.**
 
-SendMyBeat finds the tags that rank, writes the description, renders your beat and cover art into a video and uploads it to your channel. There's a web app at [sendmybeat.com](https://www.sendmybeat.com) and an iOS / Android app built with Expo.
+SendMyBeat finds the tags that rank, writes the description, renders your beat and cover art into a video and uploads it to your channel. Then it shows you what to fix next. It runs on the web at [sendmybeat.com](https://www.sendmybeat.com) and as an iOS / Android app built with Expo, both on the same account and API.
 
 <p align="center">
-  <img src="docs/screenshots/landing.png" width="240" alt="Landing screen: Tags, descriptions and uploads for every beat" />
-  <img src="docs/screenshots/workflow.png" width="240" alt="Workflow tab with tag generation and description templates" />
-  <img src="docs/screenshots/tag-ranking.png" width="240" alt="Tag ranking: every tag numbered with its score, demand and competition" />
+  <img src="docs/screenshots/web/landing.png" width="820" alt="sendmybeat.com: Made a beat? Get it found, with a live tag demo" />
 </p>
+
+## The website
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshots/web/dashboard.png" width="400" alt="Create: generate tags and pick a description" /><br /><sub><b>Create</b><br />Generate tags, pick a description, recent runs</sub></td>
+    <td align="center"><img src="docs/screenshots/web/ranking.png" width="400" alt="Tag ranking on the web" /><br /><sub><b>Tag ranking</b><br />Every tag scored on demand and competition</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/web/analytics.png" width="400" alt="Channel analytics on the web" /><br /><sub><b>Analytics</b><br />Channel health, views against your average</sub></td>
+    <td align="center"><img src="docs/screenshots/web/spotlight.png" width="400" alt="Producer Spotlight on the web" /><br /><sub><b>Spotlight</b><br />Featured producers, streaks and leaderboard</sub></td>
+  </tr>
+  <tr>
+    <td align="center" colspan="2"><img src="docs/screenshots/web/pricing.png" width="600" alt="Pricing: 3-day free trial, Plus $5, Pro $10" /><br /><sub><b>Pricing</b><br />A slider suggests the plan that fits how often you upload</sub></td>
+  </tr>
+</table>
 
 ## The mobile app
 
 <table>
   <tr>
-    <td align="center"><img src="docs/screenshots/upload-studio.png" width="230" alt="Upload Studio" /><br /><sub><b>Upload Studio</b><br />Beat + artwork → video → YouTube</sub></td>
-    <td align="center"><img src="docs/screenshots/analytics.png" width="230" alt="Analytics" /><br /><sub><b>Analytics</b><br />Views per upload and what to fix</sub></td>
-    <td align="center"><img src="docs/screenshots/spotlight.png" width="230" alt="Spotlight" /><br /><sub><b>Spotlight</b><br />Producer of the week, trending, leaderboard</sub></td>
+    <td align="center"><img src="docs/screenshots/landing.png" width="200" alt="Landing screen" /><br /><sub><b>Welcome</b><br />Live tag-run demo</sub></td>
+    <td align="center"><img src="docs/screenshots/workflow.png" width="200" alt="Workflow tab" /><br /><sub><b>Workflow</b><br />Tags, description, upload</sub></td>
+    <td align="center"><img src="docs/screenshots/tag-ranking.png" width="200" alt="Tag ranking" /><br /><sub><b>Ranking</b><br />Score, demand, competition, track record</sub></td>
+    <td align="center"><img src="docs/screenshots/upload-studio.png" width="200" alt="Upload Studio" /><br /><sub><b>Upload Studio</b><br />Beat + artwork → video → YouTube</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="docs/screenshots/producer-profile.png" width="230" alt="Producer profile" /><br /><sub><b>Producer profile</b><br />Likes, follows, top beat, uploads</sub></td>
-    <td align="center"><img src="docs/screenshots/themes.png" width="230" alt="Appearance: theme gallery" /><br /><sub><b>Themes</b><br />Eleven looks with a cross-fade</sub></td>
-    <td align="center"><img src="docs/screenshots/spotlight-ocean.png" width="230" alt="Spotlight in the Ocean theme" /><br /><sub><b>Ocean theme</b><br />Every screen follows the theme</sub></td>
+    <td align="center"><img src="docs/screenshots/analytics.png" width="200" alt="Analytics" /><br /><sub><b>Analytics</b><br />Views per upload and what to fix</sub></td>
+    <td align="center"><img src="docs/screenshots/spotlight.png" width="200" alt="Spotlight" /><br /><sub><b>Spotlight</b><br />Producer of the week, trending, leaderboard</sub></td>
+    <td align="center"><img src="docs/screenshots/producer-profile.png" width="200" alt="Producer profile" /><br /><sub><b>Profiles</b><br />Likes, follows, top beat, uploads</sub></td>
+    <td align="center"><img src="docs/screenshots/themes.png" width="200" alt="Appearance: theme gallery" /><br /><sub><b>Themes</b><br />Eleven looks with a cross-fade</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/app-icon.png" width="200" alt="App icon picker in the Sunset theme" /><br /><sub><b>App icons</b><br />50 holiday and event icons</sub></td>
+    <td align="center"><img src="docs/screenshots/spotlight-ocean.png" width="200" alt="Spotlight in the Ocean theme" /><br /><sub><b>Ocean theme</b><br />Every screen follows the theme</sub></td>
+    <td colspan="2" valign="middle"><sub>Screenshots are the website and the app's web build running against sample data, not real accounts (`docs/screenshots/`). On a phone the tab bar is the system one.</sub></td>
   </tr>
 </table>
 
-<sub>Screenshots are the app's web build with sample data (`docs/screenshots/`). On a phone the tab bar is the system one.</sub>
+## What it does
+- **Tags:** type an artist or vibe and get 60 to 80 ranked tags that always fit YouTube's 500-character limit. Edit them as chips or in the **Ranking** view, join two runs into one, and see why each tag scored what it did. Runs keep going in the background and pick back up after the app restarts.
+- **Descriptions and titles:** start from a template (type beat, beat sales, free for profit) or your own, and build a description from the tag run with your buy link and hashtags. Titles are scored as you type (artist first, length, top keyword, beat name).
+- **Upload Studio:** choose a beat and artwork, preview it live, set the format (16:9, 1:1, 9:16, 4:5), frame rate, background and privacy, and upload. Optional: one of 21 audio visualizers (8 free, 13 Pro), a custom thumbnail, a scheduled publish time, and adding the video to the artist's playlist. The render log shows each stage, and a job can be cancelled or retried.
+- **AI checks:** before an upload, score the title, tags and description against your channel and check the artwork as a thumbnail.
+- **Analytics:** views across your latest uploads against your own average, a channel health score, the title patterns that win and lose, and a better title for each weak upload. Pro.
+- **Pros:** how the biggest type-beat producers grew, how close your uploads are to their style, and a 14-day plan to copy their moves, with an agent that does steps for you. Pro.
+- **Spotlight:** the producer community. Producer of the week, trending producers, a leaderboard driven by upload streaks, likes and follows, verified badges, and profiles with a top beat and latest uploads.
+- **Themes (mobile):** Console (the default: true black, hairlines, white buttons) plus Light, Dark, Noir, Paper, Mint, Midnight, Ocean, Sunset, Rose and Match system. Changing theme cross-fades the whole app.
 
-### What it does
-- **Workflow:** type an artist or vibe and get a ranked tag set that always fits YouTube's 500-character limit. Review and edit tags as chips or in the **Ranking** view, pick or write a description, then hand it all to Upload Studio. Tag runs keep going in the background and pick back up after the app restarts.
-- **Upload Studio:** choose a beat and artwork, hear it under the live preview, set the format (16:9, 1:1, 9:16, 4:5), frame rate, background and privacy, and upload. The render log shows each stage. From Workflow you can swipe the job away to cancel it, or retry a failed one.
-- **Analytics:** views across your latest uploads, a channel health score, and AI reviews of weak titles with better ones to try. Plus and Max plans.
-- **Spotlight:** the producer community. Producer of the week, trending producers, a leaderboard, likes and follows, and profiles with a top beat (YouTube link or uploaded audio) and latest uploads. Pull down to refresh. Edit your own profile, picture and banner in place.
-- **Themes:** Console (the default: true black, hairlines, white buttons) plus Light, Dark, Noir, Paper, Mint, Midnight, Ocean, Sunset, Rose and Match system. Changing theme cross-fades the whole app.
+### Holiday app icons (mobile)
+<p align="center">
+  <img src="docs/screenshots/holiday-icons.png" width="660" alt="The 50 holiday and event versions of the SendMyBeat icon" />
+</p>
+
+The home screen icon changes on its own for holidays and events: Halloween, Thanksgiving, Black Friday, Christmas, Hanukkah, Diwali, Lunar New Year, Pride Month, Hip-Hop Day and more. Everyone gets these on their days. Paying users can also pick any of the 50 as their everyday icon in **Profile → App icon**, and turn the holiday switch off if they'd rather keep their pick.
+
+- The dates live in `mobile/src/data/icon-calendar.ts`. Fixed dates and rules (the 4th Thursday of November, Easter) work every year. Holidays that move with the moon (Lunar New Year, Diwali, Hanukkah, Eid) come from tables that run to 2030.
+- iOS only allows the change while the app is open and shows its own note when it happens. Android switches when you leave the app, since changing it while open can close the app on some phones.
+- It needs a development or store build (`expo-alternate-app-icons`), not Expo Go. The icon art is generated into `mobile/assets/app-icons/` (iOS 1024 px, Android adaptive layers, 180 px previews) and wired up in `mobile/app.config.js`.
 
 ## How tag ranking works
 Every generated tag gets a 0–100 score, and the final set is picked to make the best use of YouTube's 500 characters.
@@ -51,15 +84,17 @@ Every generated tag gets a 0–100 score, and the final set is picked to make th
 A generation spends **at most 300 YouTube API units** (`TAG_QUOTA_BUDGET_UNITS`). Artist lookups and search results are cached and shared across users, so repeat artists cost nothing.
 
 ## Plans
-| | Free | Plus | Max |
-|---|---|---|---|
-| Price | $0 | $5 / month | $12 / month |
-| AI generations | 2 a day | 150 a month | 500 a month |
-| YouTube uploads | 1 a day | 60 a month | 150 a month |
-| Channel analytics | – | ✓ | ✓ |
-| Watermark-free uploads | – | ✓ | ✓ |
+| | Free | 3-day trial | Plus | Pro |
+|---|---|---|---|---|
+| Price | $0 | $0, then Plus | $5 / month | $10 / month |
+| AI generations | – | 3 a day | 50 a month | 100 a month |
+| YouTube uploads | – | 3 a day | 50 a month | 100 a month |
+| Watermark-free uploads | – | ✓ | ✓ | ✓ |
+| Channel analytics, Pros, Pro visualizers | – | – | – | ✓ |
+| Background jobs at once | – | 1 | 1 | Queue |
+| Pick your app icon | – | ✓ | ✓ | ✓ |
 
-Limits are env-configurable (see [Cost / plan tuning](#cost--plan-tuning)). Plus and Max also have monthly LLM cost guardrails. Upload credits are only spent once a video is live on YouTube. Billing runs through Stripe on the website.
+Free accounts can browse, build descriptions and use Spotlight; generating and uploading need the trial or a plan. There's also a founding-member offer: a year of Pro for $40, for the first 50. People who subscribed before these plans keep their old limits. Limits are env-configurable (see [Cost / plan tuning](#cost--plan-tuning)), upload credits are only spent once a video is live on YouTube, and billing runs through Stripe on the website.
 
 ## What it uses
 
@@ -92,10 +127,13 @@ SendMyBeat2/
   mobile/                     # iOS / Android app (Expo)
     src/app/                  # screens (Expo Router)
     src/components/           # shared UI, editors, producer cards, theme transition
-    src/state/                # draft, Upload Studio, likes/follows
+    src/state/                # draft, Upload Studio, likes/follows, app icon
+    src/data/                 # app icon list and holiday calendar
     src/theme.ts              # palettes, useColors(), makeStyles()
+    assets/app-icons/         # 50 holiday and event icons (iOS, Android layers, previews)
+    app.config.js             # registers the alternate icons
     scripts/fetch-fonts.mjs   # downloads the Fontshare fonts on install
-  docs/screenshots/
+  docs/screenshots/           # mobile; web/ for the website
   docker-compose.yml
   DEPLOY.md
   GROWTH_PLAN.md
@@ -133,6 +171,8 @@ npm install          # also downloads the Satoshi / Clash Grotesk fonts
 npx expo start -c    # scan the QR code with your phone
 ```
 It talks to `https://api.sendmybeat.com` by default; set `EXPO_PUBLIC_API_URL` to use a local backend. Before a PR: `npx tsc --noEmit` and `npx eslint src`.
+
+App icon switching and other native modules need a development build (`npx expo run:ios` / `npx expo run:android`, or an EAS build); in Expo Go the App icon screen shows the icons but can't change them.
 
 Colors always come from the active theme. Use `useColors()` for colors, and `makeStyles((C) => ({ ... }))` instead of `StyleSheet.create`, so screens re-render when the theme changes.
 
@@ -188,10 +228,11 @@ OPENAI_VISION_MODEL=...
 STRIPE_SECRET_KEY=...
 STRIPE_PUBLISHABLE_KEY=...
 STRIPE_WEBHOOK_SECRET=...
-STRIPE_PRICE_ID_PLUS=...
-STRIPE_PRICE_ID_MAX=...
+STRIPE_PRICE_ID_PLUS_V2=...     # optional: created in Stripe on first checkout when unset
+STRIPE_PRICE_ID_PRO_V2=...
+STRIPE_PRICE_ID_FOUNDING=...
 ```
-Legacy fallback still supported: `STRIPE_PRICE_ID=...`
+Older subscriptions still use `STRIPE_PRICE_ID_PLUS`, `STRIPE_PRICE_ID_MAX` and the legacy `STRIPE_PRICE_ID`.
 
 ### Tag ranking
 ```env
@@ -242,13 +283,20 @@ PRIORITIZE_YOUTUBE_UPLOAD_JOBS=true
 ```env
 HOSTING_COST_USD=12
 
-FREE_DAILY_AI_CREDITS=2
-FREE_DAILY_UPLOAD_CREDITS=1
+TRIAL_DAYS=3
+TRIAL_DAILY_AI_CREDITS=3
+TRIAL_DAILY_UPLOAD_CREDITS=3
 
+PLUS_V2_MONTHLY_AI_CREDITS=50
+PLUS_V2_MONTHLY_UPLOAD_CREDITS=50
+PRO_V2_MONTHLY_AI_CREDITS=100
+PRO_V2_MONTHLY_UPLOAD_CREDITS=100
+FOUNDING_MEMBER_LIMIT=50
+
+# Older subscriptions (before plan version 2) keep these limits
 PLUS_MONTHLY_AI_CREDITS=150
 PLUS_MONTHLY_UPLOAD_CREDITS=60
 PLUS_MONTHLY_LLM_COST_CAP_USD=2.50
-
 MAX_MONTHLY_AI_CREDITS=500
 MAX_MONTHLY_UPLOAD_CREDITS=150
 MAX_MONTHLY_LLM_COST_CAP_USD=7.50
