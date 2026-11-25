@@ -464,8 +464,7 @@ MAX_MONTHLY_LLM_COST_CAP_USD = float(os.environ.get("MAX_MONTHLY_LLM_COST_CAP_US
 MAX_NET_REVENUE_USD = float(os.environ.get("MAX_NET_REVENUE_USD", "10.95"))
 
 # ============ LLM Helper ============
-_llm_client = None
-_llm_config = None
+_llm_clients: dict[tuple, AsyncOpenAI] = {}
 _upload_job_worker_task: asyncio.Task | None = None
 _job_worker_tasks: list[asyncio.Task] = []
 _job_watchdog_task: asyncio.Task | None = None
@@ -600,6 +599,11 @@ def _get_llm_settings(provider_override: str | None = None, model_override: str 
         api_key = os.environ.get("OPENAI_API_KEY")
         base_url = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
         model = model_override or os.environ.get("OPENAI_MODEL") or os.environ.get("LLM_MODEL", "gpt-4o")
+    elif provider == "deepseek":
+        # OpenAI-compatible API. DEEPSEEK_MODEL picks the model; check the id in DeepSeek's docs.
+        api_key = os.environ.get("DEEPSEEK_API_KEY")
+        base_url = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+        model = model_override or os.environ.get("DEEPSEEK_MODEL", "deepseek-flash")
 
     # Fallback to Grok defaults if provider is unknown or keys missing (attempt to use Grok env vars)
     if not api_key and provider != "grok":
@@ -621,13 +625,36 @@ def _get_llm_settings(provider_override: str | None = None, model_override: str 
 
 
 def _get_llm_client(provider_override: str | None = None, model_override: str | None = None):
-    global _llm_client, _llm_config
+    # One client per provider, so tag calls on one provider and other calls on another don't keep
+    # rebuilding each other's client.
     settings = _get_llm_settings(provider_override=provider_override, model_override=model_override)
-    config_key = (settings["provider"], settings["base_url"], settings["model"])
-    if _llm_client is None or _llm_config != config_key:
-        _llm_client = AsyncOpenAI(api_key=settings["api_key"], base_url=settings["base_url"])
-        _llm_config = config_key
-    return _llm_client, settings
+    config_key = (settings["provider"], settings["base_url"], settings["api_key"])
+    client = _llm_clients.get(config_key)
+    if client is None:
+        client = AsyncOpenAI(api_key=settings["api_key"], base_url=settings["base_url"])
+        _llm_clients[config_key] = client
+    return client, settings
+
+
+TAG_LLM_PROVIDERS = ("openai", "grok", "deepseek")
+
+
+def _resolve_tag_llm_providers(requested: str | None) -> tuple[str | None, str | None]:
+    """Which provider writes and scores tags, and which one takes over if it fails.
+    TAG_LLM_PROVIDER wins when set (the server owner's choice beats the app's default "grok");
+    otherwise DeepSeek is used once DEEPSEEK_API_KEY is set. TAG_LLM_FALLBACK_PROVIDER
+    (default grok) is tried if the first call errors."""
+    primary = (os.environ.get("TAG_LLM_PROVIDER") or "").strip().lower() or None
+    if primary not in TAG_LLM_PROVIDERS:
+        primary = None
+    if primary is None and os.environ.get("DEEPSEEK_API_KEY"):
+        primary = "deepseek"
+    if primary is None:
+        primary = requested
+    fallback = (os.environ.get("TAG_LLM_FALLBACK_PROVIDER") or "grok").strip().lower()
+    if fallback not in TAG_LLM_PROVIDERS or fallback == (primary or os.environ.get("LLM_PROVIDER", "grok")).lower():
+        fallback = None
+    return primary, fallback
 
 
 def _get_vision_model_for_provider(provider_name: str) -> str:
@@ -1361,17 +1388,31 @@ async def llm_chat(
     provider: str | None = None,
     model: str | None = None,
     user_id: str | None = None,  # For cost tracking
+    fallback_provider: str | None = None,
 ) -> str:
-    client, settings = _get_llm_client(provider_override=provider, model_override=model)
-    response = await client.chat.completions.create(
-        model=settings["model"],
-        messages=[
-            {"role": "system", "content": system_message},
-            {"role": "user", "content": user_message},
-        ],
-        temperature=temperature,
-        max_tokens=max_tokens,
-    )
+    messages = [
+        {"role": "system", "content": system_message},
+        {"role": "user", "content": user_message},
+    ]
+    try:
+        client, settings = _get_llm_client(provider_override=provider, model_override=model)
+        response = await client.chat.completions.create(
+            model=settings["model"],
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+    except Exception as exc:
+        if not fallback_provider or fallback_provider == (provider or "").lower():
+            raise
+        logging.warning("LLM call on %s failed (%s); retrying on %s", provider, exc, fallback_provider)
+        client, settings = _get_llm_client(provider_override=fallback_provider)
+        response = await client.chat.completions.create(
+            model=settings["model"],
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
 
     # Track usage
     if response.usage:
@@ -7174,8 +7215,11 @@ STRICT RULES:
 8) Use the trusted context above to avoid mistaken artist-name swaps. Example: if the artist is underground, do not substitute a bigger mainstream artist with a similar name.
 9) If song/project/title signals are provided, include at least 10 tags directly based on those signals.
 10) Do NOT invent song names, collaborators, or projects that are not strongly implied by the trusted context.
-11) Return STRICT JSON only in this schema:
-{{"tags":["tag1","tag2","tag3"]}}
+11) Score relevance: for EVERY pre-qualified candidate and every tag you return, give 0-100 for how well it fits THIS beat and artist
+    (100 = exactly what a listener searching for this beat types; 50 = loosely related; 0 = wrong artist, wrong sound or filler).
+    Judge fit only, not popularity; search demand is measured separately.
+12) Return STRICT JSON only in this schema:
+{{"tags":["tag1","tag2","tag3"],"relevance":{{"tag1":92,"tag2":75,"some rejected candidate":20}}}}
 
 Required diversity mix (approximate):
 - 20-24 core artist/search intent tags
@@ -7446,8 +7490,10 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
                 source_seed_tokens.add(token)
         
         llm_provider = request.llm_provider.lower() if request.llm_provider else None
-        if llm_provider not in (None, "openai", "grok"):
-            raise HTTPException(status_code=400, detail="Invalid llm_provider. Use 'openai' or 'grok'.")
+        if llm_provider not in (None, *TAG_LLM_PROVIDERS):
+            raise HTTPException(status_code=400, detail="Invalid llm_provider. Use 'openai', 'grok' or 'deepseek'.")
+        llm_provider, llm_fallback_provider = _resolve_tag_llm_providers(llm_provider)
+        source_status["llm"] = {"provider": llm_provider or os.environ.get("LLM_PROVIDER", "grok"), "fallback": llm_fallback_provider}
 
         beat_tokens = {
             token
@@ -7573,6 +7619,7 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
             ),
             user_message=prompt,
             provider=llm_provider,
+            fallback_provider=llm_fallback_provider,
         )
 
         tags_text = response.strip()
@@ -7586,10 +7633,12 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
             tags_text = tags_text[start:end].strip()
 
         parsed_tags: list[str] = []
+        llm_relevance: dict[str, float] = {}
         try:
             parsed = json.loads(tags_text)
             if isinstance(parsed, dict) and isinstance(parsed.get("tags"), list):
                 parsed_tags = [tag for tag in parsed["tags"] if isinstance(tag, str)]
+            llm_relevance = tag_metrics_service.parse_llm_relevance(parsed)
         except Exception:
             parsed_tags = [tag.strip() for tag in tags_text.split(",") if tag.strip()]
 
@@ -7694,6 +7743,19 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
                 key = tag_metrics_service.normalize_tag_key(entry.get("tag", ""))
                 if key:
                     scored_by_key[key] = entry
+
+        # The model's own relevance judgement replaces most of the keyword-rule relevance, so a
+        # popular but wrong-fit tag drops in the ranking (or below the publish score) and a
+        # well-fitting one rises. Tags it didn't score keep their keyword-rule score.
+        llm_scored_count = 0
+        if llm_relevance:
+            for key, entry in list(scored_by_key.items()):
+                judged = llm_relevance.get(tag_metrics_service.normalize_tag_key(entry.get("tag", "")))
+                if judged is None:
+                    continue
+                scored_by_key[key] = tag_metrics_service.apply_llm_relevance(entry, judged)
+                llm_scored_count += 1
+        source_status.setdefault("llm", {})["relevance_scored"] = llm_scored_count
 
         for tag in llm_clean:
             exact_key = _tag_exact_key(tag)
@@ -8118,8 +8180,9 @@ async def join_tags_ai(request: TagJoinRequest, current_user: dict = Depends(get
 
     max_tags = max(10, min(120, request.max_tags or 120))
     llm_provider = request.llm_provider.lower() if request.llm_provider else None
-    if llm_provider not in (None, "openai", "grok"):
-        raise HTTPException(status_code=400, detail="Invalid llm_provider. Use 'openai' or 'grok'.")
+    if llm_provider not in (None, *TAG_LLM_PROVIDERS):
+        raise HTTPException(status_code=400, detail="Invalid llm_provider. Use 'openai', 'grok' or 'deepseek'.")
+    llm_provider, llm_fallback_provider = _resolve_tag_llm_providers(llm_provider)
 
     query_keys = [_normalize_query_key(query) for query in request.queries]
     prior_generations = await db.tag_generations.find(
@@ -8196,6 +8259,7 @@ Candidate pool:
         system_message="You are an elite YouTube SEO system for producers. Build a high-intent final tag list only. Return strict JSON.",
         user_message=prompt,
         provider=llm_provider,
+        fallback_provider=llm_fallback_provider,
     )
 
     try:
