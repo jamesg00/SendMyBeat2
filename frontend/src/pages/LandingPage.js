@@ -105,18 +105,18 @@ const LEVEL = { high: "High", medium: "Medium", low: "Low" };
 const tagChars = (tags) => (tags.length ? tags.reduce((n, t) => n + t.length + (t.includes(" ") ? 2 : 0), 0) + tags.length - 1 : 0);
 
 const STEPS = [
-  { id: "generate", icon: Tags, title: "Generate tags", body: "Type an artist or a vibe. SendMyBeat searches YouTube, pulls tags from the videos that rank, and returns 60 to 80 that fit YouTube's 500-character limit." },
+  { id: "generate", icon: Tags, title: "Generate tags", body: "Type an artist or a vibe. Get tag suggestions from YouTube videos, then use the meter to stay under YouTube's 500-character limit." },
   { id: "review", icon: Sparkles, title: "Review the ranking", body: "Every tag gets a score from real search demand and competition. See them best to worst, open one to read why, and cut the weak ones." },
   { id: "upload", icon: Upload, title: "Upload from the studio", body: "Drop in your beat and cover art. Upload Studio renders the video and publishes it to your channel with the title, tags and description filled in." },
   { id: "grow", icon: BarChart3, title: "See what's working", body: "Analytics compares each upload with your own average and suggests better titles. Pros shows how the biggest producers grew, with moves you can copy." },
 ];
 
 const FEATURES = [
-  { icon: Tags, title: "Tags that rank", body: "60 to 80 tags per run, each scored on search demand and competition, with a meter for YouTube's 500-character limit." },
+  { icon: Upload, title: "Upload Studio", body: "Beat plus artwork becomes a video. Pick the layout, add a visualizer, preview it and publish to your channel without leaving the page." },
+  { icon: Tags, title: "Tags that rank", body: "60 to 80 tag suggestions per run, each scored on search demand and competition, with a meter for YouTube's 500-character limit." },
   { icon: FileText, title: "Descriptions", body: "Start from a template for type beats, beat sales or free-for-profit, then save your own to reuse on every upload." },
-  { icon: Upload, title: "Upload Studio", body: "Beat plus artwork becomes a video. Pick the layout, add a visualizer, preview it and publish without leaving the page." },
-  { icon: BarChart3, title: "Channel analytics", body: "Views per upload against your average, the title patterns that win and lose, and a better title for each weak upload. Pro." },
-  { icon: Star, title: "Pros", body: "Why the biggest type-beat producers blew up, how their channels work, how close your style is, and a 14-day plan to copy it. Pro." },
+  { icon: BarChart3, title: "Channel analytics", pro: true, body: "Views per upload against your average, the title patterns that win and lose, and a better title for each weak upload." },
+  { icon: Star, title: "Pros", pro: true, body: "Why the biggest type-beat producers blew up, how their channels work, how close your style is, and a 14-day plan to close the gap." },
   { icon: Users, title: "Spotlight", body: "A public profile with your top beat, a leaderboard driven by upload streaks, and other producers to follow." },
 ];
 
@@ -212,9 +212,7 @@ function TagLab() {
   return (
     <div className="lp-lab" onMouseMove={followPointer}>
       <div className="lp-lab-bar">
-        <span className="lp-lab-dots" aria-hidden="true"><i /><i /><i /></span>
-        <span className="smb-mono">Create · Generate tags</span>
-        <span className="smb-pill smb-pill--ok"><span className="smb-pill-dot" />Try it</span>
+        <span className="lp-lab-title">Tag demo</span>
       </div>
 
       <form
@@ -227,7 +225,7 @@ function TagLab() {
         <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Type an artist or a vibe" aria-label="Artist or vibe" maxLength={28} />
         <Button type="submit" className="smb-btn smb-btn--pri" disabled={run.phase === "running"}>
           <Sparkles className="h-4 w-4" />
-          Generate
+          Try the tag demo
         </Button>
       </form>
       <div className="lp-lab-suggest">
@@ -255,6 +253,7 @@ function TagLab() {
           </ul>
         ) : (
           <>
+            <p className="lp-sample">Sample scores</p>
             <div className="lp-lab-tags" role="list">
               {tags.map((t, i) => (
                 <button key={t.tag} type="button" role="listitem" className={`lp-tag ${open === i ? "is-active" : ""}`} style={{ animationDelay: `${i * 45}ms` }} onClick={() => setOpen(open === i ? null : i)}>
@@ -285,7 +284,7 @@ function TagLab() {
           </>
         )}
       </div>
-      <p className="lp-lab-note">A demo with sample scores. Real runs return 60 to 80 tags from live YouTube data.</p>
+      <p className="lp-lab-note">Real runs suggest 60 to 80 tags from live YouTube data.</p>
     </div>
   );
 }
@@ -321,13 +320,14 @@ function StepPreview({ id }) {
     const rows = [["ken carson type beat", 91, "High demand · Low competition"], ["opium type beat", 84, "High demand · Medium competition"], ["destroy lonely type beat", 79, "High demand"], ["rage beat 2026", 66, "Some demand · Low competition"], ["free trap beat", 44, "Low demand · High competition"]];
     return (
       <div className="lp-prev">
+        <p className="lp-sample">Sample scores</p>
         {rows.map(([tag, score, levels], i) => (
           <div key={tag} className="lp-rank" style={{ animationDelay: `${i * 90}ms` }}>
             <span className="smb-mono smb-t3">{i + 1}</span>
             <span className="min-w-0 flex-1">
               <span className="smb-meter-row">
                 <span className="smb-mono truncate">{tag}</span>
-                <span className="smb-mono">{score}</span>
+                <span className="smb-mono lp-score">{score}</span>
               </span>
               <span className="smb-bar"><span className={`smb-bar-fill ${score >= 60 ? "smb-bar-fill--acc" : ""}`} style={{ width: `${score}%` }} /></span>
               <span className="smb-t3 text-xs">{levels}</span>
@@ -376,6 +376,7 @@ function StepPreview({ id }) {
   const diff = Math.round(((VIEWS[picked] - avg) / avg) * 100);
   return (
     <div className="lp-prev">
+      <p className="lp-sample">Example channel</p>
       <div className="flex items-baseline gap-2">
         <span className="lp-big">{VIEWS[picked].toLocaleString()}</span>
         <span className="smb-t2 text-sm">views</span>
@@ -391,7 +392,7 @@ function StepPreview({ id }) {
           </g>
         ))}
       </svg>
-      <p className="smb-t3 text-xs">Sample channel. Hover the chart: red uploads are below the average, and each gets a suggested title.</p>
+      <p className="smb-t3 text-xs">Hover the chart: red uploads are below the average, and each gets a suggested title.</p>
     </div>
   );
 }
@@ -419,14 +420,14 @@ function HowItWorks() {
               setAuto(false);
             }}
           >
-            <span className="lp-how-num">{String(i + 1).padStart(2, "0")}</span>
+            <span className="lp-how-num">{i + 1}</span>
             <span className="min-w-0">
               <b>{s.title}</b>
               <span className="lp-how-body">{s.body}</span>
             </span>
             {active === i && auto ? <i className="lp-how-timer" aria-hidden="true" /> : null}
           </button>
-        ))}
+        )).flatMap((btn, i) => (i === active ? [btn, <div key="inline" className="lp-how-inline"><StepPreview id={step.id} /></div>] : [btn]))}
       </div>
       <div className="lp-how-stage" key={step.id} onMouseMove={followPointer}>
         <div className="lp-how-stage-head">
@@ -618,10 +619,9 @@ const LandingPage = ({ setIsAuthenticated }) => {
         <div className="lp-hero-copy">
           <p className="smb-eyebrow">For beat producers on YouTube</p>
           <h1 className="lp-h1">
-            Made a beat?
-            <span>Get it found.</span>
+            SendMyBeat generates tags, <span>renders your beat video</span> and uploads to YouTube.
           </h1>
-          <p className="lp-lede">SendMyBeat finds the tags that rank, writes the description, renders the video and uploads it to your channel. Then it shows you what to fix next.</p>
+          <p className="lp-lede">Start with your beat and artwork. Generate tags, write a description, pick a layout and add a visualizer. Preview the video, publish to your own YouTube channel, then see what to fix next.</p>
           <div className="lp-cta">
             <Button onClick={start} className="smb-btn smb-btn--pri smb-btn--lg">
               Start free for 3 days <ArrowRight className="h-4 w-4" />
@@ -640,7 +640,7 @@ const LandingPage = ({ setIsAuthenticated }) => {
       <section className="lp-section" id="how" data-reveal>
         <div className="lp-section-head">
           <p className="smb-eyebrow">How it works</p>
-          <h2 className="lp-h2">From a finished beat to a ranked upload, in four steps.</h2>
+          <h2 className="lp-h2">Take your finished beat from tags to YouTube.</h2>
           <p className="smb-t2">Click a step to try it. Each preview is a small working piece of the app.</p>
         </div>
         <HowItWorks />
@@ -649,13 +649,13 @@ const LandingPage = ({ setIsAuthenticated }) => {
       <section className="lp-section" id="features" data-reveal>
         <div className="lp-section-head">
           <p className="smb-eyebrow">What's inside</p>
-          <h2 className="lp-h2">Everything a type-beat channel needs, in one place.</h2>
+          <h2 className="lp-h2">Generate tags. Write descriptions. Turn beats into videos.</h2>
         </div>
         <div className="lp-features">
           {FEATURES.map((f) => (
             <article key={f.title} className="lp-feature" onMouseMove={followPointer}>
               <span className="lp-feature-ico"><f.icon className="h-5 w-5" aria-hidden="true" /></span>
-              <h3>{f.title}</h3>
+              <h3>{f.title}{f.pro ? <span className="lp-pro">Pro</span> : null}</h3>
               <p>{f.body}</p>
             </article>
           ))}

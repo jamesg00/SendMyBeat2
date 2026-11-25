@@ -90,9 +90,6 @@
 }
 .lp-lab { display: grid; gap: 14px; padding: 16px; }
 .lp-lab-bar { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--c-t3); }
-.lp-lab-bar .smb-pill { margin-left: auto; }
-.lp-lab-dots { display: inline-flex; gap: 5px; }
-.lp-lab-dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--c-line); }
 .lp-lab-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
 .lp-lab-form input { height: 42px; }
 .lp-lab-suggest { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -403,4 +400,64 @@
 @media (prefers-reduced-motion: reduce) {
   .lp *::before { animation: none !important; }
   .lp-hero-copy > *, .lp-hero .lp-lab { opacity: 1; transform: none; }
+}
+
+/* ---------- fixes from the site review ---------- */
+
+/* Two fonts: Space Grotesk for words, Plex Mono only for tags, scores and numbers. */
+.lp,
+.lp-auth {
+  --font-sans: var(--font-display);
+  font-family: var(--font-display);
+  /* Body text one step brighter; captions keep --c-t3. */
+  --c-t2: #C4C4C4;
+}
+
+/* The headline says what SendMyBeat does, so it runs smaller than the old two-line hook. */
+.lp-h1 { font-size: clamp(34px, 4.8vw, 58px); line-height: 1.04; letter-spacing: -0.035em; }
+
+/* Log in and Get started stay on one line at any width. */
+.lp-nav-actions { flex-shrink: 0; }
+.lp-nav-actions > * { white-space: nowrap; flex-shrink: 0; }
+
+/* Tag demo: one plain label, readable chips. */
+.lp-lab-title { font-size: 14px; font-weight: 600; color: var(--c-text); }
+
+/* Demo scores are marked as samples before you see them. */
+.lp-sample { margin: 0; font: 500 12px var(--font-mono); letter-spacing: 0.04em; text-transform: uppercase; color: var(--c-t3); }
+
+/* Scores never split across lines. */
+.lp-score,
+.lp-tag span { white-space: nowrap; flex-shrink: 0; min-width: 2ch; text-align: right; }
+
+/* Pro as a badge next to the feature name. */
+.lp-pro { display: inline-flex; align-items: center; height: 20px; margin-left: 8px; padding: 0 7px; border-radius: 5px; border: 1px solid var(--c-accline); color: var(--c-acc); font: 600 11px var(--font-mono); letter-spacing: 0.04em; vertical-align: middle; }
+
+/* How it works: on wide screens the preview sits beside the steps; on phones it opens under the active step. */
+.lp-how-inline { display: none; }
+
+@media (max-width: 960px) {
+  .lp-how-stage { display: none; }
+  .lp-how-inline { display: grid; gap: 14px; padding: 4px 16px 16px; animation: lp-pop 0.45s var(--ease) both; }
+
+  /* Upload Studio stays the one big card; the rest become compact rows. */
+  .lp-features > .lp-feature:nth-child(n + 2) { grid-template-columns: 36px 1fr; column-gap: 12px; row-gap: 2px; padding: 14px 16px; }
+  .lp-features > .lp-feature:nth-child(n + 2) .lp-feature-ico { grid-row: span 2; width: 36px; height: 36px; }
+  .lp-features > .lp-feature:nth-child(n + 2) h3 { margin: 0; font-size: 16px; }
+  .lp-features > .lp-feature:nth-child(n + 2) p { font-size: 14px; }
+}
+
+@media (max-width: 640px) {
+  .lp-lab-form { grid-template-columns: 1fr; }
+  .lp-lab-form .smb-btn { width: 100%; }
+  .lp-lab-suggest button { height: 44px; padding: 0 16px; font-size: 14px !important; }
+}
+
+@media (max-width: 420px) {
+  .lp-nav { gap: 12px; padding: 0 16px; }
+  .lp-nav-actions { gap: 10px; }
+  .lp-wordmark { font-size: 13px; }
+}
+@media (max-width: 360px) {
+  .lp-wordmark { font-size: 0; gap: 0; }
 }
