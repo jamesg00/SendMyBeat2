@@ -32,20 +32,20 @@ def cache_db(doc):
 @pytest.mark.asyncio
 async def test_a_cached_artist_costs_no_quota():
     db = cache_db({'context': CONTEXT, 'fetched_at': datetime.now(timezone.utc)})
-    budget = [300]
+    budget = [3]
     with patch.object(server, 'db', db), patch.object(server, '_fetch_artist_context_from_youtube_api') as fetch:
         assert await server._artist_context_with_cache(MagicMock(), 'future', budget) == CONTEXT
     fetch.assert_not_called()
-    assert budget == [300]
+    assert budget == [3]
 
 
 @pytest.mark.asyncio
 async def test_a_new_artist_costs_two_searches_and_is_cached():
     db = cache_db({'context': CONTEXT, 'fetched_at': datetime.now(timezone.utc) - timedelta(days=8)})
-    budget = [300]
+    budget = [3]
     with patch.object(server, 'db', db), patch.object(server, '_fetch_artist_context_from_youtube_api', return_value=CONTEXT):
         await server._artist_context_with_cache(MagicMock(), 'future', budget)
-    assert budget == [100]
+    assert budget == [1]
     db.artist_context_cache.update_one.assert_awaited_once()
 
 
@@ -54,7 +54,16 @@ async def test_no_budget_left_means_no_artist_search():
     db = cache_db(None)
     with patch.object(server, 'db', db), patch.object(server, '_fetch_artist_context_from_youtube_api') as fetch:
         with pytest.raises(RuntimeError):
-            await server._artist_context_with_cache(MagicMock(), 'future', [150])
+            await server._artist_context_with_cache(MagicMock(), 'future', [1])
+    fetch.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_daily_search_cap_means_no_artist_search():
+    db = cache_db(None)
+    with patch.object(server, 'db', db), patch.object(server, '_fetch_artist_context_from_youtube_api') as fetch,             patch.object(server.youtube_quota_service, 'try_use_searches', AsyncMock(return_value=False)):
+        with pytest.raises(RuntimeError):
+            await server._artist_context_with_cache(MagicMock(), 'future', [3])
     fetch.assert_not_called()
 
 

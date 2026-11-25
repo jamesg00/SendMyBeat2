@@ -508,7 +508,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
     toast.success("Logged out successfully");
   };
 
-  const pollBackgroundJobUntilDone = async (jobId, { intervalMs = 2500, maxAttempts = 240 } = {}) => {
+  const pollBackgroundJobUntilDone = async (jobId, { intervalMs = 2500, maxAttempts = 480 } = {}) => {
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       const response = await axios.get(`${API}/jobs/${jobId}`);
       const job = response?.data?.job;
@@ -614,7 +614,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
         { signal: controller.signal }
       );
       const queuedJobId = response?.data?.job?.id;
-      const resultPayload = queuedJobId ? await pollBackgroundJobUntilDone(queuedJobId, { intervalMs: 2500, maxAttempts: 180 }) : response.data;
+      const resultPayload = queuedJobId ? await pollBackgroundJobUntilDone(queuedJobId, { intervalMs: 2500, maxAttempts: 480 }) : response.data;
       setGeneratedTags(resultPayload.tags);
       setGeneratedTagScores(buildTagScoreMap(resultPayload?.scored_tags || []));
       setActiveTagHistoryId(resultPayload.id);
@@ -854,7 +854,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
         llm_provider: DEFAULT_TAG_PROVIDER
       });
       const queuedJobId = joinResponse?.data?.job?.id;
-      const joinPayload = queuedJobId ? await pollBackgroundJobUntilDone(queuedJobId, { intervalMs: 2500, maxAttempts: 180 }) : joinResponse.data;
+      const joinPayload = queuedJobId ? await pollBackgroundJobUntilDone(queuedJobId, { intervalMs: 2500, maxAttempts: 480 }) : joinResponse.data;
       const optimizedTags = Array.isArray(joinPayload?.tags) ? joinPayload.tags : [];
       if (!optimizedTags.length) {
         toast.error("AI join returned no tags. Please try again.");

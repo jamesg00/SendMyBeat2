@@ -1,4 +1,6 @@
 import { STYLE_KIND, drawBlob, drawDotRing, drawMirrorBars, drawNcsRing, drawProximity, drawWave } from "@/lib/visualizerStyles";
+import { BeatEngine, createFrame, fillFromAnalyser } from "@/lib/viz2/engine";
+import { drawV2, isV2Mode, rgbArray } from "@/lib/viz2";
 const IS_MOBILE = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(max-width: 768px)").matches;
 
 // Magic Number Constants for better maintainability and readability
@@ -118,6 +120,45 @@ const DEFAULT_OPTIONS = {
   },
 };
 
+
+const clampNum = (value, min, max, fallback) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
+};
+
+/** The new styles' adjustable effects, from the drawing options, clamped to their ranges. */
+export function v2Effects(o = {}) {
+  const fx = {
+    shadow: clampNum(o.vizShadow, 0, 1, 0),
+    glow: clampNum(o.vizGlow, 0, 1, 0),
+    opacity: clampNum(o.vizOpacity, 0.1, 1, 1),
+    thickness: clampNum(o.vizThickness, 0.5, 3, 1),
+    size: clampNum(o.vizSize, 0.5, 1.5, 1),
+  };
+  fx.layered = fx.shadow > 0 || fx.glow > 0 || fx.opacity < 1 || fx.thickness !== 1;
+  return fx;
+}
+
+/** Make `ctx.lineWidth = x` store x * scale.k, so every style's lines get thicker or thinner. */
+function scaleLineWidths(ctx, scale) {
+  let proto = Object.getPrototypeOf(ctx);
+  let desc = null;
+  while (proto && !desc) {
+    desc = Object.getOwnPropertyDescriptor(proto, "lineWidth");
+    proto = Object.getPrototypeOf(proto);
+  }
+  if (!desc || !desc.set || !desc.get) return;
+  Object.defineProperty(ctx, "lineWidth", {
+    configurable: true,
+    get() {
+      return desc.get.call(this) / (scale.k || 1);
+    },
+    set(value) {
+      desc.set.call(this, value * (scale.k || 1));
+    },
+  });
+}
+
 export default class AudioVisualizer {
   constructor(canvas, options = {}) {
     this.canvas = canvas;
@@ -204,6 +245,13 @@ export default class AudioVisualizer {
     this.pixelScale = 1;
     this.stepAccumulator = 0;
     this.analysisProvider = null;
+    // New styles (viz2): a frame from the beat engine, per-style state, and where frames come from.
+    this.beatProvider = null;
+    this.v2Frame = createFrame();
+    this.v2Out = createFrame();
+    this.v2State = {};
+    this.v2Engine = null;
+    this.v2Time = 0;
     this.seedRandom(0x5eed1e55);
 
     this.resize = this.resize.bind(this);
@@ -282,6 +330,14 @@ export default class AudioVisualizer {
       if (!this.dataArray || this.dataArray.length !== bins) this.dataArray = new Uint8Array(bins);
     }
     this.buildBinMap();
+  }
+
+  /**
+   * Where the new styles get their frames: a function that fills a frame (engine.js createFrame)
+   * from the decoded beat and returns true. Without one they read the live analyser.
+   */
+  setBeatProvider(provider) {
+    this.beatProvider = provider || null;
   }
 
   attachCanvas(nextCanvas) {
@@ -567,7 +623,8 @@ export default class AudioVisualizer {
     const cssW = Math.floor(rect.width || this.canvas.clientWidth || 0);
     const cssH = Math.floor(rect.height || this.canvas.clientHeight || 0);
     if (!cssW || !cssH) return;
-    const dpr = window.devicePixelRatio || 1;
+    // Past 2x (1.5x on phones) the picture looks the same and every frame costs a lot more.
+    const dpr = Math.min(window.devicePixelRatio || 1, IS_MOBILE ? 1.5 : 2);
     this.canvas.width = Math.max(1, Math.floor(cssW * dpr));
     this.canvas.height = Math.max(1, Math.floor(cssH * dpr));
     if (this.designW && this.designH) {
@@ -1048,6 +1105,151 @@ export default class AudioVisualizer {
     return 1 + amount * 0.05 * (this.framePulse || 0);
   }
 
+  /** One frame of a new style: fill the beat frame, scale it by Reactivity, draw. */
+  renderV2(dt, w, h) {
+    const c = this.ctx;
+    const o = this.options;
+    const A = this.v2Frame;
+    this.v2Time += dt;
+    const filled = this.beatProvider ? this.beatProvider(A) !== false : false;
+    if (!filled) {
+      if (!this.v2Engine) this.v2Engine = new BeatEngine();
+      fillFromAnalyser(this.v2Engine, A, this.analyser, this.dataArray, dt, this.v2Time, Boolean(this.analyser) && this.running);
+    }
+    // Reactivity 0.5x to 2x scales levels and hit sizes, on a copy so the source stays untouched.
+    const gain = Math.max(0.25, Math.min(2.5, (o.gain ?? 0.8) / 0.8));
+    const out = this.v2Out;
+    for (let i = 0; i < A.spec.length; i += 1) {
+      out.spec[i] = Math.min(1, A.spec[i] * gain);
+      out.specFast[i] = Math.min(1, A.specFast[i] * gain);
+    }
+    out.wave = A.wave;
+    out.t = A.t;
+    out.dt = dt;
+    out.live = A.live;
+    out.low = Math.min(1, A.low * gain);
+    out.mid = Math.min(1, A.mid * gain);
+    out.high = Math.min(1, A.high * gain);
+    out.energy = Math.min(1, A.energy * gain);
+    out.kickHit = A.kickHit;
+    out.snareHit = A.snareHit;
+    out.hatHit = A.hatHit;
+    out.kick = Math.min(1, A.kick * gain);
+    out.snare = Math.min(1, A.snare * gain);
+    out.hat = Math.min(1, A.hat * gain);
+    out.kickStrength = Math.min(1, A.kickStrength * gain);
+    out.snareStrength = Math.min(1, A.snareStrength * gain);
+    out.hatStrength = Math.min(1, A.hatStrength * gain);
+
+    const mode = o.mode;
+    if (!this.v2State[mode]) this.v2State[mode] = {};
+    const state = this.v2State[mode];
+    state.dpr = this.pixelScale || 1;
+    const fx = v2Effects(o);
+    const primary = rgbArray(o.spectrumColor);
+    // Shadow, glow, opacity and thickness need the visualizer on a layer of its own, which is then
+    // laid over the artwork in one go. Size alone, or no effects, draws straight onto the canvas.
+    const layer = fx.layered ? this.v2LayerFor(fx.thickness) : null;
+    const target = layer ? layer.ctx : c;
+    if (layer) {
+      target.setTransform(1, 0, 0, 1, 0, 0);
+      target.clearRect(0, 0, layer.canvas.width, layer.canvas.height);
+      const scale = this.pixelScale || 1;
+      target.setTransform(scale, 0, 0, scale, 0, 0);
+    }
+    target.save();
+    if (fx.size !== 1) {
+      target.translate(w / 2, h / 2);
+      target.scale(fx.size, fx.size);
+      target.translate(-w / 2, -h / 2);
+    }
+    drawV2(target, mode, w, h, out, state, dt, {
+      primary,
+      secondary: rgbArray(o.particleColor),
+      user: rgbArray(o.spectrumColor),
+      cover: this.centerImage,
+      fill: o.fillCenter === "white" ? "color" : o.fillCenter,
+      fillColor: rgbArray(o.fillCenterColor),
+      ring: o.spectrumBorderEnabled !== false,
+      radius: o.radius,
+      reach: o.maxBarLength,
+    });
+    target.restore();
+    target.globalCompositeOperation = "source-over";
+    target.globalAlpha = 1;
+    if (layer) this.compositeV2(layer.canvas, fx, primary);
+    // The artwork zoom follows the kick.
+    this.framePulse = this.lerp(this.framePulse || 0, out.kick, 18, dt);
+    if (o.fxVignette) this.drawVignette();
+  }
+
+  /**
+   * A canvas the size of this one for the new styles' effects, or null where none can be made
+   * (tests, very old browsers). Its context multiplies every line width by `thickness`.
+   */
+  v2LayerFor(thickness) {
+    const W = this.canvas.width;
+    const H = this.canvas.height;
+    if (this.v2Layer === undefined) {
+      let canvas = null;
+      try {
+        canvas = typeof OffscreenCanvas !== "undefined" ? new OffscreenCanvas(W, H) : document.createElement("canvas");
+      } catch {
+        canvas = null;
+      }
+      const ctx = canvas && typeof canvas.getContext === "function" ? canvas.getContext("2d") : null;
+      this.v2Layer = ctx ? { canvas, ctx, lineScale: { k: 1 } } : null;
+      if (this.v2Layer) scaleLineWidths(ctx, this.v2Layer.lineScale);
+    }
+    const layer = this.v2Layer;
+    if (!layer) return null;
+    if (layer.canvas.width !== W || layer.canvas.height !== H) {
+      layer.canvas.width = W;
+      layer.canvas.height = H;
+    }
+    layer.lineScale.k = thickness;
+    return layer;
+  }
+
+  /** Lay the effects layer over the artwork: dark halo first, then the visualizer with its glow. */
+  compositeV2(layerCanvas, fx, primary) {
+    const c = this.ctx;
+    const W = this.canvas.width;
+    const H = this.canvas.height;
+    // Blur sizes follow the canvas height, so the preview and a 1080p video look the same.
+    const unit = Math.min(W, H) / 540;
+    c.save();
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.globalCompositeOperation = "source-over";
+    if (fx.shadow > 0) {
+      // A soft dark outline behind every line and dot, so the visualizer reads on busy or bright
+      // artwork. The layer itself is drawn off the canvas and only its shadow lands on it.
+      const away = W + 64;
+      c.globalAlpha = fx.opacity;
+      c.shadowColor = `rgba(0, 0, 0, ${0.5 + fx.shadow * 0.45})`;
+      c.shadowOffsetX = away;
+      c.shadowOffsetY = 0;
+      c.shadowBlur = unit * (1.5 + fx.shadow * 7);
+      c.drawImage(layerCanvas, -away, 0);
+      if (fx.shadow > 0.5) {
+        c.shadowBlur = unit * (0.75 + fx.shadow * 2.5);
+        c.drawImage(layerCanvas, -away, 0);
+      }
+      c.shadowOffsetX = 0;
+    }
+    if (fx.glow > 0) {
+      const [r, g, b] = primary || [255, 255, 255];
+      c.shadowColor = `rgba(${r}, ${g}, ${b}, ${0.55 + fx.glow * 0.4})`;
+      c.shadowBlur = unit * (2 + fx.glow * 12);
+    } else {
+      c.shadowColor = "rgba(0, 0, 0, 0)";
+      c.shadowBlur = 0;
+    }
+    c.globalAlpha = fx.opacity;
+    c.drawImage(layerCanvas, 0, 0);
+    c.restore();
+  }
+
   /** Advance the simulation by dt seconds and draw one frame. */
   renderFrame(dt) {
     const c = this.ctx;
@@ -1058,6 +1260,11 @@ export default class AudioVisualizer {
     c.globalCompositeOperation = "source-over";
     // Keep the visualizer transparent so it does not darken the background image.
     c.clearRect(0, 0, w, h);
+
+    if (isV2Mode(this.options.mode)) {
+      this.renderV2(dt, w, h);
+      return;
+    }
 
     const bars = this.computeBars();
 

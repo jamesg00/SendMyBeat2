@@ -368,6 +368,37 @@ const routes = [
     history = history.filter((r) => r.id !== m[1]);
     return { ok: true };
   }],
+  // Title ideas and title checks: a small stand-in for services/tag_titles.py.
+  ["GET", /^\/tags\/history\/([^/]+)\/titles$/, (m) => {
+    const item = history.find((r) => r.id === m[1]);
+    if (!item) return [404, { detail: "Tag generation not found" }];
+    const artist = item.query.split(" x ")[0].replace(/\b\w/g, (c) => c.toUpperCase());
+    const titles = [
+      `${artist} Type Beat - "BEAT NAME"`,
+      `${artist} Type Beat - "BEAT NAME" | Dark Trap Instrumental`,
+      `${artist} x Hinoni Type Beat - "BEAT NAME"`,
+      `${artist} Type Beat 2026 - "BEAT NAME"`,
+    ].map((title, i) => ({ title, keywords: [], covers: [], coverage: 90 - i * 10, length: title.length, score: [80, 100, 75, 70][i] }));
+    return { titles };
+  }],
+  ["POST", /^\/titles\/score$/, (m, body) => {
+    const title = String(body.title || "").trim();
+    const item = history.find((r) => r.id === body.tag_id);
+    const artist = item ? item.query.split(" x ")[0] : "";
+    const head = title.toLowerCase().slice(0, 40);
+    const leads = artist ? head.includes(artist) && head.includes("type beat") : head.includes("type beat");
+    const checks = [
+      { id: "artist_first", ok: leads, message: leads ? "Artist and 'type beat' in the first 40 characters" : "Start with the artist and 'Type Beat' so searchers see it first" },
+      { id: "length", ok: title.length <= 100, message: `${title.length} of 100 characters` },
+      ...(item ? [{ id: "top_keyword", ok: title.toLowerCase().includes("dark trap"), message: title.toLowerCase().includes("dark trap") ? "Uses 'dark trap', your run's top sound keyword" : "Add 'dark trap', your run's top sound keyword" }] : []),
+      { id: "beat_name", ok: /["“][^"“”]+["”]/.test(title), message: /["“][^"“”]+["”]/.test(title) ? "Beat name in quotes" : 'Add the beat name in quotes, like "Neon"' },
+      { id: "characters", ok: !/[<>]/.test(title), message: /[<>]/.test(title) ? "Remove < and >, YouTube rejects titles with them" : "No characters YouTube rejects" },
+    ];
+    const weights = { artist_first: 40, length: 15, top_keyword: 20, beat_name: 15, characters: 10 };
+    const total = checks.reduce((s, c) => s + weights[c.id], 0);
+    const earned = checks.filter((c) => c.ok).reduce((s, c) => s + weights[c.id], 0);
+    return { score: title ? Math.round((100 * earned) / total) : 0, checks };
+  }],
   ["POST", /^\/tags\/generate$/, (m, body) => {
     const made = run(`r${Date.now()}`, body.query, 0);
     history = [made, ...history];
@@ -385,6 +416,23 @@ const routes = [
     if (m[1] === "upload1") { uploadCancelled = true; return { success: true, cancelled: false, job: { id: "upload1", status: "processing", progress: 42, message: "Cancelling…", cancel_requested: true } }; }
     return { cancelled: jobs.delete(m[1]) };
   }],
+  // Description builder: a small stand-in for services/description_builder.py.
+  ["POST", /^\/descriptions\/generate$/, (m, body) => {
+    const item = history.find((r) => r.id === body.tag_id);
+    if (!item) return [404, { detail: "Tag run not found." }];
+    const artist = item.query.split(" x ")[0].replace(/\b\w/g, (c) => c.toUpperCase());
+    const beat = String(body.beat_name || "").trim().toUpperCase();
+    const template = (descriptions.find((d) => d.id === body.template_id) || {}).content || "";
+    const hashtags = [`#${artist.toLowerCase().replace(/[^a-z0-9]/g, "")}typebeat`, `#${artist.toLowerCase().replace(/[^a-z0-9]/g, "")}`, "#typebeat", "#darktraptypebeat"];
+    const content = [
+      `${artist} type beat | dark trap beat | pluggnb type beat${beat ? ` - "${beat}"` : ""}`,
+      "Buy or lease: https://beatstars.com/jamesbeats",
+      `${beat ? `"${beat}" is a` : "A"} dark trap ${artist} type beat. Made for artists who want a ${artist} sound.`,
+      template,
+      hashtags.join(" "),
+    ].filter(Boolean).join("\n\n");
+    return { content, hashtags, bytes: new TextEncoder().encode(content).length, warnings: [] };
+  }],
   ["GET", /^\/descriptions$/, () => descriptions],
   ["POST", /^\/descriptions$/, (m, body) => {
     const d = { id: `d${Date.now()}`, ...body };
@@ -399,7 +447,8 @@ const routes = [
     descriptions = descriptions.filter((x) => x.id !== m[1]);
     return { ok: true };
   }],
-  ["GET", /^\/youtube\/status$/, () => ({ connected: true, email: "jamesbeats@example.com", name: "jamesbeats", profile_picture: svg("J", "#7a1f1f", "#200606") })],
+  ["GET", /^\/youtube\/status$/, () => ({ connected: true, email: "jamesbeats@example.com", name: "jamesbeats", profile_picture: svg("J", "#7a1f1f", "#200606"), playlists_allowed: false, custom_thumbnails_allowed: null })],
+  ["GET", /^\/youtube\/auth-url$/, () => ({ auth_url: "/dashboard?mock=youtube-consent" })],
   ["POST", /^\/youtube\/analytics$/, () => startJob(8, analytics)],
   ["POST", /^\/upload\/(audio|image)$/, (m) => ({ file_id: `mock-${m[1]}`, media_kind: m[1] })],
   ["POST", /^\/youtube\/upload$/, () => ({ job: { id: "upload1", status: "queued", progress: 0 } })],

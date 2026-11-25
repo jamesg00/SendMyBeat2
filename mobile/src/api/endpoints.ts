@@ -44,7 +44,18 @@ export type ScoredTag = {
 };
 export type TagRun = { id: string; query: string; tags: string[]; scored_tags?: ScoredTag[]; created_at?: string };
 export type Description = { id: string; title: string; content: string; is_ai_generated?: boolean };
-export type YouTubeStatus = { connected: boolean; email?: string | null; name?: string | null };
+export type YouTubeStatus = {
+  connected: boolean;
+  email?: string | null;
+  name?: string | null;
+  /** Playlists need an extra YouTube permission, asked for only when the producer turns them on. */
+  playlists_allowed?: boolean;
+  /** false once YouTube refused a custom thumbnail (channel not verified); null until the first try. */
+  custom_thumbnails_allowed?: boolean | null;
+};
+/** Google sign-in link; with playlists it also asks to manage playlists. */
+export const youtubeAuthUrl = (playlists = false) =>
+  api<{ auth_url: string }>(`/youtube/auth-url${playlists ? '?playlists=true' : ''}`);
 
 export type ChannelVideo = {
   id?: string;
@@ -144,10 +155,15 @@ export const billingPortal = (returnUrl: string) =>
   api<{ url: string }>(`/subscription/portal?${new URLSearchParams({ return_url: returnUrl }).toString()}`, { method: 'POST' });
 export const tagHistory = () => api<TagRun[]>('/tags/history');
 export const deleteTagRun = (id: string) => api<unknown>(`/tags/history/${id}`, { method: 'DELETE' });
-export type TitleIdea = { title: string; keywords: string[]; coverage: number; length: number };
+export type TitleIdea = { title: string; keywords: string[]; coverage: number; length: number; score?: number };
 /** Video titles built from a run's best keywords (no credit used). */
 export const titleIdeas = (runId: string, beatName: string) =>
   api<{ titles: TitleIdea[] }>(`/tags/history/${runId}/titles?beat_name=${encodeURIComponent(beatName)}`);
+export type TitleCheck = { id: string; ok: boolean; message: string };
+export type TitleScore = { score: number; checks: TitleCheck[] };
+/** Scores a title against the chosen tag run: artist first, length, top keyword, beat name (no credit, no YouTube quota). */
+export const scoreTitle = (title: string, tagId?: string) =>
+  api<TitleScore>('/titles/score', { body: tagId ? { title, tag_id: tagId } : { title } });
 // Starts tag generation; returns either the finished run or a job to follow with pollJob.
 export const startTagGeneration = (query: string) =>
   api<{ job?: { id: string } } & Partial<TagRun>>('/tags/generate', { body: { query, custom_tags: [] } });
@@ -214,6 +230,12 @@ export const setLike = (userId: string, on: boolean) =>
 export const setFollow = (userId: string, on: boolean) =>
   api<{ following: boolean; followers: number }>(`/producers/${userId}/follow`, { method: on ? 'POST' : 'DELETE' });
 
+export type BuiltDescription = { content: string; hashtags: string[]; bytes: number; warnings: string[] };
+/** A description built from a tag run: keywords, buy link, hashtags (no credit, nothing saved). */
+export const buildDescription = (input: { tagId: string; beatName: string; templateId?: string | null }) =>
+  api<BuiltDescription>('/descriptions/generate', {
+    body: { tag_id: input.tagId, beat_name: input.beatName, template_id: input.templateId || null, include_chapters: false },
+  });
 export const createDescription = (title: string, content: string) =>
   api<Description>('/descriptions', { body: { title, content } });
 
@@ -249,23 +271,56 @@ export type YouTubeUploadOptions = {
   audioFileId: string;
   imageFileId: string;
   aspectRatio: '16:9' | '1:1' | '9:16' | '4:5';
-  imageScale: number;
+  /** Artwork width and height as a multiple of fitting the frame. */
+  imageScaleX: number;
+  imageScaleY: number;
+  /** Artwork centre's offset from the frame centre, in half-frames (-2 to 2). */
+  imagePosX: number;
+  imagePosY: number;
   imageRotation: number;
+  imageFlipH: boolean;
+  imageFlipV: boolean;
   background: 'black' | 'white' | 'blurred';
   renderFps: '2' | '30' | '60';
   removeWatermark: boolean;
+  /** imageFileId is a video the phone already rendered with the visualizer: pass it through as is. */
+  baked?: boolean;
+  /** The visualizer style it was rendered with (the server checks Pro styles against your plan). */
+  visualizerStyle?: string;
+  /** Publish later: an ISO time 15 minutes to 180 days out. The video stays private until then. */
+  publishAt?: string;
+  /** Add to the artist's playlist ("Artist Type Beats"). */
+  playlistMode?: 'none' | 'artist';
+  /** A picture uploaded with uploadImage, set as the custom thumbnail. */
+  thumbnailFileId?: string;
+  /** Language code, like en or es. */
+  defaultLanguage?: string;
 };
 
 export type UploadJob = {
   id: string;
   status: 'queued' | 'processing' | 'succeeded' | 'failed' | 'cancelled' | string;
   progress?: number;
+  /** queued, validate, oauth_refresh, gif_transcode, ffmpeg_render, encoding, youtube_upload, cleanup. */
+  stage?: string;
+  /** Encoding progress 0-100 while the video renders. */
+  encode_progress?: number;
+  cancel_requested?: boolean;
   message?: string;
   error?: string;
-  result?: { video_url?: string; message?: string };
+  result?: {
+    video_url?: string;
+    message?: string;
+    scheduled_for?: string | null;
+    thumbnail_set?: boolean;
+    playlist_id?: string | null;
+    /** Thumbnail or playlist steps that didn't work; the video itself is up. */
+    warnings?: string[];
+  };
 };
 
-// Same form fields the website's UploadStudio sends (visualizer off; the server renders the artwork).
+// Same form fields the website's UploadStudio sends (frontend/src/components/UploadStudio.js). With a rendered visualizer video the
+// transforms are neutral, so the server passes the video through and only adds audio.
 export async function startYouTubeUpload(o: YouTubeUploadOptions) {
   const form = new FormData();
   form.append('title', o.title);
@@ -277,17 +332,81 @@ export async function startYouTubeUpload(o: YouTubeUploadOptions) {
   if (o.descriptionOverride) form.append('description_override', o.descriptionOverride);
   form.append('remove_watermark', String(o.removeWatermark));
   form.append('aspect_ratio', o.aspectRatio);
-  form.append('image_scale', String(o.imageScale));
-  form.append('image_scale_x', String(o.imageScale));
-  form.append('image_scale_y', String(o.imageScale));
-  form.append('image_pos_x', '0');
-  form.append('image_pos_y', '0');
-  form.append('image_rotation', String(o.imageRotation));
+  // A rendered visualizer video already has the artwork laid out, so it goes through untouched.
+  const n = (v: number) => String(Math.round(v * 10000) / 10000);
+  if (o.baked) {
+    for (const k of ['image_scale', 'image_scale_x', 'image_scale_y']) form.append(k, '1');
+    for (const k of ['image_pos_x', 'image_pos_y', 'image_rotation']) form.append(k, '0');
+  } else {
+    form.append('image_scale', n((o.imageScaleX + o.imageScaleY) / 2));
+    form.append('image_scale_x', n(o.imageScaleX));
+    form.append('image_scale_y', n(o.imageScaleY));
+    form.append('image_pos_x', n(o.imagePosX));
+    form.append('image_pos_y', n(o.imagePosY));
+    form.append('image_rotation', String(Math.round(o.imageRotation)));
+    form.append('image_flip_h', String(o.imageFlipH));
+    form.append('image_flip_v', String(o.imageFlipV));
+    form.append('image_pos_mode', 'frame');
+  }
   form.append('background_color', o.background);
   form.append('render_fps', o.renderFps);
   form.append('visualizer_enabled', 'false');
   form.append('visualizer_settings', '{}');
+  if (o.visualizerStyle) form.append('visualizer_style', o.visualizerStyle);
+  if (o.publishAt) form.append('publish_at', o.publishAt);
+  if (o.playlistMode && o.playlistMode !== 'none') form.append('playlist_mode', o.playlistMode);
+  if (o.thumbnailFileId) form.append('thumbnail_file_id', o.thumbnailFileId);
+  if (o.defaultLanguage) form.append('default_language', o.defaultLanguage);
   return api<{ job?: UploadJob; video_url?: string; message?: string }>('/youtube/upload', { body: form });
+}
+
+// ---- AI checks in Upload Studio, the same two the website runs before an upload.
+export type BeatAnalysis = {
+  overall_score: number;
+  predicted_performance?: string;
+  channel_stage?: string;
+  competition_level?: string;
+  packaging_priority?: string;
+  title_diagnosis?: string;
+  channel_fit?: string;
+  small_channel_strategy?: string;
+  better_title_angles?: string[];
+  tag_strategy?: string;
+  suggestions?: string[];
+  strengths?: string[];
+  weaknesses?: string[];
+};
+export type BeatAnalysisInput = {
+  title: string;
+  tags: string[];
+  description: string;
+  channel_name?: string;
+  subscriber_count?: number;
+  total_videos?: number;
+  recent_avg_views?: number;
+};
+/** Scores the title, tags and description against your channel (Pro). */
+export const analyzeBeat = (input: BeatAnalysisInput) => runJob<BeatAnalysis>('/beat/analyze', input, 2500);
+
+export type ThumbnailCheck = {
+  score: number;
+  verdict?: string;
+  ctr_risk?: string;
+  packaging_priority?: string;
+  hook_alignment?: string;
+  issues?: string[];
+  suggestions?: string[];
+  text_overlay_suggestion?: string;
+  branding_suggestion?: string;
+};
+/** Checks the artwork as a thumbnail for this title, tags and description. */
+export function checkThumbnail(input: { imageFileId: string; title: string; tags: string[]; description: string }) {
+  const form = new FormData();
+  form.append('image_file_id', input.imageFileId);
+  form.append('title', input.title);
+  form.append('tags', input.tags.join(', '));
+  form.append('description', input.description);
+  return runJob<ThumbnailCheck>('/beat/thumbnail-check', form, 2500);
 }
 
 export const uploadJob = (id: string) => api<{ job?: UploadJob }>(`/youtube/upload-jobs/${id}`);

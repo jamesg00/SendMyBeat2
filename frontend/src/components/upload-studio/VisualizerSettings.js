@@ -1,9 +1,10 @@
 import React, { useState } from "react";
-import { ChevronDown, ImageUp, Music } from "lucide-react";
+import { ChevronDown, ImageUp, Lock, Music } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import StudioSection, { StudioSeg, StudioSwitch } from "@/components/upload-studio/StudioSection";
-import { VISUALIZER_STYLES } from "@/lib/constants";
+import { VISUALIZER_STYLES, canUsePremiumVisualizers } from "@/lib/constants";
 import { STYLE_KIND } from "@/lib/visualizerStyles";
+import { isPremiumMode, isV2Mode, v2HasCover } from "@/lib/viz2";
 
 // Visualizer: pick a style, then tune its look and the effects around it.
 // Laid out as plain rows so it reads the same in a wide panel, a narrow one, and the phone drawer.
@@ -59,6 +60,34 @@ const GLYPHS = {
   ),
 };
 
+// Styles with a drawn icon in public/visualizer-icons (the Pro styles and the four redrawn free ones).
+const ICON_MODES = new Set(VISUALIZER_STYLES.filter((item) => item.premium || isV2Mode(item.mode)).map((item) => item.mode));
+
+const StyleTile = ({ item, active, locked, onPick }) => (
+  <button
+    type="button"
+    role="radio"
+    aria-checked={active}
+    className={`vz-style ${active ? "is-active" : ""} ${locked ? "is-locked" : ""}`}
+    onClick={onPick}
+    title={locked ? `${item.blurb}. Premium style: Plus or Pro` : item.blurb}
+  >
+    {ICON_MODES.has(item.mode) ? (
+      <img className="vz-style-icon" src={`/visualizer-icons/${item.mode}.png`} alt="" aria-hidden="true" loading="lazy" draggable="false" />
+    ) : (
+      <svg viewBox="0 0 48 30" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+        {GLYPHS[item.mode]}
+      </svg>
+    )}
+    <b>{item.name}</b>
+    {locked ? (
+      <span className="vz-style-lock" aria-label="Premium">
+        <Lock className="h-3 w-3" aria-hidden="true" />
+      </span>
+    ) : null}
+  </button>
+);
+
 const Group = ({ title, children }) => (
   <div className="vz-group">
     <p className="us-label">{title}</p>
@@ -105,14 +134,23 @@ const VisualizerSettings = ({
   handleCenterVisualizerImageUpload,
   centerVisualizerImageName,
   centerVisualizerImageInputRef,
+  subscriptionStatus,
 }) => {
   const s = visualizerSettings;
   const set = (patch) => setVisualizerSettings((prev) => ({ ...prev, ...patch }));
   const [advanced, setAdvanced] = useState(false);
   const style = VISUALIZER_STYLES.find((item) => item.mode === s.mode) || VISUALIZER_STYLES[0];
-  const kind = STYLE_KIND[s.mode] || "ring";
+  // New styles (the Pro ones and the redrawn NCS, Monstercat, Spectrum, Proximity) draw from the
+  // beat engine and only use colours, Reactivity and the logo; the old bar controls don't apply.
+  const v2 = isV2Mode(s.mode);
+  const premium = isPremiumMode(s.mode);
+  const kind = v2 ? (s.mode === "circle" ? "ring" : "v2") : STYLE_KIND[s.mode] || "ring";
   const ring = kind === "ring";
   const monstercat = kind === "monstercat";
+  const hasLogo = v2 ? v2HasCover(s.mode) : ring;
+  const proAllowed = canUsePremiumVisualizers(subscriptionStatus);
+  const freeStyles = VISUALIZER_STYLES.filter((item) => !item.premium);
+  const proStyles = VISUALIZER_STYLES.filter((item) => item.premium);
 
   return (
     <StudioSection
@@ -125,44 +163,66 @@ const VisualizerSettings = ({
       {visualizerEnabled ? (
         <>
           <Group title="Style">
-            <div className="vz-styles" role="radiogroup" aria-label="Visualizer style">
-              {VISUALIZER_STYLES.map((item) => (
-                <button
-                  key={item.mode}
-                  type="button"
-                  role="radio"
-                  aria-checked={s.mode === item.mode}
-                  className={`vz-style ${s.mode === item.mode ? "is-active" : ""}`}
-                  onClick={() => applyVisualizerPreset(item.preset)}
-                  title={item.blurb}
-                >
-                  <svg viewBox="0 0 48 30" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
-                    {GLYPHS[item.mode]}
-                  </svg>
-                  <b>{item.name}</b>
-                </button>
+            <div className="vz-styles" role="radiogroup" aria-label="Free visualizer styles">
+              {freeStyles.map((item) => (
+                <StyleTile key={item.mode} item={item} active={s.mode === item.mode} onPick={() => applyVisualizerPreset(item.preset)} />
               ))}
             </div>
-            <p className="us-hint">{style.blurb}. Picking a style resets it to its recommended look.</p>
+            <p className="us-label vz-pro-label">Premium{proAllowed ? "" : " · Plus and Pro"}</p>
+            <div className="vz-styles" role="radiogroup" aria-label="Premium visualizer styles">
+              {proStyles.map((item) => (
+                <StyleTile key={item.mode} item={item} active={s.mode === item.mode} locked={!proAllowed} onPick={() => applyVisualizerPreset(item.preset)} />
+              ))}
+            </div>
+            <p className="us-hint">
+              {style.blurb}. Picking a style resets it to its recommended look.
+              {premium && !proAllowed ? " You can try premium styles here; uploading with one needs Plus or Pro." : ""}
+            </p>
           </Group>
 
           <Group title="Look">
-            <Row label="Colour" hint={s.multiColorReactive ? "Rainbow: colour follows loudness" : "Bars and shapes"}>
-              {!s.multiColorReactive ? <Swatch label="Visualizer colour" value={s.spectrumColor} onChange={(v) => set({ spectrumColor: v })} /> : null}
-              <span className="vz-inline-label">Rainbow</span>
-              <StudioSwitch label="Rainbow colours" checked={Boolean(s.multiColorReactive)} onChange={(v) => set({ multiColorReactive: v, spectrumRgb: v })} />
-            </Row>
-            <Row label="Glow colour" hint="Glow, halo and stars">
-              <Swatch label="Glow colour" value={s.particleColor} onChange={(v) => set({ particleColor: v })} />
-            </Row>
+            {v2 ? (
+              <Row label={premium ? "Main colour" : "Colour"} hint={premium ? "The brightest parts" : "Lines and shapes"}>
+                <Swatch label="Visualizer colour" value={s.spectrumColor} onChange={(v) => set({ spectrumColor: v })} />
+              </Row>
+            ) : (
+              <Row label="Colour" hint={s.multiColorReactive ? "Rainbow: colour follows loudness" : "Bars and shapes"}>
+                {!s.multiColorReactive ? <Swatch label="Visualizer colour" value={s.spectrumColor} onChange={(v) => set({ spectrumColor: v })} /> : null}
+                <span className="vz-inline-label">Rainbow</span>
+                <StudioSwitch label="Rainbow colours" checked={Boolean(s.multiColorReactive)} onChange={(v) => set({ multiColorReactive: v, spectrumRgb: v })} />
+              </Row>
+            )}
+            {premium ? (
+              <Row label="Second colour" hint="Depth and the quieter parts">
+                <Swatch label="Second colour" value={s.particleColor} onChange={(v) => set({ particleColor: v })} />
+              </Row>
+            ) : !v2 ? (
+              <Row label="Glow colour" hint="Glow, halo and stars">
+                <Swatch label="Glow colour" value={s.particleColor} onChange={(v) => set({ particleColor: v })} />
+              </Row>
+            ) : null}
             <Slider label="Reactivity" value={s.intensity} min={0.5} max={2} step={0.05} onChange={(v) => set({ intensity: v })} format={(v) => `${v.toFixed(2)}×`} />
+            {v2 ? (
+              <>
+                <Slider label="Shadow behind it" value={s.vizShadow ?? 0} min={0} max={1} step={0.05} onChange={(v) => set({ vizShadow: v })} format={(v) => (v ? pct(v) : "Off")} />
+                <p className="us-hint">A soft dark outline that keeps it readable on busy or bright artwork.</p>
+                <div className="vz-two">
+                  <Slider label="Glow" value={s.vizGlow ?? 0} min={0} max={1} step={0.05} onChange={(v) => set({ vizGlow: v })} format={(v) => (v ? pct(v) : "Off")} />
+                  <Slider label="Opacity" value={s.vizOpacity ?? 1} min={0.2} max={1} step={0.05} onChange={(v) => set({ vizOpacity: v })} format={pct} />
+                </div>
+                <div className="vz-two">
+                  <Slider label="Line thickness" value={s.vizThickness ?? 1} min={0.5} max={3} step={0.1} onChange={(v) => set({ vizThickness: v })} format={(v) => `${v.toFixed(1)}×`} />
+                  <Slider label="Size" value={s.vizSize ?? 1} min={0.5} max={1.5} step={0.05} onChange={(v) => set({ vizSize: v })} format={pct} />
+                </div>
+              </>
+            ) : null}
             {ring ? (
               <div className="vz-two">
                 <Slider label="Logo size" value={s.radius} min={0.1} max={0.34} step={0.01} onChange={(v) => set({ radius: v })} format={pct} />
                 <Slider label="Reach" value={s.maxBarLength} min={0.06} max={0.34} step={0.01} onChange={(v) => set({ maxBarLength: v })} format={pct} />
               </div>
             ) : null}
-            {s.mode === "spectrum" ? (
+            {s.mode === "spectrum" && !v2 ? (
               <div className="vz-two">
                 <Slider label="Bar width" value={s.spectrumBarThickness} min={2} max={16} step={1} onChange={(v) => set({ spectrumBarThickness: v })} format={(v) => `${v}px`} />
                 <Slider label="Glow" value={s.spectrumGlow} min={0} max={48} step={1} onChange={(v) => set({ spectrumGlow: v })} />
@@ -176,7 +236,7 @@ const VisualizerSettings = ({
             ) : null}
           </Group>
 
-          {ring ? (
+          {hasLogo ? (
             <Group title="Logo">
               <div className="us-field">
                 <StudioSeg
@@ -198,9 +258,11 @@ const VisualizerSettings = ({
                       <ImageUp className="h-3.5 w-3.5" aria-hidden="true" /> Upload logo
                     </button>
                   </Row>
-                  <Row label="Spin the picture">
-                    <StudioSwitch label="Spin the picture" checked={Boolean(s.centerImageSpin)} onChange={(v) => set({ centerImageSpin: v })} />
-                  </Row>
+                  {!v2 ? (
+                    <Row label="Spin the picture">
+                      <StudioSwitch label="Spin the picture" checked={Boolean(s.centerImageSpin)} onChange={(v) => set({ centerImageSpin: v })} />
+                    </Row>
+                  ) : null}
                 </>
               ) : null}
               {s.fillCenter === "color" || s.fillCenter === "white" ? (
@@ -210,7 +272,7 @@ const VisualizerSettings = ({
               ) : null}
               {s.fillCenter !== "transparent" ? (
                 <Row label="Outline">
-                  {s.spectrumBorderEnabled ? <Swatch label="Outline colour" value={s.spectrumBorderColor} onChange={(v) => set({ spectrumBorderColor: v })} /> : null}
+                  {s.spectrumBorderEnabled && !v2 ? <Swatch label="Outline colour" value={s.spectrumBorderColor} onChange={(v) => set({ spectrumBorderColor: v })} /> : null}
                   <StudioSwitch label="Outline around the logo" checked={Boolean(s.spectrumBorderEnabled)} onChange={(v) => set({ spectrumBorderEnabled: v })} />
                 </Row>
               ) : null}
@@ -218,7 +280,7 @@ const VisualizerSettings = ({
           ) : null}
 
           <Group title="Effects">
-            {monstercat ? (
+            {v2 ? null : monstercat ? (
               <Row label="Sparks" hint="Streaks flying across the bars">
                 <StudioSwitch label="Sparks" checked={Boolean(s.monstercatParticleEnabled)} onChange={(v) => set({ monstercatParticleEnabled: v })} />
               </Row>
@@ -238,16 +300,19 @@ const VisualizerSettings = ({
               </>
             )}
             <Slider label="Artwork zoom on the kick" value={s.fxZoomPulse ?? 0} min={0} max={1} step={0.05} onChange={(v) => set({ fxZoomPulse: v })} format={(v) => (v ? pct(v) : "Off")} />
-            {!monstercat ? <Slider label="Shake" value={s.shakeIntensity} min={0} max={2} step={0.05} onChange={(v) => set({ shakeIntensity: v })} format={(v) => (v ? `${v.toFixed(2)}×` : "Off")} /> : null}
-            <Row label="Flash on hard hits">
-              <StudioSwitch label="Flash on hard hits" checked={Boolean(s.fxFlash)} onChange={(v) => set({ fxFlash: v })} />
-            </Row>
+            {!monstercat && !v2 ? <Slider label="Shake" value={s.shakeIntensity} min={0} max={2} step={0.05} onChange={(v) => set({ shakeIntensity: v })} format={(v) => (v ? `${v.toFixed(2)}×` : "Off")} /> : null}
+            {!v2 ? (
+              <Row label="Flash on hard hits">
+                <StudioSwitch label="Flash on hard hits" checked={Boolean(s.fxFlash)} onChange={(v) => set({ fxFlash: v })} />
+              </Row>
+            ) : null}
             <Row label="Dark corners">
               <StudioSwitch label="Dark corners" checked={Boolean(s.fxVignette)} onChange={(v) => set({ fxVignette: v })} />
             </Row>
             <Slider label="Artwork brightness" value={s.backgroundOpacity ?? 1} min={0.2} max={1} step={0.05} onChange={(v) => set({ backgroundOpacity: v })} format={pct} />
           </Group>
 
+          {v2 ? null : (
           <div className="vz-group">
             <button type="button" className="vz-advanced" onClick={() => setAdvanced((v) => !v)} aria-expanded={advanced}>
               Fine tuning
@@ -292,6 +357,7 @@ const VisualizerSettings = ({
               </div>
             ) : null}
           </div>
+          )}
         </>
       ) : null}
     </StudioSection>
