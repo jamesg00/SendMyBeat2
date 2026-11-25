@@ -3358,7 +3358,7 @@ def _escape_ffmpeg_text(value: str) -> str:
 
 
 def _build_youtube_watermark_filter(*, target_w: int, target_h: int, background_color: str) -> str:
-    text = _escape_ffmpeg_text("Upload your beats for free on SendMyBeat")
+    text = _escape_ffmpeg_text("Made with SendMyBeat.com")
     font_color = "black@0.78" if background_color == "white" else "white@0.78"
     border_color = "white@0.38" if background_color == "white" else "black@0.45"
     font_size = max(22, min(34, int(target_w * 0.022)))
