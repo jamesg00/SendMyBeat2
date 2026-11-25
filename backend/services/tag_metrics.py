@@ -39,6 +39,10 @@ TAG_SCORE_RELEVANCE_WEIGHT = float(os.environ.get("TAG_SCORE_RELEVANCE_WEIGHT", 
 TAG_MIN_PACK_SIZE = int(os.environ.get("TAG_MIN_PACK_SIZE", "15"))
 TAG_RELAXED_SCORE_DELTA = int(os.environ.get("TAG_RELAXED_SCORE_DELTA", "5"))
 TAG_MAX_PUBLISH_COUNT = int(os.environ.get("TAG_MAX_PUBLISH_COUNT", "50"))
+# How much of a tag's relevance comes from the model's own 0-100 judgement once it has scored the
+# tag (0 = keyword rules only, 1 = model only). The keyword rules can't tell that "drake type beat"
+# is a poor fit for a Ken Carson beat; the model can.
+TAG_LLM_RELEVANCE_BLEND = max(0.0, min(1.0, float(os.environ.get("TAG_LLM_RELEVANCE_BLEND", "0.6"))))
 
 TAG_KEYWORD_CACHE_COLLECTION = "tag_keyword_cache"
 YOUTUBE_TAGS_CHAR_LIMIT = 500
@@ -447,6 +451,63 @@ def tag_signals(breakdown: dict[str, Any] | None) -> dict[str, str]:
         signals["record"] = "proven" if boost > 0 else "weak"
         signals["record_videos"] = int(record.get("videos") or 0)
     return signals
+
+
+def parse_llm_relevance(parsed: Any) -> dict[str, float]:
+    """Read the model's per-tag relevance (0-100) from its JSON reply. Accepts
+    {"relevance": {"tag": 87}} or {"relevance": [{"tag": "...", "relevance": 87}]}; anything
+    unreadable is skipped, so a reply without scores changes nothing."""
+    if not isinstance(parsed, dict):
+        return {}
+    raw = parsed.get("relevance")
+    pairs: list[tuple[Any, Any]] = []
+    if isinstance(raw, dict):
+        pairs = list(raw.items())
+    elif isinstance(raw, list):
+        for item in raw:
+            if isinstance(item, dict):
+                pairs.append((item.get("tag"), item.get("relevance", item.get("score"))))
+    scores: dict[str, float] = {}
+    for tag, value in pairs:
+        key = normalize_tag_key(tag) if isinstance(tag, str) else ""
+        if not key or isinstance(value, bool):
+            continue
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            continue
+        if math.isnan(number):
+            continue
+        scores[key] = max(0.0, min(100.0, number))
+    return scores
+
+
+def apply_llm_relevance(
+    entry: dict[str, Any],
+    llm_relevance: float,
+    blend: float = TAG_LLM_RELEVANCE_BLEND,
+) -> dict[str, Any]:
+    """Blend the model's relevance into a scored tag and move its score by the same share the
+    relevance weight gives it. Demand, competition and track record stay as they were. Applying it
+    twice starts again from the keyword relevance, so it never compounds."""
+    breakdown = dict(entry.get("breakdown") or {})
+    base = breakdown.get("heuristic_relevance", breakdown.get("relevance"))
+    if base is None:
+        return entry
+    base = float(base)
+    current = float(breakdown.get("relevance") if breakdown.get("relevance") is not None else base)
+    llm_value = max(0.0, min(100.0, float(llm_relevance)))
+    blended = (1.0 - blend) * base + blend * llm_value
+    delta = TAG_SCORE_RELEVANCE_WEIGHT * (blended - current)
+    score = max(1, min(100, round(int(entry.get("score") or 0) + delta)))
+    breakdown["heuristic_relevance"] = round(base, 1)
+    breakdown["llm_relevance"] = round(llm_value, 1)
+    breakdown["relevance"] = round(blended, 1)
+    updated = dict(entry)
+    updated["score"] = score
+    updated["breakdown"] = breakdown
+    updated["signals"] = tag_signals(breakdown)
+    return updated
 
 
 def _cache_is_fresh(doc: dict[str, Any] | None, ttl_seconds: int) -> bool:

@@ -79,6 +79,7 @@ You need to set up the configuration files.
 3. Fill in your keys (use the ones you saved!):
    - `GROK_API_KEY`: Paste your xAI API key here.
    - `LLM_PROVIDER`: Ensure it is set to `grok`.
+   - `DEEPSEEK_API_KEY` (optional): Your DeepSeek API key. When set, tags are written and scored by DeepSeek, with Grok as the fallback if a DeepSeek call fails.
    - `MONGO_INITDB_ROOT_USERNAME`: Set a dedicated Mongo root username.
    - `MONGO_INITDB_ROOT_PASSWORD`: Set a strong Mongo password.
    - `MONGO_URL`: Set this to the authenticated internal Docker hostname form, for example `mongodb://sendmybeat_root:YOUR_PASSWORD@mongo:27017/production?authSource=admin`.
