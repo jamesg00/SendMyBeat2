@@ -918,7 +918,7 @@ const UploadStudio = ({
     }));
   };
 
-  const pollBackgroundJobUntilDone = async (jobId, { intervalMs = 2500, maxAttempts = 180 } = {}) => {
+  const pollBackgroundJobUntilDone = async (jobId, { intervalMs = 2500, maxAttempts = 480 } = {}) => {
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       const response = await axios.get(`${API}/jobs/${jobId}`);
       const job = response?.data?.job;
