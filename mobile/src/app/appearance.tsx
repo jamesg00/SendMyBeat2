@@ -6,12 +6,14 @@ import Svg, { Path } from 'react-native-svg';
 
 import { useUiStyles } from '@/components/ui';
 import { Wallpaper } from '@/components/wallpaper';
+import { openPaywall, useSubscription } from '@/state/billing';
 import { setWallpaper, useWallpaperId, wallpaperColors, WALLPAPERS, type WallpaperId } from '@/state/wallpaper';
-import { F, font, makeStyles, PALETTES, setTheme, THEMES, useColors, useThemeId, type Palette, type ThemeId } from '@/theme';
+import { F, R, font, makeStyles, PALETTES, setTheme, THEMES, useColors, useThemeId, type Palette, type ThemeId } from '@/theme';
 
 // The theme gallery, like the Clippr desktop app's Appearance page. Picking one cross-fades the
 // whole app to it; the choice is kept on this device. Below it, the animated wallpapers for the
-// main tabs; the picked one also plays behind this screen.
+// main tabs, for paying accounts; the picked one also plays behind this screen. Free accounts see
+// them locked, and a tap opens the plans.
 export default function AppearanceScreen() {
   const s = useStyles();
   const ui = useUiStyles();
@@ -20,10 +22,12 @@ export default function AppearanceScreen() {
   const current = useThemeId();
   const wallpaper = useWallpaperId();
   const wallColors = wallpaperColors(C);
+  const sub = useSubscription();
+  const paying = !!sub?.is_subscribed;
 
   return (
     <View style={s.root}>
-      {wallpaper && wallColors ? <Wallpaper id={wallpaper} colors={wallColors} active /> : null}
+      {paying && wallpaper && wallColors ? <Wallpaper id={wallpaper} colors={wallColors} active /> : null}
       <ScrollView style={{ flex: 1 }} contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 32 }]}>
         <View style={s.topBar}>
           <Pressable onPress={() => router.back()} hitSlop={10} style={s.done} accessibilityRole="button">
@@ -53,29 +57,46 @@ export default function AppearanceScreen() {
           </Text>
         </View>
         <View style={s.wallGrid} accessibilityRole="radiogroup">
-          <WallpaperCard id={null} label="None" selected={wallpaper === null} />
+          <WallpaperCard id={null} label="None" selected={!paying || wallpaper === null} locked={false} />
           {WALLPAPERS.map((w) => (
-            <WallpaperCard key={w.id} id={w.id} label={w.label} preview={w.preview} selected={w.id === wallpaper} />
+            <WallpaperCard key={w.id} id={w.id} label={w.label} preview={w.preview} selected={paying && w.id === wallpaper} locked={!paying} />
           ))}
         </View>
+        {!paying ? (
+          <Pressable onPress={() => openPaywall('needs_plan')} style={s.upgrade} accessibilityRole="button">
+            <Text style={[s.upgradeText, { color: C.acc }]}>Choose a plan to pick a wallpaper</Text>
+          </Pressable>
+        ) : null}
       </ScrollView>
     </View>
   );
 }
 
-function WallpaperCard({ id, label, preview, selected }: { id: WallpaperId | null; label: string; preview?: number; selected: boolean }) {
+function WallpaperCard({
+  id,
+  label,
+  preview,
+  selected,
+  locked,
+}: {
+  id: WallpaperId | null;
+  label: string;
+  preview?: number;
+  selected: boolean;
+  locked: boolean;
+}) {
   const s = useStyles();
   const C = useColors();
   return (
     <Pressable
-      onPress={() => setWallpaper(id)}
+      onPress={() => (locked ? openPaywall('needs_plan') : setWallpaper(id))}
       style={({ pressed }) => [s.wallCard, selected && { borderColor: C.acc, borderWidth: 2, padding: 5 }, pressed && { transform: [{ scale: 0.97 }] }]}
       accessibilityRole="radio"
       accessibilityState={{ checked: selected }}
-      accessibilityLabel={id ? `${label} wallpaper` : 'No wallpaper'}>
+      accessibilityLabel={id ? `${label} wallpaper${locked ? ', needs a plan' : ''}` : 'No wallpaper'}>
       <View style={s.wallPreview}>
         {preview ? (
-          <Image source={preview} style={{ flex: 1 }} contentFit="cover" accessibilityIgnoresInvertColors />
+          <Image source={preview} style={[{ flex: 1 }, locked && { opacity: 0.55 }]} contentFit="cover" accessibilityIgnoresInvertColors />
         ) : (
           <View style={{ flex: 1, backgroundColor: C.bg, alignItems: 'center', justifyContent: 'center' }}>
             <Svg width={22} height={22} viewBox="0 0 22 22" accessibilityElementsHidden importantForAccessibility="no">
@@ -83,6 +104,13 @@ function WallpaperCard({ id, label, preview, selected }: { id: WallpaperId | nul
             </Svg>
           </View>
         )}
+        {locked ? (
+          <View style={s.lock}>
+            <Svg width={11} height={11} viewBox="0 0 24 24" accessibilityElementsHidden importantForAccessibility="no">
+              <Path d="M7 11V8a5 5 0 0 1 10 0v3M5 11h14v10H5z" stroke="#FFFFFF" strokeWidth={2.4} fill="none" strokeLinejoin="round" />
+            </Svg>
+          </View>
+        ) : null}
       </View>
       <Text style={s.wallLabel} numberOfLines={1}>
         {label}
@@ -174,4 +202,25 @@ const useStyles = makeStyles((C) => ({
   },
   wallPreview: { aspectRatio: 0.58, borderRadius: 9, overflow: 'hidden' },
   wallLabel: { color: C.text, fontSize: 12.5, textAlign: 'center', ...font('600') },
+  lock: {
+    position: 'absolute',
+    right: 6,
+    bottom: 6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  upgrade: {
+    height: 44,
+    borderRadius: R.ctl,
+    borderWidth: 1,
+    borderColor: C.accLine,
+    backgroundColor: C.accSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  upgradeText: { fontSize: 14.5, ...font('600') },
 }));

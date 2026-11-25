@@ -20,6 +20,7 @@ import { useFocusEffect } from 'expo-router';
 import Svg, { Path, Rect } from 'react-native-svg';
 
 import { Wallpaper } from '@/components/wallpaper';
+import { useKnownSubscription } from '@/state/billing';
 import { useWallpaperId, wallpaperColors } from '@/state/wallpaper';
 import { F, R, display, font, makeStyles, useColors } from '@/theme';
 
@@ -45,8 +46,10 @@ export function Screen({
   const C = useColors();
   const styles = useUiStyles();
   const insets = useSafeAreaInsets();
-  // The picked wallpaper sits behind the content (dark themes only), and only animates while
-  // this tab is the one on screen.
+  // The picked wallpaper sits behind the content (dark themes, paying accounts only), and only
+  // animates while this tab is the one on screen. It waits for the plan to load, so a free
+  // account never sees it flash in.
+  const paying = !!useKnownSubscription()?.is_subscribed;
   const wallpaperId = useWallpaperId();
   const wallColors = wallpaperColors(C);
   const [focused, setFocused] = useState(true);
@@ -56,7 +59,7 @@ export function Screen({
       return () => setFocused(false);
     }, []),
   );
-  const wall = wallpaperId && wallColors ? <Wallpaper id={wallpaperId} colors={wallColors} active={focused} /> : null;
+  const wall = paying && wallpaperId && wallColors ? <Wallpaper id={wallpaperId} colors={wallColors} active={focused} /> : null;
   // The scroll view starts below the status bar so the pull-to-refresh spinner shows under it,
   // not hidden behind the clock.
   return (
