@@ -659,9 +659,9 @@ function DoneView({ phase }: { phase: Extract<Phase, { kind: 'done' }> }) {
     <View style={{ flex: 1, gap: 18, paddingTop: 8 }}>
       <View style={s.statusRow}>
         <View style={[s.statusDot, { backgroundColor: C.acc }]} />
-        <Text style={s.sub}>{studio.publishAt ? 'Scheduled on YouTube' : 'Live on YouTube'}</Text>
+        <Text style={s.sub}>{phase.scheduled ? 'Scheduled on YouTube' : 'Live on YouTube'}</Text>
       </View>
-      <Text style={s.renderTitle}>{studio.title || 'Your beat'}</Text>
+      <Text style={s.renderTitle}>{phase.title || 'Your beat'}</Text>
       <Text style={s.sub}>{phase.message}</Text>
       {phase.warnings?.map((w) => (
         <Text key={w} style={[s.sub, { color: C.text }]}>

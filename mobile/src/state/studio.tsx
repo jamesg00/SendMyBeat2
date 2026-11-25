@@ -1,7 +1,7 @@
 import * as DocumentPicker from 'expo-document-picker';
 import { Directory, File, Paths } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Platform } from 'react-native';
 
 import * as api from '@/api/endpoints';
@@ -11,7 +11,9 @@ import { VIZ_DEFAULTS, getBaker, isProStyle, pickStyle, type BakeProgress, type 
 import { useDraft, type DraftDescription } from '@/state/draft';
 
 // Upload Studio lives here instead of in the screen, so closing the studio keeps the draft and
-// the render job keeps polling. On native the draft is also saved to disk and survives app restarts.
+// the render job keeps polling. Every app start opens an empty studio: the draft on disk is only
+// brought back while its upload is still running, so that job keeps being followed. A finished
+// upload clears the beat, artwork and settings straight away.
 
 export type LogLine = { at: number; text: string };
 export type FileSlot = { name: string; uri: string; fileId?: string; status: 'uploading' | 'ready' | 'error'; error?: string };
@@ -19,7 +21,7 @@ export type Phase =
   | { kind: 'idle' }
   | { kind: 'sending' }
   | { kind: 'job'; job: UploadJob; startedAt: number; log: LogLine[] }
-  | { kind: 'done'; url?: string; message: string; warnings?: string[] }
+  | { kind: 'done'; url?: string; message: string; warnings?: string[]; title?: string; scheduled?: boolean }
   | { kind: 'error'; message: string };
 
 export type StudioSettings = {
@@ -125,10 +127,24 @@ const persist = Platform.OS !== 'web';
 const dir = persist ? new Directory(Paths.document, 'studio') : null;
 const stateFile = dir ? new File(dir, 'draft.json') : null;
 
+/** Deletes the saved draft and the copies of the beat, artwork and logo kept next to it. */
+function clearSaved() {
+  try {
+    if (dir?.exists) dir.delete();
+  } catch {
+    // nothing to clean up
+  }
+}
+
+/** The draft to bring back on app start: only one whose upload is still running. */
 function loadSaved(): Saved | null {
   try {
     if (!stateFile?.exists) return null;
     const saved = JSON.parse(stateFile.textSync()) as Saved & { scale?: number };
+    if (saved.phase?.kind !== 'job') {
+      clearSaved();
+      return null;
+    }
     // Drafts from before the free transform had one scale for both sides.
     if (saved.scaleX === undefined && typeof saved.scale === 'number') {
       saved.scaleX = saved.scale;
@@ -243,6 +259,26 @@ export function StudioProvider({ children }: { children: ReactNode }) {
 
   const jobId = phase.kind === 'job' ? phase.job.id : null;
 
+  // Clears the beat, artwork and settings while keeping the phase (and the tags and description).
+  const clearDraft = useCallback(() => {
+    setSettings(DEFAULTS);
+    setAudio(null);
+    setImage(null);
+    clearSaved();
+  }, []);
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+
+  /** A finished upload: show what went up and start the next draft empty. */
+  const finish = useCallback(
+    (done: Omit<Extract<Phase, { kind: 'done' }>, 'kind' | 'title' | 'scheduled'>) => {
+      const cur = settingsRef.current;
+      setPhase({ kind: 'done', ...done, title: cur.title.trim() || undefined, scheduled: !!cur.publishAt });
+      clearDraft();
+    },
+    [clearDraft],
+  );
+
   // Poll the render + upload job the same way the website does (every 3s), even with the studio closed.
   useEffect(() => {
     if (!jobId) return;
@@ -251,8 +287,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
         const { job } = await api.uploadJob(jobId);
         if (!job) return;
         if (job.status === 'succeeded') {
-          setPhase({
-            kind: 'done',
+          finish({
             url: job.result?.video_url,
             message: job.result?.message ?? 'Video uploaded to YouTube.',
             warnings: job.result?.warnings?.length ? job.result.warnings : undefined,
@@ -272,7 +307,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
       }
     }, 3000);
     return () => clearInterval(timer);
-  }, [jobId]);
+  }, [jobId, finish]);
 
   const send = async (
     f: PickedFile,
@@ -433,22 +468,15 @@ export function StudioProvider({ children }: { children: ReactNode }) {
         const now = Date.now();
         setPhase({ kind: 'job', job: res.job, startedAt: now, log: [{ at: now, text: 'Sent beat and artwork to SendMyBeat' }] });
       }
-      else setPhase({ kind: 'done', url: res.video_url, message: res.message ?? 'Upload started.' });
+      else finish({ url: res.video_url, message: res.message ?? 'Upload started.' });
     } catch (e) {
       setPhase({ kind: 'error', message: e instanceof Error ? e.message : 'Upload failed.' });
     }
   };
 
   const reset = () => {
-    setSettings(DEFAULTS);
-    setAudio(null);
-    setImage(null);
+    clearDraft();
     setPhase({ kind: 'idle' });
-    try {
-      if (dir?.exists) dir.delete();
-    } catch {
-      // nothing to clean up
-    }
   };
 
   // Queued jobs stop at once, running ones at their next step; polling then reports it cancelled.

@@ -1382,6 +1382,32 @@ const UploadStudio = ({
     }
   };
 
+  // After a video goes up, the next upload starts empty: no beat, artwork, thumbnail or beat details.
+  const startFreshAfterUpload = () => {
+    audioPlayerRef.current?.pause?.();
+    setAudioFile(null);
+    setAudioFileId("");
+    setAudioPreviewUrl("");
+    setIsAudioPlaying(false);
+    setAudioCurrentTime(0);
+    setAudioDuration(0);
+    setImageFile(null);
+    setImageFileId("");
+    setSelectedImageLabel("");
+    setImagePreviewUrl("");
+    setImageMeta({ width: 0, height: 0, ratio: 1 });
+    setThumbnailFileId("");
+    setThumbnailName("");
+    setThumbnailCheckResult(null);
+    setBeatAnalysis(null);
+    setUploadTitle("");
+    setUploadBeatBpm("");
+    setUploadBeatKey("");
+    setBeatMetaPromptShown(false);
+    setMobileDrawerOpen(false);
+    setStudioOpen(false);
+  };
+
   const handleYouTubeUploadAsync = async () => {
     if (!uploadTitle || !(selectedDescriptionId || uploadDescriptionText.trim()) || !audioFileId || !imageFileId) {
       toast.error("Please fill title, description, and ensure files are uploaded.");
@@ -1484,6 +1510,7 @@ const UploadStudio = ({
       if (response?.data?.video_url) {
         toast.success("Video uploaded successfully!");
         window.open(response.data.video_url, "_blank");
+        startFreshAfterUpload();
         return;
       }
 
@@ -1537,6 +1564,7 @@ const UploadStudio = ({
             window.open(nextJob.result.video_url, "_blank");
           }
           setCurrentUploadJob(null);
+          startFreshAfterUpload();
         } else if (nextJob.status === "failed" || nextJob.status === "cancelled") {
           window.clearInterval(interval);
           setUploadingToYouTube(false);
