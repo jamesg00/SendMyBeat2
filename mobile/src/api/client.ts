@@ -126,9 +126,10 @@ function readableJobError(error?: string) {
 export type JobProgress = (progress: number, message?: string) => void;
 
 // Same contract as pollBackgroundJobUntilDone on the website, plus progress reports for the UI.
+// Waits up to 20 minutes (480 x 2.5s): on a busy day a job can sit in the queue before it starts.
 export async function pollJob<R>(
   jobId: string,
-  { intervalMs = 2500, maxAttempts = 180, onProgress }: { intervalMs?: number; maxAttempts?: number; onProgress?: JobProgress } = {},
+  { intervalMs = 2500, maxAttempts = 480, onProgress }: { intervalMs?: number; maxAttempts?: number; onProgress?: JobProgress } = {},
 ): Promise<R> {
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     const { job } = await api<{ job?: Job<R> }>(`/jobs/${jobId}`);

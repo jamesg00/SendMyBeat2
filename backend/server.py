@@ -533,8 +533,25 @@ VISUAL_UPLOAD_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".gif", ".webm", "
 VIDEO_VISUAL_EXTENSIONS = {".gif", ".webm", ".mp4", ".mov", ".m4v"}
 # Jobs that run FFmpeg; they get their own worker lane (see _start_background_job_workers).
 MEDIA_JOB_TYPES = frozenset({"youtube_upload"})
-MEDIA_JOB_WORKER_CONCURRENCY = int(os.environ.get("MEDIA_JOB_WORKER_CONCURRENCY", "1"))
-LIGHT_JOB_WORKER_CONCURRENCY = int(os.environ.get("LIGHT_JOB_WORKER_CONCURRENCY", "3"))
+# Media lane slots. A youtube_upload job renders (CPU) and then uploads (network). Two slots let
+# one job upload while the next one renders; FFMPEG_RENDER_CONCURRENCY still caps how many
+# encodes run at once, so a 2 vCPU / 2 GB box never runs two FFmpeg processes (~300 MB each).
+MEDIA_JOB_WORKER_CONCURRENCY = int(os.environ.get("MEDIA_JOB_WORKER_CONCURRENCY", "2"))
+FFMPEG_RENDER_CONCURRENCY = max(1, int(os.environ.get("FFMPEG_RENDER_CONCURRENCY", "1") or "1"))
+# Light jobs (tags, analysis, plan steps) mostly wait on LLM and web calls, so more of them can
+# run side by side on a small box. With 3, a burst of users queued behind each other and the
+# website stopped waiting after a few minutes.
+LIGHT_JOB_WORKER_CONCURRENCY = int(os.environ.get("LIGHT_JOB_WORKER_CONCURRENCY", "8"))
+# asyncio.to_thread shares one thread pool. Python's default is cpu_count + 4 (6 threads on a
+# 2 vCPU box), and a render, an upload chunk, every web lookup in a tag run and every bcrypt
+# login all wait for one of those threads. The threads mostly sit on I/O, so a bigger pool is cheap.
+ASYNC_THREAD_POOL_SIZE = max(8, int(os.environ.get("ASYNC_THREAD_POOL_SIZE", "32") or "32"))
+# YouTube resumable upload chunk size (a multiple of 256 KB). -1 sent the whole file as one
+# request, so YOUTUBE_CHUNK_TIMEOUT_SECONDS applied to the whole upload and progress never moved.
+YOUTUBE_UPLOAD_CHUNK_BYTES = int(os.environ.get("YOUTUBE_UPLOAD_CHUNK_BYTES", str(8 * 1024 * 1024)))
+YOUTUBE_DAILY_UPLOADS_USED_MESSAGE = (
+    "SendMyBeat has used today's YouTube upload allowance. Uploads open again after midnight Pacific time."
+)
 PRIORITIZE_YOUTUBE_UPLOAD_JOBS = str(os.environ.get("PRIORITIZE_YOUTUBE_UPLOAD_JOBS", "true")).strip().lower() not in {"0", "false", "no"}
 SPOTLIGHT_REFRESH_INTERVAL_SECONDS = int(os.environ.get("SPOTLIGHT_REFRESH_INTERVAL_SECONDS", "1800"))
 METADATA_CACHE_TTL_SECONDS = int(os.environ.get("METADATA_CACHE_TTL_SECONDS", "86400"))
@@ -3240,6 +3257,37 @@ async def _background_job_worker_loop() -> None:
     await background_job_service.worker_loop()
 
 
+_render_slots: asyncio.Semaphore | None = None
+
+
+def _get_render_slots() -> asyncio.Semaphore:
+    """Caps concurrent FFmpeg renders across media lane slots (see FFMPEG_RENDER_CONCURRENCY)."""
+    global _render_slots
+    if _render_slots is None:
+        _render_slots = asyncio.Semaphore(FFMPEG_RENDER_CONCURRENCY)
+    return _render_slots
+
+
+def _configure_thread_pool() -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    asyncio.get_running_loop().set_default_executor(
+        ThreadPoolExecutor(max_workers=ASYNC_THREAD_POOL_SIZE, thread_name_prefix="smb-io")
+    )
+
+
+async def _youtube_upload_slots_full() -> bool:
+    """True when queued uploads already cover what is left of today's YouTube upload allowance."""
+    left = await youtube_quota_service.uploads_left(db)
+    if left <= 0:
+        return True
+    try:
+        queued = await db.upload_jobs.count_documents({"status": "queued", "type": "youtube_upload"})
+    except (AttributeError, TypeError):
+        queued = 0
+    return int(queued or 0) >= left
+
+
 def _start_background_job_workers() -> list[asyncio.Task]:
     """Two lanes over the same Mongo queue.
 
@@ -4121,6 +4169,11 @@ async def _execute_youtube_upload_job(job: dict) -> dict:
 
     await _assert_job_not_cancel_requested(job_id, stage="oauth_refresh")
     await ensure_has_upload_credit(user_id)
+    # Reserve one of today's YouTube uploads before spending CPU on the render. It is given back
+    # if the job fails before the video starts going to YouTube.
+    upload_quota_day = youtube_quota_service.quota_day()
+    if not await youtube_quota_service.try_use_upload(db):
+        raise HTTPException(status_code=429, detail=YOUTUBE_DAILY_UPLOADS_USED_MESSAGE)
     await _update_upload_job(
         job_id,
         progress=JOB_PROGRESS_ENCODE_MIN,
@@ -4139,12 +4192,24 @@ async def _execute_youtube_upload_job(job: dict) -> dict:
     )
     heartbeat_task = asyncio.create_task(_job_heartbeat_loop(job_id))
     try:
-        rendered_video_path = await _render_youtube_video(
-            audio_upload=audio_upload,
-            image_upload=image_upload,
-            payload=payload,
-            job_id=job_id,
-        )
+        render_slots = _get_render_slots()
+        if render_slots.locked():
+            await _update_upload_job(
+                job_id,
+                message="Waiting for a free render slot...",
+                extra_updates={"last_heartbeat_at": _safe_iso_now()},
+            )
+        async with render_slots:
+            await _assert_job_not_cancel_requested(job_id, stage="ffmpeg_render")
+            rendered_video_path = await _render_youtube_video(
+                audio_upload=audio_upload,
+                image_upload=image_upload,
+                payload=payload,
+                job_id=job_id,
+            )
+    except BaseException:
+        await youtube_quota_service.release_upload(db, upload_quota_day)
+        raise
     finally:
         heartbeat_task.cancel()
         try:
@@ -4169,6 +4234,7 @@ async def _execute_youtube_upload_job(job: dict) -> dict:
         },
     )
 
+    youtube_insert_started = False
     try:
         await _assert_job_not_cancel_requested(job_id, stage="ffmpeg_render")
         await _update_upload_job(
@@ -4180,7 +4246,7 @@ async def _execute_youtube_upload_job(job: dict) -> dict:
         logging.info("YouTube API upload started for job=%s title=%r", job_id, title)
         youtube = await asyncio.to_thread(build, "youtube", "v3", credentials=credentials)
         upload_body = publish_extras_service.build_upload_body({**payload, "title": title})
-        media_upload = MediaFileUpload(str(rendered_video_path), chunksize=-1, resumable=True, mimetype="video/mp4")
+        media_upload = MediaFileUpload(str(rendered_video_path), chunksize=YOUTUBE_UPLOAD_CHUNK_BYTES, resumable=True, mimetype="video/mp4")
         request = youtube.videos().insert(
             part="snippet,status",
             body=upload_body,
@@ -4200,6 +4266,7 @@ async def _execute_youtube_upload_job(job: dict) -> dict:
             )
 
         try:
+            youtube_insert_started = True
             response = await _youtube_resumable_upload(
                 request,
                 on_chunk_status=_report_youtube_chunk_progress,
@@ -4254,6 +4321,10 @@ async def _execute_youtube_upload_job(job: dict) -> dict:
             "scheduled_for": scheduled_for,
             "warnings": extras.get("warnings") or [],
         }
+    except BaseException:
+        if not youtube_insert_started:
+            await youtube_quota_service.release_upload(db, upload_quota_day)
+        raise
     finally:
         try:
             rendered_video_path.unlink(missing_ok=True)
@@ -10024,6 +10095,8 @@ async def upload_to_youtube(
                 "message": "A YouTube upload is already running. Waiting for the existing job to finish.",
                 "job": _sanitize_upload_job_doc(active_job),
             }
+        if await _youtube_upload_slots_full():
+            raise HTTPException(status_code=429, detail=YOUTUBE_DAILY_UPLOADS_USED_MESSAGE)
         logging.info(f"Queueing YouTube upload for user {current_user['id']}")
         payload = await _build_youtube_upload_job_payload(
             current_user=current_user,
@@ -11053,6 +11126,7 @@ async def _ensure_indexes() -> None:
 async def startup_background_tasks():
     global _upload_job_worker_task, _job_watchdog_task, _spotlight_refresh_task, _tag_outcome_task, _job_worker_tasks
     _validate_security_configuration()
+    _configure_thread_pool()
     await _ensure_indexes()
     await _log_admin_id_hint()
     _log_youtube_render_timeout_configuration()
