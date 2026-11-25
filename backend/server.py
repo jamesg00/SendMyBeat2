@@ -639,6 +639,16 @@ def _get_llm_client(provider_override: str | None = None, model_override: str | 
 TAG_LLM_PROVIDERS = ("openai", "grok", "deepseek")
 
 
+def _llm_extra_body(settings: dict) -> dict | None:
+    """Provider-specific request fields. DeepSeek thinks before answering by default, which is
+    slow and bills the thinking as output; tag picking and scoring don't need it.
+    DEEPSEEK_THINKING=enabled turns it back on."""
+    if settings.get("provider") == "deepseek":
+        thinking = (os.environ.get("DEEPSEEK_THINKING") or "disabled").strip().lower()
+        return {"thinking": {"type": "enabled" if thinking == "enabled" else "disabled"}}
+    return None
+
+
 def _resolve_tag_llm_providers(requested: str | None) -> tuple[str | None, str | None]:
     """Which provider writes and scores tags, and which one takes over if it fails.
     TAG_LLM_PROVIDER wins when set (the server owner's choice beats the app's default "grok");
@@ -1401,6 +1411,7 @@ async def llm_chat(
             messages=messages,
             temperature=temperature,
             max_tokens=max_tokens,
+            extra_body=_llm_extra_body(settings),
         )
     except Exception as exc:
         if not fallback_provider or fallback_provider == (provider or "").lower():
@@ -1412,6 +1423,7 @@ async def llm_chat(
             messages=messages,
             temperature=temperature,
             max_tokens=max_tokens,
+            extra_body=_llm_extra_body(settings),
         )
 
     # Track usage
