@@ -243,3 +243,164 @@
   .lp *, .lp *::after { animation: none !important; transition: none !important; }
   .lp-log--loop li { opacity: 1; }
 }
+
+/* ======================================================================
+   Console Ultra look (concept 47): aurora behind the hero, a gradient edge
+   that travels around the tag lab, the big feature tile and the plan that
+   fits, a bento features grid, mint-to-blue buttons with a sheen, and a
+   gradient call-to-action card. Looks only: nothing here changes behavior.
+   ====================================================================== */
+@property --lp-ang { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+
+.lp {
+  --lp-mint: #8BFFD0;
+  --lp-blue: #4C8DFF;
+  --lp-grad: linear-gradient(135deg, var(--lp-mint), var(--lp-blue));
+  --lp-ink: #04131c;
+  --lp-edge: conic-gradient(from var(--lp-ang), var(--lp-mint), var(--lp-blue), rgba(255, 255, 255, 0.06) 40%, rgba(255, 255, 255, 0.06) 60%, var(--lp-mint));
+}
+
+/* Section labels read like code comments. */
+.lp .smb-eyebrow::before { content: "// "; color: #555; }
+
+/* Console panels: flat cards with a thin mint-to-blue light along the top. */
+.lp-lab,
+.lp-how-stage,
+.lp-feature,
+.lp-plan,
+.lp-match {
+  background: var(--c-card);
+  box-shadow: none;
+}
+.lp-match { position: relative; overflow: hidden; border-radius: 12px; }
+.lp-lab,
+.lp-how-stage,
+.lp-feature,
+.lp-plan { border-radius: 12px; }
+.lp-how-stage::before,
+.lp-feature::before,
+.lp-plan::before,
+.lp-match::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(139, 255, 208, 0.7), rgba(76, 141, 255, 0.6), transparent);
+}
+.lp .smb-pill { border-radius: 5px; }
+
+/* How it works: tighter steps, the active one marked with an accent bar. */
+.lp-how-step { border-radius: 9px; }
+.lp-how-step.is-active { background: #0d0d0d; border-color: #2a2a2a; box-shadow: inset 3px 0 0 var(--c-acc); }
+.lp-feature-ico { border-radius: 8px; }
+
+/* Hero: a slow aurora behind it, a staggered entrance and a shimmering headline. */
+.lp-hero { isolation: isolate; }
+.lp-hero::before {
+  content: "";
+  position: absolute;
+  inset: -120px -10% -40px;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(40% 50% at 70% 30%, rgba(139, 255, 208, 0.22), transparent 70%),
+    radial-gradient(45% 55% at 88% 70%, rgba(76, 141, 255, 0.28), transparent 70%),
+    radial-gradient(35% 40% at 15% 10%, rgba(76, 141, 255, 0.14), transparent 70%);
+  filter: blur(30px);
+  animation: lp-drift 16s ease-in-out infinite alternate;
+}
+.lp-hero-copy > * { animation: lp-rise 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.lp-hero-copy > :nth-child(2) { animation-delay: 0.08s; }
+.lp-hero-copy > :nth-child(3) { animation-delay: 0.16s; }
+.lp-hero-copy > :nth-child(4) { animation-delay: 0.24s; }
+.lp-hero-copy > :nth-child(5) { animation-delay: 0.32s; }
+.lp-h1 span {
+  background: linear-gradient(90deg, var(--lp-mint), var(--lp-blue), var(--lp-mint)) 0 50% / 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: lp-shine 6s linear infinite;
+}
+
+/* The traveling gradient edge. */
+.lp-lab,
+.lp-features > .lp-feature:first-child,
+.lp-plan.is-pick {
+  border: 1px solid transparent;
+  background: linear-gradient(var(--c-card), var(--c-card)) padding-box, var(--lp-edge) border-box;
+  animation: lp-spin 7s linear infinite;
+}
+.lp-features > .lp-feature:first-child:hover,
+.lp-plan.is-pick { border-color: transparent; }
+.lp-hero .lp-lab {
+  box-shadow: 0 40px 120px -40px rgba(139, 255, 208, 0.4);
+  animation: lp-rise 1s 0.2s cubic-bezier(0.2, 0.7, 0.2, 1) both, lp-spin 7s linear infinite;
+}
+.lp-plan.is-pick { box-shadow: 0 30px 80px -30px rgba(76, 141, 255, 0.6); }
+.lp-plan.is-pick::before { display: none; }
+
+/* Features as a bento grid: the first tile is big and has its own aurora. */
+.lp-features { grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-rows: minmax(190px, auto); }
+.lp-features > .lp-feature:first-child { grid-column: span 2; grid-row: span 2; display: flex; flex-direction: column; justify-content: flex-end; isolation: isolate; }
+.lp-features > .lp-feature:first-child h3 { font-size: 30px; letter-spacing: -0.03em; }
+.lp-features > .lp-feature:first-child .lp-feature-ico { width: 56px; height: 56px; margin-bottom: auto; }
+.lp-features > .lp-feature:nth-child(n + 4) { grid-column: span 2; }
+.lp-features > .lp-feature:first-child::before {
+  inset: -30%;
+  height: auto;
+  z-index: -1;
+  background:
+    radial-gradient(35% 40% at 70% 30%, rgba(139, 255, 208, 0.25), transparent 70%),
+    radial-gradient(40% 45% at 30% 80%, rgba(76, 141, 255, 0.3), transparent 70%);
+  filter: blur(20px);
+  animation: lp-drift 12s ease-in-out infinite alternate;
+}
+.lp-features > .lp-feature:first-child::after { display: none; }
+
+/* Main buttons: mint to blue, with a sheen that passes every few seconds. */
+.lp .smb-btn--pri,
+.lp-auth .smb-btn--pri {
+  background: var(--lp-grad, linear-gradient(135deg, #8BFFD0, #4C8DFF)) !important;
+  color: #04131c !important;
+  box-shadow: 0 10px 30px -10px rgba(76, 141, 255, 0.7) !important;
+}
+.lp .smb-btn--pri:hover:not(:disabled),
+.lp-auth .smb-btn--pri:hover:not(:disabled) { filter: brightness(1.08); box-shadow: 0 14px 34px -12px rgba(76, 141, 255, 0.8) !important; }
+.lp .smb-btn--pri::after { animation: lp-sheen 4.5s ease-in-out infinite; }
+
+/* The last call to action: a glowing mint-to-blue card. */
+.lp-final {
+  border-color: transparent;
+  border-radius: 32px;
+  background: linear-gradient(165deg, var(--lp-mint), var(--lp-blue)) 0 0 / 200% 200%;
+  color: var(--lp-ink);
+  box-shadow: 0 40px 140px -40px rgba(76, 141, 255, 0.5), 0 0 100px -40px rgba(139, 255, 208, 0.45);
+  animation: lp-hue 12s ease-in-out infinite alternate;
+}
+.lp-final .lp-h2 { color: var(--lp-ink); }
+.lp-final .smb-t2 { color: rgba(4, 19, 28, 0.75) !important; }
+.lp .lp-final .smb-btn--pri { background: var(--lp-ink) !important; color: #fff !important; box-shadow: 0 12px 30px -12px rgba(4, 19, 28, 0.6) !important; }
+.lp-final .lp-login { color: var(--lp-ink); }
+.lp-final .lp-login:hover { color: #000; }
+
+@keyframes lp-spin { to { --lp-ang: 360deg; } }
+@keyframes lp-drift { 0% { transform: translate3d(0, 0, 0) scale(1); } 50% { transform: translate3d(-5%, 4%, 0) scale(1.1); } 100% { transform: translate3d(3%, -2%, 0) scale(1.04); } }
+@keyframes lp-shine { to { background-position: 200% 50%; } }
+@keyframes lp-sheen { 0%, 60% { transform: translateX(-120%) skewX(-20deg); } 100% { transform: translateX(220%) skewX(-20deg); } }
+@keyframes lp-rise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+@keyframes lp-hue { 0% { background-position: 0% 30%; } 100% { background-position: 100% 70%; } }
+
+@media (max-width: 960px) {
+  .lp-features { grid-template-columns: 1fr; grid-auto-rows: auto; }
+  .lp-features > .lp-feature:first-child,
+  .lp-features > .lp-feature:nth-child(n + 4) { grid-column: auto; grid-row: auto; }
+  .lp-features > .lp-feature:first-child { min-height: 220px; }
+  .lp-final { margin-left: 12px; margin-right: 12px; border-radius: 24px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lp *::before { animation: none !important; }
+  .lp-hero-copy > *, .lp-hero .lp-lab { opacity: 1; transform: none; }
+}
