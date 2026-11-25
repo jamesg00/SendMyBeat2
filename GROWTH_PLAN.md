@@ -3,6 +3,7 @@
 **Goal:** Acquire 10,000 active music producers.
 **Budget:** $0 (Organic Growth Only).
 **Timeline:** 3-6 Months.
+**Results:** Track what each experiment did in [docs/growth-log.md](docs/growth-log.md).
 
 ---
 
