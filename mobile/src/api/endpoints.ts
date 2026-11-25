@@ -3,7 +3,7 @@ import { File } from 'expo-file-system';
 import { api, runJob, type JobProgress } from './client';
 
 // Shapes follow the Pydantic models in backend/server.py and backend/models_spotlight.py.
-export type User = { id: string; username: string; is_admin?: boolean; email?: string | null };
+export type User = { id: string; username: string; is_admin?: boolean; email?: string | null; created_at?: string | null };
 export type TokenResponse = { access_token: string; token_type: string; user: User };
 
 export type SubscriptionStatus = {

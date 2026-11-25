@@ -88,13 +88,13 @@ export function requireCredit(kind: 'ai' | 'upload') {
 
 // Free accounts see the plans once each time the app opens.
 let promptedFree = false;
-export function useFreePlanPrompt() {
+export function useFreePlanPrompt(enabled = true) {
   const s = useSubscription();
   useEffect(() => {
-    if (!s || s.is_subscribed || promptedFree) return;
+    if (!enabled || !s || s.is_subscribed || promptedFree) return;
     promptedFree = true;
     openPaywall('needs_plan');
-  }, [s]);
+  }, [s, enabled]);
 }
 
 const appLink = () => Linking.createURL('billing');
