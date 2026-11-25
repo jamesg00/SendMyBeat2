@@ -21,7 +21,7 @@ export function Wallpaper(props: Props) {
   }, [key]);
 
   return (
-    <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: props.colors.bg }]} aria-hidden>
+    <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: props.colors.screen }]} aria-hidden>
       {createElement('iframe', {
         ref: frame,
         srcDoc: html,

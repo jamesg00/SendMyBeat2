@@ -46,9 +46,9 @@ export function Screen({
   const C = useColors();
   const styles = useUiStyles();
   const insets = useSafeAreaInsets();
-  // The picked wallpaper sits behind the content (dark themes, paying accounts only), and only
-  // animates while this tab is the one on screen. It waits for the plan to load, so a free
-  // account never sees it flash in.
+  // The picked wallpaper sits behind the content (paying accounts only; light themes get its light
+  // version), and only animates while this tab is the one on screen. It waits for the plan to
+  // load, so a free account never sees it flash in.
   const paying = !!useKnownSubscription()?.is_subscribed;
   const wallpaperId = useWallpaperId();
   const wallColors = wallpaperColors(C);
@@ -59,7 +59,7 @@ export function Screen({
       return () => setFocused(false);
     }, []),
   );
-  const wall = paying && wallpaperId && wallColors ? <Wallpaper id={wallpaperId} colors={wallColors} active={focused} /> : null;
+  const wall = paying && wallpaperId ? <Wallpaper id={wallpaperId} colors={wallColors} active={focused} /> : null;
   // The scroll view starts below the status bar so the pull-to-refresh spinner shows under it,
   // not hidden behind the clock.
   return (

@@ -31,7 +31,7 @@ export function Wallpaper(props: Props) {
   return (
     <View
       pointerEvents="none"
-      style={[StyleSheet.absoluteFill, { backgroundColor: props.colors.bg }]}
+      style={[StyleSheet.absoluteFill, { backgroundColor: props.colors.screen }]}
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants">
       <WebView
@@ -52,7 +52,7 @@ export function Wallpaper(props: Props) {
         showsVerticalScrollIndicator={false}
         showsHorizontalScrollIndicator={false}
         androidLayerType="hardware"
-        style={{ flex: 1, backgroundColor: props.colors.bg }}
+        style={{ flex: 1, backgroundColor: props.colors.screen }}
       />
     </View>
   );
