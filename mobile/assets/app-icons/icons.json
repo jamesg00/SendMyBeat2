@@ -1,0 +1,252 @@
+[
+ {
+  "id": "NewYear",
+  "name": "New Year",
+  "concept": 101
+ },
+ {
+  "id": "LunarNewYear",
+  "name": "Lunar New Year",
+  "concept": 102
+ },
+ {
+  "id": "ValentinesDay",
+  "name": "Valentine's Day",
+  "concept": 103
+ },
+ {
+  "id": "ValentineBlush",
+  "name": "Valentine Blush",
+  "concept": 104
+ },
+ {
+  "id": "StPatricksDay",
+  "name": "St. Patrick's Day",
+  "concept": 105
+ },
+ {
+  "id": "Spring",
+  "name": "Spring",
+  "concept": 106
+ },
+ {
+  "id": "Easter",
+  "name": "Easter",
+  "concept": 107
+ },
+ {
+  "id": "AprilFools",
+  "name": "April Fools",
+  "concept": 108
+ },
+ {
+  "id": "EarthDay",
+  "name": "Earth Day",
+  "concept": 109
+ },
+ {
+  "id": "MothersDay",
+  "name": "Mother's Day",
+  "concept": 110
+ },
+ {
+  "id": "PrideMonth",
+  "name": "Pride Month",
+  "concept": 111
+ },
+ {
+  "id": "FathersDay",
+  "name": "Father's Day",
+  "concept": 112
+ },
+ {
+  "id": "Summer",
+  "name": "Summer",
+  "concept": 113
+ },
+ {
+  "id": "FourthOfJuly",
+  "name": "Fourth of July",
+  "concept": 114
+ },
+ {
+  "id": "BackToSchool",
+  "name": "Back to School",
+  "concept": 115
+ },
+ {
+  "id": "Halloween",
+  "name": "Halloween",
+  "concept": 116
+ },
+ {
+  "id": "HalloweenPumpkin",
+  "name": "Halloween Pumpkin",
+  "concept": 117
+ },
+ {
+  "id": "SpookyPurple",
+  "name": "Spooky Purple",
+  "concept": 118
+ },
+ {
+  "id": "Diwali",
+  "name": "Diwali",
+  "concept": 119
+ },
+ {
+  "id": "Thanksgiving",
+  "name": "Thanksgiving",
+  "concept": 120
+ },
+ {
+  "id": "BlackFriday",
+  "name": "Black Friday",
+  "concept": 121
+ },
+ {
+  "id": "CyberMonday",
+  "name": "Cyber Monday",
+  "concept": 122
+ },
+ {
+  "id": "Christmas",
+  "name": "Christmas",
+  "concept": 123
+ },
+ {
+  "id": "ChristmasTree",
+  "name": "Christmas Tree",
+  "concept": 124
+ },
+ {
+  "id": "SnowDay",
+  "name": "Snow Day",
+  "concept": 125
+ },
+ {
+  "id": "Hanukkah",
+  "name": "Hanukkah",
+  "concept": 126
+ },
+ {
+  "id": "Kwanzaa",
+  "name": "Kwanzaa",
+  "concept": 127
+ },
+ {
+  "id": "RamadanAndEid",
+  "name": "Ramadan and Eid",
+  "concept": 128
+ },
+ {
+  "id": "NewYearsEve",
+  "name": "New Year's Eve",
+  "concept": 129
+ },
+ {
+  "id": "AwardsNight",
+  "name": "Awards Night",
+  "concept": 130
+ },
+ {
+  "id": "BeatBattle",
+  "name": "Beat Battle",
+  "concept": 131
+ },
+ {
+  "id": "RecordStoreDay",
+  "name": "Record Store Day",
+  "concept": 132
+ },
+ {
+  "id": "WorldMusicDay",
+  "name": "World Music Day",
+  "concept": 133
+ },
+ {
+  "id": "HipHopDay",
+  "name": "Hip Hop Day",
+  "concept": 134
+ },
+ {
+  "id": "FestivalSeason",
+  "name": "Festival Season",
+  "concept": 135
+ },
+ {
+  "id": "SendMyBeatBirthday",
+  "name": "SendMyBeat Birthday",
+  "concept": 136
+ },
+ {
+  "id": "Milestone",
+  "name": "Milestone",
+  "concept": 137
+ },
+ {
+  "id": "LoFi",
+  "name": "Lo-fi",
+  "concept": 138
+ },
+ {
+  "id": "Synthwave",
+  "name": "Synthwave",
+  "concept": 139
+ },
+ {
+  "id": "Midnight",
+  "name": "Midnight",
+  "concept": 140
+ },
+ {
+  "id": "LightMode",
+  "name": "Light Mode",
+  "concept": 141
+ },
+ {
+  "id": "Gold",
+  "name": "Gold",
+  "concept": 142
+ },
+ {
+  "id": "Platinum",
+  "name": "Platinum",
+  "concept": 143
+ },
+ {
+  "id": "Diamond",
+  "name": "Diamond",
+  "concept": 144
+ },
+ {
+  "id": "Neon",
+  "name": "Neon",
+  "concept": 145
+ },
+ {
+  "id": "Mono",
+  "name": "Mono",
+  "concept": 146
+ },
+ {
+  "id": "BigGame",
+  "name": "Big Game",
+  "concept": 147
+ },
+ {
+  "id": "SolarEclipse",
+  "name": "Solar Eclipse",
+  "concept": 148
+ },
+ {
+  "id": "CherryBlossom",
+  "name": "Cherry Blossom",
+  "concept": 149
+ },
+ {
+  "id": "Autumn",
+  "name": "Autumn",
+  "concept": 150
+ }
+]

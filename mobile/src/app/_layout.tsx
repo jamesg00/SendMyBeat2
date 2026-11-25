@@ -9,7 +9,8 @@ import { AuthProvider, useAuth } from '@/api/auth';
 import { setPaywallHandler } from '@/api/client';
 import { LaunchIntro } from '@/components/launch-intro';
 import { ThemeTransition } from '@/components/theme-transition';
-import { openPaywall, useFreePlanPrompt, type PaywallReason } from '@/state/billing';
+import { useAppIconSync } from '@/state/app-icon';
+import { openPaywall, useFreePlanPrompt, useKnownSubscription, type PaywallReason } from '@/state/billing';
 import { DraftProvider } from '@/state/draft';
 import { useJobNotifications } from '@/state/notifications';
 import { StudioProvider } from '@/state/studio';
@@ -48,6 +49,14 @@ function SignedIn() {
   return null;
 }
 
+// The home screen icon follows holidays for everyone and the picked icon for paying accounts.
+// Signed in, it waits for the plan to load so a paid icon isn't reset in the meantime.
+function AppIconSync({ signedIn }: { signedIn: boolean }) {
+  const sub = useKnownSubscription();
+  useAppIconSync(!signedIn ? false : sub ? sub.is_subscribed : null);
+  return null;
+}
+
 function RootStack() {
   const C = useColors();
   const [fontsLoaded] = useFonts({
@@ -82,6 +91,7 @@ function RootStack() {
     <ThemeProvider value={theme}>
       <StatusBar style={C.dark ? 'light' : 'dark'} />
       {user ? <SignedIn /> : null}
+      <AppIconSync signedIn={!!user} />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.bg } }}>
         {/* Signed out, every app route lands on the landing screen (not the auth sheet). */}
         <Stack.Protected guard={!!user} redirectTo="/login">
@@ -90,6 +100,7 @@ function RootStack() {
           <Stack.Screen name="producer/[id]" options={{ presentation: 'modal' }} />
           <Stack.Screen name="profile-edit" options={{ presentation: 'modal' }} />
           <Stack.Screen name="appearance" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="app-icon" options={{ presentation: 'modal' }} />
           <Stack.Screen name="pro/[id]" options={{ presentation: 'modal' }} />
           <Stack.Screen name="pro-plan/[id]" options={{ presentation: 'modal' }} />
           <Stack.Screen name="admin-pros" options={{ presentation: 'modal' }} />
