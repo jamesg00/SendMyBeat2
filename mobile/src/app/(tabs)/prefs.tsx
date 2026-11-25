@@ -12,6 +12,8 @@ import { useRequest } from '@/api/use-request';
 import { Avatar } from '@/components/producer';
 import { PlanCard, usePlan } from '@/components/pros';
 import { manageBilling, openPaywall, planName, refreshSubscription, useSubscription } from '@/state/billing';
+import { iconInfo } from '@/data/app-icons';
+import { iconFor, useIconPrefs } from '@/state/app-icon';
 import { AppIcon, Button, ListGroup, ListRow, Meter, Screen } from '@/components/ui';
 import { F, R, font, makeStyles, THEMES, useColors, useThemeId } from '@/theme';
 
@@ -38,6 +40,8 @@ export default function ProfileScreen() {
   );
 
   const plan = planName(sub);
+  const iconPrefs = useIconPrefs();
+  const iconName = iconInfo(iconFor(!!sub?.is_subscribed, iconPrefs))?.name ?? 'SendMyBeat';
   const openBilling = () => (sub?.is_subscribed ? void manageBilling() : openPaywall('needs_plan'));
   const openSpotlight = me.data ? () => router.push({ pathname: '/producer/[id]', params: { id: me.data!.user_id } }) : undefined;
 
@@ -105,6 +109,7 @@ export default function ProfileScreen() {
             value={THEMES.find((t) => t.id === themeId)?.label}
             onPress={() => router.push('/appearance')}
           />
+          <ListRow left={<AppIcon size={28} />} title="App icon" value={iconName} onPress={() => router.push('/app-icon')} />
           <ListRow left={<Tile icon="heart" />} title="Support SendMyBeat" onPress={() => router.push('/support')} last={!user?.is_admin} />
           {user?.is_admin ? <ListRow title="Admin · Pros photos and channels" onPress={() => router.push('/admin-pros')} /> : null}
           {user?.is_admin ? <ListRow title="Admin · Verification requests" onPress={() => router.push('/admin-verify')} /> : null}
