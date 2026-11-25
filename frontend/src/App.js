@@ -18,6 +18,7 @@ import TermsAndConditions from "@/pages/TermsAndConditions";
 import About from "@/pages/About";
 import VizEmbed from "@/pages/VizEmbed";
 import Footer from "@/components/Footer";
+import RouteMeta from "@/lib/RouteMeta";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/lib/ThemeContext";
 import { clearAuthToken, getAuthToken } from "@/lib/auth";
@@ -155,6 +156,7 @@ function MainApp() {
       <div className="App flex flex-col min-h-screen">
         <Toaster position="top-right" richColors />
         <BrowserRouter>
+        <RouteMeta />
         <div className="flex-grow">
           <Routes>
             <Route
