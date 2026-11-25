@@ -5553,7 +5553,7 @@ async def get_youtube_auth_url(playlists: bool = False, current_user: dict = Dep
     # Create OAuth URL with YouTube upload and readonly scopes
     params = {
         'client_id': GOOGLE_CLIENT_ID,
-        'redirect_uri': f"{os.environ.get('FRONTEND_URL', 'https://tagbeats.preview.emergentagent.com')}/youtube-callback",
+        'redirect_uri': f"{FRONTEND_URL}/youtube-callback",
         'response_type': 'code',
         # Playlists need a broader scope, so it's only asked for when the producer turns them on.
         'scope': " ".join(YOUTUBE_BASE_SCOPES + ((YOUTUBE_PLAYLIST_SCOPE,) if playlists else ())),
@@ -5585,7 +5585,7 @@ async def connect_youtube(
             "code": code,
             "client_id": GOOGLE_CLIENT_ID,
             "client_secret": GOOGLE_CLIENT_SECRET,
-            "redirect_uri": f"{os.environ.get('FRONTEND_URL', 'https://tagbeats.preview.emergentagent.com')}/youtube-callback",
+            "redirect_uri": f"{FRONTEND_URL}/youtube-callback",
             "grant_type": "authorization_code"
         }
         
