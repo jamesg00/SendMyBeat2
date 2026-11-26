@@ -565,8 +565,10 @@ const LandingPage = ({ setIsAuthenticated }) => {
   // Links like /?signup=1 (from the free tag page) open the sign-up form.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get("signup") === "1") openAuth("register");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (params.get("signup") === "1") {
+      setAuthMode("register");
+      setIsLoginOpen(true);
+    }
   }, []);
 
   const [googleLoading, setGoogleLoading] = useState(false);
