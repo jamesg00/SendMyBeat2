@@ -1220,7 +1220,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
             />
           )}
 
-          <TabsContent value="workflow" className="space-y-4 sm:space-y-6 dashboard-section">
+          <TabsContent value="workflow" className="space-y-4 sm:space-y-6 dashboard-section ucr-create">
             {stylePlan ? <StylePlanCard plan={stylePlan} onChange={setStylePlan} /> : null}
             <PublishWorkflow
               subscriptionStatus={subscriptionStatus}

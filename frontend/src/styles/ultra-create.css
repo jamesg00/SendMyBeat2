@@ -1,1 +1,304 @@
-/* The landing look on Create (workflow, Tags, descriptions, Upload Studio). Builds on ultra.css. */
+/* The landing look on Create (workflow, Tags, descriptions, Upload Studio). Builds on ultra.css.
+ *
+ * Create should read like the landing page's tag lab and How it works section: the tag generator
+ * is the one panel with the traveling edge, the step strip reads like the How it works steps,
+ * tags are mono chips, section labels are code comments, and fields get an accent focus ring.
+ * Colors come from the palette tokens (var(--c-*), var(--u-*)), so every palette keeps working.
+ * Looks only: nothing here changes behavior.
+ *
+ * Hooks added in the JSX: .ucr-create on the Create tab panel, .ucr-feature on the tag generator
+ * card, .ucr-rise on the step strip and the two build cards. Upload Studio is rendered on <body>,
+ * so its rules are scoped by its own classes (.us-*), not by .ucr-create.
+ */
+
+/* ============================== entrance ============================== */
+
+/* Staggered rise, like .u-rise, but it only fills backwards: once it ends nothing is left on the
+   element, so it never holds a stacking context that could trap the description picker's menu. */
+.ucr-rise > * { animation: u-rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) backwards; }
+.ucr-rise > :nth-child(2) { animation-delay: 0.07s; }
+.ucr-rise > :nth-child(3) { animation-delay: 0.14s; }
+.ucr-rise > :nth-child(n + 4) { animation-delay: 0.21s; }
+
+/* ============================== step strip ============================== */
+
+/* Like the landing's How it works steps: words in Space Grotesk, the number in mono, and the
+   current step marked with a 3px accent bar. (The number is the label's first letter, so it can
+   be set apart without touching the markup; that needs a block-level box, not a flex one.) */
+.ucr-create .workflow-step-pill {
+  display: inline-block;
+  font-family: var(--font-display) !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  letter-spacing: -0.005em !important;
+  line-height: 1.3;
+  padding: 6px 12px 6px 13px !important;
+  border: 1px solid transparent !important;
+  border-radius: var(--u-r-pill) !important;
+  background: transparent !important;
+  color: var(--c-t2) !important;
+}
+.ucr-create .workflow-step-pill::first-letter {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  color: var(--c-t3);
+}
+.ucr-create .workflow-step-pill--done {
+  color: var(--c-text) !important;
+  border-color: var(--c-line) !important;
+  background: var(--c-card) !important;
+  box-shadow: inset 3px 0 0 var(--c-acc);
+}
+.ucr-create .workflow-step-pill--done::first-letter { color: var(--c-acc); }
+@media (max-width: 767px) {
+  .ucr-create .workflow-step-pill { display: block; text-align: left; }
+}
+
+/* ============================== section labels ============================== */
+
+/* "Review Outputs" and "Upload" read like code comments, as .smb-eyebrow already does. */
+.ucr-create .workflow-section-kicker::before,
+.th-label::before {
+  content: "// ";
+  color: var(--c-t3);
+  opacity: 0.7;
+}
+.th-label { font-family: var(--font-mono); font-size: 12px; }
+
+/* Field labels in Descriptions and Upload Studio: "// Content", not "CONTENT". Both are flex rows
+   (label on the left, a count on the right), so the slashes are a flex item and the count is
+   pushed right by its own margin rather than by space-between. */
+.ds-label,
+.us-label {
+  justify-content: flex-start !important;
+  gap: 6px;
+  font: 500 12px var(--font-mono) !important;
+  letter-spacing: 0.02em !important;
+  text-transform: none !important;
+  color: var(--c-t3);
+}
+.ds-label::before,
+.us-label::before {
+  content: "//";
+  flex: none;
+  color: var(--c-t3);
+  opacity: 0.7;
+}
+.ds-label > span,
+.us-label > .us-count { margin-left: auto; }
+.ds-label label { text-transform: none; }
+
+/* ============================== panels ============================== */
+
+/* The featured panel: the tag generator gets the traveling gradient edge, as the tag lab does on
+   the landing page. --u-edge is declared again here, on the element that animates --u-ang:
+   declared only on <html> it is resolved there once and the edge would sit still. */
+/* (Four classes: the Card also carries .rounded-xl.border.bg-card, which console.css and ultra.css
+   style with three.) */
+.ucr-create .dashboard-card.tags-studio-card.ucr-feature,
+.ucr-create .dashboard-card.tags-studio-card.ucr-feature:hover {
+  --u-edge: conic-gradient(from var(--u-ang), var(--u-a), var(--u-b), color-mix(in srgb, var(--c-text) 6%, transparent) 40%, color-mix(in srgb, var(--c-text) 6%, transparent) 60%, var(--u-a));
+  border: 1px solid transparent !important;
+  border-radius: var(--u-r) !important;
+  background: linear-gradient(var(--c-card), var(--c-card)) padding-box, var(--u-edge) border-box !important;
+  box-shadow: 0 30px 80px -42px var(--u-shadow-b) !important;
+  animation: u-spin 7s linear infinite;
+}
+.ucr-create .ucr-feature .wf-head > .flex > svg:first-child { color: var(--c-acc); }
+
+/* Review Outputs and Upload: flat panels with the light along the top. */
+.ucr-create .workflow-results-shell {
+  border: 1px solid var(--c-line) !important;
+  border-radius: var(--u-r) !important;
+  background: var(--u-hair) top center / 100% 1px no-repeat, var(--c-card) !important;
+  box-shadow: none !important;
+}
+.ucr-create .workflow-results-shell__header { border-bottom-color: var(--c-line-soft); }
+.ucr-create .workflow-results-shell__column:first-child { border-color: var(--c-line-soft); }
+
+/* Insets inside panels: the landing's 10px corners. */
+.ucr-create .workflow-inline-output-tools,
+.ucr-create .wf-empty,
+.ucr-create .ds-empty,
+.ucr-create .workflow-output-empty-state,
+.ucr-create .up-job { border-radius: 10px !important; }
+
+/* ============================== tag generator ============================== */
+
+/* Recent runs: the current set is marked like the active How it works step. */
+.ucr-create .wf-run.is-active {
+  background: var(--c-card2);
+  box-shadow: inset 3px 0 0 var(--c-acc);
+}
+.ucr-create .wf-run.is-selected { box-shadow: inset 3px 0 0 var(--c-t3); }
+
+/* Tags as the landing's chips: mono, 6px corners, a lift on hover, the accent on the ones that
+   open their score. */
+.ucr-create .tag-item {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 9px;
+  border-radius: 6px;
+  border: 1px solid var(--c-line);
+  background: var(--c-card);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.2;
+  transition: border-color 0.2s var(--ease), background-color 0.2s var(--ease), transform 0.2s var(--ease);
+}
+.ucr-create .tag-item:hover { transform: translateY(-2px); border-color: var(--c-t3); }
+.ucr-create .tag-item[style*="cursor"]:hover { border-color: var(--c-acc); background: var(--c-accsoft); }
+/* The delete x: the site-wide button padding made every chip about 48px tall; keep it chip-sized. */
+.ucr-create .tag-item > button {
+  padding: 0 2px !important;
+  font-size: 12px !important;
+  line-height: 1;
+  background: none;
+  border: 0;
+}
+/* The score inside a chip: a small mono badge with square-ish corners (its colors stay). */
+.ucr-create .tag-item > .rounded-full {
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1.1;
+}
+
+/* Tags / Ranking toggle: the landing's squarer corners. */
+.ucr-create .workflow-output-card .pro-seg { border-radius: 8px; }
+.ucr-create .workflow-output-card .pro-seg button { border-radius: 6px; }
+
+/* Ranking: the rank in mono, accent while you point at a row. */
+.ucr-create .tag-rank-num { font-family: var(--font-mono); color: var(--c-t3) !important; }
+.ucr-create .tag-rank-row:hover .tag-rank-num { color: var(--c-acc) !important; }
+
+/* A strong tag's score in its detail sheet shimmers, like the landing headline accent. */
+.smb-sheet .tag-score.smb-acc {
+  background: linear-gradient(90deg, var(--u-a), var(--u-b), var(--u-a)) 0 50% / 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: u-shine 6s linear infinite;
+}
+.smb-sheet .tag-signals { border-radius: 10px; }
+
+/* ============================== descriptions ============================== */
+
+.ucr-create .ds-pick-trigger { border-radius: 10px; }
+.ucr-create .ds-pick-panel { border-radius: var(--u-r); }
+.ucr-create .ds-pick-item.is-current { box-shadow: inset 3px 0 0 var(--c-acc); }
+.ucr-create .ds-saved-item { border-radius: 10px; }
+.ucr-create .ds-saved-item.is-open {
+  border-color: var(--c-line);
+  box-shadow: inset 3px 0 0 var(--c-acc);
+}
+.ucr-create .description-inline-stat { border-radius: var(--u-r-pill) !important; font-family: var(--font-mono); }
+
+/* ============================== upload ============================== */
+
+/* Beat, Artwork, Open the studio: steps like How it works. Chosen ones get the accent bar; the
+   studio step, once it's ready, gets a still mint-to-blue edge (the traveling one stays on the
+   tag generator). */
+.ucr-create .up-step { border-radius: 10px; }
+.ucr-create .up-step.is-done {
+  background: var(--c-card2);
+  box-shadow: inset 3px 0 0 var(--c-acc);
+}
+.ucr-create .up-step--go.is-done {
+  border: 1px solid transparent;
+  background: linear-gradient(var(--c-card2), var(--c-card2)) padding-box, var(--u-grad) border-box;
+  box-shadow: 0 18px 50px -34px var(--u-shadow-b);
+}
+.ucr-create .up-step-num { border-radius: 6px; }
+.ucr-create .up-step-action { font-family: var(--font-mono); font-size: 12px; color: var(--c-t3); }
+.ucr-create label.up-step:hover .up-step-action { color: var(--c-acc); }
+
+/* Connect YouTube in the Upload header is a main action: the gradient, kept as a round pill. */
+.ucr-create .up-shell .up-account .smb-btn--pri {
+  background: var(--u-grad) !important;
+  color: var(--u-ink) !important;
+  border-color: transparent !important;
+  box-shadow: 0 10px 30px -12px var(--u-shadow-b) !important;
+}
+.ucr-create .up-connect { border-radius: 10px; }
+
+/* ============================== Upload Studio ============================== */
+
+/* Sections: flat panels with the light along the top, 12px corners. */
+.us-sec {
+  border-radius: var(--u-r);
+  background: var(--u-hair) top center / 100% 1px no-repeat, var(--c-card);
+}
+/* Section icons: the landing's icon tiles, in the palette's accent. */
+.us-chip,
+.us-chip--blue,
+.us-chip--pink,
+.us-chip--amber,
+.us-chip--purple,
+.us-chip--green {
+  border-radius: 8px;
+  border: 1px solid var(--c-line);
+  background: var(--c-card2);
+  color: var(--c-acc);
+}
+
+/* Squarer pills. */
+.us-pill-btn,
+.us-ready li,
+.us-topbar-files span,
+.us-stage-meta { border-radius: var(--u-r-pill); }
+.us-tag-list span { border-radius: 6px; }
+
+/* Ready-to-upload ticks read like the landing's run log: mono, the accent on what's done. */
+.us-ready li { font-family: var(--font-mono); font-size: 11.5px; }
+.us-ready li.is-ok { background: transparent; }
+
+/* Picked shape and background: the accent, as a chip picked in the tag lab. */
+.us-panel .us-aspect.is-active,
+.us-panel .us-bg.is-active { border-color: var(--c-acc); }
+.us-panel .us-seg button.is-active { box-shadow: inset 0 -2px 0 var(--c-acc), 0 2px 8px -2px rgba(0, 0, 0, 0.5); }
+
+/* Title ideas as tag-lab chips; the checks as a run log. */
+.th-chip { border-radius: 6px; }
+.th-chip-text { font-family: var(--font-display); }
+.th-chip.is-on { border-color: var(--c-acc); background: var(--c-accsoft); }
+.th-chip.is-on .th-chip-score { color: var(--c-acc); }
+.th-checks { border-radius: 10px; background: var(--c-card2); }
+.th-checks li { font-family: var(--font-mono); font-size: 12px; }
+
+/* The old upload-job meter in the side panel fills mint to blue. */
+.us-panel .h-full.bg-\[var\(--accent-primary\)\] { background: var(--u-grad-x) !important; }
+
+/* ============================== fields ============================== */
+
+/* An accent focus ring on Create's fields and the studio's. */
+.ucr-create input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]):focus,
+.ucr-create textarea:focus,
+.ucr-create select:focus,
+.us-panel input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]):focus,
+.us-panel textarea:focus,
+.ds-edit input:focus,
+.ds-edit textarea:focus {
+  border-color: var(--c-accline) !important;
+  box-shadow: 0 0 0 3px var(--c-accsoft) !important;
+}
+
+/* ============================== bottom progress ============================== */
+
+/* The light along the top and 12px corners. Its position stays as console.css sets it. */
+.smb-progress {
+  border-radius: var(--u-r);
+  background: var(--u-hair) top center / 100% 1px no-repeat, color-mix(in srgb, var(--c-card) 92%, transparent);
+}
+.smb-progress-message { font-family: var(--font-display); }
+
+/* ============================== reduced motion ============================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .ucr-rise > * { animation: none !important; }
+  .ucr-create .dashboard-card.tags-studio-card.ucr-feature,
+  .smb-sheet .tag-score.smb-acc { animation: none !important; }
+  .ucr-create .tag-item:hover { transform: none; }
+}
