@@ -1135,34 +1135,56 @@ const UploadStudio = ({
 
     const drawingOptions = buildVisualizerOptions(visualizerSettings, { imagePreviewUrl, centerVisualizerImageUrl, spectrumRecordImageUrl });
 
+    let fastRenderError = null;
     if (canExportOffline() && audioFile) {
-      try {
-        setVizBakeStatus("rendering");
-        setVizBakeProgress(0);
-        const source = beatSpectrum || new OfflineAnalyser(await decodeBeat(audioFile));
-        // The new styles need the beat-engine track; build it now if the preview hadn't yet.
-        let track = beatTrack;
-        if (!track && isV2Mode(visualizerSettings.mode)) {
-          track = await buildBeatTrack({ samples: source.samples, sampleRate: source.sampleRate, duration: source.duration }, { signal });
+      let source = null;
+      let track = beatTrack;
+      let rendered = null;
+      // Try the chosen frame rate first. If the phone's encoder gives up (60 fps at full size is
+      // too much for some phones, or memory runs out on a long beat), try again at 30 fps before
+      // falling back to the slow real-time recording.
+      const attempts = exportFps > 30 ? [exportFps, 30] : [exportFps];
+      for (const fps of attempts) {
+        try {
+          setVizBakeStatus("rendering");
+          setVizBakeProgress(0);
+          if (!source) source = beatSpectrum || new OfflineAnalyser(await decodeBeat(audioFile));
+          // The new styles need the beat-engine track; build it now if the preview hadn't yet.
+          if (!track && isV2Mode(visualizerSettings.mode)) {
+            track = await buildBeatTrack({ samples: source.samples, sampleRate: source.sampleRate, duration: source.duration }, { signal });
+          }
+          const result = await exportVisualizerVideo({
+            analyser: source.clone(),
+            beatTrack: track,
+            options: drawingOptions,
+            size: [targetW, targetH],
+            designSize: designSizeFor(videoAspectRatio),
+            fps,
+            duration: source.duration,
+            drawBackdrop: paintBackdrop,
+            onProgress: setVizBakeProgress,
+            signal,
+          });
+          console.info(`Visualizer export: ${result.frames} frames at ${result.fps} fps, ${result.width}x${result.height}, ${result.codec}, ${(result.blob.size / 1048576).toFixed(1)} MB in ${result.seconds.toFixed(1)}s`);
+          if (fps !== exportFps) toast.info(`Rendered the visualizer at ${fps} fps; this browser couldn't encode ${exportFps} fps.`);
+          rendered = { blob: result.blob, fps };
+          break;
+        } catch (error) {
+          if (signal?.aborted) return null; // cancelled: don't fall back to recording
+          fastRenderError = error;
+          console.error(`Offline visualizer export at ${fps} fps failed`, error);
         }
-        const result = await exportVisualizerVideo({
-          analyser: source.clone(),
-          beatTrack: track,
-          options: drawingOptions,
-          size: [targetW, targetH],
-          designSize: designSizeFor(videoAspectRatio),
-          fps: exportFps,
-          duration: source.duration,
-          drawBackdrop: paintBackdrop,
-          onProgress: setVizBakeProgress,
-          signal,
-        });
-        console.info(`Visualizer export: ${result.frames} frames at ${result.fps} fps, ${result.width}x${result.height}, ${result.codec}, ${(result.blob.size / 1048576).toFixed(1)} MB in ${result.seconds.toFixed(1)}s`);
-        const fileId = await uploadVisual(result.blob, "visualizer.mp4", "video/mp4");
-        if (fileId) return { fileId, fps: exportFps };
-      } catch (error) {
-        if (signal?.aborted) return null; // cancelled: don't fall back to recording
-        console.error("Offline visualizer export failed; falling back to recording", error);
+      }
+      if (rendered) {
+        try {
+          const fileId = await uploadVisual(rendered.blob, "visualizer.mp4", "video/mp4");
+          if (fileId) return { fileId, fps: rendered.fps };
+          fastRenderError = new Error("the rendered video didn't upload");
+        } catch (error) {
+          if (signal?.aborted) return null;
+          fastRenderError = new Error(`the rendered video didn't upload: ${error?.message || error}`);
+          console.error("Uploading the rendered visualizer failed", error);
+        }
       }
     }
     if (signal?.aborted) return null;
@@ -1170,7 +1192,10 @@ const UploadStudio = ({
     // ---- Fallback: record the canvas in real time for the whole beat.
     setVizBakeStatus("recording");
     setVizBakeProgress(0);
-    toast.info("This browser can't encode video directly, so the visualizer is recorded in real time. Keep this tab open and in front until it finishes.", { duration: 12000 });
+    const fallbackReason = fastRenderError
+      ? `The fast render failed (${String(fastRenderError?.message || fastRenderError).slice(0, 120)}),`
+      : "This browser can't encode video directly,";
+    toast.info(`${fallbackReason} so the visualizer is recorded in real time. Keep this tab open and in front until it finishes.`, { duration: 15000 });
 
     // Create a full-res hidden canvas for the dedicated baking visualizer.
     // It must be in the DOM so clientWidth/clientHeight return valid values.
