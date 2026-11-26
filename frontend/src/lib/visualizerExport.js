@@ -1,6 +1,7 @@
 import { ArrayBufferTarget, Muxer } from "mp4-muxer";
 import AudioVisualizer from "@/lib/AudioVisualizer";
 import { ANALYSIS_STEP_HZ } from "@/lib/offlineAnalysis";
+import { visualizerBitrate } from "@/lib/visualizerUpload";
 
 // Renders the visualizer video frame by frame, for the whole song, at the exact output size and
 // frame rate, and encodes it with the browser's own video encoder. Nothing is recorded from the
@@ -63,8 +64,7 @@ export async function exportVisualizerVideo({ analyser, beatTrack, options, size
 
   // Bitrate: plenty for bars over a still picture, and capped so a long beat stays under the
   // server's 200 MB upload limit.
-  const targetBitrate = fps > 30 ? 7_000_000 : 4_500_000;
-  const bitrate = Math.round(Math.min(targetBitrate, (170 * 1024 * 1024 * 8) / Math.max(1, duration)));
+  const bitrate = visualizerBitrate(fps, duration);
   const picked = await pickEncoderConfig(width, height, fps, bitrate);
   if (!picked) throw new Error("No video encoder is available for this size.");
 

@@ -19,6 +19,7 @@ import { getMediaAspectRatio, getPreviewImageTransform } from "@/lib/mediaLayout
 import FreeTransform, { SCALE_MAX, SCALE_MIN } from "@/components/upload-studio/FreeTransform";
 import { OfflineAnalyser, decodeBeat } from "@/lib/offlineAnalysis";
 import { canExportOffline, exportVisualizerVideo } from "@/lib/visualizerExport";
+import { uploadVisualizer, visualizerBitrate } from "@/lib/visualizerUpload";
 import { buildBeatTrack } from "@/lib/viz2/track";
 import { isPremiumMode, isV2Mode } from "@/lib/viz2";
 import { buildVisualizerOptions, designSizeFor, outputDimsFor } from "@/lib/visualizerOptions";
@@ -1123,19 +1124,16 @@ const UploadStudio = ({
     const uploadVisual = async (blob, name, type) => {
       setVizBakeStatus("uploading");
       setVizBakeProgress(0);
-      const fd = new FormData();
-      fd.append("file", new File([blob], name, { type }));
-      const res = await axios.post(`${API}/upload/image`, fd, {
-        timeout: 20 * 60_000,
-        signal,
+      return uploadVisualizer({
+        url: `${API}/upload/image`, blob, name, type, signal,
         onUploadProgress: (e) => e.total && setVizBakeProgress(e.loaded / e.total),
       });
-      return res.data?.file_id || null;
     };
 
     const drawingOptions = buildVisualizerOptions(visualizerSettings, { imagePreviewUrl, centerVisualizerImageUrl, spectrumRecordImageUrl });
 
     if (canExportOffline() && audioFile) {
+      let result;
       try {
         setVizBakeStatus("rendering");
         setVizBakeProgress(0);
@@ -1145,7 +1143,7 @@ const UploadStudio = ({
         if (!track && isV2Mode(visualizerSettings.mode)) {
           track = await buildBeatTrack({ samples: source.samples, sampleRate: source.sampleRate, duration: source.duration }, { signal });
         }
-        const result = await exportVisualizerVideo({
+        result = await exportVisualizerVideo({
           analyser: source.clone(),
           beatTrack: track,
           options: drawingOptions,
@@ -1158,11 +1156,14 @@ const UploadStudio = ({
           signal,
         });
         console.info(`Visualizer export: ${result.frames} frames at ${result.fps} fps, ${result.width}x${result.height}, ${result.codec}, ${(result.blob.size / 1048576).toFixed(1)} MB in ${result.seconds.toFixed(1)}s`);
-        const fileId = await uploadVisual(result.blob, "visualizer.mp4", "video/mp4");
-        if (fileId) return { fileId, fps: exportFps };
       } catch (error) {
         if (signal?.aborted) return null; // cancelled: don't fall back to recording
         console.error("Offline visualizer export failed; falling back to recording", error);
+      }
+      // Upload failures must not trigger a second, real-time render.
+      if (result) {
+        const fileId = await uploadVisual(result.blob, "visualizer.mp4", "video/mp4");
+        return { fileId, fps: exportFps };
       }
     }
     if (signal?.aborted) return null;
@@ -1170,7 +1171,7 @@ const UploadStudio = ({
     // ---- Fallback: record the canvas in real time for the whole beat.
     setVizBakeStatus("recording");
     setVizBakeProgress(0);
-    toast.info("This browser can't encode video directly, so the visualizer is recorded in real time. Keep this tab open and in front until it finishes.", { duration: 12000 });
+    toast.info("Direct video encoding is unavailable or failed, so the visualizer is recorded in real time. Keep this tab open and in front until it finishes.", { duration: 12000 });
 
     // Create a full-res hidden canvas for the dedicated baking visualizer.
     // It must be in the DOM so clientWidth/clientHeight return valid values.
@@ -1236,9 +1237,8 @@ const UploadStudio = ({
       ? "video/webm;codecs=vp9"
       : "video/webm;codecs=vp8";
 
-    // Target ~40MB for a 20s clip so it fits well under the 200MB server limit.
-    // 1080p visualizers are mostly flat color + waveform — VP9 compresses them well at these rates.
-    const bitsPerSecond = recordFps >= 60 ? 16_000_000 : recordFps >= 30 ? 10_000_000 : 6_000_000;
+    // Budget for the entire beat, with room for encoder variation and container overhead.
+    const bitsPerSecond = visualizerBitrate(recordFps, RECORD_SECONDS);
     const stream = composite.captureStream(recordFps);
     const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: bitsPerSecond });
     const chunks = [];
@@ -1265,6 +1265,7 @@ const UploadStudio = ({
 
     cancelAnimationFrame(rafId);
     recorder.stop();
+    stream.getTracks().forEach((track) => track.stop());
 
     // Cleanup baking resources
     bakingViz.destroy();
@@ -1277,10 +1278,8 @@ const UploadStudio = ({
     const blob = await recordingComplete;
     if (signal?.aborted || !blob || blob.size < 1000) return null;
 
-    try {
-      const fileId = await uploadVisual(blob, "visualizer.webm", mimeType);
-      return fileId ? { fileId, fps: recordFps } : null;
-    } catch { return null; }
+    const fileId = await uploadVisual(blob, "visualizer.webm", mimeType);
+    return { fileId, fps: recordFps };
   };
 
   // Development only: lets a test run the visualizer export without filling in the upload form.
@@ -1435,7 +1434,16 @@ const UploadStudio = ({
     let vizBaked = false;
     let vizFps = 30;
     if (visualizerEnabled) {
-      const baked = await bakeVisualizerToVideo(controller.signal);
+      let baked;
+      try {
+        baked = await bakeVisualizerToVideo(controller.signal);
+      } catch (error) {
+        if (!controller.signal.aborted) toast.error(error.message || "The visualizer failed. Please try again.", { duration: 15000 });
+        setVizBakeStatus(null);
+        setUploadingToYouTube(false);
+        setUploadController(null);
+        return;
+      }
       setVizBakeStatus(null);
       if (controller.signal.aborted) {
         setUploadingToYouTube(false);

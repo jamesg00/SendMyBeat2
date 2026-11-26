@@ -150,6 +150,36 @@ Never expose `27017`, `8000`, or `3000` directly on the internet in front of pro
 
 ## Troubleshooting & Maintenance
 
+### Visualizer upload fails with 413 / a CORS "Network Error"
+
+The browser renders the full visualizer video using the device's encoder, then posts it to
+`https://api.sendmybeat.com/api/upload/image`. A successful render followed by HTTP 413 means
+the upload was rejected for its size. If the proxy's error response lacks CORS headers, Axios
+can only report `Network Error`; changing FastAPI CORS settings alone will not fix the size limit.
+
+The application accepts video visuals up to 200 MiB. The live API reported nginx on November
+26, 2026. For nginx deployments, inspect the active configuration with `sudo nginx -T`, locate
+the HTTPS `server` block for `api.sendmybeat.com`, and add:
+
+```nginx
+client_max_body_size 220m;
+```
+
+Keep the existing TLS, proxy and routing settings. Check any matching `location` blocks for a
+smaller `client_max_body_size` override. The 220 MiB request allowance leaves room for multipart
+overhead; the backend still enforces its 200 MiB file limit. Validate before reloading:
+
+```bash
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+Then retry a 60 FPS visualizer upload and confirm `/api/upload/image` returns a `file_id`, followed
+by a successful YouTube job. If a CDN or another proxy is in front of nginx, its request limit must
+also permit that size. This repository does not contain the live nginx configuration; rebuilding
+the application containers alone does not apply this setting.
+
+See nginx's [client_max_body_size documentation](https://nginx.org/en/docs/http/ngx_http_core_module.html#client_max_body_size).
+
 - **View Logs:**
   ```bash
   docker compose logs -f
