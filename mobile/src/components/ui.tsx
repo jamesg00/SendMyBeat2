@@ -211,7 +211,7 @@ export function EdgeCard({ children, style, glow }: { children: ReactNode; style
   const faint = C.dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
   return (
     <View
-      style={[styles.edgeWrap, glow && { shadowColor: C.gradB, shadowOpacity: 0.45, shadowRadius: 24, shadowOffset: { width: 0, height: 14 }, elevation: 8 }]}
+      style={[styles.edgeWrap, glow && { backgroundColor: C.card, shadowColor: C.gradB, shadowOpacity: 0.45, shadowRadius: 24, shadowOffset: { width: 0, height: 14 }, elevation: 8 }]}
       onLayout={(e) => setBox({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}>
       <View style={[StyleSheetAbsolute, { borderRadius: R.card, overflow: 'hidden' }]} pointerEvents="none">
         {d > 0 ? (
@@ -240,7 +240,7 @@ export function SectionLabel({ children, right }: { children: string; right?: Re
   const styles = useUiStyles();
   return (
     <View style={styles.sectionRow}>
-      <Text style={styles.sectionLabel}>
+      <Text style={styles.sectionLabel} accessibilityLabel={children}>
         <Text style={styles.sectionSlash}>{'// '}</Text>
         {children}
       </Text>

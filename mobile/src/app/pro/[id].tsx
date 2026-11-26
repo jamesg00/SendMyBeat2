@@ -3,14 +3,14 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Line, Rect } from 'react-native-svg';
+import Svg, { Defs, Line, LinearGradient, Rect, Stop } from 'react-native-svg';
 
 import * as api from '@/api/endpoints';
 import type { ProBreakdown, ProDetail, StyleMatch, TitlePatterns } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
 import { openWebLink, VerifiedBadge } from '@/components/producer';
 import { copyPro, ProHero, Ring, usePlan } from '@/components/pros';
-import { Button, Segmented, useUiStyles } from '@/components/ui';
+import { Button, SectionLabel, Segmented, TopLight, useUiStyles } from '@/components/ui';
 import { openPaywall, useSubscription } from '@/state/billing';
 import { F, R, display, font, makeStyles, useColors } from '@/theme';
 
@@ -129,18 +129,20 @@ function ProLock({ name, what }: { name: string; what: string }) {
 function Story({ p }: { p: ProDetail }) {
   const s = useStyles();
   const C = useColors();
-  const ui = useUiStyles();
   return (
     <>
       {p.why ? (
         <View style={s.quote}>
+          <TopLight />
           <Text style={s.kicker}>WHY THEY BLEW UP</Text>
           <Text style={s.quoteText}>{p.why}</Text>
         </View>
       ) : null}
 
       <View>
-        <Text style={[ui.sectionLabel, { paddingBottom: 10 }]}>How it happened</Text>
+        <View style={{ paddingBottom: 10 }}>
+          <SectionLabel>How it happened</SectionLabel>
+        </View>
         {p.story.map((line, i) => {
           const last = i === p.story.length - 1;
           return (
@@ -156,7 +158,9 @@ function Story({ p }: { p: ProDetail }) {
       </View>
 
       <View>
-        <Text style={[ui.sectionLabel, { paddingBottom: 8 }]}>Notable</Text>
+        <View style={{ paddingBottom: 8 }}>
+          <SectionLabel>Notable</SectionLabel>
+        </View>
         {p.notable.map((n, i) => (
           <View key={n.text} style={[s.row, i === p.notable.length - 1 && s.rowLast]}>
             <Text style={s.year}>{n.year || '–'}</Text>
@@ -166,10 +170,11 @@ function Story({ p }: { p: ProDetail }) {
       </View>
 
       <View style={{ gap: 8 }}>
-        <Text style={ui.sectionLabel}>Their moves</Text>
+        <SectionLabel>Their moves</SectionLabel>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -20 }} contentContainerStyle={{ paddingHorizontal: 20, gap: 8 }}>
           {p.moves.map((m, i) => (
             <Pressable key={m.id} onPress={() => copyPro(p.id, [m.id])} style={s.move} accessibilityRole="button" accessibilityHint="Starts a plan with this move">
+              <TopLight />
               <Text style={s.kicker}>{String(i + 1).padStart(2, '0')}</Text>
               <Text style={s.moveTitle}>{m.title}</Text>
               <Text style={s.moveBody}>{m.body}</Text>
@@ -181,7 +186,9 @@ function Story({ p }: { p: ProDetail }) {
 
       {p.latest_uploads.length ? (
         <View>
-          <Text style={[ui.sectionLabel, { paddingBottom: 8 }]}>Latest uploads</Text>
+          <View style={{ paddingBottom: 8 }}>
+            <SectionLabel>Latest uploads</SectionLabel>
+          </View>
           {p.latest_uploads.slice(0, 5).map((u, i, all) => (
             <Pressable
               key={u.video_id}
@@ -201,7 +208,7 @@ function Story({ p }: { p: ProDetail }) {
       ) : null}
 
       <View style={{ gap: 6 }}>
-        <Text style={ui.sectionLabel}>Sources</Text>
+        <SectionLabel>Sources</SectionLabel>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 14 }}>
           {p.sources.map((src) => (
             <Pressable key={src.url} onPress={() => openWebLink(src.url)} accessibilityRole="link" hitSlop={6}>
@@ -256,7 +263,6 @@ function anatomy(title: string): { text: string; kind: 'artist' | 'formula' | 'n
 function Breakdown({ p }: { p: ProDetail }) {
   const s = useStyles();
   const C = useColors();
-  const ui = useUiStyles();
   const b = p.breakdown;
   const t = p.patterns;
   if (!t.uploads) return <Text style={s.sub}>Their uploads haven’t loaded from YouTube yet. Check back soon.</Text>;
@@ -272,6 +278,7 @@ function Breakdown({ p }: { p: ProDetail }) {
   return (
     <>
       <View style={s.panel}>
+        <TopLight />
         <Text style={s.panelLabel}>Title anatomy</Text>
         {example ? (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
@@ -298,6 +305,7 @@ function Breakdown({ p }: { p: ProDetail }) {
       </View>
 
       <View style={s.panel}>
+        <TopLight />
         <View style={s.rowBetween}>
           <Text style={s.panelLabel}>Views per upload</Text>
           {b.top_share_pct != null ? (
@@ -328,10 +336,7 @@ function Breakdown({ p }: { p: ProDetail }) {
       </View>
 
       <View style={{ gap: 8 }}>
-        <View style={s.rowBetween}>
-          <Text style={ui.sectionLabel}>When they upload</Text>
-          <Text style={s.mono}>{t.per_week != null ? `${t.per_week} a week` : ''}</Text>
-        </View>
+        <SectionLabel right={<Text style={s.mono}>{t.per_week != null ? `${t.per_week} a week` : ''}</Text>}>When they upload</SectionLabel>
         <Heatmap t={t} />
         <Text style={s.fine}>Night · morning · afternoon · evening, UTC.</Text>
       </View>
@@ -350,6 +355,12 @@ function ViewsChart({ b }: { b: ProBreakdown }) {
   const breakouts = new Set(b.breakout_index);
   return (
     <Svg width={w} height={h} accessibilityLabel="Views per upload; the brightest bars are their breakout uploads">
+      <Defs>
+        <LinearGradient id="proBars" x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor={C.gradA} />
+          <Stop offset="1" stopColor={C.gradB} />
+        </LinearGradient>
+      </Defs>
       <Line x1={0} y1={h - 1} x2={w} y2={h - 1} stroke={C.lineSoft} />
       {b.views.map((v, i) => {
         const bh = Math.max(3, (v / top) * (h - 6));
@@ -361,7 +372,7 @@ function ViewsChart({ b }: { b: ProBreakdown }) {
             width={Math.max(2, slot * 0.7)}
             height={bh}
             rx={Math.min(2, slot * 0.3)}
-            fill={breakouts.has(i) ? C.acc : C.wave}
+            fill={breakouts.has(i) ? 'url(#proBars)' : C.wave}
           />
         );
       })}
@@ -443,6 +454,7 @@ function YouVsThem({ p }: { p: ProDetail }) {
 
       {r.gaps.length ? (
         <View style={s.panel}>
+          <TopLight />
           <Text style={s.kicker}>BIGGEST GAPS</Text>
           {r.gaps.map((g) => (
             <View key={g.trait} style={[s.rowBetween, { minHeight: 44 }]}>
@@ -547,7 +559,7 @@ const useStyles = makeStyles((C) => ({
   breakout: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 32 },
   verdict: { color: C.text, fontSize: 20, lineHeight: 25, letterSpacing: -0.3, ...display },
   dotMark: { position: 'absolute', width: 16, height: 16, marginLeft: -8, borderRadius: 8 },
-  copyPill: { minHeight: 34, paddingHorizontal: 14, borderRadius: 17, justifyContent: 'center', borderWidth: 1, borderColor: C.accLine, backgroundColor: C.accSoft },
+  copyPill: { minHeight: 34, paddingHorizontal: 14, borderRadius: 9, justifyContent: 'center', borderWidth: 1, borderColor: C.accLine, backgroundColor: C.accSoft },
   copyPillText: { color: C.acc, fontSize: 13, ...font('600') },
   input: {
     minHeight: 44,

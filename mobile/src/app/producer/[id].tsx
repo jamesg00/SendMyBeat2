@@ -9,7 +9,8 @@ import * as api from '@/api/endpoints';
 import type { Producer, ProducerBeat } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
 import { Avatar, followerCount, FollowButton, isVerified, knownProducer, LikeButton, markProfileEdited, openWebLink, pickProfileImage, rememberProducers, TopBeat, topBeatOf, VerifiedBadge } from '@/components/producer';
-import { Button, useUiStyles } from '@/components/ui';
+import { Button, SectionLabel } from '@/components/ui';
+import { UltraFill } from '@/components/ultra';
 import { loadSocial, useSocial } from '@/state/social';
 import { F, R, display, font, makeStyles, useColors } from '@/theme';
 
@@ -29,7 +30,6 @@ const SOCIAL_LABELS: Record<string, string> = {
 export default function ProducerScreen() {
   const C = useColors();
   const s = useStyles();
-  const ui = useUiStyles();
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const stats = useRequest(() => api.producerStats(id));
@@ -126,7 +126,8 @@ export default function ProducerScreen() {
             <Avatar producer={p} size={76} />
             {mine ? (
               <View style={s.avatarBadge}>
-                {editing === 'avatar' ? <ActivityIndicator color={C.onPrimary} size="small" /> : <Text style={s.avatarBadgeText}>Edit</Text>}
+                <UltraFill radius={12} sheen={false} />
+                {editing === 'avatar' ? <ActivityIndicator color={C.onGrad} size="small" /> : <Text style={s.avatarBadgeText}>Edit</Text>}
               </View>
             ) : null}
           </Pressable>
@@ -184,14 +185,16 @@ export default function ProducerScreen() {
 
         {topBeat ? (
           <View style={{ gap: 8 }}>
-            <View style={s.rowBetween}>
-              <Text style={ui.sectionLabel}>Top beat</Text>
-              {mine ? (
-                <Pressable onPress={() => router.push('/profile-edit')} hitSlop={8} accessibilityRole="button">
-                  <Text style={s.change}>Change</Text>
-                </Pressable>
-              ) : null}
-            </View>
+            <SectionLabel
+              right={
+                mine ? (
+                  <Pressable onPress={() => router.push('/profile-edit')} hitSlop={8} accessibilityRole="button">
+                    <Text style={s.change}>Change</Text>
+                  </Pressable>
+                ) : undefined
+              }>
+              Top beat
+            </SectionLabel>
             <TopBeat key={topBeat.url} beat={topBeat} />
           </View>
         ) : mine ? (
@@ -209,7 +212,9 @@ export default function ProducerScreen() {
         ) : null}
 
         <View>
-          <Text style={[ui.sectionLabel, { paddingBottom: 8 }]}>Latest uploads</Text>
+          <View style={{ paddingBottom: 8 }}>
+            <SectionLabel>Latest uploads</SectionLabel>
+          </View>
           {stats.loading ? (
             <ActivityIndicator color={C.t2} style={{ alignSelf: 'flex-start' }} />
           ) : beats.filter((b) => b.url).length === 0 ? (
@@ -280,12 +285,11 @@ const useStyles = makeStyles((C) => ({
     height: 24,
     paddingHorizontal: 8,
     borderRadius: 12,
-    backgroundColor: C.primary,
+    backgroundColor: C.gradB,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarBadgeText: { color: C.onPrimary, fontSize: 11, ...font('600') },
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  avatarBadgeText: { color: C.onGrad, fontSize: 11, ...font('600') },
   change: { color: C.t2, fontSize: 13, ...font('500') },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   name: { color: C.text, fontSize: 22, letterSpacing: -0.2, ...display },

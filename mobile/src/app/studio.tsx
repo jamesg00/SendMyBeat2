@@ -23,13 +23,14 @@ import {
   type NativeTouchEvent,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Defs, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
+import Svg, { Path } from 'react-native-svg';
 
 import * as api from '@/api/endpoints';
 import type { YouTubeUploadOptions } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
 import { AiTab, DetailsTab, ImageTab, TABS, TabIcon, VideoTab, VizTab, type AiResults, type Tab } from '@/components/studio-tabs';
-import { Button, Meter, PlayPauseIcon } from '@/components/ui';
+import { Button, Meter, PlayPauseIcon, TopLight } from '@/components/ui';
+import { UltraFill, gradGlow } from '@/components/ultra';
 import { VisualizerPreview } from '@/components/visualizer-preview';
 import { openPaywall, useSubscription } from '@/state/billing';
 import { useDraft } from '@/state/draft';
@@ -45,9 +46,8 @@ import { F, R, display, font, makeStyles, useColors } from '@/theme';
 type Aspect = YouTubeUploadOptions['aspectRatio'];
 const ASPECT: Record<Aspect, number> = { '16:9': 16 / 9, '1:1': 1, '9:16': 9 / 16, '4:5': 4 / 5 };
 const SHAPE: Record<Aspect, string> = { '16:9': 'YouTube', '9:16': 'Shorts', '1:1': 'Square', '4:5': 'Portrait' };
-// icon 87: mint to blue on black.
+// icon 87: mint on black.
 const MINT = '#8BFFD0';
-const BLUE = '#4C8DFF';
 const SHEET_OVERLAP = 20;
 
 function clock(sec: number) {
@@ -217,6 +217,7 @@ function Editor() {
 
       {landscape ? null : (
         <View style={[s.sheet, { marginTop: keyboard ? insets.top : -SHEET_OVERLAP }]}>
+          <TopLight />
           {!keyboard ? <View style={s.handle} /> : null}
           <View style={s.tabs} accessibilityRole="tablist">
             {TABS.map((t) => {
@@ -480,11 +481,13 @@ function Scrubber({ player, status, light }: { player: AudioPlayer; status: Audi
 }
 
 function PlayerPill({ player, status, toggle }: { player: AudioPlayer; status: AudioStatus; toggle: () => void }) {
+  const C = useColors();
   const s = useStyles();
   return (
     <View style={s.pill}>
       <Pressable onPress={toggle} style={s.pillPlay} accessibilityRole="button" accessibilityLabel={status.playing ? 'Pause preview' : 'Play preview'}>
-        <PlayPauseIcon playing={status.playing} color="#0A0A0A" />
+        <UltraFill radius={18} sheen={false} />
+        <PlayPauseIcon playing={status.playing} color={C.onGrad} />
       </Pressable>
       <View style={{ flex: 1 }}>
         <Scrubber player={player} status={status} light />
@@ -572,7 +575,7 @@ function UploadBar({ goTo }: { goTo: (t: Tab) => void }) {
 
   return (
     <View style={[s.bar, { paddingBottom: insets.bottom + 10 }]}>
-      {bake ? <Meter value={bake.value} height={3} color={MINT} /> : null}
+      {bake ? <Meter value={bake.value} height={3} gradient /> : null}
       {phase.kind === 'error' ? <Text style={s.barError}>{phase.message}</Text> : null}
       {notConnected && !missing ? <Text style={s.barNote}>Connect your YouTube channel on sendmybeat.com, then come back to upload.</Text> : null}
       {bake ? <Text style={s.barNote}>Keep the app open while the video renders.</Text> : null}
@@ -583,22 +586,18 @@ function UploadBar({ goTo }: { goTo: (t: Tab) => void }) {
             {run ? `${run.tags.length} tags` : 'Tags optional'}
           </Text>
         </View>
-        <Pressable onPress={onPress} style={({ pressed }) => [s.uploadBtn, pressed && enabled && { transform: [{ scale: 0.98 }] }]} accessibilityRole="button" accessibilityState={{ disabled: !enabled }}>
+        <Pressable
+          onPress={onPress}
+          style={({ pressed }) => [s.uploadBtn, enabled && [{ backgroundColor: C.gradB }, gradGlow(C)], pressed && enabled && { transform: [{ scale: 0.98 }] }]}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: !enabled }}>
           {enabled ? (
-            <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
-              <Defs>
-                <LinearGradient id="up" x1="0" y1="0" x2="1" y2="0">
-                  <Stop offset="0" stopColor={MINT} />
-                  <Stop offset="1" stopColor={BLUE} />
-                </LinearGradient>
-              </Defs>
-              <Rect width="100%" height="100%" fill="url(#up)" />
-            </Svg>
+            <UltraFill radius={14} angle="horizontal" />
           ) : (
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: C.card2 }]} />
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: C.card2, borderRadius: 14 }]} />
           )}
           {bake ? <ActivityIndicator color={C.t2} size="small" style={{ marginRight: 8 }} /> : null}
-          <Text style={[s.uploadText, !enabled && { color: C.t2 }]} numberOfLines={1}>
+          <Text style={[s.uploadText, { color: enabled ? C.onGrad : C.t2 }]} numberOfLines={1}>
             {label}
           </Text>
         </Pressable>
@@ -656,7 +655,7 @@ function RenderView({ phase, title }: { phase: Extract<Phase, { kind: 'sending' 
           <Text style={s.monoSub}>{Math.round(pct)}%</Text>
           {stage === 2 && typeof encode === 'number' ? <Text style={s.monoSub}>Encode {Math.round(encode)}%</Text> : null}
         </View>
-        <Meter value={pct / 100} height={4} />
+        <Meter value={pct / 100} height={4} gradient />
       </View>
 
       <View style={s.stages}>
@@ -669,6 +668,7 @@ function RenderView({ phase, title }: { phase: Extract<Phase, { kind: 'sending' 
       </View>
 
       <View style={s.logPanel}>
+        <TopLight />
         <View style={s.logHead}>
           <Text style={[s.sub, { color: C.text, ...font('500') }]}>Log</Text>
           {job ? <Text style={s.monoSub}>job {job.job.id.slice(0, 6)}…</Text> : null}
@@ -749,7 +749,7 @@ const useStyles = makeStyles((C) => ({
 
   pillWrap: { position: 'absolute', left: 16, right: 16 },
   pill: { height: 52, borderRadius: 26, backgroundColor: 'rgba(0,0,0,0.62)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)', flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: 8, paddingRight: 16 },
-  pillPlay: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#EDEDED', alignItems: 'center', justifyContent: 'center' },
+  pillPlay: { width: 36, height: 36, borderRadius: 18, backgroundColor: C.gradB, alignItems: 'center', justifyContent: 'center' },
   pillTime: { color: '#EDEDED', fontSize: 11, fontFamily: F.mono },
   scrub: { height: 22, justifyContent: 'center' },
   scrubTrack: { height: 4, borderRadius: 2, backgroundColor: C.line, overflow: 'hidden' },
@@ -780,8 +780,9 @@ const useStyles = makeStyles((C) => ({
   barSub: { color: C.t3, fontSize: 11, ...font() },
   barError: { color: C.danger, fontSize: 12, lineHeight: 16, textAlign: 'center', ...font() },
   barNote: { color: C.t3, fontSize: 12, lineHeight: 16, textAlign: 'center', ...font() },
-  uploadBtn: { flex: 1, height: 52, borderRadius: 14, overflow: 'hidden', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
-  uploadText: { color: '#03140C', fontSize: 16, ...font('700') },
+  // No overflow clip here, so the glow shows; the fill clips itself to the corners.
+  uploadBtn: { flex: 1, height: 52, borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
+  uploadText: { fontSize: 16, ...font('700') },
 
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   statusDot: { width: 8, height: 8, borderRadius: 4 },

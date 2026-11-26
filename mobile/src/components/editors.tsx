@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import * as api from '@/api/endpoints';
 import type { Description, ScoredTag, TagLevel, TagRun } from '@/api/endpoints';
-import { Button, Card, ListGroup, ListRow, Meter, Segmented, SwipeToDelete, confirmAction } from '@/components/ui';
+import { Button, Card, ListGroup, ListRow, Meter, Segmented, SwipeToDelete, TopLight, confirmAction } from '@/components/ui';
 import { DESCRIPTION_TEMPLATES } from '@/data/templates';
 import { useDraft, type DraftDescription } from '@/state/draft';
 import { F, R, font, makeStyles, useColors } from '@/theme';
@@ -280,7 +280,7 @@ export function TagEditor({ run, onSaved }: { run: TagRun; onSaved: (r: TagRun) 
       </View>
 
       <View style={{ gap: 6 }}>
-        <Meter value={Math.min(1, chars / TAG_CHAR_LIMIT)} color={over ? C.warn : C.text} />
+        <Meter value={Math.min(1, chars / TAG_CHAR_LIMIT)} color={over ? C.warn : C.text} gradient={!over} />
         <View style={s.meterHead}>
           <Text style={[s.muted, over && { color: C.warn }]}>
             {over ? 'Over the YouTube limit. Tap tags to remove some.' : 'YouTube tag limit'}
@@ -437,6 +437,7 @@ function TagDetail({
       <Pressable style={s.sheetBackdrop} onPress={close} accessibilityLabel="Close" accessibilityRole="button" />
       {entry ? (
         <View style={[s.sheet, { paddingBottom: insets.bottom + 16 }]} accessibilityViewIsModal>
+          <TopLight />
           <View style={s.grabber} />
 
           <View style={{ gap: 6 }}>
@@ -453,7 +454,7 @@ function TagDetail({
                 <Text style={s.verdict}>{verdict(entry.score)}</Text>
                 <Text style={s.mono}>/100</Text>
               </View>
-              <Meter value={entry.score / 100} color={strong ? C.acc : C.text} height={4} />
+              <Meter value={entry.score / 100} color={strong ? C.acc : C.text} height={4} gradient={strong} />
             </View>
           </View>
 

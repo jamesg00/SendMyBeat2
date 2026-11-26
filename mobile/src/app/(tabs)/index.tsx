@@ -9,13 +9,14 @@ import type { Description, TagRun } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
 import { Checklist } from '@/components/checklist';
 import { openPaywall, planName, refreshSubscription, requireCredit, useSubscription } from '@/state/billing';
-import { Button, Card, IconTile, JobProgress, ListGroup, ListRow, Meter, Pill, PlayPauseIcon, Screen, SectionLabel, Segmented, SwipeToDelete, confirmAction, useUiStyles } from '@/components/ui';
+import { Button, Card, EdgeCard, IconTile, JobProgress, ListGroup, ListRow, Meter, Pill, PlayPauseIcon, Screen, SectionLabel, Segmented, SwipeToDelete, confirmAction, useUiStyles } from '@/components/ui';
 import { DescriptionEditor, TagEditor } from '@/components/editors';
 import { Avatar } from '@/components/producer';
 import { PlanWorkflow } from '@/components/plan-agent';
 import { usePlan } from '@/components/pros';
 import { useDraft } from '@/state/draft';
 import { useStudio } from '@/state/studio';
+import { AccentBar } from '@/components/ultra';
 import { F, R, font, makeStyles, useColors } from '@/theme';
 
 type Step = 'build' | 'review' | 'upload';
@@ -200,7 +201,7 @@ function StudioBanner() {
           <Text style={s.muted} numberOfLines={1}>
             {detail}
           </Text>
-          {phase.kind === 'job' ? <Meter value={(phase.job.progress ?? 0) / 100} /> : null}
+          {phase.kind === 'job' ? <Meter value={(phase.job.progress ?? 0) / 100} gradient /> : null}
           <Text style={s.swipeHint}>Swipe left to {running ? 'cancel' : 'delete'}</Text>
         </View>
         {phase.kind === 'error' ? (
@@ -259,7 +260,7 @@ function UsageMeter({ label, left, total }: { label: string; left: number; total
           <Text style={{ color: C.t3, ...font() }}>/{total}</Text>
         </Text>
       </View>
-      <Meter value={total > 0 ? left / total : 0} />
+      <Meter value={total > 0 ? left / total : 0} gradient />
     </View>
   );
 }
@@ -287,7 +288,6 @@ function BuildStep({
 }) {
   const C = useColors();
   const s = useStyles();
-  const ui = useUiStyles();
   const { generation, generationError, lastGenerated, run, setRun } = useDraft();
   const [query, setQuery] = useState('');
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -324,7 +324,8 @@ function BuildStep({
           <Text style={s.muted}>Runs in the background. You can switch tabs or close the app.</Text>
         </View>
       ) : (
-        <Card>
+        // The main tool on this screen gets the traveling gradient edge.
+        <EdgeCard glow>
           <View style={s.cardHead}>
             <Text style={s.cardTitle}>Generate tags</Text>
             <Text style={s.mono}>60–80 tags · 1 credit</Text>
@@ -345,11 +346,12 @@ function BuildStep({
           </View>
           {generationError ? <Text style={s.error}>{generationError}</Text> : null}
           <Button title="Generate" onPress={generate} />
-        </Card>
+        </EdgeCard>
       )}
 
       {!generation && lastGenerated && lastGenerated.id === run?.id ? (
         <Pressable onPress={() => onOpen(lastGenerated)} style={({ pressed }) => [s.done, pressed && { opacity: 0.7 }]} accessibilityRole="button">
+          <AccentBar />
           <Text style={{ color: C.acc, fontSize: 13, fontFamily: F.mono }}>✓</Text>
           <Text style={[s.sub, { flex: 1 }]}>
             {lastGenerated.tags.length} tags ready for <Text style={{ color: C.text }}>{lastGenerated.query}</Text>
@@ -362,8 +364,7 @@ function BuildStep({
 
       <View>
         <View style={s.runsHead}>
-          <Text style={ui.sectionLabel}>Recent runs</Text>
-          {runs.length ? <Text style={s.swipeHint}>Swipe left to delete</Text> : null}
+          <SectionLabel right={runs.length ? <Text style={s.swipeHint}>Swipe left to delete</Text> : undefined}>Recent runs</SectionLabel>
         </View>
         {deleteError ? <Text style={s.error}>{deleteError}</Text> : null}
         {historyLoading ? (
@@ -572,7 +573,7 @@ const useStyles = makeStyles((C) => ({
     borderTopColor: C.lineSoft,
   },
   hairLast: { borderBottomWidth: 1, borderBottomColor: C.lineSoft },
-  runsHead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingBottom: 8 },
+  runsHead: { paddingBottom: 8 },
   hairTitle: { flex: 1, color: C.text, fontSize: 15, ...font() },
   hairDate: { width: 64, textAlign: 'right', color: C.t3, fontSize: 13, ...font() },
   reviewHead: { flexDirection: 'row', alignItems: 'flex-end', gap: 12 },

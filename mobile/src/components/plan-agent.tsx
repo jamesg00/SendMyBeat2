@@ -6,7 +6,8 @@ import { Pressable, Text, View } from 'react-native';
 import * as api from '@/api/endpoints';
 import type { PlanAssist, PlanStep, StylePlan } from '@/api/endpoints';
 import { openPro, Ring } from '@/components/pros';
-import { Button, JobProgress, Meter } from '@/components/ui';
+import { Button, JobProgress, Meter, TopLight } from '@/components/ui';
+import { AccentBar } from '@/components/ultra';
 import { useDraft, type DraftDescription } from '@/state/draft';
 import { agentBusy, dismissAgent, runAgent, useAgentRuns, type AgentRun } from '@/state/plan-agent';
 import { useStudio } from '@/state/studio';
@@ -62,6 +63,7 @@ export function PlanWorkflow({ plan, onChange }: { plan: StylePlan; onChange: (p
 
   return (
     <View style={s.plan}>
+      <TopLight />
       <Pressable
         onPress={() => openPro(plan.pro_id)}
         style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}
@@ -82,6 +84,7 @@ export function PlanWorkflow({ plan, onChange }: { plan: StylePlan; onChange: (p
           const isNext = plan.next?.id === step.id;
           return (
             <View key={step.id} style={[s.step, i === 0 && { borderTopWidth: 0 }]}>
+              {isNext && !step.done ? <AccentBar left={-16} inset={10} /> : null}
               <View style={s.stepHead}>
                 <Pressable
                   onPress={() => void tick(step, !step.done)}
@@ -101,7 +104,7 @@ export function PlanWorkflow({ plan, onChange }: { plan: StylePlan; onChange: (p
                     {step.target ? ` · ${step.count ?? 0}/${step.target} from your uploads` : ''}
                     {ticking === step.id ? ' · Saving…' : ''}
                   </Text>
-                  {step.target && !step.done ? <Meter value={(step.count ?? 0) / step.target} color={C.acc} height={2} /> : null}
+                  {step.target && !step.done ? <Meter value={(step.count ?? 0) / step.target} color={C.acc} height={2} gradient /> : null}
                 </View>
               </View>
 

@@ -5,9 +5,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import * as api from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
-import { Button } from '@/components/ui';
+import { Aurora, Button, EdgeCard } from '@/components/ui';
 import { dollars, sendTip, startPlan, useSubscription } from '@/state/billing';
-import { F, R, display, font, makeStyles, useColors } from '@/theme';
+import { F, display, font, makeStyles, useColors } from '@/theme';
 
 // Support SendMyBeat: the founding member deal (Pro for a year at a discount, limited spots) and
 // one-time tips. Kept quiet on purpose: reached from a row in Profile and a link on the plans.
@@ -45,14 +45,15 @@ export default function SupportScreen() {
         </Pressable>
       </View>
       <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 32, gap: 18 }}>
+        <Aurora style={{ top: -60, right: -90 }} />
         <View style={{ gap: 8 }}>
           <Text style={s.title}>Support SendMyBeat</Text>
           <Text style={s.sub}>Early support pays for building the iPhone app and keeps SendMyBeat going.</Text>
         </View>
 
-        <View style={s.card}>
+        <EdgeCard glow style={s.card}>
           <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
-            <Text style={s.kicker}>FOUNDING MEMBER</Text>
+            <Text style={[s.kicker, { color: C.acc }]}>FOUNDING MEMBER</Text>
             {spots != null ? <Text style={s.kicker}>{spots > 0 ? `${spots} of ${founding.limit} left` : 'All taken'}</Text> : null}
           </View>
           <Text style={s.cardTitle}>A year of Pro for {dollars(founding.price_cents)}</Text>
@@ -68,7 +69,7 @@ export default function SupportScreen() {
             />
           )}
           <Text style={s.fine}>If you already pay for a plan, it switches to this one.</Text>
-        </View>
+        </EdgeCard>
 
         <View style={{ gap: 10 }}>
           <Text style={s.kicker}>OR LEAVE A TIP</Text>
@@ -98,7 +99,8 @@ const useStyles = makeStyles((C) => ({
   topAction: { color: C.t2, fontSize: 15, ...font() },
   title: { color: C.text, fontSize: 26, ...display },
   sub: { color: C.t2, fontSize: 14, lineHeight: 20, ...font() },
-  card: { padding: 16, gap: 12, borderRadius: R.card, borderWidth: 1, borderColor: C.line, backgroundColor: C.card },
+  // Inside the edge card (its 1px edge plus 15 keeps the old 16 padding).
+  card: { gap: 12 },
   kicker: { color: C.t3, fontSize: 11, letterSpacing: 0.4, fontFamily: F.monoMedium },
   cardTitle: { color: C.text, fontSize: 20, ...display },
   fine: { color: C.t3, fontSize: 12, lineHeight: 17, ...font() },

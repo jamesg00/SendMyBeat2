@@ -4,7 +4,8 @@ import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput,
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/api/auth';
-import { Button, Card, Segmented, useUiStyles } from '@/components/ui';
+import { Aurora, Button, EdgeCard, Segmented, useUiStyles } from '@/components/ui';
+import { GradientSpan, Rise } from '@/components/ultra';
 import { R, font, makeStyles, useColors } from '@/theme';
 
 type Mode = 'login' | 'register';
@@ -46,20 +47,29 @@ export default function AuthScreen() {
         contentContainerStyle={[s.root, { paddingBottom: insets.bottom + 24 }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}>
+        <Aurora style={{ top: -30, right: -90 }} />
         <View style={s.topBar}>
           <Pressable onPress={() => router.back()} hitSlop={10} style={s.close} accessibilityRole="button" accessibilityLabel="Close">
             <Text style={s.closeText}>Cancel</Text>
           </Pressable>
         </View>
 
-        <View style={{ gap: 8 }}>
+        <Rise index={0} style={{ gap: 8 }}>
           <Text style={ui.largeTitle} accessibilityRole="header">
-            {mode === 'login' ? 'Welcome back' : 'Create account'}
+            {mode === 'login' ? (
+              <>
+                Welcome <GradientSpan>back</GradientSpan>
+              </>
+            ) : (
+              <>
+                Create <GradientSpan>account</GradientSpan>
+              </>
+            )}
           </Text>
           <Text style={s.sub}>
             {mode === 'login' ? 'Log in to your SendMyBeat account.' : 'Free to start. No card needed.'}
           </Text>
-        </View>
+        </Rise>
 
         <Segmented
           value={mode}
@@ -73,37 +83,39 @@ export default function AuthScreen() {
           ]}
         />
 
-        <Card>
-          <Text style={ui.sectionLabel}>Username</Text>
-          <TextInput
-            value={username}
-            onChangeText={setUsername}
-            autoCapitalize="none"
-            autoCorrect={false}
-            autoComplete="username"
-            textContentType="username"
-            style={s.input}
-            placeholder="producer name"
-            placeholderTextColor={C.t3}
-            accessibilityLabel="Username"
-          />
-          <Text style={ui.sectionLabel}>Password</Text>
-          <TextInput
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-            textContentType={mode === 'login' ? 'password' : 'newPassword'}
-            style={s.input}
-            placeholder="••••••••"
-            placeholderTextColor={C.t3}
-            onSubmitEditing={submit}
-            returnKeyType="go"
-            accessibilityLabel="Password"
-          />
-          {error ? <Text style={s.error}>{error}</Text> : null}
-          <Button title={busy ? 'Please wait…' : mode === 'login' ? 'Log in' : 'Create account'} onPress={busy ? undefined : submit} />
-        </Card>
+        <Rise index={1}>
+          <EdgeCard glow>
+            <Text style={ui.sectionLabel}>Username</Text>
+            <TextInput
+              value={username}
+              onChangeText={setUsername}
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="username"
+              textContentType="username"
+              style={s.input}
+              placeholder="producer name"
+              placeholderTextColor={C.t3}
+              accessibilityLabel="Username"
+            />
+            <Text style={ui.sectionLabel}>Password</Text>
+            <TextInput
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+              textContentType={mode === 'login' ? 'password' : 'newPassword'}
+              style={s.input}
+              placeholder="••••••••"
+              placeholderTextColor={C.t3}
+              onSubmitEditing={submit}
+              returnKeyType="go"
+              accessibilityLabel="Password"
+            />
+            {error ? <Text style={s.error}>{error}</Text> : null}
+            <Button title={busy ? 'Please wait…' : mode === 'login' ? 'Log in' : 'Create account'} onPress={busy ? undefined : submit} />
+          </EdgeCard>
+        </Rise>
 
         <Pressable onPress={() => setMode(mode === 'login' ? 'register' : 'login')} style={s.switchBtn} accessibilityRole="button">
           <Text style={s.switch}>

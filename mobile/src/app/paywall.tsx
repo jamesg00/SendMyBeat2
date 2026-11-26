@@ -7,7 +7,8 @@ import Svg, { Path } from 'react-native-svg';
 
 import * as api from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
-import { AppIcon, Button } from '@/components/ui';
+import { AppIcon, Aurora, Button, EdgeCard } from '@/components/ui';
+import { GradPill, GradientSpan, UltraFill } from '@/components/ultra';
 import { dollars, markPaywallOpen, startPlan, useSubscription, type PaywallReason } from '@/state/billing';
 import { F, R, display, font, makeStyles, useColors } from '@/theme';
 
@@ -84,7 +85,8 @@ export default function PaywallScreen() {
     return (
       <View style={[s.root, s.center, { paddingBottom: insets.bottom + 24 }]}>
         <Animated.View entering={FadeIn.duration(400)} style={s.doneTick}>
-          <Check size={30} color={C.onAcc} />
+          <UltraFill radius={36} sheen={false} />
+          <Check size={30} color={C.onGrad} />
         </Animated.View>
         <Animated.View entering={FadeInDown.delay(120)} style={{ alignItems: 'center', gap: 8, paddingHorizontal: 24 }}>
           <Text style={s.doneTitle}>{sub?.trial ? 'Your free trial is on' : `You’re on ${done === 'max' ? 'Pro' : 'Plus'}`}</Text>
@@ -100,6 +102,7 @@ export default function PaywallScreen() {
   return (
     <View style={s.root}>
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+        <Aurora style={{ top: -40, right: -90 }} />
         <View style={s.topBar}>
           <AppIcon size={40} />
           <Pressable onPress={() => router.back()} hitSlop={12} style={s.close} accessibilityRole="button" accessibilityLabel="Close">
@@ -110,7 +113,9 @@ export default function PaywallScreen() {
         </View>
 
         <View style={{ gap: 8 }}>
-          <Text style={s.title}>{head.title}</Text>
+          <Text style={s.title}>
+            <GradientSpan>{head.title}</GradientSpan>
+          </Text>
           <Text style={s.sub}>
             {message || (sub?.trial_available && reason === 'needs_plan' ? `Try everything free for ${trial.days} days. Cancel anytime in Profile.` : head.sub)}
           </Text>
@@ -137,8 +142,8 @@ export default function PaywallScreen() {
         <View accessible accessibilityLabel={rows.map((r) => `${r.label}: Plus ${say(r.plus)}, Pro ${say(r.pro)}`).join('. ')}>
           <View style={s.tableHead}>
             <Text style={[s.th, { flex: 1, textAlign: 'left' }]}>WHAT YOU GET</Text>
-            <Text style={[s.th, pick === 'plus' && { color: C.text }]}>PLUS</Text>
-            <Text style={[s.th, pick === 'max' && { color: C.text }]}>PRO</Text>
+            <Text style={[s.th, pick === 'plus' && { color: C.acc }]}>PLUS</Text>
+            <Text style={[s.th, pick === 'max' && { color: C.acc }]}>PRO</Text>
           </View>
           {rows.map((r, i) => (
             <View key={r.label} style={[s.tr, i === rows.length - 1 && { borderBottomWidth: 1 }]}>
@@ -205,20 +210,31 @@ function PlanCard({
   onPress: () => void;
 }) {
   const s = useStyles();
-  const C = useColors();
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [s.plan, selected && { borderColor: C.acc, backgroundColor: C.accSoft }, pressed && { opacity: 0.85 }]}
-      accessibilityRole="radio"
-      accessibilityState={{ checked: selected }}
-      accessibilityLabel={`${name}, ${price} a month${badge ? `, ${badge.toLowerCase()}` : ''}`}>
-      {badge ? <Text style={[s.badge, solid && { color: C.onPrimary, backgroundColor: C.primary, borderColor: C.primary }]}>{badge}</Text> : <View style={{ height: 19 }} />}
+  const body = (
+    <>
+      {badge ? solid ? <GradPill label={badge} style={s.solidBadge} /> : <Text style={s.badge}>{badge}</Text> : <View style={{ height: 19 }} />}
       <Text style={s.planName}>{name}</Text>
       <Text style={s.price}>
         {price}
         <Text style={s.per}>/mo</Text>
       </Text>
+    </>
+  );
+  // The picked plan gets the traveling gradient edge and a glow, like the plan that fits on the website.
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [{ flex: 1 }, pressed && { opacity: 0.85 }]}
+      accessibilityRole="radio"
+      accessibilityState={{ checked: selected }}
+      accessibilityLabel={`${name}, ${price} a month${badge ? `, ${badge.toLowerCase()}` : ''}`}>
+      {selected ? (
+        <EdgeCard glow style={s.planInner}>
+          {body}
+        </EdgeCard>
+      ) : (
+        <View style={s.plan}>{body}</View>
+      )}
     </Pressable>
   );
 }
@@ -229,7 +245,10 @@ const useStyles = makeStyles((C) => ({
   scroll: { paddingHorizontal: 22, paddingTop: 14, paddingBottom: 24, gap: 24 },
   topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   plans: { flexDirection: 'row', gap: 10 },
-  plan: { flex: 1, gap: 6, padding: 14, borderRadius: R.card + 4, borderWidth: 1.5, borderColor: C.line, backgroundColor: C.card },
+  // Same size picked or not: the edge card's 1px edge plus 13 padding matches 1px border plus 13.
+  plan: { flex: 1, gap: 6, padding: 13, borderRadius: R.card, borderWidth: 1, borderColor: C.line, backgroundColor: C.card },
+  planInner: { flex: 1, gap: 6, padding: 13 },
+  solidBadge: { paddingVertical: 3 },
   badge: {
     alignSelf: 'flex-start',
     color: C.acc,
@@ -238,7 +257,7 @@ const useStyles = makeStyles((C) => ({
     fontFamily: F.monoMedium,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: R.chip,
+    borderRadius: 5,
     borderWidth: 1,
     borderColor: C.accLine,
     overflow: 'hidden',
@@ -261,6 +280,17 @@ const useStyles = makeStyles((C) => ({
   footer: { paddingHorizontal: 22, paddingTop: 12, gap: 10, borderTopWidth: 1, borderTopColor: C.line, backgroundColor: C.bg },
   error: { color: C.danger, fontSize: 13, textAlign: 'center', ...font() },
   fine: { color: C.t3, fontSize: 12, lineHeight: 17, textAlign: 'center', ...font() },
-  doneTick: { width: 72, height: 72, borderRadius: 36, backgroundColor: C.acc, alignItems: 'center', justifyContent: 'center' },
+  doneTick: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: C.gradB,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: C.gradB,
+    shadowOpacity: C.dark ? 0.55 : 0.3,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 10 },
+  },
   doneTitle: { color: C.text, fontSize: 28, textAlign: 'center', ...display },
 }));

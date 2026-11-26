@@ -2,10 +2,11 @@ import { router } from 'expo-router';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Circle, Line, Polyline, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, Defs, Line, LinearGradient, Path, Polyline, Stop, Text as SvgText } from 'react-native-svg';
 
 import { LandingRender } from '@/components/landing-render';
-import { AppIcon, Button, JobProgress, Meter, useUiStyles } from '@/components/ui';
+import { AppIcon, Aurora, Button, EdgeCard, JobProgress, Meter, SectionLabel, TopLight } from '@/components/ui';
+import { AccentBar, CtaCard, GradPill, GradientSpan, InkButton, Rise, onGradSoft } from '@/components/ultra';
 import { F, R, display, font, makeStyles, useColors } from '@/theme';
 
 // The first screen before signing in: what SendMyBeat does, previews of each part of the app
@@ -56,7 +57,6 @@ const PLANS = [
 export default function LandingScreen() {
   const C = useColors();
   const s = useStyles();
-  const ui = useUiStyles();
   const insets = useSafeAreaInsets();
   const narrow = useWindowDimensions().width < 360; // iPhone SE (1st gen) and small Androids
   return (
@@ -64,6 +64,8 @@ export default function LandingScreen() {
       style={{ flex: 1, backgroundColor: C.bg }}
       contentContainerStyle={[s.root, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 32 }]}
       showsVerticalScrollIndicator={false}>
+      {/* Behind everything above the fold, so it never tints the text on top. */}
+      <Aurora style={{ top: insets.top - 20, right: -90, width: 420, height: 340 }} />
       <View style={s.topBar}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
           <AppIcon size={30} />
@@ -76,21 +78,32 @@ export default function LandingScreen() {
         </Pressable>
       </View>
 
+      {/* The hero rises in step by step, like the website's. */}
       <View style={{ gap: 14 }}>
-        <Text style={s.eyebrow}>For beat producers on YouTube</Text>
-        <Text style={[s.hero, narrow && { fontSize: 30, lineHeight: 36 }]}>Tags, descriptions and uploads for every beat.</Text>
-        <Text style={s.lede}>
-          SendMyBeat finds the tags that rank, writes the description, renders the video and uploads it to your channel.
-        </Text>
+        <Rise index={0}>
+          <SectionLabel>For beat producers on YouTube</SectionLabel>
+        </Rise>
+        <Rise index={1}>
+          <Text style={[s.hero, narrow && { fontSize: 30, lineHeight: 36 }]}>
+            Tags, descriptions and uploads <GradientSpan>for every beat.</GradientSpan>
+          </Text>
+        </Rise>
+        <Rise index={2}>
+          <Text style={s.lede}>
+            SendMyBeat finds the tags that rank, writes the description, renders the video and uploads it to your channel.
+          </Text>
+        </Rise>
       </View>
 
-      <View style={{ gap: 10 }}>
+      <Rise index={3} style={{ gap: 10 }}>
         <Button title="Get started" onPress={() => openAuth('register')} />
         <Button title="Log in" variant="secondary" onPress={() => openAuth('login')} />
         <Text style={s.fine}>3 free credits · no card needed</Text>
-      </View>
+      </Rise>
 
-      <TagRunDemo />
+      <Rise index={4} style={s.demoGlow}>
+        <TagRunDemo />
+      </Rise>
 
       <Feature
         n="01"
@@ -113,43 +126,61 @@ export default function LandingScreen() {
 
       <View style={{ gap: 12 }}>
         <View style={{ gap: 6 }}>
-          <Text style={ui.sectionLabel}>Pricing</Text>
+          <SectionLabel>Pricing</SectionLabel>
           <Text style={s.h2}>Try it free, no card needed.</Text>
         </View>
-        {PLANS.map((p) => (
-          <View key={p.name} style={s.plan} accessible accessibilityLabel={`${p.name} plan, ${p.price}${p.per ? ' a month' : ''}. ${p.lines.join('. ')}.`}>
-            <View style={s.planHead}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 }}>
-                <Text style={s.planName}>{p.name}</Text>
-                {p.badge ? <Text style={s.planBadge}>{p.badge}</Text> : null}
+        {PLANS.map((p) => {
+          // The most popular plan gets the traveling gradient edge, like the plan that fits on the website.
+          const pick = p.name === 'Pro';
+          const body = (
+            <>
+              <View style={s.planHead}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 }}>
+                  <Text style={s.planName}>{p.name}</Text>
+                  {p.badge ? pick ? <GradPill label={p.badge} style={{ alignSelf: 'center' }} /> : <Text style={s.planBadge}>{p.badge}</Text> : null}
+                </View>
+                <Text style={s.planPrice}>
+                  {p.price}
+                  <Text style={s.planPer}>{p.per}</Text>
+                </Text>
               </View>
-              <Text style={s.planPrice}>
-                {p.price}
-                <Text style={s.planPer}>{p.per}</Text>
-              </Text>
+              {p.lines.map((line) => (
+                <View key={line} style={s.planLine}>
+                  <Text style={[s.planDash, pick && s.planDashPick]}>–</Text>
+                  <Text style={s.planText}>{line}</Text>
+                </View>
+              ))}
+            </>
+          );
+          return (
+            <View key={p.name} accessible accessibilityLabel={`${p.name} plan, ${p.price}${p.per ? ' a month' : ''}. ${p.lines.join('. ')}.`}>
+              {pick ? (
+                <EdgeCard glow style={{ gap: 8 }}>
+                  {body}
+                </EdgeCard>
+              ) : (
+                <View style={s.plan}>
+                  <TopLight />
+                  {body}
+                </View>
+              )}
             </View>
-            {p.lines.map((line) => (
-              <View key={line} style={s.planLine}>
-                <Text style={s.planDash}>–</Text>
-                <Text style={s.planText}>{line}</Text>
-              </View>
-            ))}
-          </View>
-        ))}
+          );
+        })}
         <Text style={s.note}>
           Without a plan you can still browse Pros and Spotlight. Change or cancel any time from Plan and billing in your profile.
         </Text>
       </View>
 
-      <View style={s.closing}>
-        <Text style={s.h2}>Your next upload, done in minutes.</Text>
-        <Button title="Get started" onPress={() => openAuth('register')} />
+      <CtaCard>
+        <Text style={[s.h2, { color: C.onGrad }]}>Your next upload, done in minutes.</Text>
+        <InkButton title="Get started" onPress={() => openAuth('register')} />
         <Pressable onPress={() => openAuth('login')} style={s.switchBtn} accessibilityRole="button">
-          <Text style={s.switch}>
-            Have an account? <Text style={{ color: C.text, ...font('600') }}>Log in</Text>
+          <Text style={[s.switch, { color: onGradSoft(C) }]}>
+            Have an account? <Text style={{ color: C.onGrad, ...font('600') }}>Log in</Text>
           </Text>
         </Pressable>
-      </View>
+      </CtaCard>
     </ScrollView>
   );
 }
@@ -159,7 +190,10 @@ function Feature({ n, title, body, children }: { n: string; title: string; body:
   return (
     <View style={{ gap: 12 }}>
       <View style={{ gap: 6 }}>
-        <Text style={s.featNum}>{n}</Text>
+        <Text style={s.featNum}>
+          <Text style={s.featSlash}>{'// '}</Text>
+          {n}
+        </Text>
         <Text style={s.h2} accessibilityRole="header">
           {title}
         </Text>
@@ -192,6 +226,7 @@ function TagEditorPreview() {
   const chars = 438;
   return (
     <View style={s.panel} accessible accessibilityLabel={`Example tag editor, ${chars} of 500 characters used`}>
+      <TopLight />
       <View style={s.chips}>
         {SAMPLE_TAGS.map((t, i) => (
           <View key={t} style={[s.chip, i === 1 && s.chipNew]}>
@@ -204,7 +239,7 @@ function TagEditorPreview() {
         </View>
       </View>
       <View style={{ gap: 8 }}>
-        <Meter value={chars / 500} />
+        <Meter value={chars / 500} gradient />
         <View style={s.rowBetween}>
           <Text style={s.muted}>YouTube tag limit</Text>
           <Text style={s.mono}>{chars} / 500</Text>
@@ -228,6 +263,7 @@ function ChartPreview() {
   const pts = VIEWS.map((v, i) => `${x(i)},${y(v)}`).join(' ');
   return (
     <View style={s.panel} accessible accessibilityLabel="Example analytics chart: views per upload rising over the last 8 uploads">
+      <TopLight />
       <View style={{ gap: 2 }}>
         <Text style={s.muted}>Views, last 8 uploads · sample channel</Text>
         <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 10 }}>
@@ -238,6 +274,16 @@ function ChartPreview() {
       <View style={{ height: h }} onLayout={(e) => setW(e.nativeEvent.layout.width)}>
         {w > 0 ? (
           <Svg width={w} height={h}>
+            <Defs>
+              <LinearGradient id="lpLine" x1="0" y1="0" x2={w} y2="0" gradientUnits="userSpaceOnUse">
+                <Stop offset="0" stopColor={C.gradA} />
+                <Stop offset="1" stopColor={C.gradB} />
+              </LinearGradient>
+              <LinearGradient id="lpArea" x1="0" y1={top} x2="0" y2={bottom} gradientUnits="userSpaceOnUse">
+                <Stop offset="0" stopColor={C.gradB} stopOpacity={0.22} />
+                <Stop offset="1" stopColor={C.gradB} stopOpacity={0} />
+              </LinearGradient>
+            </Defs>
             {[10, 20].map((t) => (
               <Line key={t} x1={0} x2={w} y1={y(t)} y2={y(t)} stroke="#1A1A1A" strokeWidth={1} />
             ))}
@@ -248,7 +294,8 @@ function ChartPreview() {
             <SvgText x={0} y={y(10) - 4} fill={C.t3} fontSize={10} fontFamily={F.mono}>
               10K
             </SvgText>
-            <Polyline points={pts} fill="none" stroke={C.text} strokeWidth={1.75} strokeLinejoin="round" strokeLinecap="round" />
+            <Path d={`M${x(0)},${bottom} L${pts.split(' ').join(' L')} L${x(VIEWS.length - 1)},${bottom} Z`} fill="url(#lpArea)" />
+            <Polyline points={pts} fill="none" stroke="url(#lpLine)" strokeWidth={1.75} strokeLinejoin="round" strokeLinecap="round" />
             <Circle cx={x(VIEWS.length - 1)} cy={y(VIEWS[VIEWS.length - 1])} r={4} fill={C.bg} stroke={C.acc} strokeWidth={2} />
             <SvgText x={0} y={h - 2} fill={C.t3} fontSize={10} fontFamily={F.mono}>
               8 uploads ago
@@ -271,13 +318,10 @@ const LEADERS = [
 
 function LeaderboardPreview() {
   const s = useStyles();
-  const ui = useUiStyles();
   return (
     <View style={s.panel} accessible accessibilityLabel="Example Spotlight leaderboard with you ranked 14th">
-      <View style={s.rowBetween}>
-        <Text style={ui.sectionLabel}>Leaderboard</Text>
-        <Text style={s.muted}>Trending</Text>
-      </View>
+      <TopLight />
+      <SectionLabel right={<Text style={s.muted}>Trending</Text>}>Leaderboard</SectionLabel>
       <View>
         {LEADERS.map((p, i) => (
           <LeaderRow key={p.name} rank={String(i + 1)} name={p.name} pts={p.pts} />
@@ -293,6 +337,7 @@ function LeaderRow({ rank, name, pts, you }: { rank: string; name: string; pts: 
   const s = useStyles();
   return (
     <View style={[s.leader, you && s.you]}>
+      {you ? <AccentBar inset={0} /> : null}
       <Text style={[s.rank, (you || Number(rank) <= 3) && { color: C.text }]}>{rank}</Text>
       <View style={s.avatar}>
         <Text style={s.avatarText}>{name[0].toUpperCase()}</Text>
@@ -300,7 +345,7 @@ function LeaderRow({ rank, name, pts, you }: { rank: string; name: string; pts: 
       <Text style={[s.leaderName, you && font('600')]} numberOfLines={1}>
         {name}
       </Text>
-      <Text style={[s.mono, you && { color: C.text }]}>{pts}</Text>
+      <Text style={[s.mono, you && { color: C.acc }]}>{pts}</Text>
     </View>
   );
 }
@@ -311,12 +356,14 @@ const useStyles = makeStyles((C) => ({
   logo: { color: C.text, fontSize: 16, fontFamily: F.brand },
   topLink: { minHeight: 44, minWidth: 44, alignItems: 'flex-end', justifyContent: 'center' },
   topLinkText: { color: C.t2, fontSize: 15, ...font('500') },
-  eyebrow: { color: C.t2, fontSize: 12, fontFamily: F.mono },
   hero: { color: C.text, fontSize: 36, lineHeight: 42, letterSpacing: -0.3, ...display },
   lede: { color: C.t2, fontSize: 16, lineHeight: 23, ...font() },
   fine: { color: C.t3, fontSize: 12.5, textAlign: 'center', fontFamily: F.mono },
   note: { color: C.t3, fontSize: 13, lineHeight: 18, textAlign: 'center', ...font() },
-  featNum: { color: C.t3, fontSize: 12, fontFamily: F.mono },
+  featNum: { color: C.acc, fontSize: 12, fontFamily: F.mono },
+  featSlash: { color: C.t3 },
+  // The tag run demo glows a little, like the tag lab in the website's hero.
+  demoGlow: { borderRadius: R.card, shadowColor: C.gradA, shadowOpacity: C.dark ? 0.28 : 0.12, shadowRadius: 40, shadowOffset: { width: 0, height: 20 } },
   h2: { color: C.text, fontSize: 21, lineHeight: 27, letterSpacing: -0.3, ...font('600') },
   body: { color: C.t2, fontSize: 15, lineHeight: 21, ...font() },
   muted: { color: C.t3, fontSize: 13, ...font() },
@@ -360,7 +407,7 @@ const useStyles = makeStyles((C) => ({
     fontFamily: F.mono,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: R.chip,
+    borderRadius: 5,
     borderWidth: 1,
     borderColor: C.accLine,
     overflow: 'hidden',
@@ -369,9 +416,9 @@ const useStyles = makeStyles((C) => ({
   planPer: { color: C.t3, fontSize: 13, fontFamily: F.mono, letterSpacing: 0 },
   planLine: { flexDirection: 'row', gap: 10 },
   planDash: { color: C.t3, fontSize: 14, ...font() },
+  planDashPick: { color: C.acc },
   planText: { flex: 1, color: C.t2, fontSize: 14, lineHeight: 20, ...font() },
 
-  closing: { gap: 14, paddingTop: 8, borderTopWidth: 1, borderTopColor: C.lineSoft },
   switchBtn: { minHeight: 44, justifyContent: 'center' },
   switch: { color: C.t2, fontSize: 14, textAlign: 'center', ...font() },
 }));

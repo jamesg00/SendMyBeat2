@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { router, useFocusEffect } from 'expo-router';
-import { type ReactNode, useCallback, useState } from 'react';
+import { type ReactNode, useCallback, useId, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Animated, {
   Extrapolation,
@@ -19,7 +19,8 @@ import type { PlanStep, ProCard, StylePlan } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
 import { VerifiedBadge } from '@/components/producer';
 import { requirePro } from '@/state/billing';
-import { Button, Card, Meter, useUiStyles } from '@/components/ui';
+import { Button, Card, GradientFill, Meter, SectionLabel, TopLight } from '@/components/ui';
+import { GradientSpan } from '@/components/ultra';
 import { F, display, font, makeStyles, useColors } from '@/theme';
 
 // The Pros tab: producers who made it on YouTube, and the plan you copied from one of them.
@@ -51,7 +52,6 @@ export function usePlan() {
 export function ProsGallery() {
   const s = useStyles();
   const C = useColors();
-  const ui = useUiStyles();
   const list = useRequest(api.pros);
   const { width } = useWindowDimensions();
   const [index, setIndex] = useState(0);
@@ -87,7 +87,7 @@ export function ProsGallery() {
       <View style={{ gap: 4 }}>
         <Text style={s.kicker}>PROS · {items.length} PRODUCERS</Text>
         <Text style={s.headline} accessibilityRole="header">
-          They blew up on YouTube.
+          They blew up <GradientSpan>on YouTube.</GradientSpan>
         </Text>
         <Text style={s.tagline}>See why, read their numbers, and copy the moves into your own uploads.</Text>
       </View>
@@ -118,7 +118,9 @@ export function ProsGallery() {
 
       {closest.length ? (
         <View>
-          <Text style={[ui.sectionLabel, { paddingBottom: 8 }]}>Closest to your style</Text>
+          <View style={{ paddingBottom: 8 }}>
+            <SectionLabel>Closest to your style</SectionLabel>
+          </View>
           {closest.map((p, i) => (
             <Pressable
               key={p.id}
@@ -129,7 +131,9 @@ export function ProsGallery() {
               {p.photo ? <Image source={{ uri: p.photo }} style={s.avatar} contentFit="cover" /> : <View style={s.avatar} />}
               <Text style={s.matchName}>{p.name}</Text>
               <View style={s.matchBar}>
-                <View style={{ width: `${p.match ?? 0}%`, height: 4, borderRadius: 2, backgroundColor: C.acc }} />
+                <View style={{ width: `${p.match ?? 0}%`, height: 4, borderRadius: 2, overflow: 'hidden', backgroundColor: C.acc }}>
+                  <GradientFill angle="horizontal" />
+                </View>
               </View>
               <Text style={s.matchPct}>{p.match}%</Text>
             </Pressable>
@@ -252,18 +256,25 @@ export function ProHero({ pro, height, children }: { pro: ProCard; height: numbe
 /** A ring that fills to `value` (0-1) with a label in the middle. */
 export function Ring({ value, size, stroke, label, sub }: { value: number; size: number; stroke: number; label: string; sub?: string }) {
   const C = useColors();
+  const gid = `ring${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
   const r = (size - stroke) / 2;
   const len = 2 * Math.PI * r;
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }} accessibilityLabel={sub ? `${label} ${sub}` : label}>
       <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
+        <Defs>
+          <LinearGradient id={gid} x1="0" y1="0" x2="1" y2="1">
+            <Stop offset="0" stopColor={C.gradA} />
+            <Stop offset="1" stopColor={C.gradB} />
+          </LinearGradient>
+        </Defs>
         <Circle cx={size / 2} cy={size / 2} r={r} stroke={C.lineSoft} strokeWidth={stroke} fill="none" />
         {value > 0 ? (
           <Circle
           cx={size / 2}
           cy={size / 2}
           r={r}
-          stroke={C.acc}
+          stroke={`url(#${gid})`}
           strokeWidth={stroke}
           fill="none"
           strokeLinecap="round"
@@ -302,6 +313,7 @@ export function PlanCard({ plan, full, onChange }: { plan: StylePlan; full?: boo
 
   return (
     <View style={s.plan}>
+      <TopLight />
       <Pressable
         onPress={() => openPro(plan.pro_id)}
         style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}
@@ -342,7 +354,7 @@ export function PlanCard({ plan, full, onChange }: { plan: StylePlan; full?: boo
       ) : plan.next ? (
         plan.next.target ? (
           <View style={{ gap: 6 }}>
-            <Meter value={(plan.next.count ?? 0) / plan.next.target} color={C.acc} height={3} />
+            <Meter value={(plan.next.count ?? 0) / plan.next.target} color={C.acc} height={3} gradient />
             <Text style={s.next}>
               {plan.next.count ?? 0} of {plan.next.target} so far · ticks off from your uploads
             </Text>
@@ -394,7 +406,7 @@ const useStyles = makeStyles((C) => ({
     fontFamily: F.mono,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 999,
+    borderRadius: 5,
     backgroundColor: C.bg,
     opacity: 0.85,
     overflow: 'hidden',

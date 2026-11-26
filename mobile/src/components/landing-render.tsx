@@ -4,7 +4,8 @@ import { Pressable, ScrollView, Text, View, type LayoutChangeEvent } from 'react
 import { useReducedMotion } from 'react-native-reanimated';
 import Svg, { Defs, G, Line, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 
-import { PlayPauseIcon } from '@/components/ui';
+import { PlayPauseIcon, TopLight } from '@/components/ui';
+import { UltraFill, gradAt, gradGlow } from '@/components/ultra';
 import { iconUrl } from '@/state/visualizer';
 import { F, R, font, makeStyles, useColors } from '@/theme';
 
@@ -207,6 +208,7 @@ export function LandingRender() {
 
   return (
     <View style={s.panel}>
+      <TopLight />
       <View style={s.video} onLayout={onLayout} accessible accessibilityRole="image" accessibilityLabel={`Example render with the ${style.name} visualizer around the cover art`}>
         <Image source={COVER} style={s.videoBg} contentFit="cover" blurRadius={18} />
         <View style={s.videoShade} />
@@ -260,12 +262,13 @@ export function LandingRender() {
 
       <View style={s.player}>
         <Pressable onPress={() => setPlaying((p) => !p)} style={s.playBtn} hitSlop={4} accessibilityRole="button" accessibilityLabel={playing ? 'Pause the preview' : 'Play the preview'}>
-          <PlayPauseIcon playing={playing} size={11} />
+          <UltraFill radius={18} sheen={false} />
+          <PlayPauseIcon playing={playing} size={11} color={C.onGrad} />
         </Pressable>
         <View style={{ flex: 1, gap: 6 }}>
           <View style={s.wave}>
             {bars.map((b, i) => (
-              <View key={i} style={[s.waveBar, { height: `${Math.min(1, b) * 100}%`, backgroundColor: i < played ? C.text : C.wave }]} />
+              <View key={i} style={[s.waveBar, { height: `${Math.min(1, b) * 100}%`, backgroundColor: i < played ? gradAt(C, i / bars.length) : C.wave }]} />
             ))}
           </View>
           <View style={s.rowBetween}>
@@ -274,7 +277,8 @@ export function LandingRender() {
           </View>
         </View>
       </View>
-      <View style={s.uploadBtn}>
+      <View style={[s.uploadBtn, gradGlow(C, 0.8)]}>
+        <UltraFill radius={R.card} />
         <Text style={s.uploadText}>Upload to YouTube</Text>
       </View>
       <Text style={[s.time, { textAlign: 'center' }]}>mp4 · 1920×1080 · {style.name} · public</Text>
@@ -330,10 +334,10 @@ const useStyles = makeStyles((C) => ({
   note: { color: C.t3, fontSize: 12.5, ...font() },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   player: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  playBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: C.primary, alignItems: 'center', justifyContent: 'center' },
+  playBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: C.gradB, alignItems: 'center', justifyContent: 'center' },
   wave: { height: 26, flexDirection: 'row', alignItems: 'center', gap: 2 },
   waveBar: { flex: 1, borderRadius: 1 },
   time: { color: C.t3, fontSize: 11, fontFamily: F.mono },
-  uploadBtn: { height: 44, borderRadius: R.card, backgroundColor: C.primary, alignItems: 'center', justifyContent: 'center' },
-  uploadText: { color: C.onPrimary, fontSize: 15, ...font('600') },
+  uploadBtn: { height: 44, borderRadius: R.card, backgroundColor: C.gradB, alignItems: 'center', justifyContent: 'center' },
+  uploadText: { color: C.onGrad, fontSize: 15, ...font('600') },
 }));
