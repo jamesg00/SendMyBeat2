@@ -137,19 +137,29 @@
 .policy-card > h1.policy-title + p { animation-delay: 0.06s; }
 .policy-card > h1.policy-title + p + .policy-copy { animation: u-rise 0.7s 0.12s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
 
-/* Section icons sit in tiles, in the accent, like the landing feature icons. */
-.policy-copy h2 > svg.policy-muted,
-.policy-feature-card svg.policy-muted {
-  box-sizing: content-box;
-  width: 18px;
-  height: 18px;
-  padding: 9px;
-  margin-top: 0;
+/* Section icons sit in tiles, in the accent, like the landing feature icons.
+   The tile is a span (components/PolicyIcon.js): Safari ignores padding on an svg. */
+.policy-icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
   border: 1px solid var(--c-line);
   border-radius: 8px;
   background: var(--c-card2);
-  color: var(--c-acc) !important;
+  color: var(--c-acc);
 }
+.policy-icon > svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+  color: inherit;
+  stroke: currentColor;
+}
+.policy-icon--lg { width: 44px; height: 44px; }
+.policy-icon--lg > svg { width: 22px; height: 22px; }
 
 /* Feature panels: flat, 12px corners, the light along the top, a small lift on hover. */
 .policy-feature-card {
