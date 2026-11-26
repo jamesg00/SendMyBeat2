@@ -101,7 +101,12 @@ export default function WorkflowScreen() {
         </View>
       }>
       {sub && !sub.is_subscribed ? (
-        <FreePlanCard trialAvailable={!!sub.trial_available} />
+        <FreePlanCard
+          trialAvailable={!!sub.trial_available}
+          aiLeft={sub.daily_credits_remaining}
+          uploadsLeft={sub.upload_credits_remaining}
+          starter={sub.counter === 'starter'}
+        />
       ) : (
         <Pressable onPress={() => openPaywall('needs_plan')} style={s.usage} accessibilityRole="button" accessibilityLabel="Credits and plans">
           {sub ? (
@@ -208,17 +213,32 @@ function StudioBanner() {
   );
 }
 
-// Free accounts have no credits: the way in is the trial or a plan.
-function FreePlanCard({ trialAvailable }: { trialAvailable: boolean }) {
+// Free accounts get a few one-time starter credits; after that the way in is a plan.
+function FreePlanCard({
+  trialAvailable,
+  aiLeft,
+  uploadsLeft,
+  starter,
+}: {
+  trialAvailable: boolean;
+  aiLeft: number;
+  uploadsLeft: number;
+  starter: boolean;
+}) {
   const s = useStyles();
+  const hasFree = starter && (aiLeft > 0 || uploadsLeft > 0);
   return (
     <Card>
       <View style={{ gap: 6 }}>
-        <Text style={s.cardTitle}>{trialAvailable ? 'Try SendMyBeat free for 3 days' : 'Pick a plan to start'}</Text>
+        <Text style={s.cardTitle}>
+          {trialAvailable ? 'Try SendMyBeat free for 3 days' : hasFree ? 'Your free credits' : 'Pick a plan to keep going'}
+        </Text>
         <Text style={s.muted}>
           {trialAvailable
             ? '3 generations and 3 uploads a day, then Plus at $5/month. Cancel any time.'
-            : 'Plus is 50 generations and 50 uploads a month for $5. Pro is 100 of each, plus pro styles and analytics, for $10.'}
+            : hasFree
+              ? `${aiLeft} AI generations and ${uploadsLeft} uploads left. They don't renew. Plus is $5/month for 50 of each.`
+              : 'Plus is 50 generations and 50 uploads a month for $5. Pro is 100 of each, plus pro styles and analytics, for $10.'}
         </Text>
       </View>
       <Button title={trialAvailable ? 'Start free trial' : 'See plans'} onPress={() => openPaywall('needs_plan')} />

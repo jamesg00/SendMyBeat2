@@ -433,9 +433,14 @@ HOSTING_COST = float(os.environ.get("HOSTING_COST_USD", 12.00))
 # Grok-2 pricing (approximate): $2.00/M input, $10.00/M output
 GROK_INPUT_COST = 2.0 / 1_000_000
 GROK_OUTPUT_COST = 10.0 / 1_000_000
-# Free accounts browse; generating and uploading need the free trial or a plan.
+# Free accounts get a one-time starter allowance, no card needed. It never resets: once it's
+# used, generating and uploading need a monthly plan.
 FREE_DAILY_AI_CREDITS = int(os.environ.get("FREE_DAILY_AI_CREDITS", "0"))
 FREE_DAILY_UPLOAD_CREDITS = int(os.environ.get("FREE_DAILY_UPLOAD_CREDITS", "0"))
+FREE_STARTER_AI_CREDITS = int(os.environ.get("FREE_STARTER_AI_CREDITS", "3"))
+FREE_STARTER_UPLOAD_CREDITS = int(os.environ.get("FREE_STARTER_UPLOAD_CREDITS", "3"))
+# The card-up-front Stripe trial. Off by default: the free starter credits replace it.
+TRIAL_ENABLED = os.environ.get("TRIAL_ENABLED", "false").strip().lower() in {"1", "true", "yes"}
 # The free trial: 3 days on Plus with 3 generations and 3 uploads a day, then $5/month.
 TRIAL_DAYS = int(os.environ.get("TRIAL_DAYS", "3"))
 TRIAL_DAILY_AI_CREDITS = int(os.environ.get("TRIAL_DAILY_AI_CREDITS", "3"))
@@ -1798,6 +1803,8 @@ class SubscriptionStatus(BaseModel):
     founding_member: bool = False
     founding_spots_left: Optional[int] = None
     plan_version: int = 1
+    # "starter" = a free account's one-time credits, "daily" = the trial, "monthly" = a paid plan.
+    counter: Optional[str] = None
 
 class CheckoutSessionRequest(BaseModel):
     success_url: str = Field(max_length=2000)
@@ -2236,7 +2243,7 @@ async def _daily_usage(user_id: str, user_doc: dict) -> tuple[int, int, str]:
 
 async def get_user_subscription_status(user_id: str) -> dict:
     """The user's plan and credits. `counter` says which usage fields their credits come from:
-    "monthly" for paid plans, "daily" for the free trial (and free accounts, which get none)."""
+    "monthly" for paid plans, "daily" for the free trial, "starter" for free accounts' one-time credits."""
     user_doc = await db.users.find_one({"id": user_id})
 
     if not user_doc:
@@ -2265,7 +2272,7 @@ async def get_user_subscription_status(user_id: str) -> dict:
         # Pro features (copying a pro's style, pro breakdowns, channel analytics, the job queue):
         # the $10 plan, and admins (by user id) so they can test them. Credits still follow the plan.
         "pro_access": plan == "max" or _is_admin_user(user_doc),
-        "trial_available": plan == "free" and not user_doc.get("trial_used"),
+        "trial_available": TRIAL_ENABLED and plan == "free" and not user_doc.get("trial_used"),
     }
 
     if trialing:
@@ -2307,18 +2314,20 @@ async def get_user_subscription_status(user_id: str) -> dict:
             "cost_guardrail_hit": cost_guardrail_hit,
         }
 
-    credits_used, uploads_used, resets_at = await _daily_usage(user_id, user_doc)
+    # Free: the one-time starter credits (they don't reset).
+    credits_used = int(user_doc.get("free_ai_used") or 0)
+    uploads_used = int(user_doc.get("free_upload_used") or 0)
     return {
         **common,
         "is_subscribed": False,
         "plan": "free",
-        "counter": "daily",
+        "counter": "starter",
         "trial": False,
-        "credits_remaining": max(0, FREE_DAILY_AI_CREDITS - credits_used),
-        "credits_total": FREE_DAILY_AI_CREDITS,
-        "upload_credits_remaining": max(0, FREE_DAILY_UPLOAD_CREDITS - uploads_used),
-        "upload_credits_total": FREE_DAILY_UPLOAD_CREDITS,
-        "resets_at": resets_at,
+        "credits_remaining": max(0, FREE_STARTER_AI_CREDITS - credits_used),
+        "credits_total": FREE_STARTER_AI_CREDITS,
+        "upload_credits_remaining": max(0, FREE_STARTER_UPLOAD_CREDITS - uploads_used),
+        "upload_credits_total": FREE_STARTER_UPLOAD_CREDITS,
+        "resets_at": None,
         "monthly_llm_cost_usd": await _get_user_monthly_llm_cost(user_id),
         "cost_guardrail_hit": False,
     }
@@ -2328,6 +2337,8 @@ def _usage_fields(status: dict) -> tuple[str, str]:
     counter = status.get("counter") or ("monthly" if status.get("plan") in {"plus", "max"} else "daily")
     if counter == "monthly":
         return "plus_monthly_ai_used", "plus_monthly_upload_used"
+    if counter == "starter":
+        return "free_ai_used", "free_upload_used"
     return "daily_usage_count", "daily_upload_count"
 
 
@@ -2336,6 +2347,8 @@ def _paywall_detail(status: dict, what: str) -> dict:
     if status.get("plan") == "free":
         if status.get("trial_available"):
             message = f"Start your {TRIAL_DAYS}-day free trial to use {what}."
+        elif int(status.get("credits_total") or 0) > 0 or int(status.get("upload_credits_total") or 0) > 0:
+            message = f"You've used your free {what}. Pick a plan to keep going."
         else:
             message = f"Pick a plan to use {what}."
         return {"message": message, "code": "needs_plan"}
@@ -2376,7 +2389,7 @@ async def _reserve_ai_credit(user_id: str) -> bool:
         return True
     if status.get("cost_guardrail_hit"):
         return False
-    default_limit = FREE_DAILY_AI_CREDITS if status.get("plan") == "free" else 0
+    default_limit = FREE_STARTER_AI_CREDITS if status.get("plan") == "free" else 0
     field, limit = _usage_fields(status)[0], int(status.get("credits_total", default_limit) or 0)
     if limit <= 0:
         return False
@@ -2581,7 +2594,7 @@ async def _ensure_pro_user(current_user: dict, feature_name: str = "This feature
     if sub_status.get("plan") not in {"plus", "max"}:
         raise HTTPException(
             status_code=402,
-            detail={"message": f"{feature_name} needs a plan. Start your free trial to try it.", "code": "needs_plan"},
+            detail={"message": f"{feature_name} needs a plan.", "code": "needs_plan"},
         )
 
 
@@ -5690,6 +5703,30 @@ async def get_youtube_auth_url(playlists: bool = False, current_user: dict = Dep
     auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
     return {"auth_url": auth_url}
 
+async def _save_youtube_connection(user_id: str, tokens: dict, user_info: dict) -> None:
+    """Store a Google account's YouTube tokens (encrypted) for this user."""
+    token_expiry = datetime.now(timezone.utc) + timedelta(hours=1)
+    await db.youtube_connections.update_one(
+        {"user_id": user_id},
+        {
+            "$set": {
+                "user_id": user_id,
+                "google_email": user_info.get('email'),
+                "profile_picture": user_info.get('picture'),
+                "name": user_info.get('name'),
+                "access_token": None,
+                "refresh_token": None,
+                "access_token_encrypted": _encrypt_secret_value(tokens['access_token']),
+                "refresh_token_encrypted": _encrypt_secret_value(tokens.get('refresh_token')),
+                "token_expiry": token_expiry.isoformat(),
+                "connected_at": datetime.now(timezone.utc).isoformat(),
+                "scopes": str(tokens.get("scope") or "").split(),
+            }
+        },
+        upsert=True
+    )
+
+
 @api_router.post("/youtube/connect")
 async def connect_youtube(
     code: str = Form(..., max_length=2000),
@@ -5732,30 +5769,8 @@ async def connect_youtube(
         oauth2_service = await asyncio.to_thread(build, 'oauth2', 'v2', credentials=credentials)
         user_info = await asyncio.to_thread(oauth2_service.userinfo().get().execute)
         
-        # Calculate token expiry (default 1 hour from now)
-        token_expiry = datetime.now(timezone.utc) + timedelta(hours=1)
-        
-        # Store credentials in database with profile picture
-        await db.youtube_connections.update_one(
-            {"user_id": current_user['id']},
-            {
-                "$set": {
-                    "user_id": current_user['id'],
-                    "google_email": user_info.get('email'),
-                    "profile_picture": user_info.get('picture'),  # Add profile picture
-                    "name": user_info.get('name'),  # Add name
-                    "access_token": None,
-                    "refresh_token": None,
-                    "access_token_encrypted": _encrypt_secret_value(tokens['access_token']),
-                    "refresh_token_encrypted": _encrypt_secret_value(tokens.get('refresh_token')),
-                    "token_expiry": token_expiry.isoformat(),
-                    "connected_at": datetime.now(timezone.utc).isoformat(),
-                    "scopes": str(tokens.get("scope") or "").split(),
-                }
-            },
-            upsert=True
-        )
-        
+        await _save_youtube_connection(current_user['id'], tokens, user_info)
+
         return {
             "success": True, 
             "email": user_info.get('email'),
@@ -5766,6 +5781,178 @@ async def connect_youtube(
     except Exception as e:
         logging.error(f"YouTube connection error: {str(e)}")
         raise HTTPException(status_code=400, detail="Failed to connect YouTube account. Please try again.")
+
+# ============ Google sign-in ============
+# "Continue with Google" signs in (or signs up) and connects YouTube in one consent screen.
+# It reuses the YouTube redirect page; the state starts with GOOGLE_SIGNIN_STATE_PREFIX so that
+# page knows to sign in rather than link YouTube to an account that's already signed in.
+GOOGLE_SIGNIN_STATE_PREFIX = "signin."
+GOOGLE_SIGNIN_SCOPES = ("openid", "https://www.googleapis.com/auth/userinfo.profile") + YOUTUBE_BASE_SCOPES
+
+
+class GoogleSignInRequest(BaseModel):
+    code: str = Field(max_length=2000)
+    state: str = Field(max_length=200)
+
+
+async def _new_google_signin_state() -> str:
+    state = GOOGLE_SIGNIN_STATE_PREFIX + secrets.token_urlsafe(32)
+    await db.oauth_states.insert_one({
+        "state_hash": hashlib.sha256(state.encode()).hexdigest(),
+        "kind": "google_signin",
+        "expires_at": (datetime.now(timezone.utc) + YOUTUBE_OAUTH_STATE_TTL).isoformat(),
+    })
+    return state
+
+
+async def _use_google_signin_state(state: str) -> bool:
+    """True once for a state this server issued in the last few minutes."""
+    if not state or not state.startswith(GOOGLE_SIGNIN_STATE_PREFIX):
+        return False
+    doc = await db.oauth_states.find_one_and_delete({
+        "state_hash": hashlib.sha256(state.encode()).hexdigest(),
+        "kind": "google_signin",
+        "expires_at": {"$gt": datetime.now(timezone.utc).isoformat()},
+    })
+    return bool(doc)
+
+
+def _username_base_from_google(user_info: dict) -> str:
+    """A username in the register form's format (a-z, 0-9, _ . -, 3 to 32) from a Google name or email."""
+    raw = (user_info.get("name") or (user_info.get("email") or "").split("@")[0] or "producer").lower()
+    base = re.sub(r"[^a-z0-9_.-]", "", re.sub(r"\s+", "", raw))[:24]
+    return base if len(base) >= 3 else f"producer{base}"
+
+
+async def _unique_username(base: str) -> str:
+    candidate = base
+    for _ in range(20):
+        if not await db.users.find_one({"username": candidate}, {"_id": 0, "id": 1}):
+            return candidate
+        candidate = f"{base}{secrets.randbelow(9000) + 1000}"
+    return f"{base}{secrets.token_hex(3)}"
+
+
+async def _find_or_create_google_user(user_info: dict) -> dict:
+    google_sub = str(user_info.get("id") or user_info.get("sub") or "").strip()
+    email = (user_info.get("email") or "").strip().lower()
+    if not google_sub:
+        raise HTTPException(status_code=400, detail="Google didn't return an account id. Try again.")
+    user_doc = await db.users.find_one({"google_sub": google_sub, "deleted": {"$ne": True}})
+    if user_doc:
+        return user_doc
+    # An existing account that already connected this Google account for YouTube: sign into it.
+    if email and user_info.get("verified_email", True):
+        linked = await db.youtube_connections.find(
+            {"google_email": {"$regex": f"^{re.escape(email)}$", "$options": "i"}},
+            {"_id": 0, "user_id": 1},
+        ).to_list(5)
+        linked_ids = {row.get("user_id") for row in linked if row.get("user_id")}
+        if len(linked_ids) == 1:
+            user_doc = await db.users.find_one({"id": next(iter(linked_ids)), "deleted": {"$ne": True}})
+            if user_doc:
+                await db.users.update_one({"id": user_doc["id"]}, {"$set": {"google_sub": google_sub}})
+                return {**user_doc, "google_sub": google_sub}
+    # A new account.
+    base = _username_base_from_google(user_info)
+    for _ in range(3):
+        user = User(username=await _unique_username(base), is_admin=False, email=email or None)
+        user_doc = user.model_dump()
+        user_doc["created_at"] = user_doc["created_at"].isoformat()
+        user_doc.update({"auth_provider": "google", "google_sub": google_sub, "google_email": email or None})
+        try:
+            await db.users.insert_one(user_doc)
+            return user_doc
+        except DuplicateKeyError:
+            continue
+    raise HTTPException(status_code=409, detail="Couldn't create your account. Try again.")
+
+
+async def _link_google_profile(user_doc: dict, user_info: dict) -> None:
+    """Make sure the Spotlight profile exists and has a picture, then find the YouTube channel."""
+    await _ensure_producer_profile(user_doc["id"], user_doc.get("username") or "producer")
+    picture = user_info.get("picture")
+    if picture:
+        await db.producer_profiles.update_one(
+            {"user_id": user_doc["id"], "$or": [{"avatar_url": None}, {"avatar_url": ""}, {"avatar_url": {"$exists": False}}]},
+            {"$set": {"avatar_url": picture, "updated_at": datetime.now(timezone.utc)}},
+        )
+    try:
+        await _ensure_producer_youtube_channel_id(user_doc["id"])
+    except Exception as exc:
+        logging.warning(f"Could not look up the YouTube channel after Google sign-in: {exc}")
+
+
+@api_router.get("/auth/google/url")
+async def get_google_signin_url(request: Request):
+    if GOOGLE_CLIENT_ID == 'your_google_client_id_here':
+        raise HTTPException(status_code=400, detail="Google sign-in isn't set up.")
+    await _check_rate_limit_persistent(f"auth:google-url:{_client_ip(request)}", 30, 600)
+    params = {
+        'client_id': GOOGLE_CLIENT_ID,
+        'redirect_uri': f"{FRONTEND_URL}/youtube-callback",
+        'response_type': 'code',
+        'scope': " ".join(GOOGLE_SIGNIN_SCOPES),
+        'include_granted_scopes': 'true',
+        'access_type': 'offline',
+        'prompt': 'consent select_account',
+        'state': await _new_google_signin_state(),
+    }
+    return {"auth_url": f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"}
+
+
+@api_router.post("/auth/google", response_model=TokenResponse)
+async def google_signin(body: GoogleSignInRequest, request: Request):
+    await _check_rate_limit_persistent(f"auth:google:{_client_ip(request)}", AUTH_RATE_LIMIT_ATTEMPTS, AUTH_RATE_LIMIT_WINDOW_SECONDS)
+    if not await _use_google_signin_state(body.state):
+        raise HTTPException(status_code=400, detail="This sign-in link expired. Try Continue with Google again.")
+    token_response = await asyncio.to_thread(
+        requests.post,
+        "https://oauth2.googleapis.com/token",
+        data={
+            "code": body.code,
+            "client_id": GOOGLE_CLIENT_ID,
+            "client_secret": GOOGLE_CLIENT_SECRET,
+            "redirect_uri": f"{FRONTEND_URL}/youtube-callback",
+            "grant_type": "authorization_code",
+        },
+        timeout=15,
+    )
+    if token_response.status_code != 200:
+        logging.error(f"Google sign-in token exchange failed: {token_response.status_code}")
+        raise HTTPException(status_code=400, detail="Google sign-in failed. Try again.")
+    tokens = token_response.json()
+    try:
+        credentials = Credentials(
+            token=tokens['access_token'],
+            refresh_token=tokens.get('refresh_token'),
+            token_uri="https://oauth2.googleapis.com/token",
+            client_id=GOOGLE_CLIENT_ID,
+            client_secret=GOOGLE_CLIENT_SECRET,
+        )
+        oauth2_service = await asyncio.to_thread(build, 'oauth2', 'v2', credentials=credentials)
+        user_info = await asyncio.to_thread(oauth2_service.userinfo().get().execute)
+    except Exception as exc:
+        logging.error(f"Google sign-in profile lookup failed: {exc}")
+        raise HTTPException(status_code=400, detail="Google sign-in failed. Try again.")
+
+    user_doc = await _find_or_create_google_user(user_info)
+    granted = set(str(tokens.get("scope") or "").split())
+    # Google lets people untick scopes; connect YouTube only when upload access was granted.
+    if "https://www.googleapis.com/auth/youtube.upload" in granted:
+        await _save_youtube_connection(user_doc["id"], tokens, user_info)
+    await _link_google_profile(user_doc, user_info)
+
+    created_at = user_doc.get("created_at")
+    user = User(
+        id=user_doc["id"],
+        username=user_doc["username"],
+        is_admin=_is_admin_user(user_doc),
+        email=user_doc.get("email"),
+        created_at=datetime.fromisoformat(created_at) if isinstance(created_at, str) else (created_at or datetime.now(timezone.utc)),
+    )
+    return TokenResponse(access_token=create_access_token(user_doc["id"], user_doc["username"]), user=user)
+
 
 @api_router.get("/youtube/status", response_model=YouTubeConnectionStatus)
 async def get_youtube_status(current_user: dict = Depends(get_current_user)):
@@ -6128,6 +6315,7 @@ async def _subscription_response(status: dict) -> SubscriptionStatus:
         founding_member=bool(status.get("founding_member")),
         founding_spots_left=await _founding_spots_left(),
         plan_version=int(status.get("plan_version") or 1),
+        counter=status.get("counter"),
     )
 
 
@@ -6205,7 +6393,7 @@ async def create_checkout_session(request: CheckoutSessionRequest, current_user:
                 await asyncio.to_thread(stripe.checkout.Session.expire, previous_session)
             except Exception:
                 pass  # Already finished or expired.
-        trial = request.trial and plan == "plus" and not user_doc.get("trial_used")
+        trial = TRIAL_ENABLED and request.trial and plan == "plus" and not user_doc.get("trial_used")
         subscription_data: dict[str, Any] = {"metadata": {**metadata, "trial": "1" if trial else "0"}}
         if trial:
             subscription_data["trial_period_days"] = TRIAL_DAYS
@@ -6406,6 +6594,9 @@ async def get_subscription_config():
              "generations": PRO_V2_MONTHLY_AI_CREDITS, "uploads": PRO_V2_MONTHLY_UPLOAD_CREDITS},
         ],
         "trial": {"days": TRIAL_DAYS, "daily_generations": TRIAL_DAILY_AI_CREDITS, "daily_uploads": TRIAL_DAILY_UPLOAD_CREDITS},
+        "trial_enabled": TRIAL_ENABLED,
+        # One-time credits every free account starts with, no card needed.
+        "free": {"generations": FREE_STARTER_AI_CREDITS, "uploads": FREE_STARTER_UPLOAD_CREDITS},
         "founding": {"price_cents": FOUNDING_PRICE_CENTS, "interval": "year", "limit": FOUNDING_MEMBER_LIMIT},
         "tip_amounts_cents": list(TIP_AMOUNTS_CENTS),
     }
@@ -7505,6 +7696,9 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
         if llm_provider not in (None, *TAG_LLM_PROVIDERS):
             raise HTTPException(status_code=400, detail="Invalid llm_provider. Use 'openai', 'grok' or 'deepseek'.")
         llm_provider, llm_fallback_provider = _resolve_tag_llm_providers(llm_provider)
+        if current_user.get("_guest"):
+            # The free tag page runs on Grok only, so DeepSeek is kept for signed-in users.
+            llm_provider, llm_fallback_provider = FREE_TAG_LLM_PROVIDER, None
         source_status["llm"] = {"provider": llm_provider or os.environ.get("LLM_PROVIDER", "grok"), "fallback": llm_fallback_provider}
 
         beat_tokens = {
@@ -7876,6 +8070,10 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
         tag_doc["query_key"] = query_key
         tag_doc['created_at'] = tag_doc['created_at'].isoformat()
         
+        if current_user.get("_guest"):
+            # The free tag page: nothing to save to a history, streak or credit balance.
+            return tag_gen
+
         await db.tag_generations.insert_one(tag_doc)
         
         # Auto check-in for Grow in 120 (same logic as upload)
@@ -7929,6 +8127,73 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
     except Exception as e:
         logging.error(f"Error generating tags: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to generate tags. Please try again.")
+
+# ============ Free tag generator (no account) ============
+# One run per visitor, judged by both their network address and a random id the page keeps
+# in the browser, so clearing one of them isn't enough to go again. After that, the page asks
+# them to sign up. A daily cap across everyone protects the YouTube search quota.
+FREE_TAG_DAILY_CAP = int(os.environ.get("FREE_TAG_DAILY_CAP", "150"))
+# Which model writes free (no-account) tag runs. Grok, so the free page doesn't spend DeepSeek tokens.
+FREE_TAG_LLM_PROVIDER = (os.environ.get("FREE_TAG_LLM_PROVIDER") or "grok").strip().lower()
+
+
+class FreeTagRequest(BaseModel):
+    query: str = Field(min_length=2, max_length=120)
+    visitor_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+
+
+def _free_tag_keys(request: Request, visitor_id: str) -> list[str]:
+    def _hash(value: str) -> str:
+        return hashlib.sha256(f"{JWT_SECRET}:free-tags:{value}".encode()).hexdigest()
+    return [f"ip:{_hash(_client_ip(request))}", f"visitor:{_hash(visitor_id)}"]
+
+
+@api_router.get("/free-tags/status")
+async def free_tag_status(request: Request, visitor_id: str = ""):
+    visitor_id = visitor_id[:64]
+    keys = _free_tag_keys(request, visitor_id) if visitor_id else _free_tag_keys(request, "")[:1]
+    used = await db.free_tag_uses.find_one({"key": {"$in": keys}}, {"_id": 0, "key": 1})
+    return {"used": bool(used)}
+
+
+@api_router.post("/free-tags")
+async def free_tag_generate(body: FreeTagRequest, request: Request):
+    await _check_rate_limit_persistent(f"free-tags:{_client_ip(request)}", 5, 3600)
+    keys = _free_tag_keys(request, body.visitor_id)
+    if await db.free_tag_uses.find_one({"key": {"$in": keys}}, {"_id": 0, "key": 1}):
+        raise HTTPException(status_code=402, detail={
+            "code": "free_tags_used",
+            "message": "You've used your free tag run. Sign up to get 3 more free generations, then pick a plan.",
+        })
+    day_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    if await db.free_tag_uses.count_documents({"kind": "ip", "created_at": {"$gte": day_start}}) >= FREE_TAG_DAILY_CAP:
+        raise HTTPException(status_code=429, detail={
+            "code": "free_tags_busy",
+            "message": "The free tag generator is busy today. Sign up for free to generate tags now.",
+        })
+    now = datetime.now(timezone.utc).isoformat()
+    # Reserve the visitor's one run before generating, so two tabs can't both get one.
+    reserved: list[str] = []
+    try:
+        for key in keys:
+            await db.free_tag_uses.insert_one({"key": key, "kind": key.split(":", 1)[0], "created_at": now})
+            reserved.append(key)
+    except DuplicateKeyError:
+        if reserved:
+            await db.free_tag_uses.delete_many({"key": {"$in": reserved}})
+        raise HTTPException(status_code=402, detail={
+            "code": "free_tags_used",
+            "message": "You've used your free tag run. Sign up to get 3 more free generations, then pick a plan.",
+        })
+    guest = {"id": f"guest:{keys[1][-16:]}", "_execute_inline": True, "_guest": True}
+    try:
+        result = await generate_tags(TagGenerationRequest(query=body.query), current_user=guest)
+    except Exception:
+        # A failed run doesn't count against them.
+        await db.free_tag_uses.delete_many({"key": {"$in": keys}})
+        raise
+    return {"query": result.query, "tags": result.tags, "scored_tags": result.scored_tags}
+
 
 @api_router.get("/tags/history", response_model=List[TagGenerationResponse])
 async def get_tag_history(current_user: dict = Depends(get_current_user)):
@@ -11240,6 +11505,9 @@ async def _ensure_indexes() -> None:
         (db.ai_response_cache, [("key", 1)], {}),
         (db.security_rate_limits, [("key", 1)], {}),
         (db.tag_history, [("user_id", 1)], {}),
+        (db.users, [("google_sub", 1)], {"sparse": True}),  # Google sign-in
+        (db.oauth_states, [("state_hash", 1)], {}),
+        (db.free_tag_uses, [("key", 1)], {"unique": True}),  # one free tag run per visitor
     ]
     for collection, keys, options in specs:
         try:

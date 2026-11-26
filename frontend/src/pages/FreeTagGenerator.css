@@ -1,0 +1,18 @@
+.ftg { display: flex; flex-direction: column; gap: 20px; max-width: 760px; margin: 0 auto; }
+.ftg-h1 { font-size: clamp(26px, 4vw, 40px); font-weight: 700; line-height: 1.15; margin: 0; }
+.ftg-lede { font-size: 16px; line-height: 1.6; margin: 0; }
+.ftg-form { display: flex; flex-direction: column; gap: 12px; }
+.ftg-form input { height: 48px; font-size: 16px; }
+.ftg-form button, .ftg-result button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.ftg-result { display: flex; flex-direction: column; gap: 12px; }
+.ftg-result-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; }
+.ftg-result-head h2 { font-size: 20px; font-weight: 600; margin: 0; }
+.ftg-tags { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0; margin: 0; }
+.ftg-tags li { padding: 6px 10px; border-radius: 999px; border: 1px solid var(--c-line, rgba(127, 127, 127, 0.3)); font-size: 14px; }
+.ftg-cta { display: flex; flex-direction: column; gap: 10px; padding: 20px; align-items: flex-start; }
+.ftg-cta h2 { font-size: 20px; font-weight: 600; margin: 0; }
+.ftg-cta p { margin: 0; line-height: 1.6; }
+.ftg-copy h2 { font-size: 18px; font-weight: 600; margin: 16px 0 6px; }
+.ftg-copy p { line-height: 1.65; margin: 0; }
+.ftg-copy a { text-decoration: underline; }
+.ftg-copy ul { padding-left: 18px; list-style: disc; line-height: 1.8; }

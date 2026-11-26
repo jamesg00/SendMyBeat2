@@ -16,6 +16,9 @@ import YouTubeCallback from "@/pages/YouTubeCallback";
 import PrivacyPolicy from "@/pages/PrivacyPolicy";
 import TermsAndConditions from "@/pages/TermsAndConditions";
 import About from "@/pages/About";
+import FreeTagGenerator from "@/pages/FreeTagGenerator";
+import TypeBeatSeoPage from "@/pages/TypeBeatSeoPage";
+import { SEO_PATHS } from "@/lib/seoPages";
 import VizEmbed from "@/pages/VizEmbed";
 import Footer from "@/components/Footer";
 import RouteMeta from "@/lib/RouteMeta";
@@ -197,19 +200,17 @@ function MainApp() {
             />
             <Route
               path="/youtube-callback"
-              element={
-                isAuthenticated ? (
-                  <YouTubeCallback />
-                ) : (
-                  <Navigate to="/" replace />
-                )
-              }
+              element={<YouTubeCallback isAuthenticated={isAuthenticated} setIsAuthenticated={setIsAuthenticated} />}
             />
             <Route path="/pros/:id" element={isAuthenticated ? <ProPage /> : <Navigate to="/" replace />} />
             <Route path="/pros/:id/plan" element={isAuthenticated ? <ProPlanPage /> : <Navigate to="/" replace />} />
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
             <Route path="/terms" element={<TermsAndConditions />} />
             <Route path="/about" element={<About />} />
+            <Route path="/free-tag-generator" element={<FreeTagGenerator />} />
+            {SEO_PATHS.map((path) => (
+              <Route key={path} path={path} element={<TypeBeatSeoPage />} />
+            ))}
           </Routes>
         </div>
           <Footer />

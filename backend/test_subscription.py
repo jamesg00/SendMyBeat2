@@ -59,119 +59,53 @@ class TestSubscriptionStatus:
             assert status['credits_remaining'] == server._get_paid_plan_limits('plus')['ai_credits']
             assert status['upload_credits_remaining'] == server._get_paid_plan_limits('plus')['upload_credits']
 
-    # Free accounts get no credits now; these check the daily reset with the old free limits.
-    @patch('backend.server.FREE_DAILY_AI_CREDITS', 2)
-    @patch('backend.server.FREE_DAILY_UPLOAD_CREDITS', 1)
-    async def test_free_user_new_day_reset(self):
-        """Test free user credits reset on a new day."""
-        # Current time: 2024-01-02 12:00:00 UTC
-        mock_now = datetime(2024, 1, 2, 12, 0, 0, tzinfo=timezone.utc)
-
+    @patch('backend.server.FREE_STARTER_AI_CREDITS', 3)
+    @patch('backend.server.FREE_STARTER_UPLOAD_CREDITS', 3)
+    async def test_free_user_starter_credits_never_reset(self):
+        """Free accounts get a one-time starter allowance: no daily reset, no resets_at."""
         user_doc = {
             "id": "free_user",
-            "daily_usage_date": "2024-01-01", # Yesterday
-            "daily_usage_count": 3,
-            "daily_upload_count": 3
+            "daily_usage_date": "2024-01-01",  # an old day: must not trigger a reset
+            "free_ai_used": 1,
+            "free_upload_used": 2,
         }
-
         with patch('backend.server.db') as mock_db, \
-             patch('backend.server.datetime') as mock_datetime:
-
+             patch.object(server, '_get_user_monthly_llm_cost', AsyncMock(return_value=0.0)):
             mock_db.users.find_one = AsyncMock(return_value=user_doc)
             mock_db.users.update_one = AsyncMock()
 
-            # Configure mock datetime
-            mock_datetime.now.return_value = mock_now
-            mock_datetime.combine = datetime.combine
-            mock_datetime.min = datetime.min
-            mock_datetime.fromisoformat = datetime.fromisoformat
-
             status = await server.get_user_subscription_status("free_user")
 
-            # Verify update was called to reset
-            mock_db.users.update_one.assert_called_once()
-            args, kwargs = mock_db.users.update_one.call_args
-            assert args[0] == {"id": "free_user"}
-            assert args[1]["$set"]["daily_usage_count"] == 0
-            assert args[1]["$set"]["daily_upload_count"] == 0
-            assert args[1]["$set"]["daily_usage_date"] == "2024-01-02"
-
-            # Verify status
+            mock_db.users.update_one.assert_not_called()
             assert status['is_subscribed'] is False
             assert status['plan'] == 'free'
+            assert status['counter'] == 'starter'
             assert status['credits_remaining'] == 2
             assert status['upload_credits_remaining'] == 1
+            assert status['resets_at'] is None
+            assert server._usage_fields(status) == ('free_ai_used', 'free_upload_used')
 
-            # Verify resets_at is correctly calculated for tomorrow
-            expected_resets_at = "2024-01-03T00:00:00+00:00"
-            assert status['resets_at'] == expected_resets_at
-
-    # Free accounts get no credits now; these check the daily reset with the old free limits.
-    @patch('backend.server.FREE_DAILY_AI_CREDITS', 2)
-    @patch('backend.server.FREE_DAILY_UPLOAD_CREDITS', 1)
-    async def test_free_user_partial_usage_today(self):
-        """Test free user with some usage today."""
-        # Current time: 2024-01-02 12:00:00 UTC
-        mock_now = datetime(2024, 1, 2, 12, 0, 0, tzinfo=timezone.utc)
-
-        user_doc = {
-            "id": "free_user",
-            "daily_usage_date": "2024-01-02", # Today
-            "daily_usage_count": 1,
-            "daily_upload_count": 2
-        }
-
-        with patch('backend.server.db') as mock_db, \
-             patch('backend.server.datetime') as mock_datetime:
-
-            mock_db.users.find_one = AsyncMock(return_value=user_doc)
-            mock_db.users.update_one = AsyncMock()
-
-            # Configure mock datetime
-            mock_datetime.now.return_value = mock_now
-            mock_datetime.combine = datetime.combine
-            mock_datetime.min = datetime.min
-            mock_datetime.fromisoformat = datetime.fromisoformat
-
-            status = await server.get_user_subscription_status("free_user")
-
-            # Verify update was NOT called (no reset needed)
-            mock_db.users.update_one.assert_not_called()
-
-            # Verify status
-            assert status['is_subscribed'] is False
-            assert status['plan'] == 'free'
-            assert status['credits_remaining'] == 1 # 2 - 1
-            assert status['upload_credits_remaining'] == 0 # 1 - 2 floored at 0
-
+    @patch('backend.server.FREE_STARTER_AI_CREDITS', 3)
+    @patch('backend.server.FREE_STARTER_UPLOAD_CREDITS', 3)
     async def test_free_user_exhausted_credits(self):
-        """Test free user with no credits remaining."""
-        # Current time: 2024-01-02 12:00:00 UTC
-        mock_now = datetime(2024, 1, 2, 12, 0, 0, tzinfo=timezone.utc)
-
+        """Once the starter credits are used, nothing comes back the next day."""
         user_doc = {
             "id": "free_user",
-            "daily_usage_date": "2024-01-02", # Today
-            "daily_usage_count": 5, # Over limit
-            "daily_upload_count": 5
+            "daily_usage_date": "2024-01-01",
+            "daily_usage_count": 0,
+            "free_ai_used": 3,
+            "free_upload_used": 5,
         }
-
         with patch('backend.server.db') as mock_db, \
-             patch('backend.server.datetime') as mock_datetime:
-
+             patch.object(server, '_get_user_monthly_llm_cost', AsyncMock(return_value=0.0)):
             mock_db.users.find_one = AsyncMock(return_value=user_doc)
             mock_db.users.update_one = AsyncMock()
-
-            # Configure mock datetime
-            mock_datetime.now.return_value = mock_now
-            mock_datetime.combine = datetime.combine
-            mock_datetime.min = datetime.min
-            mock_datetime.fromisoformat = datetime.fromisoformat
 
             status = await server.get_user_subscription_status("free_user")
 
             mock_db.users.update_one.assert_not_called()
-
             assert status['is_subscribed'] is False
-            assert status['credits_remaining'] == 0 # Max(0, 2-5)
+            assert status['credits_remaining'] == 0
             assert status['upload_credits_remaining'] == 0
+            detail = server._paywall_detail(status, 'generations')
+            assert detail['code'] == 'needs_plan' and 'used your free generations' in detail['message']

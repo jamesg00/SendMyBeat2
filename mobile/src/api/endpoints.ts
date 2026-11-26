@@ -18,6 +18,8 @@ export type SubscriptionStatus = {
   /** In the free trial: credits are per day until trial_ends_at. */
   trial?: boolean;
   trial_available?: boolean;
+  /** "starter" = a free account's one-time credits, "daily" = the trial, "monthly" = a paid plan. */
+  counter?: string;
   trial_ends_at?: string | null;
   /** Copying a pro's style, pro breakdowns, channel analytics and the job queue. */
   pro_access?: boolean;
