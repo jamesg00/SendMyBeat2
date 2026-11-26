@@ -90,10 +90,258 @@ export const FREE_TAG_PAGE = {
     ],
     [
       "Is this a producer tag maker?",
-      "No. These are YouTube search tags, the keywords that help buyers find your upload. A producer tag is the voice drop inside your beat. See the guide on YouTube tags vs producer tags for the difference.",
+      "No. These are YouTube search tags, the keywords that help buyers find your upload. A producer tag is the voice drop inside your beat. The Tag my beat page explains the difference.",
     ],
   ],
 };
+
+// ---- Free tool pages ----------------------------------------------------------------
+// One page per tool producers search for. "tool" picks the widget (pages/tools/). "tags"
+// is the AI tag generator (one free run, shared with /free-tag-generator); the rest run in
+// the browser from lib/seoTools.js, with no sign-up and no limit. "example" fills the tool
+// before a visitor types and is what the prerendered page shows as sample output; "cta" is
+// the prerendered button that leads to the tool.
+export const TOOL_PAGES = {
+  "/tag-my-beat": {
+    tool: "tags",
+    cta: "Generate my tags",
+    nav: "Tag my beat",
+    appName: "SendMyBeat Tag My Beat",
+    eyebrow: "Free tool, no account",
+    title: "Tag My Beat: Free YouTube Tag Generator for Your Beat ({year}) | SendMyBeat",
+    description:
+      "Tag your beat for YouTube free, no sign-up: type the artist it sounds like and get scored search tags that fit the 500-character limit. Not a voice tag maker.",
+    h1: "Tag my beat: free YouTube tags in one click",
+    lede: 'Type the artist or sound your beat goes for, like "travis scott type beat". You get YouTube tags from live searches, each with a score so you can see which ones pull their weight. One free run, no sign-up.',
+    how: [
+      [
+        "How to tag a beat for YouTube",
+        'Lead with the artist plus "type beat" and the year, add the style and mood, then the spellings buyers use. Keep the whole set under YouTube\'s 500 characters, then paste it into the Tags box in YouTube Studio.',
+      ],
+      [
+        "What the colours mean",
+        "Each tag gets a score out of 100 from search demand, competition and how close it is to your search. Green is 60 or more, amber 45 to 59, red under 45. Swap red tags for something closer to your beat.",
+      ],
+    ],
+    extra: [
+      [
+        "Looking for a producer voice tag?",
+        "A producer tag, or voice tag, is the short audio drop inside your beat, like \"you're now listening to...\". SendMyBeat doesn't make those. It makes YouTube search tags, the keywords that decide which searches your upload shows up in. Record your drop or use a voice tag tool, put it in the first bars, bounce the beat, then tag the upload here.",
+      ],
+    ],
+    faq: [
+      [
+        "Is it free to tag my beat here?",
+        "Yes. You get one full tag run without an account. Sign up free for 3 more AI generations and 3 YouTube uploads, no card needed. The title, description, hashtag and tag counter tools on this site run in your browser and are free with no limit.",
+      ],
+      [
+        "Does this make a producer tag or voice tag?",
+        "No. This makes YouTube search tags, the keywords you paste into YouTube Studio. A producer tag is a voice drop in the audio, which you record yourself or make with a voice tag tool.",
+      ],
+      [
+        "How many tags should I put on a beat?",
+        "As many focused tags as fit in YouTube's 500 characters, usually 15 to 30 for a type beat. Cut anything that doesn't describe the beat: relevance counts more than the number of tags.",
+      ],
+      [
+        "Why does each tag have a score?",
+        "So you can see which tags are worth the space. The score weighs how much a tag is searched against how many videos already compete for it, and how close it is to what you typed.",
+      ],
+      [
+        "Should I tag other artists?",
+        "Only artists your beat really sounds like. Tags for unrelated big names bring viewers who leave quickly, which does your video no good.",
+      ],
+    ],
+  },
+  "/type-beat-title-generator": {
+    tool: "title",
+    cta: "Make my titles",
+    nav: "Title generator",
+    appName: "SendMyBeat Type Beat Title Generator",
+    eyebrow: "Free tool, no sign-up, no limit",
+    title: "Type Beat Title Generator for YouTube ({year}), free | SendMyBeat",
+    description:
+      "Free type beat title generator: enter the artist, beat name, style and BPM and get YouTube titles in the formats that rank, each with a character count. No sign-up.",
+    h1: "Type beat title generator",
+    lede: 'Enter the artist your beat is for, the beat name and the sound. You get YouTube titles in the formats type beat buyers search, like Drake Type Beat {year} - "Name" | Dark R&B Instrumental, each with a character count and a copy button. Free, with no sign-up and no limit.',
+    how: [
+      [
+        "What makes a type beat title work",
+        'Buyers search the artist\'s name with "type beat", so the title starts with exactly that. The beat name goes in quotes so it reads as a name. The rest of the space goes to the year, a second artist or the sound, the searches next to the obvious one.',
+      ],
+      [
+        "Keep it short enough to read",
+        "YouTube allows 100 characters, but search results and phones often cut a title after about 70. Every title here shows its length and is flagged when the end may get cut off.",
+      ],
+      [
+        "Collabs and free beats",
+        'Type two artists with an "x", like "Drake x Future", for crossover titles. Turn on [FREE] if anyone can use the beat for free, since many buyers search for "free type beat".',
+      ],
+    ],
+    faq: [
+      [
+        "What is the best title format for a type beat?",
+        'Artist plus "Type Beat" first, then the year or the beat name in quotes, then a second keyword such as the style: Drake Type Beat {year} - "Name" | Dark R&B Instrumental. Searchers see the artist straight away, and the title still reads as yours.',
+      ],
+      [
+        "How long can a YouTube title be?",
+        "100 characters. Aim for about 70 or less so the important part shows in search results and on phones.",
+      ],
+      [
+        "Should I put [FREE] in my type beat title?",
+        'Only if the beat really is free to use. "Free type beat" is a big search, but putting [FREE] on a beat you sell brings in people who won\'t buy and makes for awkward messages.',
+      ],
+      [
+        "Should the year be in the title?",
+        "It helps: buyers often search \"type beat {year}\". Update it on your best uploads each January.",
+      ],
+      [
+        "What do the scores mean?",
+        "They're the same title checks SendMyBeat runs in the app: the artist and \"type beat\" lead the title, it fits 100 characters, it uses your style keyword, the beat name is in quotes, and it has no characters YouTube rejects.",
+      ],
+    ],
+    example: { artists: "Drake x Future", beatName: "Midnight", style: "dark r&b", bpm: "140" },
+  },
+  "/beat-description-generator": {
+    tool: "description",
+    cta: "Write my description",
+    nav: "Description generator",
+    appName: "SendMyBeat Beat Description Generator",
+    eyebrow: "Free tool, no sign-up, no limit",
+    title: "YouTube Description Generator for Beats ({year}), free | SendMyBeat",
+    description:
+      "Free YouTube description generator for type beats: purchase link on top, BPM and key, credits, contact and 3 to 5 hashtags, ready to copy. No sign-up, no limit.",
+    h1: "YouTube description generator for beats",
+    lede: "Fill in the beat's details and get a description ready to paste into YouTube: a keyword line and your purchase link at the top, BPM and key, credits and contact, and hashtags at the end. Free, with no sign-up and no limit.",
+    how: [
+      [
+        "What goes at the top",
+        'YouTube shows the first lines above "...more". The description opens with a keyword line that matches your title, then the link to buy or download, so buyers see it without tapping.',
+      ],
+      [
+        "Credits and terms",
+        "Add your producer name and say whether the beat is free for profit. Clear terms save you messages asking whether someone can use the beat.",
+      ],
+      [
+        "Hashtags at the end",
+        "3 to 5 hashtags, starting with the artist's type beat tag. YouTube shows the first three above your title. Over 15 and YouTube ignores all of them.",
+      ],
+    ],
+    faq: [
+      [
+        "What should a type beat description include?",
+        "How to get the beat (a purchase or download link), BPM and key, credits and terms, a way to reach you, and a few hashtags. Put the link near the top, where people see it.",
+      ],
+      [
+        "Do keywords in the description help?",
+        'A little. YouTube reads the description for context, so one natural line with "artist type beat" and the style helps. Repeating keywords over and over can get the video flagged as spam.',
+      ],
+      [
+        "How long can a YouTube description be?",
+        "5,000 bytes, which is about 5,000 characters of plain English text. YouTube also rejects the < and > characters, so this tool leaves them out.",
+      ],
+      [
+        "Is this the same description the app writes?",
+        "Yes, it uses the same layout. With an account, SendMyBeat also fills in the keywords from your tag run, saves your contact block as a template and puts the description into the upload for you.",
+      ],
+    ],
+    example: {
+      beatName: "Midnight",
+      artist: "Drake",
+      style: "dark r&b",
+      bpm: "140",
+      musicKey: "C minor",
+      buyLink: "https://your-store.example/midnight",
+      producer: "Your Name",
+      email: "",
+      instagram: "@yourname",
+    },
+  },
+  "/youtube-hashtag-generator": {
+    tool: "hashtags",
+    cta: "Get my hashtags",
+    nav: "Hashtag generator",
+    appName: "SendMyBeat YouTube Hashtag Generator for Beats",
+    eyebrow: "Free tool, no sign-up, no limit",
+    title: "YouTube Hashtag Generator for Beats and Type Beats ({year}) | SendMyBeat",
+    description:
+      "Free YouTube hashtag generator for beats: enter the artist and style and get 3 to 5 hashtags for your description, in the right order. No sign-up, no limit.",
+    h1: "YouTube hashtag generator for beats",
+    lede: "Enter the artist your beat is for and its style. You get 3 to 5 hashtags for the end of your description, in the order that matters, with a copy button. Free, with no sign-up and no limit.",
+    how: [
+      [
+        "Why only 3 to 5",
+        "YouTube shows the first three hashtags from your description above the title. A few focused ones do the job. More than 15 and YouTube ignores every hashtag in the description.",
+      ],
+      [
+        "The order matters",
+        "The artist's type beat hashtag comes first, since that's what buyers search, then the artist, then the style. Those first three are the ones people see.",
+      ],
+    ],
+    faq: [
+      [
+        "How many hashtags should a YouTube video have?",
+        "3 to 5 is plenty for a beat. YouTube shows the first three above the title, and ignores all of them if there are more than 15.",
+      ],
+      [
+        "Where do I put hashtags on YouTube?",
+        "At the end of the description. You can put them in the title too, but they take space the artist and beat name need.",
+      ],
+      [
+        "Are hashtags the same as tags?",
+        "No. Hashtags sit in the description and show above the title. Tags go in the Tags box in YouTube Studio and viewers don't see them. Use both: generate tags with the free tag generator.",
+      ],
+      [
+        "Why don't hashtags have spaces?",
+        "A hashtag ends at the first space, so #drake type beat would only tag \"drake\". The tool joins the words: #draketypebeat.",
+      ],
+    ],
+    example: { artists: "Drake", style: "dark r&b" },
+  },
+  "/youtube-tag-counter": {
+    tool: "counter",
+    cta: "Count my tags",
+    nav: "Tag counter",
+    appName: "SendMyBeat YouTube Tag Counter",
+    eyebrow: "Free tool, no sign-up, no limit",
+    title: "YouTube Tag Counter: check the 500-character limit, free | SendMyBeat",
+    description:
+      "Paste your YouTube tags and see the count YouTube uses against its 500-character limit, quote marks included. Finds repeats and long tags and trims the list to fit.",
+    h1: "YouTube tag counter",
+    lede: "Paste your tags, separated by commas. You see the count YouTube uses against its 500-character limit, the length of each tag, repeats and over-long tags, and you can trim the list to fit in one tap. Free, with no sign-up and no limit.",
+    how: [
+      [
+        "How YouTube counts tags",
+        'YouTube counts every character of every tag plus the commas between them, and a tag with a space in it costs two more for the quote marks YouTube puts around it. So "drake type beat" costs 17, not 15. That\'s why a list that looks short can still be rejected.',
+      ],
+      [
+        "What trim to fit does",
+        "It keeps your tags in order, drops repeats and tags over 100 characters, and skips any tag that would push the list over 500. Put your most important tags first.",
+      ],
+    ],
+    faq: [
+      [
+        "What is the YouTube tag limit?",
+        "500 characters in total. Commas count, and a tag with spaces counts two extra characters for the quote marks around it.",
+      ],
+      [
+        "Why does YouTube say my tags are too long when they're under 500?",
+        "Most likely the quote marks. Every tag with a space costs two extra characters, and a set of 25 multi-word tags adds 50 characters you can't see.",
+      ],
+      [
+        "Do repeated tags help?",
+        "No. A repeat, even with different capitals, only uses up space. The counter flags them and trim to fit removes them.",
+      ],
+      [
+        "Can I use < or > in tags?",
+        "No, YouTube doesn't accept them. The counter takes them out of the cleaned list.",
+      ],
+    ],
+    example: {
+      tags: "drake type beat, drake type beat {year}, free drake type beat, Drake Type Beat, drake instrumental, dark r&b type beat, future type beat, drake x future type beat",
+    },
+  },
+};
+export const TOOL_PATHS = Object.keys(TOOL_PAGES);
 
 // Guide pages, one per thing producers search for. Each answers it and points to the
 // free tag generator or sign-up.
@@ -129,28 +377,6 @@ export const GUIDES = {
       ["Beat plus artwork becomes a video", "Pick a layout, add an audio visualizer and preview it before anything goes live."],
       ["Tags and description filled in", "Generate tags and write a description from a template, and they go into the upload with your title."],
       ["Your channel, your settings", "Connect your Google account once. Uploads go to your channel as public, unlisted or private videos."],
-    ],
-  },
-  "/beat-description-generator": {
-    title: "YouTube Description Generator for Beats | SendMyBeat",
-    description: "Write YouTube descriptions for type beats: purchase links, credits, BPM and contact info, from templates you save and reuse.",
-    h1: "YouTube descriptions for your beats",
-    lede: "A beat description has a job: tell buyers how to get the beat and how to reach you, and give YouTube a few words of context.",
-    sections: [
-      ["Start from a template", "Templates for type beats, beat sales and free-for-profit beats, with places for your links, BPM, key and contact."],
-      ["Save your own", "Keep the description you use on every upload and fill in only what changes."],
-      ["Keep it readable", "Put the purchase link and the credit line at the top, where people see them without tapping \"more\"."],
-    ],
-  },
-  "/tag-my-beat": {
-    title: "Tag My Beat: YouTube tags vs producer tags, and how to do both | SendMyBeat",
-    description: "\"Tag my beat\" can mean two things: YouTube search tags or a producer voice tag. Here's the difference, and a free tool for the YouTube tags.",
-    h1: "Tag your beat: YouTube tags or a producer tag?",
-    lede: "Producers say \"tag my beat\" for two different jobs. One gets your beat found on YouTube. The other puts your name inside the beat.",
-    sections: [
-      ["Two kinds of tag", "A producer tag is a short voice drop in the audio, like \"you're now listening to...\", that marks the beat as yours. YouTube tags are keywords in YouTube Studio that tell YouTube which searches your upload belongs in."],
-      ["Tagging your beat for YouTube", "Start with the artist plus \"type beat\" and the year, add the style, then the spellings buyers use. Keep it under YouTube's 500 characters. The free generator builds this set for you from live YouTube searches."],
-      ["Adding a producer tag", "SendMyBeat doesn't record voice tags. Record your own or use a voice tag tool, drop it into the first few bars, and bounce the beat before you upload. Then tag the upload for YouTube here."],
     ],
   },
 };
@@ -310,6 +536,7 @@ const pageMeta = (path) => {
   if (STATIC_PAGES[path]) return STATIC_PAGES[path];
   if (path === FREE_TAG_PAGE.path) return { ...FREE_TAG_PAGE, priority: "0.9", changefreq: "weekly" };
   if (GUIDES[path]) return { ...GUIDES[path], priority: path === TAG_HUB_PATH ? "0.8" : "0.7", changefreq: "monthly" };
+  if (TOOL_PAGES[path]) return { ...TOOL_PAGES[path], priority: "0.8", changefreq: "monthly" };
   if (path.startsWith(`${TAG_HUB_PATH}/`)) {
     const page = tagSetPage(path.slice(TAG_HUB_PATH.length + 1));
     if (page) return { ...page, priority: "0.6", changefreq: "monthly" };
@@ -320,6 +547,7 @@ const pageMeta = (path) => {
 export const PUBLIC_PATHS = [
   ...Object.keys(STATIC_PAGES),
   FREE_TAG_PAGE.path,
+  ...TOOL_PATHS,
   ...Object.keys(GUIDES),
   ...TAG_SET_SLUGS.map(tagSetPath),
 ];
@@ -379,6 +607,25 @@ export const jsonLdFor = (path, year) => {
       },
       breadcrumbs([["SendMyBeat", "/"], ["Free tag generator", path]]),
       faqPage(FREE_TAG_PAGE.faq, year),
+    ];
+  }
+  if (TOOL_PAGES[path]) {
+    const tool = TOOL_PAGES[path];
+    return [
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        name: tool.appName,
+        url: `${SITE}${path}`,
+        description: meta.description,
+        applicationCategory: "MultimediaApplication",
+        operatingSystem: "Web",
+        isAccessibleForFree: true,
+        offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+        publisher: { "@type": "Organization", name: "SendMyBeat", url: SITE },
+      },
+      breadcrumbs([["SendMyBeat", "/"], [tool.nav, path]]),
+      faqPage(tool.faq, year),
     ];
   }
   if (GUIDES[path]) {
