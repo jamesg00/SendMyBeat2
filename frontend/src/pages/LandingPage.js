@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { setAuthToken } from "@/lib/auth";
+import { HOME } from "@/lib/seoModel";
 import { resolvePalette, useTheme } from "@/lib/ThemeContext";
 import "@/pages/LandingPage.css";
 import RenderPreview from "@/pages/landing/RenderPreview";
@@ -105,35 +106,17 @@ const SUGGESTIONS = ["future", "travis scott", "ken carson", "dark trap", "plugg
 const LEVEL = { high: "High", medium: "Medium", low: "Low" };
 const tagChars = (tags) => (tags.length ? tags.reduce((n, t) => n + t.length + (t.includes(" ") ? 2 : 0), 0) + tags.length - 1 : 0);
 
-const STEPS = [
-  { id: "generate", icon: Tags, title: "Generate tags", body: "Type an artist or a vibe. Get tag suggestions from YouTube videos, then use the meter to stay under YouTube's 500-character limit." },
-  { id: "review", icon: Sparkles, title: "Review the ranking", body: "Every tag gets a score from real search demand and competition. See them best to worst, open one to read why, and cut the weak ones." },
-  { id: "upload", icon: Upload, title: "Upload from the studio", body: "Drop in your beat and cover art. Upload Studio renders the video and publishes it to your channel with the title, tags and description filled in." },
-  { id: "grow", icon: BarChart3, title: "See what's working", body: "Analytics compares each upload with your own average and suggests better titles. Pros shows how the biggest producers grew, with moves you can copy." },
-];
+// Steps, features, plans and FAQ come from HOME in lib/seoModel.js, the same copy the build
+// writes into the homepage's HTML (and its FAQ structured data), so the two can't drift.
+const STEP_ICONS = { generate: Tags, review: Sparkles, upload: Upload, grow: BarChart3 };
+const STEPS = HOME.steps.map((s) => ({ ...s, icon: STEP_ICONS[s.id] }));
 
-const FEATURES = [
-  { icon: Upload, title: "Upload Studio", body: "Beat plus artwork becomes a video. Pick the layout, add a visualizer, preview it and publish to your channel without leaving the page." },
-  { icon: Tags, title: "Tags that rank", body: "60 to 80 tag suggestions per run, each scored on search demand and competition, with a meter for YouTube's 500-character limit." },
-  { icon: FileText, title: "Descriptions", body: "Start from a template for type beats, beat sales or free-for-profit, then save your own to reuse on every upload." },
-  { icon: BarChart3, title: "Channel analytics", pro: true, body: "Views per upload against your average, the title patterns that win and lose, and a better title for each weak upload." },
-  { icon: Star, title: "Pros", pro: true, body: "Why the biggest type-beat producers blew up, how their channels work, how close your style is, and a 14-day plan to close the gap." },
-  { icon: Users, title: "Spotlight", body: "A public profile with your top beat, a leaderboard driven by upload streaks, and other producers to follow." },
-];
+const FEATURE_ICONS = { studio: Upload, tags: Tags, descriptions: FileText, analytics: BarChart3, pros: Star, spotlight: Users };
+const FEATURES = HOME.features.map((f) => ({ ...f, icon: FEATURE_ICONS[f.id] }));
 
-const PLANS = [
-  { id: "trial", name: "Free", price: "$0", per: "no card", limit: 3, unit: "in total", lines: ["3 AI generations to try it", "3 YouTube uploads to try it", "One-time credits that don't renew", "Then Plus at $5/mo. Cancel anytime"] },
-  { id: "plus", name: "Plus", price: "$5", per: "/mo", limit: 50, unit: "a month", lines: ["50 AI generations a month", "50 YouTube uploads a month", "Tags, descriptions and Upload Studio", "No watermark"] },
-  { id: "pro", name: "Pro", price: "$10", per: "/mo", limit: 100, unit: "a month", lines: ["100 AI generations a month", "100 YouTube uploads a month", "Copy a pro producer's style", "Pro breakdowns and channel analytics", "Run several jobs at once"] },
-];
+const PLANS = HOME.plans;
 
-const FAQ = [
-  ["Do I need a card to try it?", "No. A free account comes with 3 AI generations and 3 YouTube uploads, no card needed. They don't renew, so after that you pick Plus or Pro."],
-  ["Where do the tags come from?", "From YouTube itself: what people type into search, and the tags on videos that already rank for your artist. AI adds variations, then every tag is scored."],
-  ["Does it upload to my own channel?", "Yes. You connect your Google account once, and uploads go to that YouTube channel as public, unlisted or private videos."],
-  ["What can I do without a plan?", "Use your 3 free generations and 3 free uploads, browse Spotlight and read the Pros stories. After the free credits, generating, uploading and analytics need a plan."],
-  ["Is there a phone app?", "An Android app with the same account and features is on the way."],
-];
+const FAQ = HOME.faq;
 
 /** Google's "G", for the sign-in button. */
 const GoogleMark = () => (
@@ -295,7 +278,7 @@ function TagLab() {
           </>
         )}
       </div>
-      <p className="lp-lab-note">Real runs suggest 60 to 80 tags from live YouTube data.</p>
+      <p className="lp-lab-note">Real runs score up to 50 tags from live YouTube data and fill YouTube's 500 characters.</p>
     </div>
   );
 }
@@ -322,7 +305,7 @@ function StepPreview({ id }) {
             </li>
           ))}
         </ul>
-        <p className="smb-mono smb-t3 text-xs">60–80 tags · about 45 seconds · 1 credit</p>
+        <p className="smb-mono smb-t3 text-xs">Up to 50 tags · about 45 seconds · 1 credit</p>
       </div>
     );
   }

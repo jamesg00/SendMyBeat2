@@ -13,7 +13,9 @@ RUN npm run build
 # Production Stage
 FROM node:18-alpine
 WORKDIR /app
-RUN npm install -g serve
+RUN npm install -g serve@14
 COPY --from=build /app/build ./build
 EXPOSE 3000
-CMD ["serve", "-s", "build", "-l", "3000"]
+# No -s: it sends every path to index.html and skips the prerendered pages. build/serve.json
+# (written by scripts/prerender-seo.js) maps each public page to its own file, the rest to app.html.
+CMD ["serve", "build", "-l", "3000"]

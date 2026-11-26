@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Copy, Sparkles } from "lucide-react";
 import { API } from "@/App";
 import { Button } from "@/components/ui/button";
-import { TAG_HUB_PATH, TAG_SETS, freeTagLink, tagSetPage, tagSetPath, tagsFor, withYear, youtubeTagChars } from "@/lib/seoModel";
+import { TAG_HUB_PATH, TAG_SETS, freeTagLink, moreTagSets, tagSetPage, tagSetPath, tagsFor, withYear, youtubeTagChars } from "@/lib/seoModel";
 import "@/pages/PolicyPages.css";
 import "@/pages/FreeTagGenerator.css";
 
@@ -112,8 +112,7 @@ const TagSetPage = () => {
 
   const tags = tagsFor(slug, YEAR);
   const copyAll = () => copyText(tags.join(", "), "Tags copied");
-  // TODO(merge): use moreTagSets(slug, 24)
-  const others = Object.entries(TAG_SETS).filter(([s, set]) => s !== slug && set.kind === page.kind && !page.related.includes(s));
+  const others = moreTagSets(slug, 24);
 
   return (
     <div className="policy-shell">
