@@ -1,0 +1,300 @@
+/*
+ * The landing page look ("Console Ultra", concept 47) for the rest of the site.
+ *
+ * Loaded after console.css and pros.css. Landing pieces become shared tokens (--u-*) and a few
+ * utility classes (u-*), then the app's existing classes pick them up: mint-to-blue main buttons
+ * with a sheen, flat panels with a thin mint-to-blue light along the top, a traveling gradient
+ * edge on the thing that matters most, code-comment section labels, Space Grotesk for words.
+ *
+ * Themes stay as they are. On Console the gradient is the brand mint to blue (#8BFFD0 -> #4C8DFF);
+ * every other palette uses its own two accent tones, so Light stays blue, Paper stays black, Rose
+ * stays pink. Backgrounds (.dashboard-parallax-bg) are untouched. Looks only: no behavior changes.
+ */
+
+@property --u-ang { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+
+/* ============================== tokens ============================== */
+
+html {
+  --u-a: var(--c-acc2);
+  --u-b: var(--c-acc);
+  --u-ink: var(--c-onacc);
+}
+:root:not([data-palette]),
+html[data-palette="console"] {
+  --u-a: #8BFFD0;
+  --u-b: #4C8DFF;
+  --u-ink: #04131c;
+}
+html {
+  --u-grad: linear-gradient(135deg, var(--u-a), var(--u-b));
+  --u-grad-x: linear-gradient(90deg, var(--u-a), var(--u-b));
+  /* The light along the top of a panel. */
+  --u-hair: linear-gradient(90deg, transparent, color-mix(in srgb, var(--u-a) 70%, transparent), color-mix(in srgb, var(--u-b) 60%, transparent), transparent);
+  /* The edge that travels around the featured panel. */
+  --u-edge: conic-gradient(from var(--u-ang), var(--u-a), var(--u-b), color-mix(in srgb, var(--c-text) 6%, transparent) 40%, color-mix(in srgb, var(--c-text) 6%, transparent) 60%, var(--u-a));
+  --u-glow-a: color-mix(in srgb, var(--u-a) 22%, transparent);
+  --u-glow-b: color-mix(in srgb, var(--u-b) 28%, transparent);
+  --u-shadow-b: color-mix(in srgb, var(--u-b) 70%, transparent);
+  --u-r: 12px;
+  --u-r-pill: 5px;
+}
+
+/* Two fonts, as on the landing page: Space Grotesk for words, Plex Mono for tags and numbers. */
+html {
+  --font-sans: var(--font-display);
+}
+/* Console body text one step brighter, like the landing page. Captions keep --c-t3. */
+:root:not([data-palette]),
+html[data-palette="console"] {
+  --c-t2: #C4C4C4 !important;
+  --text-secondary: #C4C4C4 !important;
+}
+
+/* ============================== motion ============================== */
+
+@keyframes u-spin { to { --u-ang: 360deg; } }
+@keyframes u-drift {
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(-5%, 4%, 0) scale(1.1); }
+  100% { transform: translate3d(3%, -2%, 0) scale(1.04); }
+}
+@keyframes u-shine { to { background-position: 200% 50%; } }
+@keyframes u-sheen {
+  0%, 60% { transform: translateX(-120%) skewX(-20deg); }
+  100% { transform: translateX(220%) skewX(-20deg); }
+}
+@keyframes u-rise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+@keyframes u-hue { 0% { background-position: 0% 30%; } 100% { background-position: 100% 70%; } }
+
+/* ============================== utilities ============================== */
+
+/* A flat panel with the mint-to-blue light along its top. Drawn as a background layer,
+   not a pseudo-element, so it never clashes with a component's own ::before / ::after. */
+.u-panel {
+  background: var(--u-hair) top center / 100% 1px no-repeat, var(--c-card) !important;
+  border: 1px solid var(--c-line) !important;
+  border-radius: var(--u-r) !important;
+  box-shadow: none !important;
+}
+
+/* The traveling gradient edge, for the one thing on a screen that matters most. */
+.u-edge {
+  border: 1px solid transparent !important;
+  background: linear-gradient(var(--c-card), var(--c-card)) padding-box, var(--u-edge) border-box !important;
+  animation: u-spin 7s linear infinite;
+}
+.u-edge--glow { box-shadow: 0 30px 80px -30px var(--u-shadow-b) !important; }
+
+/* A slow aurora behind a header or hero. Put it on an element with position: relative. */
+.u-aurora { isolation: isolate; }
+.u-aurora::before {
+  content: "";
+  position: absolute;
+  inset: -80px -10% -30px;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(40% 50% at 70% 30%, var(--u-glow-a), transparent 70%),
+    radial-gradient(45% 55% at 88% 70%, var(--u-glow-b), transparent 70%),
+    radial-gradient(35% 40% at 15% 10%, color-mix(in srgb, var(--u-b) 14%, transparent), transparent 70%);
+  filter: blur(30px);
+  animation: u-drift 16s ease-in-out infinite alternate;
+}
+
+/* Shimmering mint-to-blue words, like the landing headline. */
+.u-grad-text {
+  background: linear-gradient(90deg, var(--u-a), var(--u-b), var(--u-a)) 0 50% / 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: u-shine 6s linear infinite;
+}
+
+/* A glowing mint-to-blue card for a call to action. */
+.u-cta {
+  border: 0 !important;
+  border-radius: 20px !important;
+  background: linear-gradient(165deg, var(--u-a), var(--u-b)) 0 0 / 200% 200% !important;
+  color: var(--u-ink) !important;
+  box-shadow: 0 30px 100px -40px var(--u-shadow-b) !important;
+  animation: u-hue 12s ease-in-out infinite alternate;
+}
+.u-cta h1, .u-cta h2, .u-cta h3, .u-cta p, .u-cta .smb-t2, .u-cta .smb-t3 { color: var(--u-ink) !important; }
+.u-cta .smb-btn--pri { background: var(--u-ink) !important; color: #fff !important; box-shadow: 0 12px 30px -12px rgba(4, 19, 28, 0.6) !important; }
+
+/* Staggered entrance for the children of a block. */
+.u-rise > * { animation: u-rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.u-rise > :nth-child(2) { animation-delay: 0.06s; }
+.u-rise > :nth-child(3) { animation-delay: 0.12s; }
+.u-rise > :nth-child(4) { animation-delay: 0.18s; }
+.u-rise > :nth-child(n + 5) { animation-delay: 0.24s; }
+
+/* Icon tile, like the landing feature icons. */
+.u-ico {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  border-radius: 8px;
+  border: 1px solid var(--c-line);
+  background: var(--c-card2);
+  color: var(--c-acc);
+}
+
+/* ============================== the app's own classes ============================== */
+
+/* Section labels read like code comments. */
+.smb-eyebrow::before { content: "// "; color: var(--c-t3); opacity: 0.7; }
+.smb-eyebrow.smb-acc::before { color: inherit; }
+
+/* Main buttons: mint to blue with a sheen that passes every few seconds. */
+.smb-btn--pri,
+button.bg-primary,
+a.bg-primary,
+.btn-modern,
+.terminal-publish-button {
+  background: var(--u-grad) !important;
+  color: var(--u-ink) !important;
+  border: 1px solid transparent !important;
+  box-shadow: 0 10px 30px -10px var(--u-shadow-b) !important;
+}
+.smb-btn--pri:hover:not(:disabled),
+button.bg-primary:hover:not(:disabled),
+a.bg-primary:hover,
+.btn-modern:hover:not(:disabled),
+.terminal-publish-button:hover:not(:disabled) {
+  filter: brightness(1.08);
+  box-shadow: 0 14px 34px -12px var(--u-shadow-b) !important;
+}
+.smb-btn--pri::after,
+button.bg-primary::after,
+.btn-modern::after,
+.terminal-publish-button::after { animation: u-sheen 4.5s ease-in-out infinite; }
+.smb-btn--pri:disabled,
+button.bg-primary:disabled,
+.btn-modern:disabled,
+.terminal-publish-button:disabled { filter: saturate(0.4); opacity: 0.6; box-shadow: none !important; }
+.smb-btn--pri:disabled::after,
+button.bg-primary:disabled::after { animation: none; }
+
+/* Panels: flat, 12px corners, the mint-to-blue light along the top. */
+.smb-card,
+.dashboard-card,
+.dashboard-card-muted,
+.producer-card,
+.glass-card,
+.game-card,
+.terminal-panel-card,
+.tags-studio-card,
+.description-studio-card,
+.workflow-output-card,
+.workflow-upload-shell,
+.spotlight-section-card,
+.spotlight-profile-shell,
+.spotlight-profile-card,
+.spotlight-leaderboard-card,
+.rounded-xl.border.bg-card {
+  background: var(--u-hair) top center / 100% 1px no-repeat, var(--c-card) !important;
+  box-shadow: none !important;
+  border-radius: var(--u-r) !important;
+}
+.smb-card:hover,
+.dashboard-card:hover,
+.producer-card:hover,
+.tags-studio-card:hover,
+.description-studio-card:hover,
+.spotlight-section-card:hover {
+  border-color: color-mix(in srgb, var(--c-text) 22%, transparent) !important;
+}
+
+/* Pills and small badges get the landing's squarer corners. */
+.smb-pill,
+.smb-nav-tag { border-radius: var(--u-r-pill); }
+.smb-badge,
+.terminal-plan-badge { border-radius: 6px; }
+
+/* Meters fill mint to blue. */
+.smb-bar-fill--acc { background: var(--u-grad-x); }
+
+/* Sidebar: the active page gets the accent bar from the landing's How it works steps. */
+.smb-nav-link.is-active {
+  background: var(--c-card2);
+  box-shadow: inset 3px 0 0 var(--c-acc);
+}
+.smb-nav-link.is-active::before { display: none; }
+.smb-nav-link.is-active .smb-ico { color: var(--c-acc); }
+
+/* Page header: a quiet aurora behind the title, and a staggered entrance. */
+.smb-main-head { position: relative; isolation: isolate; }
+.smb-main-head::before {
+  content: "";
+  position: absolute;
+  inset: -90px -6% -40px 30%;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(40% 55% at 60% 40%, var(--u-glow-a), transparent 70%),
+    radial-gradient(45% 60% at 90% 70%, var(--u-glow-b), transparent 70%);
+  filter: blur(34px);
+  opacity: 0.7;
+  animation: u-drift 16s ease-in-out infinite alternate;
+}
+.smb-main-titles > * { animation: u-rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.smb-main-titles > :nth-child(2) { animation-delay: 0.06s; }
+.smb-page-title { letter-spacing: -0.035em; }
+
+/* Upgrade sheet and dialogs: a mint-to-blue edge in place of the grey one. */
+.smb-sheet::before {
+  background: linear-gradient(160deg, color-mix(in srgb, var(--u-a) 55%, transparent), color-mix(in srgb, var(--u-b) 35%, transparent) 30%, transparent 55%);
+}
+.smb-sheet { border-radius: var(--u-r) !important; }
+
+/* Plan options: the picked one gets the traveling edge, as the plan that fits does on the landing page. */
+.smb-opt { border-radius: 10px; }
+.smb-opt.is-active {
+  border-color: transparent !important;
+  background: linear-gradient(var(--c-card), var(--c-card)) padding-box, var(--u-edge) border-box !important;
+  animation: u-spin 7s linear infinite;
+}
+.smb-opt.is-active .smb-radio { border-color: var(--c-acc); }
+
+/* Featured producer in Spotlight: the traveling edge. */
+.producer-card--featured {
+  border: 1px solid transparent !important;
+  background: linear-gradient(var(--c-card), var(--c-card)) padding-box, var(--u-edge) border-box !important;
+  animation: u-spin 7s linear infinite;
+}
+
+/* Bottom progress: mint-to-blue fill. */
+.smb-progress .smb-bar-fill { background: var(--u-grad-x); }
+
+/* ============================== light palettes ============================== */
+
+/* On white, the aurora and glows are softer so text stays crisp. */
+html[data-palette="light"],
+html[data-palette="paper"] {
+  --u-glow-a: color-mix(in srgb, var(--u-a) 16%, transparent);
+  --u-glow-b: color-mix(in srgb, var(--u-b) 14%, transparent);
+  --u-shadow-b: color-mix(in srgb, var(--u-b) 40%, transparent);
+}
+
+/* ============================== reduced motion ============================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .u-edge,
+  .smb-opt.is-active,
+  .producer-card--featured,
+  .u-cta,
+  .u-grad-text { animation: none !important; }
+  .u-aurora::before,
+  .smb-main-head::before { animation: none !important; }
+  .u-rise > *,
+  .smb-main-titles > * { animation: none !important; opacity: 1; transform: none; }
+  .smb-btn--pri::after,
+  button.bg-primary::after,
+  .btn-modern::after,
+  .terminal-publish-button::after { animation: none !important; }
+}

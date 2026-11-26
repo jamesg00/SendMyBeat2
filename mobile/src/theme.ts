@@ -34,6 +34,12 @@ export type Palette = {
   youtube: string;
   /** Unplayed waveform bars. */
   wave: string;
+  /** The landing page's gradient (main buttons, meters, the light along the top of cards):
+   *  brand mint to blue in Console, the theme's own two accent tones elsewhere. */
+  gradA: string;
+  gradB: string;
+  /** Text and icons on the gradient. */
+  onGrad: string;
 };
 
 export type ThemeId = 'console' | 'auto' | 'light' | 'graphite' | 'noir' | 'paper' | 'mint' | 'midnight' | 'ocean' | 'sunset' | 'rose';
@@ -42,6 +48,14 @@ type Resolved = Exclude<ThemeId, 'auto'>;
 const rgba = (hex: string, alpha: number) => {
   const n = parseInt(hex.slice(1), 16);
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
+};
+
+/** `hex` blended toward `to` by `t` (0..1), as #rrggbb. */
+const mix = (hex: string, to: string, t: number) => {
+  const a = parseInt(hex.slice(1), 16);
+  const b = parseInt(to.slice(1), 16);
+  const ch = (s: number) => Math.round(((a >> s) & 255) * (1 - t) + ((b >> s) & 255) * t);
+  return `#${((1 << 24) | (ch(16) << 16) | (ch(8) << 8) | ch(0)).toString(16).slice(1)}`;
 };
 
 type Base = Pick<Palette, 'bg' | 'card' | 'card2' | 'text' | 't2' | 't3' | 'acc' | 'onAcc'> & {
@@ -79,6 +93,11 @@ function palette(id: Resolved, b: Base): Palette {
     warn: b.dark ? '#F5A524' : '#B26B00',
     youtube: '#FF3B30',
     wave: rgba(ink, b.dark ? 0.22 : 0.16),
+    // Dark themes run from a lighter tint of the accent to the accent; light themes from the
+    // accent to a deeper shade, so white text on it stays readable.
+    gradA: b.dark ? mix(b.acc, '#ffffff', 0.45) : b.acc,
+    gradB: b.dark ? b.acc : mix(b.acc, '#000000', 0.25),
+    onGrad: b.onAcc,
   };
 }
 
@@ -107,6 +126,9 @@ const CONSOLE: Palette = {
   warn: '#F5A524',
   youtube: '#FF3B30',
   wave: '#3A3A3A',
+  gradA: '#8BFFD0',
+  gradB: '#4C8DFF',
+  onGrad: '#04131C',
 };
 
 export const PALETTES: Record<Resolved, Palette> = {

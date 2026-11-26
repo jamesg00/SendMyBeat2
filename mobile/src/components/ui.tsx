@@ -13,11 +13,21 @@ import {
   type TextStyle,
   type ViewStyle,
 } from 'react-native';
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, {
+  Easing,
+  interpolate,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { useFocusEffect } from 'expo-router';
-import Svg, { Path, Rect } from 'react-native-svg';
+import Svg, { Defs, Ellipse, LinearGradient, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 
 import { Wallpaper } from '@/components/wallpaper';
 import { useKnownSubscription } from '@/state/billing';
@@ -76,6 +86,7 @@ export function Screen({
         }>
         {header}
         <View style={styles.titleRow}>
+          {wall ? null : <Aurora />}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1 }}>
             {icon}
             <Text style={styles.largeTitle} accessibilityRole="header">
@@ -90,16 +101,149 @@ export function Screen({
   );
 }
 
-export function Card({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
-  const styles = useUiStyles();
-  return <View style={[styles.card, style]}>{children}</View>;
+// ---- the landing page look (Console Ultra): gradient pieces shared by every screen
+
+let gradSeq = 0;
+/** A unique id for an SVG gradient, stable for the component's life. */
+function useGradId(prefix: string) {
+  const [id] = useState(() => `${prefix}${++gradSeq}`);
+  return id;
 }
 
+/** Fills its parent with the theme's gradient (mint to blue in Console). */
+export function GradientFill({ radius = 0, angle = 'diagonal' }: { radius?: number; angle?: 'diagonal' | 'horizontal' }) {
+  const C = useColors();
+  const id = useGradId('gf');
+  return (
+    <Svg style={StyleSheetAbsolute} width="100%" height="100%" pointerEvents="none">
+      <Defs>
+        <LinearGradient id={id} x1="0" y1="0" x2="1" y2={angle === 'diagonal' ? '1' : '0'}>
+          <Stop offset="0" stopColor={C.gradA} />
+          <Stop offset="1" stopColor={C.gradB} />
+        </LinearGradient>
+      </Defs>
+      <Rect x="0" y="0" width="100%" height="100%" rx={radius} ry={radius} fill={`url(#${id})`} />
+    </Svg>
+  );
+}
+
+const StyleSheetAbsolute = { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 } as const;
+
+/** The thin mint-to-blue light along the top of a card. */
+export function TopLight() {
+  const C = useColors();
+  const id = useGradId('tl');
+  return (
+    <Svg style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 1 }} width="100%" height={1} pointerEvents="none">
+      <Defs>
+        <LinearGradient id={id} x1="0" y1="0" x2="1" y2="0">
+          <Stop offset="0" stopColor={C.gradA} stopOpacity={0} />
+          <Stop offset="0.35" stopColor={C.gradA} stopOpacity={0.7} />
+          <Stop offset="0.65" stopColor={C.gradB} stopOpacity={0.6} />
+          <Stop offset="1" stopColor={C.gradB} stopOpacity={0} />
+        </LinearGradient>
+      </Defs>
+      <Rect x="0" y="0" width="100%" height={1} fill={`url(#${id})`} />
+    </Svg>
+  );
+}
+
+/** A slow mint and blue glow behind a title, like the landing page hero. */
+export function Aurora({ style }: { style?: StyleProp<ViewStyle> }) {
+  const C = useColors();
+  const id = useGradId('au');
+  const reduce = useReducedMotion();
+  const t = useSharedValue(0);
+  useEffect(() => {
+    if (reduce) return;
+    t.value = withRepeat(withTiming(1, { duration: 16000, easing: Easing.inOut(Easing.sin) }), -1, true);
+  }, [reduce, t]);
+  const drift = useAnimatedStyle(() => ({
+    transform: [{ translateX: interpolate(t.value, [0, 1], [0, -24]) }, { translateY: interpolate(t.value, [0, 1], [0, 14]) }, { scale: interpolate(t.value, [0, 1], [1, 1.1]) }],
+  }));
+  const a = C.dark ? 0.24 : 0.14;
+  const b = C.dark ? 0.3 : 0.14;
+  return (
+    <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: -90, right: -60, width: 380, height: 240 }, drift, style]}>
+      <Svg width="100%" height="100%">
+        <Defs>
+          <RadialGradient id={`${id}a`} cx="50%" cy="50%" r="50%">
+            <Stop offset="0" stopColor={C.gradA} stopOpacity={a} />
+            <Stop offset="1" stopColor={C.gradA} stopOpacity={0} />
+          </RadialGradient>
+          <RadialGradient id={`${id}b`} cx="50%" cy="50%" r="50%">
+            <Stop offset="0" stopColor={C.gradB} stopOpacity={b} />
+            <Stop offset="1" stopColor={C.gradB} stopOpacity={0} />
+          </RadialGradient>
+        </Defs>
+        <Ellipse cx="45%" cy="40%" rx="38%" ry="42%" fill={`url(#${id}a)`} />
+        <Ellipse cx="72%" cy="62%" rx="40%" ry="45%" fill={`url(#${id}b)`} />
+      </Svg>
+    </Animated.View>
+  );
+}
+
+export function Card({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
+  const styles = useUiStyles();
+  return (
+    <View style={[styles.card, style]}>
+      <TopLight />
+      {children}
+    </View>
+  );
+}
+
+/** A card with a gradient edge that travels around it, for the one thing on a screen that
+ *  matters most (the plan that fits, the main tool). Still when Reduce Motion is on. */
+export function EdgeCard({ children, style, glow }: { children: ReactNode; style?: StyleProp<ViewStyle>; glow?: boolean }) {
+  const C = useColors();
+  const styles = useUiStyles();
+  const id = useGradId('ec');
+  const reduce = useReducedMotion();
+  const [box, setBox] = useState({ w: 0, h: 0 });
+  const spin = useSharedValue(0);
+  useEffect(() => {
+    if (reduce) return;
+    spin.value = withRepeat(withTiming(360, { duration: 7000, easing: Easing.linear }), -1);
+  }, [reduce, spin]);
+  const rotate = useAnimatedStyle(() => ({ transform: [{ rotate: `${spin.value}deg` }] }));
+  const d = Math.ceil(Math.hypot(box.w, box.h));
+  const faint = C.dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
+  return (
+    <View
+      style={[styles.edgeWrap, glow && { shadowColor: C.gradB, shadowOpacity: 0.45, shadowRadius: 24, shadowOffset: { width: 0, height: 14 }, elevation: 8 }]}
+      onLayout={(e) => setBox({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}>
+      <View style={[StyleSheetAbsolute, { borderRadius: R.card, overflow: 'hidden' }]} pointerEvents="none">
+        {d > 0 ? (
+          <Animated.View style={[{ position: 'absolute', width: d, height: d, left: (box.w - d) / 2, top: (box.h - d) / 2 }, rotate]}>
+            <Svg width={d} height={d}>
+              <Defs>
+                <LinearGradient id={id} x1="0" y1="0" x2="1" y2="0">
+                  <Stop offset="0" stopColor={C.gradA} />
+                  <Stop offset="0.3" stopColor={C.gradB} />
+                  <Stop offset="0.5" stopColor={faint} />
+                  <Stop offset="1" stopColor={faint} />
+                </LinearGradient>
+              </Defs>
+              <Rect x="0" y="0" width={d} height={d} fill={`url(#${id})`} />
+            </Svg>
+          </Animated.View>
+        ) : null}
+      </View>
+      <View style={[styles.edgeInner, style]}>{children}</View>
+    </View>
+  );
+}
+
+/** Section labels read like code comments, as on the landing page: "// Pricing". */
 export function SectionLabel({ children, right }: { children: string; right?: ReactNode }) {
   const styles = useUiStyles();
   return (
     <View style={styles.sectionRow}>
-      <Text style={styles.sectionLabel}>{children}</Text>
+      <Text style={styles.sectionLabel}>
+        <Text style={styles.sectionSlash}>{'// '}</Text>
+        {children}
+      </Text>
       {right}
     </View>
   );
@@ -118,30 +262,70 @@ type ButtonProps = {
   style?: StyleProp<ViewStyle>;
 };
 
-// Primary is white-on-black like the system's own prominent buttons; mint stays for status only.
+/** The light that passes across a main button every few seconds. */
+function Sheen({ width }: { width: number }) {
+  const id = useGradId('sh');
+  const reduce = useReducedMotion();
+  const t = useSharedValue(0);
+  useEffect(() => {
+    if (reduce) return;
+    t.value = withRepeat(withTiming(1, { duration: 4500, easing: Easing.linear }), -1);
+  }, [reduce, t]);
+  const band = width * 0.4;
+  const move = useAnimatedStyle(() => ({
+    transform: [{ translateX: interpolate(t.value, [0, 0.6, 1], [-band * 1.6, -band * 1.6, width + band]) }, { skewX: '-20deg' }],
+  }));
+  if (reduce || width <= 0) return null;
+  return (
+    <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: 0, bottom: 0, left: 0, width: band }, move]}>
+      <Svg width="100%" height="100%">
+        <Defs>
+          <LinearGradient id={id} x1="0" y1="0" x2="1" y2="0">
+            <Stop offset="0" stopColor="#ffffff" stopOpacity={0} />
+            <Stop offset="0.5" stopColor="#ffffff" stopOpacity={0.45} />
+            <Stop offset="1" stopColor="#ffffff" stopOpacity={0} />
+          </LinearGradient>
+        </Defs>
+        <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${id})`} />
+      </Svg>
+    </Animated.View>
+  );
+}
+
+// Primary is the landing page's mint-to-blue button (the theme's own gradient in other themes),
+// with a sheen that passes every few seconds and a soft blue glow under it.
 export function Button({ title, onPress, variant = 'primary', size = 'lg', style }: ButtonProps) {
   const C = useColors();
   const styles = useUiStyles();
+  const [width, setWidth] = useState(0);
   const height = size === 'lg' ? 50 : size === 'md' ? 40 : 32;
   const radius = size === 'lg' ? 12 : size === 'md' ? 10 : 8;
+  const primary = variant === 'primary';
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
+      onLayout={primary ? (e) => setWidth(e.nativeEvent.layout.width) : undefined}
       style={({ pressed }) => [
         styles.button,
         { height, borderRadius: radius, paddingHorizontal: size === 'sm' ? 12 : 16 },
-        variant === 'primary' && { backgroundColor: C.primary },
+        primary && { backgroundColor: C.gradB, shadowColor: C.gradB, shadowOpacity: C.dark ? 0.55 : 0.3, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 4 },
         variant === 'secondary' && { backgroundColor: C.card2, borderWidth: 1, borderColor: C.line },
         variant === 'plain' && { backgroundColor: 'transparent', paddingHorizontal: 0 },
         pressed && { transform: [{ scale: 0.97 }], opacity: 0.85 },
         style,
       ]}>
+      {primary ? (
+        <View style={[StyleSheetAbsolute, { borderRadius: radius, overflow: 'hidden' }]} pointerEvents="none">
+          <GradientFill radius={radius} />
+          <Sheen width={width} />
+        </View>
+      ) : null}
       <Text
         style={[
           styles.buttonText,
           { fontSize: size === 'lg' ? 16 : size === 'md' ? 15 : 13 },
-          { color: variant === 'primary' ? C.onPrimary : variant === 'plain' ? C.t2 : C.text },
+          { color: primary ? C.onGrad : variant === 'plain' ? C.t2 : C.text },
         ]}>
         {title}
       </Text>
@@ -211,7 +395,12 @@ export function Segmented<V extends string>({
 
 export function ListGroup({ children }: { children: ReactNode }) {
   const styles = useUiStyles();
-  return <View style={styles.listGroup}>{children}</View>;
+  return (
+    <View style={styles.listGroup}>
+      <TopLight />
+      {children}
+    </View>
+  );
 }
 
 export function ListRow({
@@ -271,7 +460,8 @@ export function Pill({ label, tone = 'accent' }: { label: string; tone?: 'accent
   );
 }
 
-export function Meter({ value, color, height = 2 }: { value: number; color?: string; height?: number }) {
+/** `gradient` fills it mint to blue (the theme's gradient) instead of one color. */
+export function Meter({ value, color, height = 2, gradient }: { value: number; color?: string; height?: number; gradient?: boolean }) {
   const C = useColors();
   const styles = useUiStyles();
   const w = useSharedValue(Math.max(0, Math.min(1, value)));
@@ -281,7 +471,10 @@ export function Meter({ value, color, height = 2 }: { value: number; color?: str
   const fill = useAnimatedStyle(() => ({ width: `${w.value * 100}%` }));
   return (
     <View style={[styles.meterTrack, { height, borderRadius: height / 2 }]}>
-      <Animated.View style={[styles.meterFill, { height, borderRadius: height / 2, backgroundColor: color ?? C.text }, fill]} />
+      <Animated.View
+        style={[styles.meterFill, { height, borderRadius: height / 2, backgroundColor: gradient ? undefined : (color ?? C.text), overflow: 'hidden' }, fill]}>
+        {gradient ? <GradientFill angle="horizontal" /> : null}
+      </Animated.View>
     </View>
   );
 }
@@ -329,13 +522,14 @@ export function JobProgress({
 
   return (
     <View style={styles.job} accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: 100, now: Math.round(pct) }}>
+      <TopLight />
       <View style={styles.jobHead}>
         <Text style={styles.jobTitle} numberOfLines={1}>
           {title}
         </Text>
         <Text style={styles.jobPct}>{Math.round(pct)}%</Text>
       </View>
-      <Meter value={pct / 100} color={C.acc} />
+      <Meter value={pct / 100} gradient />
       <View style={{ gap: 8 }}>
         {lines.slice(0, current + 2).map((l) => (
           <View key={l.label} style={styles.logLine}>
@@ -531,8 +725,11 @@ export const useUiStyles = makeStyles((C) => ({
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   largeTitle: { color: C.text, fontSize: 30, lineHeight: 36, letterSpacing: -0.3, ...display },
   card: { backgroundColor: C.card, borderRadius: R.card, borderWidth: 1, borderColor: C.line, padding: 16, gap: 12 },
+  edgeWrap: { borderRadius: R.card, padding: 1 },
+  edgeInner: { backgroundColor: C.card, borderRadius: R.card - 1, padding: 15, gap: 12 },
   sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 2 },
-  sectionLabel: { color: C.t2, fontSize: 13, ...font('500') },
+  sectionLabel: { color: C.t2, fontSize: 12.5, fontFamily: F.mono, letterSpacing: 0.2 },
+  sectionSlash: { color: C.t3 },
   body: { color: C.text, fontSize: 15, ...font() },
   button: { alignItems: 'center', justifyContent: 'center' },
   buttonText: { ...font('600') },
@@ -558,7 +755,7 @@ export const useUiStyles = makeStyles((C) => ({
   rowSub: { color: C.t2, fontSize: 13, ...font() },
   rowValue: { color: C.t2, fontSize: 14, ...font() },
   chevron: { color: C.t3, fontSize: 20, marginTop: -2 },
-  pill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: R.chip, alignSelf: 'flex-start', borderWidth: 1 },
+  pill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 5, alignSelf: 'flex-start', borderWidth: 1 },
   pillText: { fontSize: 12, ...font('500') },
   meterTrack: { backgroundColor: C.lineSoft, overflow: 'hidden' },
   meterFill: {},
