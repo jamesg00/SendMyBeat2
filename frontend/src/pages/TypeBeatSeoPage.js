@@ -1,14 +1,18 @@
 import { Link, useLocation } from "react-router-dom";
 import { SEO_PAGES } from "@/lib/seoPages";
+import { ARTISTS, STYLES, TAG_HUB_PATH, tagSetPath } from "@/lib/seoModel";
 import "@/pages/PolicyPages.css";
 import "@/pages/FreeTagGenerator.css";
 
-// One template for the search pages in lib/seoPages.js.
+// One template for the guide pages in lib/seoModel.js. The type beat tags guide also
+// lists every artist and style tag set.
 const TypeBeatSeoPage = () => {
   const { pathname } = useLocation();
-  const page = SEO_PAGES[pathname.replace(/\/+$/, "")];
+  const path = pathname.replace(/\/+$/, "");
+  const page = SEO_PAGES[path];
   if (!page) return null;
-  const others = Object.entries(SEO_PAGES).filter(([path]) => path !== pathname);
+  const others = Object.entries(SEO_PAGES).filter(([p]) => p !== path);
+  const isHub = path === TAG_HUB_PATH;
 
   return (
     <div className="policy-shell">
@@ -17,6 +21,23 @@ const TypeBeatSeoPage = () => {
           <p className="smb-eyebrow">SendMyBeat guides</p>
           <h1 className="policy-title ftg-h1">{page.h1}</h1>
           <p className="policy-muted ftg-lede">{page.lede}</p>
+
+          {isHub ? (
+            <nav className="ftg-copy" aria-label="Tag sets">
+              <h2 className="policy-title">Tags by artist</h2>
+              <p className="ftg-links">
+                {Object.entries(ARTISTS).map(([slug, a]) => (
+                  <Link key={slug} to={tagSetPath(slug)}>{a.name}</Link>
+                ))}
+              </p>
+              <h2 className="policy-title">Tags by style</h2>
+              <p className="ftg-links">
+                {Object.entries(STYLES).map(([slug, s]) => (
+                  <Link key={slug} to={tagSetPath(slug)}>{s.name}</Link>
+                ))}
+              </p>
+            </nav>
+          ) : null}
 
           <section className="ftg-copy">
             {page.sections.map(([heading, body]) => (
@@ -39,8 +60,8 @@ const TypeBeatSeoPage = () => {
           <nav className="ftg-copy" aria-label="More guides">
             <h2 className="policy-title">More guides</h2>
             <ul>
-              {others.map(([path, other]) => (
-                <li key={path}><Link to={path}>{other.h1}</Link></li>
+              {others.map(([p, other]) => (
+                <li key={p}><Link to={p}>{other.h1}</Link></li>
               ))}
             </ul>
           </nav>
