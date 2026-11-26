@@ -135,3 +135,7 @@ async def test_the_free_page_stops_at_the_daily_cap():
         with pytest.raises(HTTPException) as err:
             await server.free_tag_generate(body, fake_request())
     assert err.value.status_code == 429
+
+
+def test_free_tag_runs_use_grok_by_default():
+    assert server.FREE_TAG_LLM_PROVIDER == 'grok'

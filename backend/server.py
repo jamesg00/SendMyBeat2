@@ -7696,6 +7696,9 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
         if llm_provider not in (None, *TAG_LLM_PROVIDERS):
             raise HTTPException(status_code=400, detail="Invalid llm_provider. Use 'openai', 'grok' or 'deepseek'.")
         llm_provider, llm_fallback_provider = _resolve_tag_llm_providers(llm_provider)
+        if current_user.get("_guest"):
+            # The free tag page runs on Grok only, so DeepSeek is kept for signed-in users.
+            llm_provider, llm_fallback_provider = FREE_TAG_LLM_PROVIDER, None
         source_status["llm"] = {"provider": llm_provider or os.environ.get("LLM_PROVIDER", "grok"), "fallback": llm_fallback_provider}
 
         beat_tokens = {
@@ -8130,6 +8133,8 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
 # in the browser, so clearing one of them isn't enough to go again. After that, the page asks
 # them to sign up. A daily cap across everyone protects the YouTube search quota.
 FREE_TAG_DAILY_CAP = int(os.environ.get("FREE_TAG_DAILY_CAP", "150"))
+# Which model writes free (no-account) tag runs. Grok, so the free page doesn't spend DeepSeek tokens.
+FREE_TAG_LLM_PROVIDER = (os.environ.get("FREE_TAG_LLM_PROVIDER") or "grok").strip().lower()
 
 
 class FreeTagRequest(BaseModel):
