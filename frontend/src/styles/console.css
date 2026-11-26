@@ -947,7 +947,8 @@ html:not(.dark) [role="tab"][data-state="active"] {
   backdrop-filter: blur(4px);
 }
 
-.smb-sheet { gap: 18px !important; padding: 24px !important; }
+/* App.css gives every dialog a margin, which pushed the sheet off the right edge on phones. */
+.smb-sheet { gap: 18px !important; padding: 24px !important; margin: 0 !important; }
 .smb-sheet::before {
   content: "";
   position: absolute;
@@ -1241,6 +1242,8 @@ html:not(.dark) [role="tab"][data-state="active"] {
     top: auto !important;
     bottom: 0 !important;
     left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
     transform: none !important;
     max-width: 100% !important;
     border-radius: 18px 18px 0 0 !important;

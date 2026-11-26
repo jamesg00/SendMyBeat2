@@ -6,6 +6,7 @@ import { Copy, Sparkles } from "lucide-react";
 import { API } from "@/App";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import ProgressBar from "@/components/ProgressBar";
 import "@/pages/PolicyPages.css";
 import "@/pages/FreeTagGenerator.css";
 
@@ -39,9 +40,21 @@ const savedResult = () => {
 
 const tagChars = (tags) => tags.join(",").length;
 
+// The free run happens in one request, so these steps follow the clock, in the order the server works.
+const STEPS = [
+  { at: 0, text: "Reading your search" },
+  { at: 4000, text: "Checking what people search on YouTube" },
+  { at: 11000, text: "Pulling tags from videos that already rank" },
+  { at: 20000, text: "Scoring each tag for search intent" },
+  { at: 30000, text: "Trimming to YouTube's 500-character limit" },
+  { at: 40000, text: "Almost done, finishing your list" },
+];
+const RUN_MS = 45000;
+
 const FreeTagGenerator = () => {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
+  const [step, setStep] = useState(0);
   const [result, setResult] = useState(savedResult);
   const [used, setUsed] = useState(Boolean(savedResult()));
   const id = useMemo(visitorId, []);
@@ -53,6 +66,21 @@ const FreeTagGenerator = () => {
       .then((res) => setUsed(Boolean(res.data?.used)))
       .catch(() => {});
   }, [id, used]);
+
+  useEffect(() => {
+    if (!loading) return undefined;
+    setStep(0);
+    const started = Date.now();
+    const timer = setInterval(() => {
+      const elapsed = Date.now() - started;
+      let next = 0;
+      STEPS.forEach((s, i) => {
+        if (elapsed >= s.at) next = i;
+      });
+      setStep(next);
+    }, 500);
+    return () => clearInterval(timer);
+  }, [loading]);
 
   const generate = async (e) => {
     e.preventDefault();
@@ -110,10 +138,12 @@ const FreeTagGenerator = () => {
               />
               <Button type="submit" className="smb-btn smb-btn--pri smb-btn--lg" disabled={loading || query.trim().length < 2}>
                 <Sparkles className="h-4 w-4" aria-hidden="true" />
-                {loading ? "Generating, this takes a moment..." : "Generate my tags"}
+                {loading ? "Generating..." : "Generate my tags"}
               </Button>
             </form>
           ) : null}
+
+          <ProgressBar isActive={loading} message={`${STEPS[step].text}...`} duration={RUN_MS} />
 
           {result ? (
             <section className="ftg-result" aria-live="polite">
