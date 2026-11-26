@@ -1,6 +1,6 @@
 import { Link, useSearchParams } from "react-router-dom";
 import FreeTagTool from "@/components/seo/FreeTagTool";
-import { FREE_TAG_PAGE, GUIDES, STYLES, TAG_HUB_PATH, TAG_SETS, TOOL_PAGES, tagSetPath, withYear } from "@/lib/seoModel";
+import { BLOG, FREE_TAG_PAGE, GUIDES, STYLES, TAG_HUB_PATH, TAG_SETS, TOOL_PAGES, tagSetPath, withYear } from "@/lib/seoModel";
 import "@/pages/PolicyPages.css";
 import "@/pages/FreeTagGenerator.css";
 
@@ -55,10 +55,14 @@ const FreeTagGenerator = () => {
             <p>These run in your browser, so there's no limit on how often you use them.</p>
             <p className="ftg-links">
               {Object.entries(TOOL_PAGES)
-                .filter(([, t]) => t.tool !== "tags")
+                .filter(([, t]) => t.tool !== "tags" && !t.account)
                 .map(([path, t]) => (
                   <Link key={path} to={path}>{t.nav}</Link>
                 ))}
+            </p>
+            <p>
+              Need to get a beat onto YouTube? The <Link to="/upload-mp3-to-youtube">free MP3 to YouTube uploader</Link> turns your
+              MP3 and a picture or GIF into a video on your channel, 3 a day with a free account.
             </p>
           </nav>
 
@@ -85,6 +89,7 @@ const FreeTagGenerator = () => {
               {Object.entries(GUIDES).map(([path, g]) => (
                 <li key={path}><Link to={path}>{g.h1}</Link></li>
               ))}
+              <li><Link to={BLOG.path}>Producer blog: guides for type beat channels</Link></li>
             </ul>
           </nav>
         </div>

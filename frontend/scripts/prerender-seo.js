@@ -72,6 +72,7 @@ function footer(m) {
     ...Object.entries(m.GUIDES)
       .filter(([p]) => p !== m.TAG_HUB_PATH)
       .map(([p, g]) => [p, g.h1]),
+    [m.BLOG.path, "Producer blog"],
     ["/about", "About"],
     ["/?signup=1", "Sign up free"],
   ];
@@ -90,14 +91,54 @@ function freeTagBody(m, year) {
         .join("")}</ul><h2 class="policy-title">Tags by style</h2>${linkRow(
         Object.entries(m.STYLES).map(([s, st]) => [m.tagSetPath(s), st.name])
       )}</section>` +
-      toolNav(m, "More free tools, no sign-up", (t) => t.tool !== "tags") +
+      toolNav(m, "More free tools, no sign-up", (t) => t.tool !== "tags" && !t.account) +
+      toolNav(m, "Free with an account", (t) => t.account) +
       faqHtml(m, p.faq, year) +
       footer(m)
   );
 }
 
-function guideBody(m, pagePath) {
-  const g = m.GUIDES[pagePath];
+// Related link blocks ("related" in seoModel.js: one block or a list) and a CTA box whose
+// first link is the main button. Shared by guides, blog posts and tool pages.
+const relatedHtml = (m, related) =>
+  m
+    .relatedBlocks(related)
+    .map((r) => `<section class="ftg-copy"><h2 class="policy-title">${esc(r.heading)}</h2><p>${esc(r.body)}</p>${linkRow(r.links)}</section>`)
+    .join("");
+const ctaBox = (c) =>
+  `<section class="ftg-cta policy-feature-card u-cta"><h2 class="policy-title">${esc(c.heading)}</h2><p>${esc(c.body)}</p><p>${c.links
+    .map(([href, text], i) => a(href, text, `smb-btn ${i === 0 ? "smb-btn--pri" : "smb-btn--sec"} smb-btn--lg`))
+    .join(" ")}</p></section>`;
+
+const GUIDE_CTA = {
+  heading: "Try it on your next beat",
+  body: "Run the tag generator once for free, no account. Sign up for 3 free generations and 3 uploads, no card needed.",
+  links: [
+    ["/free-tag-generator", "Free tag generator"],
+    ["/?signup=1", "Sign up free"],
+  ],
+};
+
+// A blog post's ready-made tag set ("tagSet"), the same one its tag page shows.
+function postTagSet(m, slug, year) {
+  const set = m.TAG_SETS[slug];
+  if (!set) return "";
+  const tags = m.tagsFor(slug, year);
+  const query = `${set.name.toLowerCase()} type beat`;
+  return `<section class="ftg-result"><div class="ftg-result-head"><h2 class="policy-title">${esc(set.name)} type beat tags to copy</h2><span class="smb-mono smb-t3 text-xs">${
+    tags.length
+  } tags, ${m.youtubeTagChars(tags)} of 500 characters</span></div>${tagList(tags)}<p>${a(
+    m.freeTagLink(query),
+    "Generate fresh tags free",
+    "smb-btn smb-btn--pri"
+  )} ${a(m.tagSetPath(slug), `${set.name} tag page`, "smb-btn smb-btn--sec")}</p></section>`;
+}
+
+// Guides and blog posts share this template (pages/TypeBeatSeoPage.js).
+function guideBody(m, pagePath, year) {
+  const post = m.BLOG_POSTS[pagePath];
+  const g = post || m.GUIDES[pagePath];
+  const y = (text) => m.withYear(text, year);
   const hub =
     pagePath === m.TAG_HUB_PATH
       ? `<nav class="ftg-copy" aria-label="Tag sets"><h2 class="policy-title">Tags by artist</h2>${m
@@ -107,16 +148,52 @@ function guideBody(m, pagePath) {
           Object.entries(m.STYLES).map(([s, x]) => [m.tagSetPath(s), x.name])
         )}</nav>`
       : "";
+  const eyebrow = post
+    ? `<p class="smb-eyebrow">${a(m.BLOG.path, "Producer blog")} / <time datetime="${esc(post.date)}">${esc(m.postDate(post.date))}</time></p>`
+    : `<p class="smb-eyebrow">SendMyBeat guides</p>`;
+  const posts = m.blogPostList().filter(([p]) => p !== pagePath);
   return shell(
-    `<p class="smb-eyebrow">SendMyBeat guides</p><h1 class="policy-title ftg-h1">${esc(g.h1)}</h1>` +
-      `<p class="policy-muted ftg-lede">${esc(g.lede)}</p>${hub}` +
-      `<section class="ftg-copy">${sections(g.sections)}</section>` +
-      `<section class="ftg-cta policy-feature-card"><h2 class="policy-title">Try it on your next beat</h2><p>Run the tag generator once for free, no account. Sign up for 3 free generations and 3 uploads, no card needed.</p><p>${a(
-        "/free-tag-generator",
-        "Free tag generator",
-        "smb-btn smb-btn--pri smb-btn--lg"
-      )}</p></section>` +
-      toolNav(m, "Free tools, no sign-up") +
+    `${eyebrow}<h1 class="policy-title ftg-h1">${esc(y(g.h1))}</h1>` +
+      `<p class="policy-muted ftg-lede">${esc(y(g.lede))}</p>` +
+      (g.tagSet ? postTagSet(m, g.tagSet, year) : "") +
+      hub +
+      `<section class="ftg-copy">${sections(g.sections.map(([h, b]) => [y(h), y(b)]))}</section>` +
+      relatedHtml(m, g.related) +
+      ctaBox(g.cta || GUIDE_CTA) +
+      (g.faq ? faqHtml(m, g.faq, year) : "") +
+      toolNav(m, "Free tools, no sign-up", (t) => !t.account) +
+      toolNav(m, "Free with an account", (t) => t.account) +
+      `<nav class="ftg-copy" aria-label="Producer blog"><h2 class="policy-title">${post ? "More from the blog" : "From the producer blog"}</h2>${linkRow([
+        ...posts.map(([p, x]) => [p, y(x.h1)]),
+        [m.BLOG.path, "All posts"],
+      ])}</nav>` +
+      footer(m)
+  );
+}
+
+function blogIndexBody(m, year) {
+  const b = m.BLOG;
+  return shell(
+    `<p class="smb-eyebrow">SendMyBeat blog</p><h1 class="policy-title ftg-h1">${esc(b.h1)}</h1>` +
+      `<p class="policy-muted ftg-lede">${esc(b.lede)}</p>` +
+      `<section class="ftg-copy"><ul class="ftg-examples">${m
+        .blogPostList()
+        .map(
+          ([p, post]) =>
+            `<li>${a(p, m.withYear(post.h1, year))}<p><time datetime="${esc(post.date)}">${esc(m.postDate(post.date))}</time>. ${esc(
+              m.withYear(post.summary, year)
+            )}</p></li>`
+        )
+        .join("")}</ul></section>` +
+      ctaBox({
+        heading: "Put it into practice",
+        body: "SendMyBeat turns one search into scored tags, titles and a description, makes your beat into a video and uploads it to your channel. Sign up free for 3 generations and 3 uploads, no card needed.",
+        links: [
+          ["/?signup=1", "Sign up free"],
+          ["/free-tag-generator", "Try one free tag run"],
+        ],
+      }) +
+      toolNav(m, "Free tools") +
       footer(m)
   );
 }
@@ -176,6 +253,15 @@ function toolExample(m, t, tools, year) {
       m.FREE_TAG_PAGE.featured.map((s) => [m.tagSetPath(s), `${m.TAG_SETS[s].name} type beat tags`])
     )}</section>`;
   }
+  if (t.tool === "upload") {
+    return `<section class="ftg-result mup" id="tool">${head("Upload your MP3 in four steps", "3 free uploads a day")}<ol class="mup-steps">${(t.steps || [])
+      .map(([title, body]) => `<li><strong>${esc(title)}</strong><span>${esc(body)}</span></li>`)
+      .join("")}</ol><p class="mup-actions">${a("/?signup=1", "Sign up free to upload", "smb-btn smb-btn--pri smb-btn--lg")} ${a(
+      "/?login=1",
+      "Log in",
+      "smb-btn smb-btn--sec smb-btn--lg"
+    )}</p></section>`;
+  }
   if (!tools) return "";
   if (t.tool === "title") {
     const titles = tools.typeBeatTitles({ ...ex, year });
@@ -206,11 +292,33 @@ function toolExample(m, t, tools, year) {
   return "";
 }
 
+// The free uploader pages' pitch for a SendMyBeat account (UPLOAD_PITCH in seoModel.js).
+function uploadPitch(m) {
+  const p = m.UPLOAD_PITCH;
+  return (
+    `<section class="ftg-cta policy-feature-card u-cta mup-pitch"><h2 class="policy-title">${esc(p.heading)}</h2><p>${esc(p.body)}</p>` +
+    `<ul class="mup-features">${p.features
+      .map((f) => `<li><strong>${esc(f.title)}${f.pro ? ' <span class="smb-pill">Pro</span>' : ""}</strong><span>${esc(f.body)}</span></li>`)
+      .join("")}</ul>` +
+    `<ul class="mup-plans">${p.plans
+      .map(
+        (x) =>
+          `<li><strong>${esc(x.name)} <span class="smb-mono">${esc(x.price)}${x.per.startsWith("/") ? esc(x.per) : ""}</span></strong><span>${esc(
+            x.lines.slice(0, 2).join(", ")
+          )}${x.id === "trial" ? ", no card" : ""}</span></li>`
+      )
+      .join("")}</ul>` +
+    `<p>${a(p.signup[0], p.signup[1], "smb-btn smb-btn--pri smb-btn--lg")} ${a(p.home[0], p.home[1], "smb-btn smb-btn--sec smb-btn--lg")}</p></section>`
+  );
+}
+
 function toolBody(m, pagePath, year, tools) {
   const t = m.TOOL_PAGES[pagePath];
   const others = Object.entries(m.TOOL_PAGES).filter(([p]) => p !== pagePath);
   const cta =
-    t.tool === "tags"
+    t.tool === "upload"
+      ? uploadPitch(m)
+      : t.tool === "tags"
       ? ""
       : `<section class="ftg-cta policy-feature-card u-cta"><h2 class="policy-title">Need tags for this beat too?</h2><p>The tag generator pulls YouTube tags from live searches for your artist. One run is free with no account, and signing up free adds 3 more AI generations and 3 YouTube uploads, no card needed.</p><p>${a(
           "/free-tag-generator",
@@ -224,6 +332,8 @@ function toolBody(m, pagePath, year, tools) {
       toolExample(m, t, tools, year) +
       `<section class="ftg-copy">${sections([...t.how, ...(t.extra || [])].map(([h, b]) => [h, m.withYear(b, year)]))}</section>` +
       cta +
+      (t.pitch ? ctaBox(t.pitch) : "") +
+      relatedHtml(m, t.related) +
       faqHtml(m, t.faq, year) +
       `<nav class="ftg-copy" aria-label="Free tools"><h2 class="policy-title">More free tools</h2>${linkRow([
         ["/free-tag-generator", "Free tag generator"],
@@ -267,6 +377,8 @@ function homeBody(m, year) {
         [m.TAG_HUB_PATH, "Type beat tags"],
         ...tools,
         ...guides,
+        [m.BLOG.path, "Producer blog"],
+        ...m.blogPostList().map(([p, x]) => [p, m.withYear(x.h1, year)]),
       ])}<h2 class="policy-title">Popular type beat tags</h2>${linkRow(
         m.FREE_TAG_PAGE.featured.map((s) => [m.tagSetPath(s), `${m.TAG_SETS[s].name} type beat tags`])
       )}</section>` +
@@ -330,7 +442,8 @@ function renderPage(m, template, pagePath, year, tools) {
 
   let body = "";
   if (pagePath === m.FREE_TAG_PAGE.path) body = freeTagBody(m, year);
-  else if (m.GUIDES[pagePath]) body = guideBody(m, pagePath);
+  else if (m.GUIDES[pagePath] || m.BLOG_POSTS[pagePath]) body = guideBody(m, pagePath, year);
+  else if (pagePath === m.BLOG.path) body = blogIndexBody(m, year);
   else if (m.TOOL_PAGES && m.TOOL_PAGES[pagePath]) body = toolBody(m, pagePath, year, tools);
   else if (pagePath.startsWith(`${m.TAG_HUB_PATH}/`)) body = tagSetBody(m, pagePath.slice(m.TAG_HUB_PATH.length + 1), year);
   if (body) {

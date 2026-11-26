@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { toast } from "sonner";
 import { ArrowRight, BarChart3, Check, FileText, Sparkles, Star, Tags, Upload, Users } from "lucide-react";
@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { setAuthToken } from "@/lib/auth";
+import { setAuthToken, takeReturnTo } from "@/lib/auth";
 import { HOME } from "@/lib/seoModel";
 import { resolvePalette, useTheme } from "@/lib/ThemeContext";
 import "@/pages/LandingPage.css";
@@ -500,6 +500,7 @@ const LandingPage = ({ setIsAuthenticated }) => {
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const { theme } = useTheme();
+  const navigate = useNavigate();
 
   // The landing page always uses the dark Console look, whatever theme is saved for the app.
   // The saved theme comes back when you leave this page (after signing in, or to Spotlight).
@@ -534,6 +535,9 @@ const LandingPage = ({ setIsAuthenticated }) => {
       const endpoint = authMode === "login" ? "/auth/login" : "/auth/register";
       const response = await axios.post(`${API}${endpoint}`, { username, password });
       setAuthToken(response.data.access_token);
+      // Started from another page (like the free uploader)? Go back there instead of the dashboard.
+      const returnTo = takeReturnTo();
+      if (returnTo) navigate(returnTo, { replace: true });
       setIsAuthenticated(true);
       setPassword("");
       toast.success(`Welcome ${authMode === "login" ? "back" : ""}!`);
@@ -545,11 +549,14 @@ const LandingPage = ({ setIsAuthenticated }) => {
     }
   };
 
-  // Links like /?signup=1 (from the free tag page) open the sign-up form.
+  // Links like /?signup=1 (from the free tag page) open the sign-up form; /?login=1 opens log in.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("signup") === "1") {
       setAuthMode("register");
+      setIsLoginOpen(true);
+    } else if (params.get("login") === "1") {
+      setAuthMode("login");
       setIsLoginOpen(true);
     }
   }, []);

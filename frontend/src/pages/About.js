@@ -106,7 +106,7 @@ const About = () => {
                     <div>
                       <h3 className="policy-title mb-1.5 text-sm font-semibold sm:mb-2 sm:text-base md:text-lg">Free Tools, No Sign-Up</h3>
                       <p className="text-xs sm:text-sm">
-                        Try the tag generator once without an account, and use the <Link to="/type-beat-title-generator" className="policy-link">title generator</Link>, <Link to="/beat-description-generator" className="policy-link">description generator</Link>, <Link to="/youtube-hashtag-generator" className="policy-link">hashtag generator</Link> and <Link to="/youtube-tag-counter" className="policy-link">tag counter</Link> as often as you like.
+                        Try the tag generator once without an account, and use the <Link to="/type-beat-title-generator" className="policy-link">title generator</Link>, <Link to="/beat-description-generator" className="policy-link">description generator</Link>, <Link to="/youtube-hashtag-generator" className="policy-link">hashtag generator</Link> and <Link to="/youtube-tag-counter" className="policy-link">tag counter</Link> as often as you like. With a free account, the <Link to="/upload-mp3-to-youtube" className="policy-link">MP3 to YouTube uploader</Link> puts your beat and a picture or GIF on your channel, 3 times a day.
                       </p>
                     </div>
                   </div>

@@ -14,6 +14,7 @@ const Footer = () => {
             <Link key={path} to={path} className="app-footer-link">{tool.nav}</Link>
           ))}
           <Link to="/type-beat-tags" className="app-footer-link">Type beat tags</Link>
+          <Link to="/blog" className="app-footer-link">Blog</Link>
           <Link to="/about" className="app-footer-link">About</Link>
           <Link to="/privacy-policy" className="app-footer-link">Privacy</Link>
           <Link to="/terms" className="app-footer-link">Terms</Link>

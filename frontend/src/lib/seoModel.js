@@ -376,8 +376,418 @@ export const TOOL_PAGES = {
       tags: "drake type beat, drake type beat {year}, free drake type beat, Drake Type Beat, drake instrumental, dark r&b type beat, future type beat, drake x future type beat",
     },
   },
+  // The free MP3 to YouTube uploader. Unlike the tools above it needs a free account, since
+  // the video goes to the producer's own channel ("account: true" keeps it out of the
+  // "no sign-up" lists). Both pages embed the same tool (pages/tools/Mp3UploadTool.js).
+  "/upload-mp3-to-youtube": {
+    tool: "upload",
+    account: true,
+    cta: "Upload my MP3",
+    nav: "MP3 to YouTube uploader",
+    appName: "SendMyBeat Free MP3 to YouTube Uploader",
+    eyebrow: "Free tool, free account",
+    title: "Upload MP3 to YouTube Free, with an Image or GIF | SendMyBeat",
+    description:
+      "Free MP3 to YouTube uploader: add a cover image or animated GIF, a title, tags and a description, and we upload the video to your YouTube channel. 3 free a day.",
+    h1: "Upload MP3 to YouTube, free",
+    lede: "YouTube doesn't take MP3 files, only videos. Pick your MP3 and a cover image or animated GIF, and SendMyBeat turns them into a video and uploads it to your own YouTube channel with your title, tags and description. Free with a SendMyBeat account: 3 uploads a day.",
+    steps: [
+      ["Sign in with Google", "One click. It creates your free SendMyBeat account and connects the YouTube channel your video goes to."],
+      ["Add your MP3 and a picture", "MP3, WAV, M4A, FLAC or OGG audio, plus a JPG, PNG or WEBP cover or an animated GIF."],
+      ["Fill in the details", "Type a title, pick a ready-made type beat tag set and edit the tags, write your description and choose public, unlisted or private."],
+      ["Upload", "We render the video and upload it to your channel. You get the YouTube link when it's done."],
+    ],
+    how: [
+      [
+        "How to upload an MP3 to YouTube",
+        "YouTube only accepts video files, so an MP3 needs a picture to go with it. This tool does the converting for you: the picture becomes a 16:9 video as long as your track, and it goes up to your channel with the title, tags, description and privacy you chose. You don't need video editing software, and nothing to install.",
+      ],
+      [
+        "A still image or an animated GIF",
+        "Use a JPG, PNG or WEBP cover for a still video, or an animated GIF, which keeps playing on a loop for the whole track. There's no audio visualizer here: what you upload is what viewers see.",
+      ],
+      [
+        "Tags without retyping them",
+        "Instead of typing tags every time, pick an artist or style from our type beat tag sets, like Drake or dark trap, and the tags fill in. Remove the ones that don't fit, add your own, and the counter keeps you under YouTube's 500-character limit.",
+      ],
+    ],
+    extra: [
+      [
+        "What the free uploader includes",
+        "3 uploads a day, to your own channel, with a small SendMyBeat watermark on the video. Free uploads don't use the 3 trial uploads that come with your account. Plus ($5 a month) and Pro ($10 a month) remove the watermark and add 50 or 100 Upload Studio uploads a month, with layouts, visualizers and AI-scored tags.",
+      ],
+    ],
+    faq: [
+      [
+        "Is this MP3 to YouTube uploader really free?",
+        "Yes. With a free SendMyBeat account you get 3 uploads a day at no cost and no card. The count resets every day at midnight Pacific time.",
+      ],
+      [
+        "Do I need an account?",
+        "Yes, a free one. The video goes to your own YouTube channel, so you sign in with Google and allow uploads to that channel. Signing in with Google creates your SendMyBeat account and connects YouTube in one step.",
+      ],
+      [
+        "Is there a watermark?",
+        "On the free plan, yes: a small SendMyBeat watermark on the video. The Plus ($5 a month) and Pro ($10 a month) plans remove it.",
+      ],
+      [
+        "Can I use an animated GIF?",
+        "Yes. Upload a GIF and it plays on a loop for the whole track. You can also use a still JPG, PNG or WEBP image. Video clips and visualizers aren't part of the free uploader.",
+      ],
+      [
+        "Which audio files can I upload?",
+        "MP3, WAV, M4A, FLAC and OGG.",
+      ],
+      [
+        "Where do the tags come from?",
+        "From SendMyBeat's ready-made type beat tag sets for 150 artists and 21 styles. They aren't generated for your beat: you pick a set and edit it. For tags scored on live YouTube searches, use the tag generator in the app.",
+      ],
+      [
+        "Does it upload to my channel or yours?",
+        "Yours. The video is published on the YouTube channel you connect, as public, unlisted or private, and you can edit or delete it in YouTube Studio like any other upload.",
+      ],
+    ],
+  },
+  // A producer page for "type beat video maker": the free uploader is the tool on the page,
+  // and the copy covers Upload Studio's visualizer videos for when you want more.
+  "/type-beat-video-maker": {
+    tool: "upload",
+    account: true,
+    cta: "Make my video",
+    nav: "Type beat video maker",
+    appName: "SendMyBeat Type Beat Video Maker",
+    eyebrow: "Free video maker, free account",
+    title: "Type Beat Video Maker: Beat and Cover Art to a YouTube Video | SendMyBeat",
+    description:
+      "Make a type beat video free: your beat plus cover art or a GIF becomes a YouTube video on your channel. With an account, add a visualizer in Upload Studio.",
+    h1: "Type beat video maker",
+    lede: "A type beat video is your beat with something to look at. Add your audio and cover art, and SendMyBeat turns them into a video and uploads it to your YouTube channel with your title, tags and description. Free with a SendMyBeat account: 3 videos a day with a still image or animated GIF.",
+    steps: [
+      ["Sign in with Google", "Creates your free SendMyBeat account and connects the YouTube channel your video goes to."],
+      ["Add your beat and cover art", "MP3, WAV, M4A, FLAC or OGG audio, plus a JPG, PNG or WEBP cover or an animated GIF."],
+      ["Add the title, tags and description", "Type your title, pick a type beat tag set for your artist and edit it, then write the description."],
+      ["Upload", "We render the video and put it on your channel as public, unlisted or private."],
+    ],
+    how: [
+      [
+        "What a type beat video needs",
+        "YouTube only takes video files, so a beat needs a picture to go with it. Most type beat videos are the beat over one piece of cover art, with a title that starts with the artist and \"type beat\", tags for the searches buyers make and a description with your contact and purchase details. You don't need editing software for any of it.",
+      ],
+      [
+        "Free: a still image or an animated GIF",
+        "The video maker on this page is SendMyBeat's free uploader. Your cover becomes a 16:9 video as long as your beat, or an animated GIF plays on a loop for the whole track. You get 3 uploads a day with a free account, with a small SendMyBeat watermark on the video. There's no visualizer in the free uploader.",
+      ],
+      [
+        "With an account: Upload Studio and visualizers",
+        "Upload Studio is the full video maker inside SendMyBeat. Pick the shape (16:9 for YouTube, 9:16 for Shorts, square or 4:5 portrait), the background behind your art (black, white or a blurred copy of it) and an audio visualizer that moves with the beat. Preview the video, then publish it to your channel with the title, tags and description filled in.",
+      ],
+    ],
+    extra: [
+      [
+        "Which visualizer styles you get",
+        "Eight styles work on any account: NCS, Monstercat, Spectrum, Proximity, Trap, Wave, Mirror and Dots. Plus and Pro add 13 premium styles, such as Ridgeline, Waterfall, Terrain and Turntable. You can set the colours and how strongly it reacts, and on the styles built around a centre, put your cover art or logo in the middle.",
+      ],
+    ],
+    related: [
+      {
+        heading: "More on beat videos",
+        body: "Read how audio visualizers work for type beats, or go straight to the free MP3 uploader if all you need is your beat and a picture.",
+        links: [
+          ["/audio-visualizer-for-beats", "Audio visualizer for beats"],
+          ["/upload-mp3-to-youtube", "Free MP3 to YouTube uploader"],
+          ["/upload-beats-to-youtube", "Upload beats to YouTube"],
+          ["/tunestotube-alternative", "TunesToTube alternative"],
+        ],
+      },
+    ],
+    faq: [
+      [
+        "Is the type beat video maker free?",
+        "Yes. With a free SendMyBeat account you can make and upload 3 videos a day with a still image or animated GIF, no card needed. The count resets every day at midnight Pacific time.",
+      ],
+      [
+        "Is there a watermark?",
+        "Free videos have a small SendMyBeat watermark. Plus ($5 a month) and Pro ($10 a month) remove it.",
+      ],
+      [
+        "Can I add an audio visualizer?",
+        "Yes, in Upload Studio with a SendMyBeat account. Eight visualizer styles work on any account, including the 3 trial uploads a free account starts with. The 13 premium styles need Plus or Pro. The free uploader on this page doesn't have a visualizer.",
+      ],
+      [
+        "Can I make a video for YouTube Shorts?",
+        "Upload Studio can render a 9:16 video for Shorts, as well as 16:9, square and 4:5. The free uploader makes 16:9 videos.",
+      ],
+      [
+        "Which files can I use?",
+        "MP3, WAV, M4A, FLAC or OGG for the beat, and a JPG, PNG or WEBP image or an animated GIF for the picture.",
+      ],
+      [
+        "Does it upload the video for me?",
+        "Yes. You sign in with Google and the video goes to your own YouTube channel as public, unlisted or private. You can edit or delete it in YouTube Studio like any other upload.",
+      ],
+    ],
+  },
+  "/tunestotube-alternative": {
+    tool: "upload",
+    account: true,
+    cta: "Try the free uploader",
+    nav: "TunesToTube alternative",
+    appName: "SendMyBeat Free Uploader, a TunesToTube Alternative",
+    eyebrow: "Free MP3 to YouTube uploader, free account",
+    title: "TunesToTube Alternative, Free with Animated GIFs | SendMyBeat",
+    description:
+      "A free TunesToTube alternative: SendMyBeat turns your MP3 and a still image or animated GIF into a video on your YouTube channel, with ready-made type beat tags.",
+    h1: "A TunesToTube alternative for beat producers",
+    lede: "TunesToTube made uploading audio to YouTube easy. SendMyBeat's free uploader does the same job, MP3 plus picture to a video on your channel, and adds animated GIFs and ready-made type beat tags so you're not retyping them every upload.",
+    steps: [
+      ["Sign in with Google", "Creates your free SendMyBeat account and connects your YouTube channel in one step."],
+      ["Add your audio and a picture", "MP3, WAV, M4A, FLAC or OGG, plus a still image or an animated GIF."],
+      ["Pick a tag set", "Choose an artist or style, keep the tags that fit and add your own."],
+      ["Upload", "The video goes to your channel as public, unlisted or private."],
+    ],
+    how: [
+      [
+        "What TunesToTube does",
+        "TunesToTube is a free website that turns an audio file and an image into a YouTube video and uploads it to your channel. It's simple and has worked for years. As of this writing, the picture is a still image (an animated GIF uses its first frame), free videos are 720p with a TunesToTube watermark, and you type your tags and description for each upload. It doesn't make visualizers or show channel analytics.",
+      ],
+      [
+        "What SendMyBeat's free uploader does differently",
+        "The picture can be a still image or an animated GIF that loops for the whole track. Tags come from ready-made type beat sets for 150 artists and 21 styles: pick one, remove what doesn't fit, add your own, and a counter keeps you under YouTube's 500 characters. You get 3 free uploads a day, with a small SendMyBeat watermark that Plus and Pro remove.",
+      ],
+      [
+        "When TunesToTube may suit you better",
+        "If you only ever upload a still picture and don't need tags, TunesToTube does that job without a SendMyBeat account. Our uploader needs a free account because it publishes to your channel through it.",
+      ],
+    ],
+    extra: [
+      [
+        "The rest of SendMyBeat",
+        "The free uploader is one tool. With an account you also get the AI tag generator, which scores every tag on search demand and competition, Upload Studio with layouts and beat visualizers, description templates, and on Pro, channel analytics and the Pros breakdowns of how the biggest type beat producers grew.",
+      ],
+    ],
+    related: [
+      {
+        heading: "Comparing other tools?",
+        body: "See how SendMyBeat compares with a general tag generator and a general YouTube growth suite, or make a full type beat video.",
+        links: [
+          ["/rapidtags-alternative", "Rapidtags alternative"],
+          ["/vidiq-for-beat-producers", "vidIQ for beat producers"],
+          ["/type-beat-video-maker", "Type beat video maker"],
+        ],
+      },
+    ],
+    faq: [
+      [
+        "Is SendMyBeat's uploader free like TunesToTube?",
+        "Yes. You get 3 uploads a day free with a SendMyBeat account, no card needed. Plus ($5 a month) and Pro ($10 a month) remove the watermark and add the rest of the app.",
+      ],
+      [
+        "Can I upload an animated GIF?",
+        "Yes. The GIF keeps playing on a loop for the length of your track. Still JPG, PNG and WEBP images work too.",
+      ],
+      [
+        "Do I have to retype my tags every time?",
+        "No. Pick one of our type beat tag sets, edit it, and the tags go into the upload. The sets cover 150 artists and 21 styles.",
+      ],
+      [
+        "Does it have a visualizer?",
+        "Not the free uploader: it's a still image or a GIF, like TunesToTube. Beat visualizers are in SendMyBeat's Upload Studio.",
+      ],
+      [
+        "Why do I need an account?",
+        "The video is uploaded to your own YouTube channel, so you sign in with Google and allow uploads to it. That sign-in also creates your free SendMyBeat account.",
+      ],
+    ],
+  },
+  // Comparison pages. The tool on the page is the free tag generator; "pitch" is the sign-up
+  // box under the copy. Keep what they say about other tools modest and dated.
+  "/rapidtags-alternative": {
+    tool: "tags",
+    cta: "Generate my tags",
+    nav: "Rapidtags alternative",
+    appName: "SendMyBeat Type Beat Tag Generator, a Rapidtags Alternative",
+    eyebrow: "Free tool, no account",
+    title: "Rapidtags Alternative for Type Beat Tags, Free | SendMyBeat",
+    description:
+      "A Rapidtags alternative made for type beats: tags from live YouTube searches for your artist, scored and sized to 500 characters, plus titles and upload.",
+    h1: "A Rapidtags alternative built for type beats",
+    lede: 'Rapidtags is a quick YouTube tag generator for any kind of video. SendMyBeat\'s tag generator is made for type beat producers: type the artist your beat is for, like "drake type beat", and get tags from live YouTube searches, each scored and sized to fit the 500-character tag box. One free run, no sign-up.',
+    how: [
+      [
+        "What Rapidtags does",
+        "Rapidtags turns a keyword into a list of YouTube tags for any topic, with a counter for YouTube's 500-character limit and a score for the tags. It's quick and works for most kinds of videos. As of November 2026, it isn't built around type beats: it has no artist or type beat logic, and it doesn't write beat titles or descriptions, make visualizer videos or upload beats for you.",
+      ],
+      [
+        "What SendMyBeat does differently",
+        "It starts from your artist. The generator reads YouTube's search suggestions and the tags on type beats that already rank for that artist, and AI adds the variations buyers type: the year, \"free\", spellings, the style and close artists. Every tag is scored on search demand, competition and how close it is to your search, and the best ones are packed into the 500 characters, up to 50 tags per run.",
+      ],
+      [
+        "Tags, then the rest of the upload",
+        "With a SendMyBeat account, the same search also suggests titles in the type beat format, and descriptions start from templates you can save and reuse. Upload Studio turns your beat and cover art into a video with an audio visualizer and uploads it to your channel with everything filled in.",
+      ],
+    ],
+    extra: [
+      [
+        "When Rapidtags may suit you better",
+        "If you make videos that aren't beats, like vlogs, gaming or tutorials, a general tag tool such as Rapidtags fits better: SendMyBeat's generator is tuned for type beat searches and won't help much with other topics.",
+      ],
+    ],
+    pitch: {
+      heading: "Tags are step one",
+      body: "Sign up free for 3 AI generations and 3 YouTube uploads, no card needed: scored tags, titles, a description and a video with a visualizer, uploaded to your channel. After that, Plus is $5 a month for 50 of each and Pro is $10 a month for 100.",
+      links: [
+        ["/?signup=1", "Sign up free"],
+        ["/", "See everything SendMyBeat does"],
+      ],
+    },
+    related: [
+      {
+        heading: "Ready-made type beat tags",
+        body: "Want a starting set right now? These pages have tags to copy for popular artists, sized for the 500-character limit.",
+        links: [
+          ["/type-beat-tags", "All type beat tags"],
+          ["/type-beat-tags/drake", "Drake type beat tags"],
+          ["/type-beat-tags/travis-scott", "Travis Scott type beat tags"],
+          ["/type-beat-tags/future", "Future type beat tags"],
+          ["/type-beat-tags/ken-carson", "Ken Carson type beat tags"],
+          ["/youtube-tag-counter", "YouTube tag counter"],
+        ],
+      },
+      {
+        heading: "Compare other tools",
+        body: "How SendMyBeat compares with a general YouTube growth suite and with a simple audio-to-video uploader.",
+        links: [
+          ["/vidiq-for-beat-producers", "vidIQ for beat producers"],
+          ["/tunestotube-alternative", "TunesToTube alternative"],
+        ],
+      },
+    ],
+    faq: [
+      [
+        "Is SendMyBeat's tag generator free?",
+        "You get one full run without an account. Sign up free for 3 more AI generations and 3 YouTube uploads, no card needed. After that, Plus is $5 a month for 50 generations and Pro is $10 a month for 100.",
+      ],
+      [
+        "Why use a type beat tag generator instead of a general one?",
+        "Type beat buyers search in a particular way: the artist's name with \"type beat\", the year, \"free\", the style and common misspellings. A generator built around those searches gives you tags for them, instead of broad one-word tags that put your beat up against millions of other videos.",
+      ],
+      [
+        "Does it keep me under the 500-character limit?",
+        "Yes. The set is sized for YouTube's 500 characters, counted the way YouTube counts them: commas between tags, and two extra characters for the quote marks around any tag with a space in it.",
+      ],
+      [
+        "What do the tag scores mean?",
+        "Each tag gets a score out of 100 from search demand, competition and how close it is to your search. Green is 60 or more, amber 45 to 59 and red under 45, so you can swap the weak ones.",
+      ],
+      [
+        "Can SendMyBeat upload the beat too?",
+        "Yes, with an account. Upload Studio turns your beat and artwork into a video and publishes it to your YouTube channel with the tags, title and description filled in. For just an MP3 and a picture, the free uploader does 3 uploads a day.",
+      ],
+    ],
+  },
+  "/vidiq-for-beat-producers": {
+    tool: "tags",
+    cta: "Try the type beat tag generator",
+    nav: "vidIQ for beat producers",
+    appName: "SendMyBeat for Beat Producers, a vidIQ Alternative",
+    eyebrow: "Comparison, free tool inside",
+    title: "vidIQ for Beat Producers: A Type Beat Alternative | SendMyBeat",
+    description:
+      "vidIQ is a YouTube growth suite for every kind of channel. SendMyBeat is made for type beat channels: scored artist tags, titles, descriptions and upload.",
+    h1: "vidIQ for beat producers: what fits a type beat channel",
+    lede: "vidIQ is one of the best-known YouTube growth tools, made for every kind of channel. If your channel is type beats, here's an honest look at where it fits and where SendMyBeat, which is built only for beat producers, does the job more directly. Try the type beat tag generator below, one free run, no sign-up.",
+    how: [
+      [
+        "What vidIQ does",
+        "vidIQ is a general YouTube growth suite: keyword research, scores for keywords and videos, and channel analytics, for creators in any niche. As of November 2026, it has a free plan and paid monthly plans. It's broad by design rather than built around type beats, so it isn't set up for the beat-specific parts: artist-based type beat tags, beat titles and descriptions, a visualizer video and the upload.",
+      ],
+      [
+        "What SendMyBeat does for a type beat channel",
+        "Type the artist your beat is for and get a scored tag set from live YouTube searches for that artist, sized to the 500-character limit, plus titles in the type beat format. Descriptions start from templates for type beats, beat sales or free-for-profit. Upload Studio turns your beat and cover art into a video with a visualizer and uploads it to your channel.",
+      ],
+      [
+        "Analytics made for beat uploads",
+        "On Pro, channel analytics compare each upload with your own average, show which title patterns win and lose on your channel, and suggest a better title for weak uploads. The Pros section breaks down how big type beat producers grew, with a plan to close the gap with your style.",
+      ],
+    ],
+    extra: [
+      [
+        "When vidIQ suits you better",
+        "If your channel isn't music, or you want broad keyword research and analytics across any topic, vidIQ is the more complete tool. SendMyBeat only does type beats. Some producers use both: a general tool for research, and SendMyBeat for tagging, making and uploading each beat.",
+      ],
+      [
+        "What SendMyBeat costs",
+        "Free to start with 3 AI generations and 3 YouTube uploads, no card needed. Plus is $5 a month for 50 of each with no watermark, and Pro is $10 a month for 100 of each, with channel analytics and the Pros breakdowns. Check vidIQ's own site for its current prices.",
+      ],
+    ],
+    pitch: {
+      heading: "Built for one kind of channel: yours",
+      body: "Sign up free for 3 AI generations and 3 YouTube uploads, no card needed. Tag, title, describe, render and upload a beat from one place, then see what's working.",
+      links: [
+        ["/?signup=1", "Sign up free"],
+        ["/", "See everything SendMyBeat does"],
+      ],
+    },
+    related: [
+      {
+        heading: "Compare other tools",
+        body: "How SendMyBeat compares with a general tag generator and with a simple audio-to-video uploader.",
+        links: [
+          ["/rapidtags-alternative", "Rapidtags alternative"],
+          ["/tunestotube-alternative", "TunesToTube alternative"],
+        ],
+      },
+      {
+        heading: "Free tools for your next upload",
+        body: "These work without a plan.",
+        links: [
+          ["/free-tag-generator", "Free tag generator"],
+          ["/type-beat-title-generator", "Type beat title generator"],
+          ["/beat-description-generator", "Beat description generator"],
+          ["/type-beat-tags", "Type beat tags"],
+          ["/type-beat-video-maker", "Type beat video maker"],
+        ],
+      },
+    ],
+    faq: [
+      [
+        "Is vidIQ good for beat producers?",
+        "It can be, especially for general keyword research and channel stats. It isn't made for type beats, though, so you'll do the artist tags, beat titles, descriptions and video yourself. SendMyBeat does those parts for type beat channels specifically.",
+      ],
+      [
+        "Can I use vidIQ and SendMyBeat together?",
+        "Yes. They do different jobs. SendMyBeat connects to your YouTube channel through your Google account to upload, and doesn't need you to give up any other tool.",
+      ],
+      [
+        "Does SendMyBeat have channel analytics?",
+        "Yes, on Pro ($10 a month): views per upload against your own average, the title patterns that win and lose on your channel, and a better title for each weak upload.",
+      ],
+      [
+        "Does SendMyBeat work for channels that aren't beats?",
+        "Not well. Everything in it, from the tag logic to the description templates, is built around type beats. For other niches, a general tool like vidIQ is a better fit.",
+      ],
+      [
+        "How much does SendMyBeat cost?",
+        "Free to try with 3 AI generations and 3 uploads, no card needed. Plus is $5 a month and Pro is $10 a month. Cancel anytime.",
+      ],
+    ],
+  },
 };
 export const TOOL_PATHS = Object.keys(TOOL_PAGES);
+
+// A page's "related" links: one block or a list of blocks, { heading, body, links: [[path, label], ...] }.
+export const relatedBlocks = (related) => (related ? [].concat(related) : []);
+
+// The pitch on the free uploader pages: what a SendMyBeat account adds, in the homepage's
+// own feature names and plans (HOME above), so the two never disagree.
+export const UPLOAD_PITCH = {
+  heading: "Want a visualizer and AI-scored tags next time?",
+  body: "The free uploader is the simple version. SendMyBeat is built for type beat producers on YouTube: one search gives you a scored tag set, Upload Studio turns your beat into a video with a layout and visualizer, and analytics show what to fix next. Plus and Pro also take the watermark off your uploads.",
+  features: HOME.features,
+  plans: HOME.plans,
+  signup: ["/?signup=1", "Sign up free"],
+  home: ["/", "See everything SendMyBeat does"],
+};
 
 // Guide pages, one per thing producers search for. Each answers it and points to the
 // free tag generator or sign-up.
@@ -413,6 +823,84 @@ export const GUIDES = {
       ["Beat plus artwork becomes a video", "Pick a layout, add an audio visualizer and preview it before anything goes live."],
       ["Tags and description filled in", "Generate tags and write a description from a template, and they go into the upload with your title."],
       ["Your channel, your settings", "Connect your Google account once. Uploads go to your channel as public, unlisted or private videos."],
+    ],
+    related: {
+      heading: "Only need your MP3 and a picture?",
+      body: "The free uploader skips the visualizer: an MP3 plus a still image or animated GIF, with a ready-made tag set, uploaded to your channel. 3 free uploads a day with a free account.",
+      links: [
+        ["/upload-mp3-to-youtube", "Free MP3 to YouTube uploader"],
+        ["/tunestotube-alternative", "TunesToTube alternative"],
+      ],
+    },
+  },
+  // Guides can also carry "faq" (shown on the page and as FAQPage structured data) and "cta"
+  // (the box near the end: heading, body, links; the first link is the main button).
+  "/audio-visualizer-for-beats": {
+    title: "Audio Visualizer for Beats: Visualizer Videos for YouTube | SendMyBeat",
+    description:
+      "What an audio visualizer video is, why it suits a type beat upload, and how SendMyBeat's visualizer turns your beat and cover art into one for YouTube.",
+    h1: "Audio visualizer for beats",
+    lede: "An audio visualizer is the moving shape, usually bars or a ring, that reacts to your beat on screen. Here's what it adds to a type beat video and how to make one with SendMyBeat, without video editing software.",
+    sections: [
+      [
+        "What an audio visualizer video is",
+        "A visualizer video is your beat over your cover art with an animation that follows the music: bars that jump on the kick, a ring around your logo that pulses, lines that bend with the 808. The animation is drawn from the audio itself, so it moves in time with every hit.",
+      ],
+      [
+        "Why use one on a type beat",
+        "Plenty of producers upload with a still picture, and that works. A visualizer gives viewers something that moves with the beat while they listen, can carry your logo or cover art in the middle, and gives your uploads a look people recognise from one video to the next.",
+      ],
+      [
+        "How SendMyBeat's visualizer works",
+        "In Upload Studio, add your beat and cover art, turn on Visualizer and pick a style. Eight styles work on any account: NCS, Monstercat, Spectrum, Proximity, Trap, Wave, Mirror and Dots. Plus and Pro add 13 premium styles, including Ridgeline, Ring Ridges, Waterfall, Terrain, Groove and Turntable. Set the colour or turn on rainbow colours that follow the loudness, choose how strongly it reacts, and on the styles built around a centre, put your cover art, a logo or a plain colour in the middle.",
+      ],
+      [
+        "Rendered into the video, in time with the beat",
+        "SendMyBeat draws the visualizer frame by frame for the whole beat and records it into the video, so it stays in sync from start to finish. Pick 16:9 for YouTube, 9:16 for Shorts, square or 4:5, and 30 or 60 frames a second for smooth motion. Preview it, then upload to your channel with the title, tags and description filled in.",
+      ],
+      [
+        "Just need a still image?",
+        "If you don't want a visualizer, the free MP3 to YouTube uploader turns your beat and a still image or animated GIF into a video on your channel, 3 times a day with a free account.",
+      ],
+    ],
+    related: {
+      heading: "Make the rest of the video",
+      body: "Start from the video maker, or use the free uploader for a beat and a picture.",
+      links: [
+        ["/type-beat-video-maker", "Type beat video maker"],
+        ["/upload-mp3-to-youtube", "Free MP3 to YouTube uploader"],
+        ["/upload-beats-to-youtube", "Upload beats to YouTube"],
+      ],
+    },
+    cta: {
+      heading: "Make your first visualizer video",
+      body: "Sign up free for 3 YouTube uploads and 3 AI generations, no card needed. The eight standard visualizer styles work on the free uploads; Plus ($5 a month) and Pro ($10 a month) add the premium styles and remove the watermark.",
+      links: [
+        ["/?signup=1", "Sign up free"],
+        ["/upload-mp3-to-youtube", "Free still-image uploader"],
+      ],
+    },
+    faq: [
+      [
+        "Is SendMyBeat's visualizer free?",
+        "The eight standard styles work on any account, so you can use them on the 3 free uploads a new account starts with, no card needed. The 13 premium styles need Plus ($5 a month) or Pro ($10 a month). You can try a premium style in the preview before you decide.",
+      ],
+      [
+        "Do I need video editing software?",
+        "No. You add your beat and cover art, pick a style, preview it and upload, all in SendMyBeat.",
+      ],
+      [
+        "Can I make a visualizer video for YouTube Shorts?",
+        "Yes. Pick the 9:16 shape in Upload Studio. Square and 4:5 portrait are there too.",
+      ],
+      [
+        "Is there a watermark?",
+        "Uploads on a free account have a small SendMyBeat watermark. Plus and Pro remove it.",
+      ],
+      [
+        "Does the free MP3 uploader have a visualizer?",
+        "No. The free uploader makes a video from a still image or animated GIF. Visualizers are in Upload Studio.",
+      ],
     ],
   },
 };
@@ -768,11 +1256,265 @@ export const tagSetPage = (slug) => {
   };
 };
 
+// ---- Producer blog ------------------------------------------------------------------
+// /blog lists the posts; each post renders with the guide template (pages/TypeBeatSeoPage.js),
+// so a post has the same fields as a guide plus "date" (YYYY-MM-DD) and "summary" for the
+// list. "tagSet" shows that artist's ready-made tag set on the post.
+export const BLOG = {
+  path: "/blog",
+  title: "Producer Blog: YouTube Tips for Type Beat Producers | SendMyBeat",
+  description:
+    "Practical guides for type beat producers on YouTube: growing a channel, titling beats, choosing tags that buyers search, and getting every upload right.",
+  h1: "The SendMyBeat producer blog",
+  lede: "Short, practical guides for producers who sell or share type beats on YouTube: how to title, tag and describe a beat, and how to grow the channel around it.",
+};
+
+export const BLOG_POSTS = {
+  "/blog/grow-a-type-beat-channel": {
+    date: "2026-11-26",
+    title: "How to Grow a Type Beat Channel on YouTube | SendMyBeat Blog",
+    description:
+      "A practical plan to grow a type beat channel on YouTube: steady uploads, clear titles, tags from real searches, thumbnails, descriptions, Shorts and analytics.",
+    h1: "How to grow a type beat channel on YouTube",
+    summary: "Steady uploads, a title format buyers recognise, tags from real searches, and the habits that keep a channel moving.",
+    lede: "There's no trick that grows a type beat channel overnight. What works is doing the basics on every upload, for months: beats people search for, packaged so buyers can find them and buy them. Here's the checklist.",
+    sections: [
+      [
+        "Upload on a schedule you can keep",
+        "Pick a pace you can hold, whether that's one beat a day or two a week, and stick to it. A steady channel gives YouTube and returning viewers a reason to come back, and gives you more uploads to learn from. A backlog of finished beats helps you keep the schedule through busy weeks.",
+      ],
+      [
+        "Title every beat the same way",
+        'Buyers search the artist\'s name with "type beat", so lead with exactly that: [Artist] Type Beat - "Beat Name". Add the year or the style after it if there\'s room. Using one format on every upload makes your channel easy to scan and keeps the search words at the front, where they show even when the title gets cut off.',
+      ],
+      [
+        "Tag from what buyers actually search",
+        "Build tags from real searches for your artist: the artist plus \"type beat\", the year, \"free\" if the beat is free, the style and a couple of close artists your beat really sounds like. Stay inside YouTube's 500 characters and change a few tags for each beat so your uploads don't all compete for the same searches.",
+      ],
+      [
+        "Thumbnails and descriptions that sell",
+        "Use cover art that still reads as a small thumbnail on a phone: one clear image, strong contrast, little or no small text. In the description, put what a buyer needs near the top: where to buy or lease the beat, how to contact you, the BPM and key, and how to credit you if the beat is free for non-profit use.",
+      ],
+      [
+        "Use Shorts and work with others",
+        "A 9:16 clip of the best part of a beat can reach people who would never search for it, and point them to the full upload. Collaborating helps too: co-produce with other producers, send beats to artists, and share each other's uploads so each channel reaches the other's audience.",
+      ],
+      [
+        "Check your analytics, then adjust",
+        "Every few weeks, look at which uploads did better than your usual and what they have in common: the artist, the style, the title or the thumbnail. Make more of what works, and retitle or retag the uploads that stalled instead of deleting them.",
+      ],
+    ],
+    related: [
+      {
+        heading: "Tools for each step",
+        body: "Free tools for titles, tags, descriptions and hashtags, and the type beat video maker for your next upload.",
+        links: [
+          ["/type-beat-title-generator", "Type beat title generator"],
+          ["/free-tag-generator", "Free tag generator"],
+          ["/type-beat-tags", "Type beat tags by artist"],
+          ["/beat-description-generator", "Beat description generator"],
+          ["/youtube-hashtag-generator", "YouTube hashtag generator"],
+          ["/type-beat-video-maker", "Type beat video maker"],
+          ["/upload-mp3-to-youtube", "Free MP3 to YouTube uploader"],
+        ],
+      },
+    ],
+    cta: {
+      heading: "Do the basics on every upload, faster",
+      body: "SendMyBeat gives you scored tags, titles and a description from one search, turns your beat into a video with a visualizer, and uploads it to your channel. Sign up free for 3 generations and 3 uploads, no card needed.",
+      links: [
+        ["/?signup=1", "Sign up free"],
+        ["/free-tag-generator", "Try one free tag run"],
+      ],
+    },
+    faq: [
+      [
+        "How often should I upload type beats?",
+        "As often as you can keep up for months, not weeks. A steady pace you can hold beats a burst of uploads followed by silence.",
+      ],
+      [
+        "What's the best title format for a type beat?",
+        'Lead with the artist and "type beat", then the beat name in quotes: [Artist] Type Beat - "Beat Name". Add the year or style after it if there\'s room.',
+      ],
+      [
+        "Should I post type beats as Shorts?",
+        "Shorts are a good way to show the best part of a beat to people who aren't searching for it. Treat them as a way to point viewers to the full upload, not a replacement for it.",
+      ],
+      [
+        "What should go in a type beat description?",
+        "Where to buy or lease the beat, how to contact you, the BPM and key, and your credit terms if the beat is free to use. Put the purchase link near the top.",
+      ],
+    ],
+  },
+  "/blog/best-youtube-tags-for-drake-type-beat": {
+    date: "2026-11-26",
+    title: "Best YouTube Tags for a Drake Type Beat ({year}) | SendMyBeat Blog",
+    description:
+      "A copy-paste tag set for a Drake type beat, plus how to choose and order the tags and fit them in YouTube's 500-character tag limit.",
+    h1: "Best YouTube tags for a Drake type beat",
+    summary: "A ready tag set for Drake type beats, and how to pick, order and trim tags to fit YouTube's 500 characters.",
+    lede: "Lots of producers upload Drake type beats, so tags that match how buyers actually search make a difference. Below is a starting set you can copy, then how to adjust it for your beat.",
+    tagSet: "drake",
+    sections: [
+      [
+        "Start with the main search",
+        'The searches buyers type first are "drake type beat", the same with the year, and "free drake type beat" if your beat is free. Add "drake instrumental" and the nickname spelling "drizzy type beat". These go at the top of your list.',
+      ],
+      [
+        "Add Drake's sound, then close artists",
+        "Next, the style your beat actually has, like R&B or melodic trap, both with Drake's name and on its own. Then one or two artists your beat genuinely sounds like, such as Future, 21 Savage or The Weeknd, alone or as \"drake x future type beat\". Leave out artists your beat doesn't sound like: they bring viewers who leave.",
+      ],
+      [
+        "Order the tags from most to least important",
+        "Put your main artist tags first, then the style tags, then the close artists, then broad tags like \"type beat\" with the year. When you need to trim, cut from the bottom, so the searches that matter most always stay in the set.",
+      ],
+      [
+        "Fit the 500-character limit",
+        'YouTube allows 500 characters of tags. It counts every character, the commas between tags, and two extra for the quote marks around a tag with a space in it, so "drake type beat" costs 17, not 15. The set above leaves a little room for one or two tags of your own.',
+      ],
+      [
+        "Change a few tags for every beat",
+        "Use the set as a base, then swap a few tags for what makes each beat different: the mood, a second artist, the style. Uploading many beats with identical tags makes them compete with each other. Keep the title in step too: Drake Type Beat - \"Name\" belongs at the front of the title, since the title counts more than tags.",
+      ],
+    ],
+    related: [
+      {
+        heading: "Tags for Drake and close artists",
+        body: "Ready-made sets to copy, each sized for the 500-character limit.",
+        links: [
+          [tagSetPath("drake"), "Drake type beat tags"],
+          ...ARTISTS.drake.related.map((s) => [tagSetPath(s), `${ARTISTS[s].name} type beat tags`]),
+          [TAG_HUB_PATH, "All type beat tags"],
+        ],
+      },
+      {
+        heading: "Check and refresh your tags",
+        body: "Count your own list the way YouTube does, or pull a fresh set from today's searches.",
+        links: [
+          ["/youtube-tag-counter", "YouTube tag counter"],
+          [freeTagLink("drake type beat"), "Generate fresh Drake tags free"],
+          ["/blog/how-to-title-a-type-beat", "How to title a type beat"],
+        ],
+      },
+    ],
+    cta: {
+      heading: "Get tags scored on live searches",
+      body: "The tag generator reads today's YouTube searches for your artist and scores every tag on demand and competition. One run is free with no account; sign up free for 3 more and 3 YouTube uploads, no card needed.",
+      links: [
+        [freeTagLink("drake type beat"), "Generate Drake tags"],
+        ["/?signup=1", "Sign up free"],
+      ],
+    },
+    faq: [
+      [
+        "How many tags should a Drake type beat have?",
+        "As many focused tags as fit in YouTube's 500 characters, usually 15 to 30. Relevance matters more than the count, so cut anything that doesn't describe your beat.",
+      ],
+      [
+        "Should I put the year in my Drake type beat tags?",
+        'Yes. Buyers often search "drake type beat {year}", so add the year to your main tag and update it each January.',
+      ],
+      [
+        "Does the order of tags matter?",
+        "Put your most important tags first. It keeps your main searches in the set when you trim to fit, and makes the list easy to check.",
+      ],
+      [
+        "Can I use the same tags on every Drake type beat?",
+        "Use them as a starting point and change a few for each beat. Identical tags on many uploads make your own videos compete with each other.",
+      ],
+    ],
+  },
+  "/blog/how-to-title-a-type-beat": {
+    date: "2026-11-26",
+    title: "How to Title a Type Beat on YouTube, with Examples | SendMyBeat Blog",
+    description:
+      'How to title a type beat on YouTube: the [Artist] Type Beat - "Name" format, what to add after it, how long a title should be and when to use [FREE].',
+    h1: "How to title a type beat on YouTube",
+    summary: 'The [Artist] Type Beat - "Name" format, what to add after it, length, and when to use [FREE].',
+    lede: "Your title is the first thing a buyer reads and the strongest signal of what your beat is. A good type beat title is simple, consistent and starts with the search.",
+    sections: [
+      [
+        "Use the format buyers recognise",
+        'Lead with the artist and "type beat", then the beat name in quotes: Drake Type Beat - "Midnight". Buyers searching for that artist see the match straight away, and the name in quotes makes the beat yours and easy to ask for.',
+      ],
+      [
+        "What to add after the name",
+        'If there\'s room, add the year, a second artist your beat sounds like, or the style: Drake x Future Type Beat {year} - "Midnight" | Dark R&B Instrumental. Each extra keyword is a search next to the obvious one. Join two artists with an "x" for a crossover title.',
+      ],
+      [
+        "Keep it short enough to read",
+        "YouTube allows 100 characters, but search results and phones often cut a title after about 70. Keep the artist, \"type beat\" and the name at the front so the important part always shows.",
+      ],
+      [
+        "Use [FREE] only when the beat is free",
+        '"Free type beat" is a big search, but putting [FREE] on a beat you sell brings in people who won\'t buy and leads to awkward messages. Use it only when anyone can use the beat for free, and say the terms in the description.',
+      ],
+      [
+        "Stay consistent, and update the year",
+        "Use the same format on every upload so your channel reads cleanly. Each January, update the year on your best uploads, and retitle beats that stalled rather than deleting them.",
+      ],
+    ],
+    related: [
+      {
+        heading: "Make titles and tags for your next beat",
+        body: "The title generator writes titles in these formats with a character count. Tags should match the title, so start from your artist's tag set.",
+        links: [
+          ["/type-beat-title-generator", "Type beat title generator"],
+          [TAG_HUB_PATH, "Type beat tags by artist"],
+          [tagSetPath("drake"), "Drake type beat tags"],
+          [tagSetPath("travis-scott"), "Travis Scott type beat tags"],
+          ["/blog/best-youtube-tags-for-drake-type-beat", "Best tags for a Drake type beat"],
+        ],
+      },
+    ],
+    cta: {
+      heading: "Write your titles in seconds",
+      body: "The type beat title generator is free with no sign-up and no limit. With a SendMyBeat account, titles come with your scored tags and description, ready to upload.",
+      links: [
+        ["/type-beat-title-generator", "Title generator"],
+        ["/?signup=1", "Sign up free"],
+      ],
+    },
+    faq: [
+      [
+        "What is the best title format for a type beat?",
+        'Artist plus "Type Beat" first, then the beat name in quotes: Drake Type Beat - "Midnight". Add the year, a second artist or the style after it if there\'s room.',
+      ],
+      [
+        "How long should a type beat title be?",
+        "YouTube allows 100 characters. Aim for about 70 or less so the important part shows in search results and on phones.",
+      ],
+      [
+        "Should the beat name be in quotes?",
+        "Yes. Quotes show where the search words end and the name begins, and make the beat easy for a buyer to ask for by name.",
+      ],
+      [
+        "Can I change a title after uploading?",
+        "Yes, in YouTube Studio at any time. Retitling a beat that stalled is often better than deleting and uploading it again.",
+      ],
+    ],
+  },
+};
+export const BLOG_PATHS = Object.keys(BLOG_POSTS);
+
+// "2026-11-26" -> "November 26, 2026" (no Date, so the build and the browser agree).
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+export const postDate = (iso) => {
+  const [y, m, d] = String(iso).split("-").map(Number);
+  return MONTHS[m - 1] ? `${MONTHS[m - 1]} ${d}, ${y}` : String(iso);
+};
+
+// Newest first, for the blog index.
+export const blogPostList = () =>
+  Object.entries(BLOG_POSTS).sort(([pa, a], [pb, b]) => b.date.localeCompare(a.date) || pa.localeCompare(pb));
+
 const pageMeta = (path) => {
   if (STATIC_PAGES[path]) return STATIC_PAGES[path];
   if (path === FREE_TAG_PAGE.path) return { ...FREE_TAG_PAGE, priority: "0.9", changefreq: "weekly" };
   if (GUIDES[path]) return { ...GUIDES[path], priority: path === TAG_HUB_PATH ? "0.8" : "0.7", changefreq: "monthly" };
   if (TOOL_PAGES[path]) return { ...TOOL_PAGES[path], priority: "0.8", changefreq: "monthly" };
+  if (path === BLOG.path) return { ...BLOG, priority: "0.6", changefreq: "weekly" };
+  if (BLOG_POSTS[path]) return { ...BLOG_POSTS[path], priority: "0.6", changefreq: "monthly" };
   if (path.startsWith(`${TAG_HUB_PATH}/`)) {
     const page = tagSetPage(path.slice(TAG_HUB_PATH.length + 1));
     if (page) return { ...page, priority: "0.6", changefreq: "monthly" };
@@ -785,6 +1527,8 @@ export const PUBLIC_PATHS = [
   FREE_TAG_PAGE.path,
   ...TOOL_PATHS,
   ...Object.keys(GUIDES),
+  BLOG.path,
+  ...BLOG_PATHS,
   ...TAG_SET_SLUGS.map(tagSetPath),
 ];
 
@@ -866,7 +1610,46 @@ export const jsonLdFor = (path, year) => {
     ];
   }
   if (GUIDES[path]) {
-    return [breadcrumbs([["SendMyBeat", "/"], [GUIDES[path].h1, path]])];
+    const guide = GUIDES[path];
+    return [breadcrumbs([["SendMyBeat", "/"], [guide.h1, path]]), ...(guide.faq ? [faqPage(guide.faq, year)] : [])];
+  }
+  if (path === BLOG.path) {
+    return [
+      {
+        "@context": "https://schema.org",
+        "@type": "Blog",
+        name: "SendMyBeat producer blog",
+        url: `${SITE}${path}`,
+        description: meta.description,
+        publisher: { "@type": "Organization", name: "SendMyBeat", url: SITE },
+        blogPost: blogPostList().map(([p, post]) => ({
+          "@type": "BlogPosting",
+          headline: withYear(post.h1, year),
+          url: `${SITE}${p}`,
+          datePublished: post.date,
+        })),
+      },
+      breadcrumbs([["SendMyBeat", "/"], ["Blog", path]]),
+    ];
+  }
+  if (BLOG_POSTS[path]) {
+    const post = BLOG_POSTS[path];
+    return [
+      {
+        "@context": "https://schema.org",
+        "@type": "BlogPosting",
+        headline: withYear(post.h1, year),
+        description: meta.description,
+        url: `${SITE}${path}`,
+        mainEntityOfPage: `${SITE}${path}`,
+        datePublished: post.date,
+        dateModified: post.updated || post.date,
+        author: { "@type": "Organization", name: "SendMyBeat", url: SITE },
+        publisher: { "@type": "Organization", name: "SendMyBeat", url: SITE },
+      },
+      breadcrumbs([["SendMyBeat", "/"], ["Blog", BLOG.path], [withYear(post.h1, year), path]]),
+      faqPage(post.faq, year),
+    ];
   }
   const page = tagSetPage(path.slice(TAG_HUB_PATH.length + 1));
   return [
