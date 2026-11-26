@@ -5,6 +5,9 @@
 // build/<path>/index.html, with that page's title, description, canonical, structured
 // data and its main copy and links already in the HTML. React replaces the copy with the
 // live page as soon as it loads. It also writes sitemap.xml from the same page list.
+// The homepage is written into build/index.html itself (last, since that file is the
+// template), the untouched template is kept as build/app.html for every non-public path,
+// and build/serve.json tells `serve` which file answers which path.
 //
 //   node scripts/prerender-seo.js                 sitemap + prerendered pages (needs build/)
 //   node scripts/prerender-seo.js --sitemap-only  only public/sitemap.xml
@@ -16,7 +19,8 @@ const path = require("path");
 const { pathToFileURL } = require("url");
 
 const ROOT = path.resolve(__dirname, "..");
-const BUILD = path.join(ROOT, "build");
+// PRERENDER_BUILD_DIR lets you run this against a scratch copy of the build.
+const BUILD = process.env.PRERENDER_BUILD_DIR ? path.resolve(process.env.PRERENDER_BUILD_DIR) : path.join(ROOT, "build");
 const PUBLIC = path.join(ROOT, "public");
 
 async function loadModel() {
@@ -94,9 +98,10 @@ function guideBody(m, pagePath) {
   const g = m.GUIDES[pagePath];
   const hub =
     pagePath === m.TAG_HUB_PATH
-      ? `<nav class="ftg-copy" aria-label="Tag sets"><h2 class="policy-title">Tags by artist</h2>${linkRow(
-          Object.entries(m.ARTISTS).map(([s, x]) => [m.tagSetPath(s), x.name])
-        )}<h2 class="policy-title">Tags by style</h2>${linkRow(
+      ? `<nav class="ftg-copy" aria-label="Tag sets"><h2 class="policy-title">Tags by artist</h2>${m
+          .artistsByLetter()
+          .map(([letter, list]) => `<h3 class="policy-title ftg-q">${esc(letter)}</h3>${linkRow(list.map(([s, name]) => [m.tagSetPath(s), name]))}`)
+          .join("")}<h2 class="policy-title">Tags by style</h2>${linkRow(
           Object.entries(m.STYLES).map(([s, x]) => [m.tagSetPath(s), x.name])
         )}</nav>`
       : "";
@@ -116,7 +121,7 @@ function guideBody(m, pagePath) {
 function tagSetBody(m, slug, year) {
   const p = m.tagSetPage(slug);
   const tags = m.tagsFor(slug, year);
-  const others = Object.entries(m.TAG_SETS).filter(([s, x]) => s !== slug && x.kind === p.kind && !p.related.includes(s));
+  const others = m.moreTagSets(slug, 24);
   return shell(
     `<p class="smb-eyebrow">${a(m.TAG_HUB_PATH, "Type beat tags")} / ${esc(p.name)}</p>` +
       `<h1 class="policy-title ftg-h1">${esc(p.h1)}</h1><p class="policy-muted ftg-lede">${esc(p.lede)}</p>` +
@@ -134,6 +139,70 @@ function tagSetBody(m, slug, year) {
       )}</nav>` +
       footer(m)
   );
+}
+
+// ---- homepage
+// build/index.html is the homepage and also the template every other page starts from, so
+// main() renders the other pages from the untouched template first and writes this last.
+function homeBody(m, year) {
+  const h = m.HOME;
+  const tools = Object.entries(m.TOOL_PAGES || {}).map(([p, t]) => [p, t.h1 || t.title]);
+  const guides = Object.entries(m.GUIDES)
+    .filter(([p]) => p !== m.TAG_HUB_PATH)
+    .map(([p, g]) => [p, g.h1]);
+  return shell(
+    `<p class="smb-eyebrow">${esc(h.eyebrow)}</p><h1 class="policy-title ftg-h1">${esc(h.h1)}</h1>` +
+      `<p class="policy-muted ftg-lede">${esc(h.lede)}</p>` +
+      `<p class="ftg-links">${a("/?signup=1", "Start free", "smb-btn smb-btn--pri smb-btn--lg")} ${a(
+        "/free-tag-generator",
+        "Try one free tag run",
+        "smb-btn smb-btn--sec smb-btn--lg"
+      )}</p>` +
+      `<section class="ftg-copy"><ul>${h.ticks.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></section>` +
+      `<section class="ftg-copy"><h2 class="policy-title">How it works</h2>${h.steps
+        .map((s, i) => `<h3 class="policy-title ftg-q">${i + 1}. ${esc(s.title)}</h3><p>${esc(s.body)}</p>`)
+        .join("")}</section>` +
+      `<section class="ftg-copy"><h2 class="policy-title">What's inside</h2>${h.features
+        .map((f) => `<h3 class="policy-title ftg-q">${esc(f.title)}${f.pro ? " (Pro)" : ""}</h3><p>${esc(f.body)}</p>`)
+        .join("")}</section>` +
+      `<section class="ftg-copy"><h2 class="policy-title">Pricing</h2><p>Try it free, no card needed.</p><ul>${h.plans
+        .map((p) => `<li><strong>${esc(p.name)}, ${esc(p.price)}${p.per.startsWith("/") ? esc(p.per) : ` (${esc(p.per)})`}:</strong> ${esc(p.lines.join(". "))}.</li>`)
+        .join("")}</ul></section>` +
+      `<section class="ftg-copy"><h2 class="policy-title">Free tools and guides</h2>${linkRow([
+        ["/free-tag-generator", "Free tag generator"],
+        [m.TAG_HUB_PATH, "Type beat tags"],
+        ...tools,
+        ...guides,
+      ])}<h2 class="policy-title">Popular type beat tags</h2>${linkRow(
+        m.FREE_TAG_PAGE.featured.map((s) => [m.tagSetPath(s), `${m.TAG_SETS[s].name} type beat tags`])
+      )}</section>` +
+      faqHtml(m, h.faq, year) +
+      footer(m)
+  );
+}
+
+function renderHome(m, template, year) {
+  const html = renderPage(m, template, "/", year);
+  if (!/<div id="root"><\/div>/.test(html)) throw new Error('build/index.html has no empty <div id="root"></div> to fill');
+  // Signed in, "/" is the app, not the landing page: drop the landing copy before it paints.
+  const clear = `<script>try{if(sessionStorage.getItem("token")||localStorage.getItem("token"))document.getElementById("root").innerHTML=""}catch(e){}</script>`;
+  return html.replace(/<div id="root"><\/div>/, `<div id="root">${homeBody(m, year)}</div>${clear}`);
+}
+
+// `serve -s` rewrites every path without a file extension to /index.html, so it never serves
+// build/<path>/index.html. This config (build/serve.json, read by `serve build`) sends each
+// prerendered path to its own file and every other path to app.html, the untouched app shell
+// (no homepage copy or canonical, so /dashboard doesn't show the landing page first). The
+// catch-all skips .html paths because serve applies the remaining rules to a rewritten path too.
+const APP_SHELL = "app.html";
+function serveConfig(m) {
+  return {
+    rewrites: [
+      { source: "/", destination: "/index.html" },
+      ...m.PUBLIC_PATHS.filter((p) => p !== "/").map((p) => ({ source: p, destination: `${p}/index.html` })),
+      { source: "!**/*.html", destination: `/${APP_SHELL}` },
+    ],
+  };
 }
 
 function setTag(html, re, replacement) {
@@ -189,17 +258,24 @@ async function main() {
   const indexFile = path.join(BUILD, "index.html");
   if (!fs.existsSync(indexFile)) throw new Error("build/index.html not found. Run the build first.");
   const template = fs.readFileSync(indexFile, "utf8");
+  if (!template.includes('<div id="root"></div>')) {
+    throw new Error("build/index.html is already prerendered (its #root isn't empty). Run the build again first.");
+  }
   fs.writeFileSync(path.join(BUILD, "sitemap.xml"), xml);
 
   let count = 0;
   m.PUBLIC_PATHS.forEach((p) => {
-    if (p === "/") return; // index.html already carries the homepage's tags
+    if (p === "/") return; // the homepage overwrites the template, so it's written last
     const out = path.join(BUILD, p.slice(1), "index.html");
     fs.mkdirSync(path.dirname(out), { recursive: true });
     fs.writeFileSync(out, renderPage(m, template, p, year));
     count += 1;
   });
-  console.log(`prerendered ${count} pages, sitemap.xml: ${m.PUBLIC_PATHS.length} pages`);
+  fs.writeFileSync(path.join(BUILD, APP_SHELL), template);
+  fs.writeFileSync(indexFile, renderHome(m, template, year));
+  count += 1;
+  fs.writeFileSync(path.join(BUILD, "serve.json"), `${JSON.stringify(serveConfig(m), null, 2)}\n`);
+  console.log(`prerendered ${count} pages (homepage included), sitemap.xml: ${m.PUBLIC_PATHS.length} pages, serve.json written`);
 }
 
 if (require.main === module) {
@@ -209,4 +285,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { renderPage, sitemap, loadModel };
+module.exports = { renderPage, renderHome, serveConfig, sitemap, loadModel };
