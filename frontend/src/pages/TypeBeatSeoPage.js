@@ -1,6 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import { SEO_PAGES } from "@/lib/seoPages";
-import { ARTISTS, STYLES, TAG_HUB_PATH, tagSetPath } from "@/lib/seoModel";
+import { ARTISTS, STYLES, TAG_HUB_PATH, TOOL_PAGES, tagSetPath } from "@/lib/seoModel";
 import "@/pages/PolicyPages.css";
 import "@/pages/FreeTagGenerator.css";
 
@@ -58,6 +58,13 @@ const TypeBeatSeoPage = () => {
           </section>
 
           <nav className="ftg-copy" aria-label="More guides">
+            <h2 className="policy-title">Free tools, no sign-up</h2>
+            <p className="ftg-links">
+              <Link to="/free-tag-generator">Free tag generator</Link>
+              {Object.entries(TOOL_PAGES).map(([p, t]) => (
+                <Link key={p} to={p}>{t.nav}</Link>
+              ))}
+            </p>
             <h2 className="policy-title">More guides</h2>
             <ul>
               {others.map(([p, other]) => (
