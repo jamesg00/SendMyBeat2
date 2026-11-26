@@ -54,6 +54,9 @@ try:
     from backend.services import tag_outcomes as tag_outcomes_service  # noqa: F401
     from backend.services import tag_titles as tag_titles_service  # noqa: F401
     from backend.services import youtube_quota as youtube_quota_service  # noqa: F401
+    from backend.services import free_uploader as free_uploader_service  # noqa: F401
+    from backend.services import free_tag_runs as free_tag_runs_service  # noqa: F401
+    from backend.services import seo_trending as seo_trending_service  # noqa: F401
     from backend.services import description_builder as description_builder_service  # noqa: F401
     from backend.services import publish_extras as publish_extras_service  # noqa: F401
     from backend.services import thumbnail_legibility as thumbnail_legibility_service  # noqa: F401
@@ -74,6 +77,9 @@ except ImportError:
     from services import tag_outcomes as tag_outcomes_service
     from services import tag_titles as tag_titles_service
     from services import youtube_quota as youtube_quota_service
+    from services import free_uploader as free_uploader_service
+    from services import free_tag_runs as free_tag_runs_service
+    from services import seo_trending as seo_trending_service
     from services import description_builder as description_builder_service
     from services import publish_extras as publish_extras_service
     from services import thumbnail_legibility as thumbnail_legibility_service
@@ -474,6 +480,7 @@ _upload_job_worker_task: asyncio.Task | None = None
 _job_worker_tasks: list[asyncio.Task] = []
 _job_watchdog_task: asyncio.Task | None = None
 _spotlight_refresh_task: asyncio.Task | None = None
+_trending_refresh_task: asyncio.Task | None = None
 _tag_outcome_task: asyncio.Task | None = None
 UPLOAD_JOB_POLL_INTERVAL_SECONDS = int(os.environ.get("UPLOAD_JOB_POLL_INTERVAL_SECONDS", "2"))
 UPLOAD_JOB_STALE_AFTER_SECONDS = int(os.environ.get("UPLOAD_JOB_STALE_AFTER_SECONDS", "1800"))
@@ -4012,6 +4019,23 @@ PREMIUM_VISUALIZER_MODES = frozenset({
 })
 
 
+# Plans that may turn the watermark off (remove_watermark), and so get no watermark on free uploads.
+WATERMARK_REMOVAL_PLANS = frozenset({"plus", "max"})
+# The free uploader takes a still image or a GIF, never a video clip.
+FREE_UPLOADER_VISUAL_EXTENSIONS = frozenset({".jpg", ".jpeg", ".png", ".webp", ".gif"})
+
+
+def _free_uploader_visual_ext(upload_doc: dict | None) -> str:
+    """The stored visual's extension. The stored name uses the sniffed format, so it beats the
+    original filename."""
+    doc = upload_doc or {}
+    for field in ("stored_filename", "storage_key", "file_path", "original_filename"):
+        suffix = Path(str(doc.get(field) or "")).suffix.lower()
+        if suffix:
+            return suffix
+    return ""
+
+
 async def _build_youtube_upload_job_payload(
     *,
     current_user: dict,
@@ -4042,7 +4066,17 @@ async def _build_youtube_upload_job_payload(
     playlist_mode: str | None = None,
     thumbnail_file_id: str | None = None,
     default_language: str | None = None,
+    tags: list[str] | None = None,
+    free_uploader: bool = False,
+    tag_set: str | None = None,
 ) -> dict[str, Any]:
+    """Validate an upload request and build the job payload.
+
+    free_uploader=True is the free "upload MP3 to YouTube" tool: no upload credit is needed, the
+    tags come in directly (`tags`), the description may be empty, the visual must be a still image
+    or a GIF, the visualizer and publish extras are off, and the watermark follows the plan.
+    """
+    free_uploader = bool(free_uploader)
     safe_title = str(title or "").strip()
     if not safe_title:
         raise HTTPException(status_code=400, detail="Title is required.")
@@ -4064,8 +4098,19 @@ async def _build_youtube_upload_job_payload(
     except publish_extras_service.PublishOptionError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
+    if free_uploader:
+        # Nothing the free tool doesn't offer can ride along on a direct call.
+        publish_at = playlist_mode = thumbnail_file_id = default_language = None
+        visualizer_enabled = False
+        visualizer_settings_json = None
+        visualizer_style = None
+        safe_publish_at, safe_playlist_mode, safe_language = None, "none", None
+
     sub_status = await get_user_subscription_status(current_user["id"])
-    if remove_watermark and sub_status.get("plan") not in {"plus", "max"}:
+    if free_uploader:
+        # Watermark on for free accounts, off for the plans that may remove it.
+        remove_watermark = sub_status.get("plan") in WATERMARK_REMOVAL_PLANS
+    if remove_watermark and sub_status.get("plan") not in WATERMARK_REMOVAL_PLANS:
         raise HTTPException(
             status_code=402,
             detail={
@@ -4101,7 +4146,7 @@ async def _build_youtube_upload_job_payload(
 
     safe_description_override = str(description_override or "").strip()
     description_doc = None
-    if safe_description_override:
+    if safe_description_override or free_uploader:
         description_content = safe_description_override
     else:
         safe_description_id = str(description_id or "").strip()
@@ -4115,7 +4160,7 @@ async def _build_youtube_upload_job_payload(
             raise HTTPException(status_code=404, detail="Referenced description not found.")
         description_content = str(description_doc.get("content") or "").strip()
 
-    if not description_content:
+    if not description_content and not free_uploader:
         raise HTTPException(status_code=400, detail="Description content cannot be empty.")
 
     safe_audio_file_id = str(audio_file_id or "").strip()
@@ -4136,6 +4181,11 @@ async def _build_youtube_upload_job_payload(
     )
     if not image_upload:
         raise HTTPException(status_code=404, detail="Referenced image file not found.")
+    if free_uploader and _free_uploader_visual_ext(image_upload) not in FREE_UPLOADER_VISUAL_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail="Use a JPG, PNG or WEBP image, or a GIF. Video files can't be used with the free uploader.",
+        )
 
     tags_doc = None
     clean_tags: list[str] = []
@@ -4148,6 +4198,8 @@ async def _build_youtube_upload_job_payload(
         if not tags_doc:
             raise HTTPException(status_code=404, detail="Referenced tag generation not found.")
         clean_tags = _clean_youtube_tags(tags_doc.get("tags"))
+    elif tags is not None:
+        clean_tags = _clean_youtube_tags([tag for tag in tags if isinstance(tag, str)])
 
     render_settings = _normalize_upload_render_settings(
         aspect_ratio=aspect_ratio,
@@ -4165,11 +4217,17 @@ async def _build_youtube_upload_job_payload(
     )
     visualizer_payload = _normalize_visualizer_payload(visualizer_enabled, visualizer_settings_json)
 
-    await ensure_has_upload_credit(current_user["id"])
+    if not free_uploader:
+        await ensure_has_upload_credit(current_user["id"])
 
     resolved_description_id = str(
         (description_doc.get("id") if isinstance(description_doc, dict) else description_id) or ""
     ).strip()
+
+    free_fields: dict[str, Any] = {}
+    if free_uploader:
+        safe_tag_set = str(tag_set or "").strip()[:80] if isinstance(tag_set, str) else ""
+        free_fields = {"free_uploader": True, "tag_set": safe_tag_set or None}
 
     return {
         "title": safe_title,
@@ -4186,6 +4244,7 @@ async def _build_youtube_upload_job_payload(
         "playlist_mode": safe_playlist_mode,
         "thumbnail_file_id": safe_thumbnail_file_id or None,
         "default_language": safe_language,
+        **free_fields,
         **render_settings,
     }
 
@@ -4288,7 +4347,9 @@ async def _execute_youtube_upload_job(job: dict) -> dict:
     credentials = await refresh_youtube_token(user_id)
 
     await _assert_job_not_cancel_requested(job_id, stage="oauth_refresh")
-    await ensure_has_upload_credit(user_id)
+    free_upload = bool(payload.get("free_uploader"))
+    if not free_upload:  # free uploader jobs never use upload credits
+        await ensure_has_upload_credit(user_id)
     # Reserve one of today's YouTube uploads before spending CPU on the render. It is given back
     # if the job fails before the video starts going to YouTube.
     upload_quota_day = youtube_quota_service.quota_day()
@@ -4404,7 +4465,10 @@ async def _execute_youtube_upload_job(job: dict) -> dict:
             raise HTTPException(status_code=500, detail="YouTube did not return a video ID.")
 
         video_url = f"https://www.youtube.com/watch?v={video_id}"
-        await consume_upload_credit(user_id)
+        # The video is on YouTube: from here a failure must not give the free slot back.
+        job["_youtube_video_id"] = video_id
+        if not free_upload:
+            await consume_upload_credit(user_id)
         await _record_upload_outcome(user_id=user_id, video_id=video_id, payload=payload)
         extras = await _run_publish_extras(youtube, job_id=job_id, user_id=user_id, video_id=video_id, payload=payload)
         media_debug = {
@@ -4517,6 +4581,29 @@ def _outcome_youtube_client():
     return build("youtube", "v3", developerKey=key, cache_discovery=False) if key else None
 
 
+async def _release_free_upload_for_job(job: dict) -> None:
+    """Give a failed or cancelled free uploader job's daily slot back, once.
+
+    Not when the video already reached YouTube. The job doc's free_upload_released flag makes a
+    second call (or a second worker) a no-op.
+    """
+    payload = job.get("payload") or {}
+    if not payload.get("free_uploader") or job.get("_youtube_video_id"):
+        return
+    try:
+        result = await db.upload_jobs.update_one(
+            {"id": job.get("id"), "free_upload_released": {"$ne": True}},
+            {"$set": {"free_upload_released": True}},
+        )
+        if not int(getattr(result, "modified_count", 0) or 0):
+            return
+        await free_uploader_service.release_free_upload(
+            db, str(job.get("user_id") or ""), payload.get("free_upload_day") or None
+        )
+    except Exception as exc:
+        logging.warning("Could not give back the free upload for job %s: %s", job.get("id"), exc)
+
+
 async def _process_youtube_upload_job(job: dict) -> None:
     job_id = job["id"]
     try:
@@ -4538,6 +4625,7 @@ async def _process_youtube_upload_job(job: dict) -> None:
             },
         )
     except JobCancelledError as exc:
+        await _release_free_upload_for_job(job)
         await _update_upload_job(
             job_id,
             status="cancelled",
@@ -4570,6 +4658,7 @@ async def _process_youtube_upload_job(job: dict) -> None:
             failed_stage = "ffmpeg_render"
         elif "youtube" in lowered or failed_stage == "youtube_upload":
             error_code = "YOUTUBE_UPLOAD"
+        await _release_free_upload_for_job(job)
         await _update_upload_job(
             job_id,
             status="failed",
@@ -8183,10 +8272,12 @@ async def generate_tags(request: TagGenerationRequest, current_user: dict = Depe
         raise HTTPException(status_code=500, detail="Failed to generate tags. Please try again.")
 
 # ============ Free tag generator (no account) ============
-# One run per visitor, judged by both their network address and a random id the page keeps
-# in the browser, so clearing one of them isn't enough to go again. After that, the page asks
-# them to sign up. A daily cap across everyone protects the YouTube search quota.
+# A few runs per visitor per day (FREE_TAG_RUNS_PER_DAY, Pacific day), judged by both their
+# network address and a random id the page keeps in the browser, so clearing one of them isn't
+# enough to go again. After that, the page asks them to come back tomorrow or sign up. A daily cap
+# across everyone protects the YouTube search quota. Counting lives in services/free_tag_runs.py.
 FREE_TAG_DAILY_CAP = int(os.environ.get("FREE_TAG_DAILY_CAP", "150"))
+FREE_TAG_RUNS_PER_DAY = max(1, int(os.environ.get("FREE_TAG_RUNS_PER_DAY", "3")))
 # Which model writes free (no-account) tag runs. Grok, so the free page doesn't spend DeepSeek tokens.
 FREE_TAG_LLM_PROVIDER = (os.environ.get("FREE_TAG_LLM_PROVIDER") or "grok").strip().lower()
 
@@ -8202,51 +8293,92 @@ def _free_tag_keys(request: Request, visitor_id: str) -> list[str]:
     return [f"ip:{_hash(_client_ip(request))}", f"visitor:{_hash(visitor_id)}"]
 
 
+FREE_TAGS_USED_MESSAGE = (
+    "You've used today's {n} free tag runs. Come back tomorrow for more, "
+    "or sign up free to get 3 more generations right now."
+)
+
+
+def _free_tags_used_error() -> HTTPException:
+    return HTTPException(status_code=402, detail={
+        "code": "free_tags_used",
+        "message": FREE_TAGS_USED_MESSAGE.format(n=FREE_TAG_RUNS_PER_DAY),
+        "runs_left": 0,
+        "runs_per_day": FREE_TAG_RUNS_PER_DAY,
+        "resets_at": _next_pacific_midnight_iso(),
+    })
+
+
+def _next_pacific_midnight_iso(now: Optional[datetime] = None) -> str:
+    """When the free tag runs come back: the next midnight Pacific (the quota day)."""
+    now = now or datetime.now(timezone.utc)
+    try:
+        pacific = ZoneInfo("America/Los_Angeles")
+    except Exception:
+        pacific = timezone(timedelta(hours=-8))
+    local = now.astimezone(pacific)
+    next_day = local.date() + timedelta(days=1)
+    midnight = datetime(next_day.year, next_day.month, next_day.day, tzinfo=pacific)
+    return midnight.astimezone(timezone.utc).isoformat()
+
+
 @api_router.get("/free-tags/status")
 async def free_tag_status(request: Request, visitor_id: str = ""):
+    """How many free runs this visitor has left today. `used` (no runs left) is kept for older pages."""
     visitor_id = visitor_id[:64]
     keys = _free_tag_keys(request, visitor_id) if visitor_id else _free_tag_keys(request, "")[:1]
-    used = await db.free_tag_uses.find_one({"key": {"$in": keys}}, {"_id": 0, "key": 1})
-    return {"used": bool(used)}
+    try:
+        used_today = await free_tag_runs_service.runs_used_today(db, keys)
+    except Exception as exc:
+        logging.warning(f"Free tag status read failed: {exc}")
+        used_today = 0
+    runs_left = max(0, FREE_TAG_RUNS_PER_DAY - used_today)
+    return {
+        "used": runs_left == 0,
+        "runs_left": runs_left,
+        "runs_per_day": FREE_TAG_RUNS_PER_DAY,
+        "resets_at": _next_pacific_midnight_iso(),
+    }
 
 
 @api_router.post("/free-tags")
 async def free_tag_generate(body: FreeTagRequest, request: Request):
     await _check_rate_limit_persistent(f"free-tags:{_client_ip(request)}", 5, 3600)
     keys = _free_tag_keys(request, body.visitor_id)
-    if await db.free_tag_uses.find_one({"key": {"$in": keys}}, {"_id": 0, "key": 1}):
-        raise HTTPException(status_code=402, detail={
-            "code": "free_tags_used",
-            "message": "You've used your free tag run. Sign up to get 3 more free generations, then pick a plan.",
-        })
-    day_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
-    if await db.free_tag_uses.count_documents({"kind": "ip", "created_at": {"$gte": day_start}}) >= FREE_TAG_DAILY_CAP:
+    # Reserve the run before generating, so two tabs can't both take the last one.
+    outcome, day = await free_tag_runs_service.try_reserve_run(
+        db, keys, per_day=FREE_TAG_RUNS_PER_DAY, site_cap=FREE_TAG_DAILY_CAP
+    )
+    if outcome == free_tag_runs_service.USED_UP:
+        raise _free_tags_used_error()
+    if outcome == free_tag_runs_service.BUSY:
         raise HTTPException(status_code=429, detail={
             "code": "free_tags_busy",
             "message": "The free tag generator is busy today. Sign up for free to generate tags now.",
         })
-    now = datetime.now(timezone.utc).isoformat()
-    # Reserve the visitor's one run before generating, so two tabs can't both get one.
-    reserved: list[str] = []
-    try:
-        for key in keys:
-            await db.free_tag_uses.insert_one({"key": key, "kind": key.split(":", 1)[0], "created_at": now})
-            reserved.append(key)
-    except DuplicateKeyError:
-        if reserved:
-            await db.free_tag_uses.delete_many({"key": {"$in": reserved}})
-        raise HTTPException(status_code=402, detail={
-            "code": "free_tags_used",
-            "message": "You've used your free tag run. Sign up to get 3 more free generations, then pick a plan.",
+    if outcome != free_tag_runs_service.RESERVED:
+        raise HTTPException(status_code=503, detail={
+            "code": "free_tags_unavailable",
+            "message": "The free tag generator is unavailable right now. Try again in a minute, or sign up free.",
         })
     guest = {"id": f"guest:{keys[1][-16:]}", "_execute_inline": True, "_guest": True}
     try:
         result = await generate_tags(TagGenerationRequest(query=body.query), current_user=guest)
-    except Exception:
-        # A failed run doesn't count against them.
-        await db.free_tag_uses.delete_many({"key": {"$in": keys}})
+    except BaseException:
+        # A failed (or cancelled) run doesn't count against them.
+        await free_tag_runs_service.release_run(db, keys, day)
         raise
-    return {"query": result.query, "tags": result.tags, "scored_tags": result.scored_tags}
+    try:
+        runs_left = max(0, FREE_TAG_RUNS_PER_DAY - await free_tag_runs_service.runs_used_today(db, keys))
+    except Exception:
+        runs_left = None
+    return {
+        "query": result.query,
+        "tags": result.tags,
+        "scored_tags": result.scored_tags,
+        "runs_left": runs_left,
+        "runs_per_day": FREE_TAG_RUNS_PER_DAY,
+    }
 
 
 SEO_SEARCHES_IP_LIMIT_PER_HOUR = int(os.environ.get("SEO_SEARCHES_IP_LIMIT_PER_HOUR", "60"))
@@ -8281,6 +8413,21 @@ async def seo_searches(request: Request, response: Response, q: str = ""):
     if result.get("suggestions"):
         response.headers["Cache-Control"] = "public, max-age=3600"
     return {"query": result["query"], "suggestions": result["suggestions"], "updated_at": result.get("updated_at")}
+
+
+@api_router.get("/seo/trending")
+async def seo_trending(request: Request, response: Response):
+    """Public: type beat artists rising this week, from the autocomplete demand the tag engine
+    collects (see services/seo_trending.py). Served from a stored snapshot that a background
+    refresh rebuilds every TRENDING_REFRESH_SECONDS (default 12h); a request never calls YouTube."""
+    await _check_rate_limit_persistent(f"seo-trending:{_client_ip(request)}", SEO_SEARCHES_IP_LIMIT_PER_HOUR, 3600)
+    try:
+        payload = await seo_trending_service.current_payload(db)
+    except Exception as exc:
+        logging.warning(f"SEO trending lookup failed: {exc}")
+        payload = seo_trending_service.empty_payload()
+    response.headers["Cache-Control"] = "public, max-age=1800" if payload.get("artists") else "no-store"
+    return payload
 
 
 @api_router.get("/tags/history", response_model=List[TagGenerationResponse])
@@ -10648,6 +10795,159 @@ async def list_youtube_upload_jobs(limit: int = 10, current_user: dict = Depends
     }
 
 
+# ---- Free "upload MP3 to YouTube" tool ----------------------------------------------------
+# Audio + a still image or GIF -> a 16:9 video on the producer's own channel. No upload credits;
+# capped per account and site-wide each Pacific day (services/free_uploader.py).
+
+FREE_UPLOADER_TITLE_MAX = 100
+FREE_UPLOADER_DESCRIPTION_MAX = 5000
+FREE_UPLOADER_TAGS_MAX = 100
+
+
+def _free_uploader_user_cap_message(limit: int) -> str:
+    noun = "upload" if limit == 1 else "uploads"
+    return (
+        f"You've used today's {limit} free {noun}. More open after midnight Pacific time, "
+        "or upload now from the SendMyBeat Upload Studio with your upload credits."
+    )
+
+
+def _strip_youtube_angle_brackets(text: str) -> str:
+    """YouTube refuses titles and descriptions with < or >."""
+    return str(text or "").replace("<", "").replace(">", "")
+
+
+def _parse_free_uploader_tags(raw: Any) -> list[str]:
+    if not isinstance(raw, str) or not raw.strip():
+        return []
+    try:
+        parsed = json.loads(raw)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="tags must be a JSON array of strings.")
+    if not isinstance(parsed, list) or not all(isinstance(tag, str) for tag in parsed):
+        raise HTTPException(status_code=400, detail="tags must be a JSON array of strings.")
+    return parsed[:FREE_UPLOADER_TAGS_MAX]
+
+
+@api_router.get("/free-upload/status")
+async def free_upload_status(current_user: dict = Depends(get_current_user)):
+    """What the free uploader can do for this account today."""
+    user_id = current_user["id"]
+    limit = free_uploader_service.FREE_UPLOADER_DAILY_PER_USER
+    used = await free_uploader_service.used_today(db, user_id)
+    sub_status = await get_user_subscription_status(user_id)
+    connection = await db.youtube_connections.find_one({"user_id": user_id}, {"_id": 0, "user_id": 1})
+    slots_full = await free_uploader_service.global_slots_full(db) or await _youtube_upload_slots_full()
+    return {
+        "daily_limit": limit,
+        "used_today": used,
+        "left_today": max(0, limit - used),
+        "watermark": sub_status.get("plan") not in WATERMARK_REMOVAL_PLANS,
+        "youtube_connected": bool(connection),
+        "slots_full": bool(slots_full),
+    }
+
+
+@api_router.post("/free-upload/youtube")
+async def free_upload_to_youtube(
+    title: str = Form(""),
+    description: Optional[str] = Form(None),
+    tags: Optional[str] = Form(None),
+    tag_set: Optional[str] = Form(None),
+    privacy_status: str = Form("public"),
+    audio_file_id: str = Form(""),
+    image_file_id: str = Form(""),
+    current_user: dict = Depends(get_current_user),
+):
+    """Queue a free upload: audio + image/GIF to the producer's channel, no credits needed."""
+    user_id = current_user["id"]
+    reserved_day: str | None = None
+    try:
+        await _guard_heavy_feature(current_user=current_user, feature_key="youtube_upload", job_type="youtube_upload")
+        _enforce_action_rate_limit(
+            f"youtube_upload:{user_id}",
+            limit=6,
+            window_seconds=900,
+            detail_message="Too many YouTube upload requests. Please wait a bit before starting another one.",
+        )
+
+        safe_title = _strip_youtube_angle_brackets(title if isinstance(title, str) else "").strip()
+        if not safe_title:
+            raise HTTPException(status_code=400, detail="Title is required.")
+        if len(safe_title) > FREE_UPLOADER_TITLE_MAX:
+            raise HTTPException(status_code=400, detail=f"Title must be {FREE_UPLOADER_TITLE_MAX} characters or fewer.")
+        safe_description = _strip_youtube_angle_brackets(description if isinstance(description, str) else "").strip()
+        if len(safe_description) > FREE_UPLOADER_DESCRIPTION_MAX:
+            raise HTTPException(
+                status_code=400, detail=f"Description must be {FREE_UPLOADER_DESCRIPTION_MAX} characters or fewer."
+            )
+        tag_list = _parse_free_uploader_tags(tags)
+
+        if await _find_active_youtube_upload_job(current_user=current_user):
+            raise HTTPException(status_code=429, detail="A YouTube upload is already running. Wait for it to finish.")
+        limit = free_uploader_service.FREE_UPLOADER_DAILY_PER_USER
+        if await free_uploader_service.used_today(db, user_id) >= limit:
+            raise HTTPException(status_code=429, detail=_free_uploader_user_cap_message(limit))
+        if await free_uploader_service.global_slots_full(db) or await _youtube_upload_slots_full():
+            raise HTTPException(status_code=429, detail=YOUTUBE_DAILY_UPLOADS_USED_MESSAGE)
+
+        # Validate everything (YouTube connection, files, visual type) before taking a slot.
+        payload = await _build_youtube_upload_job_payload(
+            current_user=current_user,
+            title=safe_title,
+            description_id="",
+            tags_id=None,
+            privacy_status=privacy_status,
+            audio_file_id=audio_file_id,
+            image_file_id=image_file_id,
+            description_override=safe_description,
+            aspect_ratio="16:9",
+            image_scale=1.0,
+            image_scale_x=None,
+            image_scale_y=None,
+            image_pos_x=0.0,
+            image_pos_y=0.0,
+            image_rotation=0.0,
+            background_color="black",
+            remove_watermark=False,
+            render_fps=YOUTUBE_RENDER_FPS_DEFAULT,
+            visualizer_enabled=False,
+            tags=tag_list,
+            free_uploader=True,
+            tag_set=tag_set,
+        )
+
+        now = datetime.now(timezone.utc)
+        outcome = await free_uploader_service.try_use_free_upload(db, user_id, now)
+        if outcome == free_uploader_service.USER_CAP:
+            raise HTTPException(status_code=429, detail=_free_uploader_user_cap_message(limit))
+        if outcome == free_uploader_service.GLOBAL_CAP:
+            raise HTTPException(status_code=429, detail=YOUTUBE_DAILY_UPLOADS_USED_MESSAGE)
+        if outcome != free_uploader_service.RESERVED:
+            raise HTTPException(status_code=503, detail="Free uploads are unavailable right now. Please try again in a minute.")
+        reserved_day = youtube_quota_service.quota_day(now)
+        payload["free_upload_day"] = reserved_day
+
+        job_doc = await _create_youtube_upload_job(current_user=current_user, payload=payload)
+        reserved_day = None  # the job owns the slot now; a failed job gives it back
+        used = await free_uploader_service.used_today(db, user_id, now)
+        logger.info("Free YouTube upload job queued id=%s user_id=%s tag_set=%s", job_doc.get("id"), user_id, payload.get("tag_set"))
+        return {
+            "success": True,
+            "job_id": job_doc.get("id"),
+            "job": _sanitize_upload_job_doc(job_doc),
+            "left_today": max(0, limit - used),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Free YouTube upload queueing error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to queue YouTube upload. Please try again.")
+    finally:
+        if reserved_day:
+            await free_uploader_service.release_free_upload(db, user_id, reserved_day)
+
+
 # ---- Pros: producers who made it on YouTube, and plans to copy their moves -------------------
 
 
@@ -11033,6 +11333,7 @@ async def cancel_my_job(job_id: str, current_user: dict = Depends(get_current_us
     )
     if getattr(queued, "modified_count", 0):
         await _refund_job_credit(job)
+        await _release_free_upload_for_job(job)
     else:
         await db.upload_jobs.update_one(
             {"id": job_id, "user_id": current_user["id"]},
@@ -11595,7 +11896,13 @@ async def _ensure_indexes() -> None:
         (db.tag_history, [("user_id", 1)], {}),
         (db.users, [("google_sub", 1)], {"sparse": True}),  # Google sign-in
         (db.oauth_states, [("state_hash", 1)], {}),
-        (db.free_tag_uses, [("key", 1)], {"unique": True}),  # one free tag run per visitor
+        # Free tag run counters, one doc per key per day ("ip:<hash>:<day>", "visitor:<hash>:<day>",
+        # "site:<day>"). The day keeps keys unique, so the index from the one-run-ever days stays.
+        (db.free_tag_uses, [("key", 1)], {"unique": True}),
+        (db.free_tag_uses, [("expires_at", 1)], {"expireAfterSeconds": 0}),  # drops old day counters
+        (db[seo_trending_service.SNAPSHOT_COLLECTION], [("computed_at", -1)], {}),  # trending snapshots
+        (db.tag_generations, [("created_at", -1)], {}),  # trending: the last two weeks of tag runs
+        (db[free_uploader_service.COLLECTION], [("key", 1)], {"unique": True}),  # free uploader daily caps
     ]
     for collection, keys, options in specs:
         try:
@@ -11607,6 +11914,7 @@ async def _ensure_indexes() -> None:
 @app.on_event("startup")
 async def startup_background_tasks():
     global _upload_job_worker_task, _job_watchdog_task, _spotlight_refresh_task, _tag_outcome_task, _job_worker_tasks
+    global _trending_refresh_task
     _validate_security_configuration()
     _configure_thread_pool()
     await _ensure_indexes()
@@ -11630,10 +11938,14 @@ async def startup_background_tasks():
     if _tag_outcome_task is None:
         _tag_outcome_task = asyncio.create_task(tag_outcomes_service.collect_loop(db, _outcome_youtube_client))
         logger.info("Upload outcome loop started")
+    if _trending_refresh_task is None:
+        _trending_refresh_task = asyncio.create_task(seo_trending_service.refresh_loop(db))
+        logger.info("Trending artists refresh loop started")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
     global _upload_job_worker_task, _job_watchdog_task, _spotlight_refresh_task, _tag_outcome_task, _job_worker_tasks
+    global _trending_refresh_task
     for task in _job_worker_tasks:
         task.cancel()
     _job_worker_tasks = []
@@ -11647,4 +11959,7 @@ async def shutdown_db_client():
     if _tag_outcome_task:
         _tag_outcome_task.cancel()
         _tag_outcome_task = None
+    if _trending_refresh_task:
+        _trending_refresh_task.cancel()
+        _trending_refresh_task = None
     client.close()

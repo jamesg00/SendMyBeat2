@@ -71,6 +71,7 @@ const TagsSection = ({
   tagQuery,
   setTagQuery,
   minPublishScore = 58,
+  tagSuggestions = null,
 }) => {
   const [resultsCollapsed, setResultsCollapsed] = useState(mode === "results");
   const hasGeneratedTags = generatedTags.length > 0;
@@ -344,6 +345,8 @@ const TagsSection = ({
             </div>
             <p className="smb-t3 text-xs">Tip: include the artist’s name to get “type beat” variations people search for.</p>
           </div>
+
+          {tagSuggestions}
 
           <div className="space-y-2">
             <div className="wf-head">

@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { API } from '@/App';
 import { toast } from 'sonner';
-import { setAuthToken } from '@/lib/auth';
+import { setAuthToken, takeReturnTo } from '@/lib/auth';
 
 // Google sends people back here for two things: linking YouTube to the account they're signed
 // into, and "Continue with Google" sign-in. Sign-in states start with this prefix.
@@ -33,7 +33,8 @@ const YouTubeCallback = ({ isAuthenticated, setIsAuthenticated }) => {
         setAuthToken(response.data.access_token);
         setIsAuthenticated?.(true);
         toast.success(`Welcome, ${response.data.user?.username || 'producer'}!`);
-        navigate('/dashboard', { replace: true });
+        // Back to the page they signed in from (e.g. the free uploader), else the dashboard.
+        navigate(takeReturnTo() || '/dashboard', { replace: true });
       } catch (err) {
         const detail = err.response?.data?.detail;
         toast.error(typeof detail === 'string' ? detail : 'Google sign-in failed');
@@ -48,7 +49,7 @@ const YouTubeCallback = ({ isAuthenticated, setIsAuthenticated }) => {
       }
       if (error || !code) {
         toast.error('YouTube connection cancelled');
-        navigate('/dashboard');
+        navigate(takeReturnTo() || '/dashboard');
         return;
       }
       try {
@@ -63,7 +64,7 @@ const YouTubeCallback = ({ isAuthenticated, setIsAuthenticated }) => {
       } catch (err) {
         toast.error('Failed to connect YouTube account');
       }
-      navigate('/dashboard');
+      navigate(takeReturnTo() || '/dashboard');
     };
 
     if (isSignIn) signIn();

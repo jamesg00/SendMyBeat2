@@ -1,16 +1,19 @@
-import React from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft } from "lucide-react";
+import {
+  ArrowLeft, Hand, Wrench, Database, Settings2, Lock, Network, Megaphone, Share2,
+  Users, UserCheck, Clock, Cookie, Baby, RefreshCw, Mail, Youtube,
+} from "lucide-react";
+import PolicySection from "@/components/PolicySection";
 import "@/pages/PolicyPages.css";
+
+const ext = { target: "_blank", rel: "noopener noreferrer", className: "policy-link" };
 
 const PrivacyPolicy = () => {
   const navigate = useNavigate();
 
   return (
-    <div
-      className="policy-shell"
-    >
+    <div className="policy-shell">
       <div className="policy-wrap policy-copy container mx-auto max-w-4xl px-3 py-4 sm:px-4 sm:py-6 md:px-6 md:py-8">
         <div className="policy-header mb-6 sm:mb-8">
           <Button
@@ -28,197 +31,180 @@ const PrivacyPolicy = () => {
             Privacy Policy
           </h1>
           <p className="policy-muted mb-6 text-center text-xs sm:mb-8 sm:text-sm">
-            Last Updated: January 2025
+            Last Updated: November 26, 2026
           </p>
 
           <div className="policy-copy space-y-6 text-sm sm:space-y-8 sm:text-base">
-            <section>
-              <h2 className="policy-title mb-3 text-lg font-semibold sm:mb-4 sm:text-xl md:text-2xl">1. Introduction</h2>
+            <PolicySection icon={Hand} title="1. Introduction">
               <p>
-                Welcome to SendMyBeat.com ("we," "our," or "us"). We respect your privacy and are committed
-                to protecting your personal data. This privacy policy explains how we collect, use, and
-                safeguard your information when you use our service.
+                Welcome to SendMyBeat.com ("we," "our," or "us"). This policy explains what we collect when you use
+                the SendMyBeat website and mobile app, how we use it, and the choices you have.
               </p>
-            </section>
+            </PolicySection>
 
-            <section>
-              <h2 className="policy-title mb-4 text-xl font-semibold sm:text-2xl">2. What We Do</h2>
-              <p>
-                SendMyBeat is a platform that helps music producers and beat makers upload their content
-                to YouTube with AI-generated tags and descriptions. We provide tools to:
-              </p>
+            <PolicySection icon={Wrench} title="2. What We Do">
+              <p>SendMyBeat helps music producers get their beats found on YouTube. We provide:</p>
               <ul className="ml-6 mt-2 list-disc space-y-2">
-                <li>Generate optimized YouTube tags using AI</li>
-                <li>Create and save description templates</li>
-                <li>Refine and generate descriptions with AI assistance</li>
-                <li>Upload beats directly to YouTube with your content</li>
+                <li>AI-generated and scored YouTube tags, titles and descriptions</li>
+                <li>Visualizer videos and direct uploads to your YouTube channel</li>
+                <li>Channel analytics, beat analysis and thumbnail checks</li>
+                <li>Free tools you can use without an account: 3 free tag runs a day, plus the title, description and hashtag generators and the tag counter</li>
+                <li>A public Producer Spotlight where producers share their profile and top beat</li>
               </ul>
-            </section>
+            </PolicySection>
 
-            <section>
-              <h2 className="policy-title mb-4 text-xl font-semibold sm:text-2xl">3. Information We Collect</h2>
-              <p className="mb-3">We collect the following types of information:</p>
-
-              <h3 className="policy-title mb-2 text-lg font-semibold sm:text-xl">Account Information:</h3>
+            <PolicySection icon={Database} title="3. Information We Collect">
+              <h3 className="policy-title mb-2 text-base font-semibold sm:text-lg">Account information</h3>
               <ul className="mb-4 ml-6 list-disc space-y-1">
-                <li>Username and password (encrypted)</li>
-                <li>Google account email address (when you connect YouTube)</li>
+                <li>Username and password (stored only as a bcrypt hash)</li>
+                <li>If you sign in with Google: your Google email, name, account ID and profile picture</li>
+                <li>Your plan, and the Stripe customer and subscription IDs for paid plans</li>
               </ul>
-
-              <h3 className="policy-title mb-2 text-lg font-semibold sm:text-xl">Content You Upload:</h3>
+              <h3 className="policy-title mb-2 text-base font-semibold sm:text-lg">Content you create or upload</h3>
               <ul className="mb-4 ml-6 list-disc space-y-1">
-                <li>Audio files (MP3, WAV, etc.)</li>
-                <li>Thumbnail images (JPG, PNG, etc.)</li>
-                <li>Video titles and descriptions you create</li>
-                <li>Tags you generate or customize</li>
+                <li>Audio files and images you upload, and the videos we render from them</li>
+                <li>Searches you run, and the tags, titles and descriptions you generate or save</li>
+                <li>Your public producer profile: avatar, banner, bio, social links and top beat</li>
+                <li>Feedback you send us, with your username, platform, device and app version</li>
               </ul>
-
-              <h3 className="policy-title mb-2 text-lg font-semibold sm:text-xl">YouTube Access:</h3>
+              <h3 className="policy-title mb-2 text-base font-semibold sm:text-lg">YouTube data</h3>
+              <ul className="mb-4 ml-6 list-disc space-y-1">
+                <li>When you connect YouTube: your channel's email, name and picture, and access tokens (encrypted)</li>
+                <li>Public statistics for your channel and videos, used for analytics</li>
+                <li>View counts of videos you upload through us, read about 7 and 28 days after upload, to learn which tags work</li>
+              </ul>
+              <h3 className="policy-title mb-2 text-base font-semibold sm:text-lg">Technical information</h3>
               <ul className="ml-6 list-disc space-y-1">
-                <li>YouTube channel access for uploading videos</li>
-                <li>OAuth tokens for maintaining connection to your YouTube account</li>
+                <li>IP addresses, used for rate limits and to stop abuse. For the free tag runs we keep a one-way hash of your IP and a random ID saved in your browser.</li>
+                <li>Push notification tokens if you allow notifications in the mobile app</li>
+                <li>Usage records such as how many AI generations you used</li>
               </ul>
-            </section>
+            </PolicySection>
 
-            <section>
-              <h2 className="policy-title mb-4 text-xl font-semibold sm:text-2xl">4. How We Use Your Information</h2>
+            <PolicySection icon={Settings2} title="4. How We Use Your Information">
               <ul className="ml-6 list-disc space-y-2">
-                <li><strong>Authentication:</strong> To verify your identity and provide access to your account</li>
-                <li><strong>YouTube Integration:</strong> To upload videos to YOUR YouTube channel on your behalf</li>
-                <li><strong>AI Features:</strong> To generate tags and descriptions using OpenAI's GPT-4o</li>
-                <li><strong>Storage:</strong> To save your description templates and tag generation history</li>
-                <li><strong>Service Improvement:</strong> To improve our platform and user experience</li>
+                <li><strong>Running your account:</strong> signing you in, tracking your plan and credits</li>
+                <li><strong>YouTube uploads:</strong> uploading videos to YOUR channel when you ask us to</li>
+                <li><strong>AI features:</strong> sending your search terms, tags, titles, channel statistics or thumbnail image to an AI provider to generate or check them</li>
+                <li><strong>Payments:</strong> handling subscriptions and tips through Stripe</li>
+                <li><strong>Improving results:</strong> learning which tags lead to views, and improving the product</li>
+                <li><strong>Safety:</strong> rate limits and abuse prevention</li>
               </ul>
-            </section>
+            </PolicySection>
 
-            <section>
-              <h2 className="policy-title mb-4 text-xl font-semibold sm:text-2xl">5. Data Storage and Security</h2>
-              <p className="mb-3">We take data security seriously:</p>
+            <PolicySection icon={Lock} title="5. Data Storage and Security">
               <ul className="ml-6 list-disc space-y-2">
-                <li><strong>File Storage:</strong> Audio and image files are stored temporarily during upload and deleted after successful YouTube upload</li>
-                <li><strong>Database:</strong> User data, templates, and settings stored in secure MongoDB database</li>
-                <li><strong>Passwords:</strong> All passwords are encrypted using industry-standard bcrypt hashing</li>
-                <li><strong>OAuth Tokens:</strong> YouTube access tokens stored securely and encrypted</li>
-                <li><strong>API Keys:</strong> All API keys and secrets stored in secure environment variables</li>
+                <li><strong>Database:</strong> account data, history and settings are kept in a MongoDB database on our server</li>
+                <li><strong>Files:</strong> uploaded audio and images are stored on our server. Rendered videos are deleted after the upload to YouTube finishes.</li>
+                <li><strong>Passwords:</strong> stored only as bcrypt hashes</li>
+                <li><strong>YouTube tokens:</strong> encrypted before they are stored</li>
+                <li><strong>Sign-in:</strong> the website keeps your sign-in token in your browser's session storage, and the app keeps it in your phone's secure storage</li>
               </ul>
-            </section>
+            </PolicySection>
 
-            <section>
-              <h2 className="policy-title mb-4 text-xl font-semibold sm:text-2xl">6. Third-Party Services</h2>
-              <p className="mb-3">We use the following third-party services:</p>
-
-              <h3 className="policy-title mb-2 text-lg font-semibold sm:text-xl">Google Services:</h3>
-              <ul className="mb-4 ml-6 list-disc space-y-1">
-                <li><strong>Google OAuth 2.0:</strong> For secure authentication with your Google account</li>
-                <li><strong>YouTube Data API v3:</strong> For uploading videos to your YouTube channel</li>
-                <li>Privacy Policy: <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="policy-link">https://policies.google.com/privacy</a></li>
-              </ul>
-
-              <h3 className="policy-title mb-2 text-lg font-semibold sm:text-xl">OpenAI:</h3>
-              <ul className="ml-6 list-disc space-y-1">
-                <li><strong>GPT-4o:</strong> For AI-powered tag generation and description creation</li>
-                <li>Privacy Policy: <a href="https://openai.com/privacy" target="_blank" rel="noopener noreferrer" className="policy-link">https://openai.com/privacy</a></li>
-              </ul>
-            </section>
-
-            <section>
-              <h2 className="policy-title mb-4 text-xl font-semibold sm:text-2xl">7. Data Sharing</h2>
-              <p className="mb-3">We do NOT sell or share your personal data with third parties, except:</p>
+            <PolicySection icon={Network} title="6. Third-Party Services">
+              <p className="mb-3">We rely on these services, each under its own privacy policy:</p>
               <ul className="ml-6 list-disc space-y-2">
-                <li>With your explicit consent (e.g., uploading videos to YOUR YouTube channel)</li>
-                <li>To comply with legal obligations or court orders</li>
-                <li>To protect our rights, property, or safety</li>
+                <li><strong>Google and YouTube:</strong> sign-in, YouTube uploads and channel data (<a href="https://policies.google.com/privacy" {...ext}>Google Privacy Policy</a>)</li>
+                <li><strong>AI providers:</strong> xAI (Grok), OpenAI and DeepSeek process the text and images you send for AI features</li>
+                <li><strong>Stripe:</strong> processes payments. We never see or store your full card number (<a href="https://stripe.com/privacy" {...ext}>Stripe Privacy Policy</a>)</li>
+                <li><strong>Spotify, SoundCloud and Google search suggestions:</strong> queried with artist names and search phrases to find tags. None of your personal data is sent.</li>
+                <li><strong>SendGrid:</strong> delivers producer verification applications to us by email</li>
+                <li><strong>Expo:</strong> delivers push notifications to the mobile app</li>
+                <li><strong>PostHog:</strong> product analytics on the website</li>
+                <li><strong>Google AdSense:</strong> shows ads on the website to visitors without a paid plan</li>
               </ul>
-            </section>
+            </PolicySection>
 
-            <section>
-              <h2 className="policy-title mb-4 text-xl font-semibold sm:text-2xl">8. Your Rights</h2>
-              <p className="mb-3">You have the following rights:</p>
-              <ul className="ml-6 list-disc space-y-2">
-                <li><strong>Access:</strong> Request a copy of your data</li>
-                <li><strong>Delete:</strong> Delete your account and associated data at any time</li>
-                <li><strong>Revoke Access:</strong> Disconnect YouTube access at <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer" className="policy-link">https://myaccount.google.com/permissions</a></li>
-                <li><strong>Export:</strong> Download your saved descriptions and templates</li>
-                <li><strong>Opt-Out:</strong> Stop using our service at any time</li>
-              </ul>
-            </section>
-
-            <section>
-              <h2 className="policy-title mb-4 text-xl font-semibold sm:text-2xl">9. Data Retention</h2>
-              <ul className="ml-6 list-disc space-y-2">
-                <li><strong>Account Data:</strong> Retained as long as your account is active</li>
-                <li><strong>Uploaded Files:</strong> Deleted immediately after successful YouTube upload</li>
-                <li><strong>Templates:</strong> Stored until you delete them or close your account</li>
-                <li><strong>Deleted Accounts:</strong> Data permanently deleted within 30 days</li>
-              </ul>
-            </section>
-
-            <section>
-              <h2 className="policy-title mb-4 text-xl font-semibold sm:text-2xl">10. Cookies and Tracking</h2>
+            <PolicySection icon={Megaphone} title="7. Advertising">
               <p>
-                We use session cookies for authentication purposes only. We do not use tracking cookies
-                or third-party analytics. Your session data is cleared when you log out.
+                Google AdSense may use cookies to show ads based on your visits to this and other websites. You can
+                turn off personalized ads in <a href="https://adssettings.google.com" {...ext}>Google's Ad Settings</a>,
+                and read how Google uses this data at{" "}
+                <a href="https://policies.google.com/technologies/ads" {...ext}>Google's advertising policy page</a>.
+                Paid subscribers don't see our ad slot.
               </p>
-            </section>
+            </PolicySection>
 
-            <section>
-              <h2 className="policy-title mb-4 text-xl font-semibold sm:text-2xl">11. Children&apos;s Privacy</h2>
+            <PolicySection icon={Share2} title="8. Data Sharing">
+              <p className="mb-3">We do NOT sell your personal data. We share it only:</p>
+              <ul className="ml-6 list-disc space-y-2">
+                <li>With the services in section 6, to run the features you use</li>
+                <li>When you ask us to, such as uploading a video to YOUR YouTube channel</li>
+                <li>To comply with the law, or to protect our rights, property or safety</li>
+              </ul>
+            </PolicySection>
+
+            <PolicySection icon={Users} title="9. Your Public Producer Profile">
               <p>
-                Our service is not intended for users under 13 years of age. We do not knowingly collect
-                personal information from children under 13. If you believe we have collected data from
-                a child under 13, please contact us immediately.
+                Every account gets a producer profile in the public Producer Spotlight. Anyone can see its username,
+                avatar, banner, bio, social links, top beat (which can be played), likes, followers and streaks. If you
+                sign in with Google, your Google profile picture becomes your starting avatar. Change or remove these
+                details from your profile at any time, and only add what you're happy to share publicly.
               </p>
-            </section>
+            </PolicySection>
 
-            <section>
-              <h2 className="policy-title mb-4 text-xl font-semibold sm:text-2xl">12. Changes to This Policy</h2>
+            <PolicySection icon={UserCheck} title="10. Your Rights">
+              <ul className="ml-6 list-disc space-y-2">
+                <li><strong>Access or delete:</strong> ask us for a copy of your data, or to delete your account and its data, through the feedback form on your profile page or "Report a bug or idea" in the app</li>
+                <li><strong>Revoke YouTube access:</strong> disconnect YouTube in SendMyBeat, and remove our access at <a href="https://myaccount.google.com/permissions" {...ext}>Google's permissions page</a></li>
+                <li><strong>Cancel:</strong> cancel a paid plan at any time from your account</li>
+                <li><strong>Notifications:</strong> turn off push notifications in your phone's settings</li>
+              </ul>
+            </PolicySection>
+
+            <PolicySection icon={Clock} title="11. Data Retention">
+              <ul className="ml-6 list-disc space-y-2">
+                <li><strong>Account data, history and uploaded files:</strong> kept while your account is open, or until you ask us to delete them</li>
+                <li><strong>Rendered videos:</strong> deleted after the upload to YouTube finishes</li>
+                <li><strong>Rate-limit and free-run records:</strong> kept to stop abuse</li>
+              </ul>
+            </PolicySection>
+
+            <PolicySection icon={Cookie} title="12. Cookies and Browser Storage">
               <p>
-                We may update this privacy policy from time to time. We will notify you of any changes
-                by posting the new policy on this page and updating the "Last Updated" date. Continued
-                use of our service after changes constitutes acceptance of the updated policy.
+                We don't set our own tracking cookies. The website saves your sign-in token, a random ID for the free
+                tag run, your last free results and your display settings in your browser's storage. Google AdSense and
+                PostHog may set their own cookies, as described above.
               </p>
-            </section>
+            </PolicySection>
 
-            <section>
-              <h2 className="policy-title mb-4 text-xl font-semibold sm:text-2xl">13. Contact Us</h2>
+            <PolicySection icon={Baby} title="13. Children's Privacy">
+              <p>
+                Our service is not intended for users under 13. We do not knowingly collect personal information from
+                children under 13. If you believe a child under 13 has given us data, contact us and we'll delete it.
+              </p>
+            </PolicySection>
+
+            <PolicySection icon={RefreshCw} title="14. Changes to This Policy">
+              <p>
+                We may update this policy from time to time. We'll post the new version on this page and update the
+                "Last Updated" date. Continued use of the service after a change means you accept the updated policy.
+              </p>
+            </PolicySection>
+
+            <PolicySection icon={Mail} title="15. Contact Us">
+              <p>
+                Questions or data requests? Send us a message through the feedback form on your SendMyBeat profile page, or "Report a bug or idea" in the app.
+              </p>
+            </PolicySection>
+
+            <PolicySection icon={Youtube} title="16. YouTube API Disclosure" className="policy-divider mt-8 pt-6">
               <p className="mb-3">
-                If you have any questions about this privacy policy or our data practices, please contact us:
+                SendMyBeat uses the YouTube API Services. By using our YouTube features, you also agree to the{" "}
+                <a href="https://www.youtube.com/t/terms" {...ext}>YouTube Terms of Service</a> and the{" "}
+                <a href="https://policies.google.com/privacy" {...ext}>Google Privacy Policy</a>.
               </p>
-              <ul className="space-y-2">
-                <li><strong>Website:</strong> <a href="https://www.sendmybeat.com" className="policy-link">SendMyBeat.com</a></li>
-                <li><strong>For Data Requests:</strong> Use the contact form on our website</li>
-              </ul>
-            </section>
-
-            <section className="policy-divider mt-8 pt-6">
-              <h2 className="policy-title mb-4 text-xl font-semibold sm:text-2xl">14. YouTube API Disclosure</h2>
-              <p className="mb-3">
-                SendMyBeat uses the YouTube API Services. By using our service, you are also agreeing to be bound by:
+              <p>
+                You can revoke SendMyBeat&apos;s access to your YouTube data at any time on{" "}
+                <a href="https://myaccount.google.com/permissions" {...ext}>Google&apos;s security settings page</a>.
               </p>
-              <ul className="ml-6 list-disc space-y-2">
-                <li>
-                  <a href="https://www.youtube.com/t/terms" target="_blank" rel="noopener noreferrer" className="policy-link">
-                    YouTube Terms of Service
-                  </a>
-                </li>
-                <li>
-                  <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="policy-link">
-                    Google Privacy Policy
-                  </a>
-                </li>
-              </ul>
-              <p className="mt-3">
-                You can revoke SendMyBeat&apos;s access to your YouTube data via the{" "}
-                <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer" className="policy-link">
-                  Google security settings page
-                </a>.
-              </p>
-            </section>
+            </PolicySection>
           </div>
 
           <div className="policy-accent-divider mt-12 pt-6">
             <p className="policy-muted text-center text-sm">
-              &copy; 2025 SendMyBeat.com. All rights reserved.
+              &copy; 2026 SendMyBeat.com. All rights reserved.
             </p>
           </div>
         </div>
