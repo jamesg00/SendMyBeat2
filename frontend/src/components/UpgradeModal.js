@@ -86,7 +86,7 @@ const UpgradeModal = ({ open, onClose, onUpgrade, loading, subscription }) => {
                   <b>
                     SendMyBeat {p.name}
                     {currentPlan === p.id ? <span className="smb-badge smb-badge--sm">Current</span> : null}
-                    {p.id === "max" && currentPlan !== p.id ? <span className="smb-badge smb-badge--sm">Most popular</span> : null}
+                    {p.id === "max" && currentPlan !== p.id ? <span className="smb-badge smb-badge--sm usx-badge-acc">Most popular</span> : null}
                   </b>
                   <span>{p.blurb}</span>
                 </span>

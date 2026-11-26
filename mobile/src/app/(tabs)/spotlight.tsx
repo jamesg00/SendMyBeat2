@@ -8,7 +8,8 @@ import type { Producer } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
 import { Avatar, isVerified, LikeButton, profileEditCount, rememberProducers, TopBeat, topBeatOf, VerifiedBadge } from '@/components/producer';
 import { PlanCard, ProsGallery, usePlan } from '@/components/pros';
-import { Button, Card, Screen, Segmented, useUiStyles } from '@/components/ui';
+import { Button, Card, EdgeCard, Screen, SectionLabel, Segmented, TopLight } from '@/components/ui';
+import { AccentBar } from '@/components/ultra';
 import { loadSocial, useSocial } from '@/state/social';
 import { F, R, display, font, makeStyles, useColors } from '@/theme';
 
@@ -72,7 +73,6 @@ export default function SpotlightScreen() {
 function Community({ list, me }: { list: Request<api.Spotlight>; me: Request<Producer> }) {
   const C = useColors();
   const s = useStyles();
-  const ui = useUiStyles();
   const { data, error, loading, reload } = list;
   const social = useSocial();
 
@@ -103,10 +103,7 @@ function Community({ list, me }: { list: Request<api.Spotlight>; me: Request<Pro
 
       {trending.length > 0 ? (
         <View style={{ gap: 10 }}>
-          <View style={s.rowBetween}>
-            <Text style={ui.sectionLabel}>Trending</Text>
-            <Text style={s.muted}>Swipe</Text>
-          </View>
+          <SectionLabel right={<Text style={s.muted}>Swipe</Text>}>Trending</SectionLabel>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -20 }} contentContainerStyle={{ gap: 10, paddingHorizontal: 20 }}>
             {trending.map((p, i) => (
               <Pressable
@@ -115,6 +112,7 @@ function Community({ list, me }: { list: Request<api.Spotlight>; me: Request<Pro
                 style={({ pressed }) => [s.trendCard, pressed && { opacity: 0.7 }]}
                 accessibilityRole="button"
                 accessibilityLabel={`${p.username}, trending number ${i + 1}`}>
+                <TopLight />
                 <Avatar producer={p} size={40} />
                 <View style={s.nameRow}>
                   <Text style={s.trendName} numberOfLines={1}>
@@ -132,9 +130,8 @@ function Community({ list, me }: { list: Request<api.Spotlight>; me: Request<Pro
       ) : null}
 
       <View>
-        <View style={[s.rowBetween, { paddingBottom: 8 }]}>
-          <Text style={ui.sectionLabel}>Leaderboard</Text>
-          <Text style={s.muted}>{ranked.length} producers</Text>
+        <View style={{ paddingBottom: 8 }}>
+          <SectionLabel right={<Text style={s.muted}>{ranked.length} producers</Text>}>Leaderboard</SectionLabel>
         </View>
         {top.map((p, i) => (
           <LeaderRow key={p.user_id} producer={p} rank={i + 1} you={p.user_id === me.data?.user_id} last={i === top.length - 1 && myRank < 10} />
@@ -142,6 +139,7 @@ function Community({ list, me }: { list: Request<api.Spotlight>; me: Request<Pro
         {me.data && myRank >= 10 ? <LeaderRow producer={ranked[myRank]} rank={myRank + 1} you last /> : null}
         {me.data && myRank < 0 ? (
           <View style={[s.leader, s.you, s.lastRow]}>
+            <AccentBar inset={0} />
             <Text style={[s.rank, { color: C.text }]}>–</Text>
             <Text style={[s.leaderName, { ...font('600') }]}>You</Text>
             <Text style={s.muted}>Not ranked yet. Keep your streak going.</Text>
@@ -152,10 +150,11 @@ function Community({ list, me }: { list: Request<api.Spotlight>; me: Request<Pro
   );
 }
 
+// The featured producer is this screen's one card with the traveling gradient edge.
 function Featured({ producer: p, label }: { producer: Producer; label: string }) {
   const s = useStyles();
   return (
-    <View style={s.featured}>
+    <EdgeCard glow style={s.featured}>
       <Pressable onPress={() => open(p)} accessibilityRole="button" accessibilityLabel={`Open ${p.username}`}>
         {p.banner_url ? (
           <Image source={{ uri: p.banner_url }} style={s.banner} contentFit="cover" accessibilityIgnoresInvertColors />
@@ -199,7 +198,7 @@ function Featured({ producer: p, label }: { producer: Producer; label: string })
           {p.current_streak ? <Text style={s.chip}>{p.current_streak}d streak</Text> : null}
         </View>
       </View>
-    </View>
+    </EdgeCard>
   );
 }
 
@@ -211,6 +210,7 @@ function LeaderRow({ producer: p, rank, you, last }: { producer: Producer; rank:
       onPress={() => open(p)}
       accessibilityRole="button"
       style={({ pressed }) => [s.leader, you && s.you, last && s.lastRow, pressed && { backgroundColor: C.card }]}>
+      {you ? <AccentBar inset={0} /> : null}
       <Text style={[s.rank, (rank <= 3 || you) && { color: C.text }]}>{rank}</Text>
       <Avatar producer={p} size={28} />
       <View style={[s.nameRow, { flex: 1 }]}>
@@ -219,7 +219,7 @@ function LeaderRow({ producer: p, rank, you, last }: { producer: Producer; rank:
         </Text>
         {isVerified(p) ? <VerifiedBadge size={12} /> : null}
       </View>
-      <Text style={[s.mono, you && { color: C.text }]}>{points(p)}</Text>
+      <Text style={[s.mono, you && { color: C.acc }]}>{points(p)}</Text>
     </Pressable>
   );
 }
@@ -236,14 +236,14 @@ function Pros() {
 }
 
 const useStyles = makeStyles((C) => ({
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   muted: { color: C.t3, fontSize: 13, ...font() },
   sub: { color: C.t2, fontSize: 13, lineHeight: 18, ...font() },
   mono: { color: C.t2, fontSize: 12, fontFamily: F.mono },
   error: { color: C.danger, fontSize: 14, ...font() },
   cardTitle: { color: C.text, fontSize: 17, ...font('600') },
-  featured: { borderRadius: 14, borderWidth: 1, borderColor: C.line, backgroundColor: C.card, overflow: 'hidden' },
+  // Inside the edge card: no padding, clipped so the banner keeps the corners.
+  featured: { padding: 0, gap: 0, overflow: 'hidden' },
   banner: { height: 86, backgroundColor: C.card2, borderBottomWidth: 1, borderBottomColor: C.lineSoft },
   // Only the avatar overlaps the banner; the name starts below it.
   featuredHead: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingHorizontal: 14, paddingBottom: 12 },

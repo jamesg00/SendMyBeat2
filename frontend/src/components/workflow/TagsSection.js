@@ -315,7 +315,7 @@ const TagsSection = ({
   const visibleRuns = tagHistory;
 
   const renderEditorCard = () => (
-    <Card className="dashboard-card tags-studio-card h-full">
+    <Card className="dashboard-card tags-studio-card ucr-feature h-full">
       <CardHeader className="px-4 sm:px-6 pt-5 pb-3">
         <div className="wf-head">
           <div className="flex items-center gap-2 min-w-0">

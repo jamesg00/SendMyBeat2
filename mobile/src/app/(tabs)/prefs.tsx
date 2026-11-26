@@ -15,7 +15,7 @@ import { manageBilling, openPaywall, planName, refreshSubscription, useSubscript
 import { iconInfo } from '@/data/app-icons';
 import { iconFor, useIconPrefs } from '@/state/app-icon';
 import { openTour } from '@/state/tour';
-import { AppIcon, Button, ListGroup, ListRow, Meter, Screen } from '@/components/ui';
+import { AppIcon, Button, EdgeCard, ListGroup, ListRow, Meter, Screen, SectionLabel } from '@/components/ui';
 import { F, R, font, makeStyles, THEMES, useColors, useThemeId } from '@/theme';
 
 const VERIFICATION: Record<string, string> = { none: 'Get verified', pending: 'Under review', approved: 'Verified ✓', rejected: 'Try again' };
@@ -60,7 +60,7 @@ export default function ProfileScreen() {
 
   return (
     <Screen title="Profile" icon={<AppIcon size={26} />}>
-      <View style={s.card}>
+      <EdgeCard glow style={s.card}>
         <View style={s.cardHead}>
           <Pressable onPress={openSpotlight} disabled={!openSpotlight} accessibilityRole="button" accessibilityLabel="Open your Spotlight profile">
             {me.data ? (
@@ -102,12 +102,12 @@ export default function ProfileScreen() {
             </Text>
           </Pressable>
         ) : null}
-      </View>
+      </EdgeCard>
 
       {stylePlan ? <PlanCard plan={stylePlan} onChange={setStylePlan} full /> : null}
 
       <View style={{ gap: 8 }}>
-        <Text style={s.section}>APP</Text>
+        <SectionLabel>APP</SectionLabel>
         <ListGroup>
           <ListRow
             left={<Tile icon="check" accent />}
@@ -145,7 +145,7 @@ export default function ProfileScreen() {
       </View>
 
       <View style={{ gap: 8 }}>
-        <Text style={s.section}>ACCOUNT</Text>
+        <SectionLabel>ACCOUNT</SectionLabel>
         <ListGroup>
           <ListRow
             title="YouTube"
@@ -207,7 +207,7 @@ function Usage({ label, left, total }: { label: string; left: number; total: num
           {left}/{total}
         </Text>
       </View>
-      <Meter value={total > 0 ? left / total : 0} height={3} />
+      <Meter value={total > 0 ? left / total : 0} height={3} gradient />
     </View>
   );
 }
@@ -244,7 +244,8 @@ function Tile({ icon, accent }: { icon: keyof typeof TILE_ICONS; accent?: boolea
 }
 
 const useStyles = makeStyles((C) => ({
-  card: { padding: 16, gap: 14, borderRadius: R.card + 6, borderWidth: 1, borderColor: C.line, backgroundColor: C.card },
+  // Inside the edge card (its 1px edge plus 15 keeps the old 16 padding).
+  card: { gap: 14 },
   cardHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   avatar: {
     width: 56,
@@ -265,7 +266,7 @@ const useStyles = makeStyles((C) => ({
     fontFamily: F.monoMedium,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: R.chip,
+    borderRadius: 5,
     borderWidth: 1,
     borderColor: C.line,
     overflow: 'hidden',
@@ -278,7 +279,6 @@ const useStyles = makeStyles((C) => ({
   usageValue: { color: C.text, fontSize: 12, fontFamily: F.mono },
   upgrade: { height: 42, borderRadius: R.ctl, borderWidth: 1, borderColor: C.accLine, backgroundColor: C.accSoft, alignItems: 'center', justifyContent: 'center' },
   upgradeText: { color: C.acc, fontSize: 14, ...font('600') },
-  section: { color: C.t3, fontSize: 11, letterSpacing: 0.8, fontFamily: F.monoMedium },
   tile: { width: 28, height: 28, borderRadius: 8, backgroundColor: C.card2, alignItems: 'center', justifyContent: 'center' },
   mono: { color: C.t2, fontSize: 13, fontFamily: F.mono },
   status: { flexDirection: 'row', alignItems: 'center', gap: 8 },

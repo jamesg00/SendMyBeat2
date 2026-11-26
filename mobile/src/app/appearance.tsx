@@ -1,10 +1,11 @@
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
+import { useId } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Defs, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 
-import { useUiStyles } from '@/components/ui';
+import { Aurora, useUiStyles } from '@/components/ui';
 import { Wallpaper } from '@/components/wallpaper';
 import { openPaywall, useSubscription } from '@/state/billing';
 import { setWallpaper, useWallpaperId, wallpaperColors, WALLPAPERS, type WallpaperId } from '@/state/wallpaper';
@@ -29,6 +30,7 @@ export default function AppearanceScreen() {
     <View style={s.root}>
       {paying && wallpaper ? <Wallpaper id={wallpaper} colors={wallColors} active /> : null}
       <ScrollView style={{ flex: 1 }} contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 32 }]}>
+        {paying && wallpaper ? null : <Aurora style={{ top: 10, right: -90 }} />}
         <View style={s.topBar}>
           <Pressable onPress={() => router.back()} hitSlop={10} style={s.done} accessibilityRole="button">
             <Text style={s.doneText}>Done</Text>
@@ -155,15 +157,26 @@ function ThemeCard({ id, label, selected }: { id: ThemeId; label: string; select
 }
 
 // A tiny screen in the theme's own colors: background, a card with a line of text, the status
-// color and a primary button.
+// color and a primary button (in the theme's gradient, like the real one).
 function Preview({ p, half }: { p: Palette; half?: boolean }) {
+  const id = `pv${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
   return (
     <View style={{ flex: 1, backgroundColor: p.bg, padding: 8, gap: 6, justifyContent: 'flex-end' }}>
       <View style={{ backgroundColor: p.card, borderColor: p.line, borderWidth: 1, borderRadius: 6, padding: 6, gap: 5 }}>
         <View style={{ height: 4, width: half ? '80%' : '60%', borderRadius: 2, backgroundColor: p.text }} />
         <View style={{ height: 3, width: '40%', borderRadius: 2, backgroundColor: p.acc }} />
       </View>
-      <View style={{ height: 10, borderRadius: 5, backgroundColor: p.primary }} />
+      <View style={{ height: 10, borderRadius: 5, overflow: 'hidden', backgroundColor: p.gradB }}>
+        <Svg width="100%" height="100%">
+          <Defs>
+            <LinearGradient id={id} x1="0" y1="0" x2="1" y2="0">
+              <Stop offset="0" stopColor={p.gradA} />
+              <Stop offset="1" stopColor={p.gradB} />
+            </LinearGradient>
+          </Defs>
+          <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${id})`} />
+        </Svg>
+      </View>
     </View>
   );
 }

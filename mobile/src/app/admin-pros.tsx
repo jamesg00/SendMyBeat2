@@ -8,7 +8,7 @@ import { useAuth } from '@/api/auth';
 import * as api from '@/api/endpoints';
 import type { ProCard } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
-import { Button } from '@/components/ui';
+import { Button, TopLight } from '@/components/ui';
 import { F, R, display, font, makeStyles, useColors } from '@/theme';
 
 // Admins only: set a producer's press photo (used with permission) and credit, or pin their YouTube
@@ -45,6 +45,7 @@ export default function AdminProsScreen() {
         {list.error ? <Text style={s.error}>{list.error}</Text> : null}
         {(list.data?.pros ?? []).map((p) => (
           <View key={p.id} style={s.card}>
+            <TopLight />
             <Pressable onPress={() => setOpen(open === p.id ? null : p.id)} style={s.cardHead} accessibilityRole="button" accessibilityState={{ expanded: open === p.id }}>
               {p.photo ? <Image source={{ uri: p.photo }} style={s.photo} contentFit="cover" /> : <View style={s.photo} />}
               <View style={{ flex: 1, gap: 2 }}>
@@ -109,7 +110,7 @@ const useStyles = makeStyles((C) => ({
   topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 12 },
   topAction: { color: C.t2, fontSize: 16, width: 60, ...font() },
   topTitle: { color: C.text, fontSize: 16, ...font('600') },
-  card: { padding: 14, gap: 12, borderRadius: 14, borderWidth: 1, borderColor: C.line, backgroundColor: C.card },
+  card: { padding: 14, gap: 12, borderRadius: R.card, borderWidth: 1, borderColor: C.line, backgroundColor: C.card },
   cardHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   photo: { width: 48, height: 48, borderRadius: 24, backgroundColor: C.card2 },
   name: { color: C.text, fontSize: 16, ...display },

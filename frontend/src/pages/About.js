@@ -22,7 +22,7 @@ const About = () => {
 
         <div className="policy-card p-4 sm:p-6 md:p-8 lg:p-12">
           <h1 className="policy-title text-center text-2xl font-bold mb-3 sm:mb-4 sm:text-3xl md:text-4xl lg:text-5xl">
-            About SendMyBeat
+            About <span className="u-grad-text">SendMyBeat</span>
           </h1>
           <p className="policy-muted mb-8 px-2 text-center text-sm sm:mb-12 sm:text-base md:text-lg lg:text-xl">
             Empowering Music Producers to Maximize Beat Discoverability
@@ -145,7 +145,7 @@ const About = () => {
               </div>
             </section>
 
-            <section>
+            <section className="u-cta usx-cta">
               <h2 className="policy-title mb-3 text-xl font-semibold sm:mb-4 sm:text-2xl md:text-3xl">
                 Get Started Today
               </h2>

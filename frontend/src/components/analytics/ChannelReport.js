@@ -82,7 +82,7 @@ const ChannelReport = ({ data }) => {
 
       {/* What to do next */}
       {insights.growth_roadmap || actions.length ? (
-        <section className="smb-card an-next">
+        <section className="smb-card an-next u-edge u-edge--glow">
           <div className="smb-card-head">
             <h3 className="smb-card-title">Do this next</h3>
             {actions.length ? (

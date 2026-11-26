@@ -8,7 +8,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as api from '@/api/endpoints';
 import type { Producer, TopBeat as TopBeatData } from '@/api/endpoints';
 import { Avatar, markProfileEdited, pickProfileImage, rememberProducers, TopBeat, topBeatOf } from '@/components/producer';
-import { Button, Segmented, useUiStyles } from '@/components/ui';
+import { Button, SectionLabel, Segmented, TopLight, useUiStyles } from '@/components/ui';
+import { UltraFill } from '@/components/ultra';
 import { F, R, display, font, makeStyles, useColors } from '@/theme';
 
 const LINKS = [
@@ -25,7 +26,6 @@ const withScheme = (url: string) => (!url.trim() ? '' : /^https?:\/\//i.test(url
 export default function ProfileEditScreen() {
   const C = useColors();
   const s = useStyles();
-  const ui = useUiStyles();
   const insets = useSafeAreaInsets();
   const [me, setMe] = useState<Producer | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -134,7 +134,8 @@ export default function ProfileEditScreen() {
               <Avatar producer={me} size={84} />
             </View>
             <View style={s.avatarBadge}>
-              {busy === 'avatar' ? <ActivityIndicator color={C.onPrimary} size="small" /> : <Text style={s.avatarBadgeText}>Edit</Text>}
+              <UltraFill radius={13} sheen={false} />
+              {busy === 'avatar' ? <ActivityIndicator color={C.onGrad} size="small" /> : <Text style={s.avatarBadgeText}>Edit</Text>}
             </View>
           </Pressable>
           <Text style={s.note}>Pictures save as soon as you pick them. JPG, PNG or WEBP, up to 2 MB (banner 4 MB).</Text>
@@ -169,8 +170,9 @@ export default function ProfileEditScreen() {
           <TopBeatEditor beat={topBeatOf(me)} onChange={(top_beat) => patchMe({ top_beat, top_beat_url: top_beat?.url ?? '' })} />
 
           <View style={{ gap: 8 }}>
-            <Text style={ui.sectionLabel}>Links</Text>
+            <SectionLabel>Links</SectionLabel>
             <View style={s.panel}>
+              <TopLight />
               {LINKS.map((l, i) => (
                 <View key={l.key} style={[s.linkRow, i === LINKS.length - 1 && { borderBottomWidth: 0 }]}>
                   <Text style={s.linkLabel}>{l.label}</Text>
@@ -218,7 +220,6 @@ const readableName = (name: string) => {
 function TopBeatEditor({ beat, onChange }: { beat: TopBeatData | null; onChange: (b: TopBeatData | null) => void }) {
   const C = useColors();
   const s = useStyles();
-  const ui = useUiStyles();
   const [mode, setMode] = useState<'youtube' | 'audio'>(beat?.kind === 'audio' ? 'audio' : 'youtube');
   const [url, setUrl] = useState(beat?.kind === 'youtube' ? beat.url : '');
   const [title, setTitle] = useState(beat?.title && beat.title !== 'Top beat' ? beat.title : '');
@@ -249,14 +250,16 @@ function TopBeatEditor({ beat, onChange }: { beat: TopBeatData | null; onChange:
 
   return (
     <View style={{ gap: 10 }}>
-      <View style={s.rowBetween}>
-        <Text style={ui.sectionLabel}>Top beat</Text>
-        {beat ? (
-          <Pressable onPress={busy ? undefined : () => go(async () => (await api.clearTopBeat()).top_beat)} hitSlop={8} accessibilityRole="button">
-            <Text style={[s.note, { color: C.danger }]}>Remove</Text>
-          </Pressable>
-        ) : null}
-      </View>
+      <SectionLabel
+        right={
+          beat ? (
+            <Pressable onPress={busy ? undefined : () => go(async () => (await api.clearTopBeat()).top_beat)} hitSlop={8} accessibilityRole="button">
+              <Text style={[s.note, { color: C.danger }]}>Remove</Text>
+            </Pressable>
+          ) : undefined
+        }>
+        Top beat
+      </SectionLabel>
       {beat ? <TopBeat key={beat.url} beat={beat} /> : <Text style={s.note}>Show off your best beat on your profile.</Text>}
 
       <Segmented
@@ -335,11 +338,11 @@ const useStyles = makeStyles((C) => ({
     height: 26,
     paddingHorizontal: 9,
     borderRadius: 13,
-    backgroundColor: C.primary,
+    backgroundColor: C.gradB,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarBadgeText: { color: C.onPrimary, fontSize: 12, ...font('600') },
+  avatarBadgeText: { color: C.onGrad, fontSize: 12, ...font('600') },
   note: { color: C.t3, fontSize: 12, lineHeight: 17, ...font() },
   error: { color: C.danger, fontSize: 13, ...font() },
   input: {
@@ -356,7 +359,6 @@ const useStyles = makeStyles((C) => ({
   },
   area: { height: 96 },
   counter: { color: C.t3, fontSize: 11, fontFamily: F.mono, alignSelf: 'flex-end', marginTop: -2 },
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   panel: { borderRadius: R.card, borderWidth: 1, borderColor: C.line, backgroundColor: C.card, overflow: 'hidden' },
   linkRow: { flexDirection: 'row', alignItems: 'center', gap: 12, height: 48, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: C.lineSoft },
   linkLabel: { width: 84, color: C.t2, fontSize: 14, ...font() },

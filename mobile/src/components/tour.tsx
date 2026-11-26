@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/api/auth';
 import { AppIcon, Button } from '@/components/ui';
+import { UltraFill } from '@/components/ultra';
 import { autoStartTour, closeTour, useTourOpen, wantsAutoTour } from '@/state/tour';
 import { F, R, display, font, makeStyles, useColors } from '@/theme';
 
@@ -250,6 +251,7 @@ function BuildArt() {
           dark trap type beat
         </Text>
         <View style={s.fieldBtn}>
+          <UltraFill radius={8} sheen={false} />
           <Text style={s.fieldBtnText}>Generate</Text>
         </View>
       </View>
@@ -287,6 +289,7 @@ function ReviewArt() {
         <View style={[s.line, { width: '54%' }]} />
       </View>
       <View style={[s.fieldBtn, { alignSelf: 'flex-start', paddingHorizontal: 14 }]}>
+        <UltraFill radius={8} sheen={false} />
         <Text style={s.fieldBtnText}>Copy all</Text>
       </View>
     </View>
@@ -461,8 +464,8 @@ const useStyles = makeStyles((C) => ({
     backgroundColor: C.bg,
   },
   fieldText: { flex: 1, color: C.text, fontSize: 14, ...font() },
-  fieldBtn: { height: 32, paddingHorizontal: 12, borderRadius: 8, backgroundColor: C.primary, alignItems: 'center', justifyContent: 'center' },
-  fieldBtnText: { color: C.onPrimary, fontSize: 13, ...font('600') },
+  fieldBtn: { height: 32, paddingHorizontal: 12, borderRadius: 8, backgroundColor: C.gradB, alignItems: 'center', justifyContent: 'center' },
+  fieldBtnText: { color: C.onGrad, fontSize: 13, ...font('600') },
   line: { height: 7, borderRadius: 4, backgroundColor: C.line },
   cover: { width: 64, height: 64, borderRadius: 10, backgroundColor: C.card2, borderWidth: 1, borderColor: C.line, alignItems: 'center', justifyContent: 'center' },
   wave: { flex: 1, height: 52, flexDirection: 'row', alignItems: 'center', gap: 3 },

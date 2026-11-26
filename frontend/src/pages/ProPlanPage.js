@@ -83,7 +83,7 @@ const ProPlanPage = () => {
                     <h3 className="smb-card-title">Pick the moves</h3>
                     <span className="smb-mono smb-t3 text-xs">{chosen.length} picked</span>
                   </div>
-                  <div className="smb-opts">
+                  <div className="smb-opts usx-moves">
                     {p.moves.map((m) => {
                       const on = chosen.includes(m.id);
                       return (

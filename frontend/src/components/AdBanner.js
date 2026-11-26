@@ -58,7 +58,7 @@ const AdBanner = ({
   if (!isAdSenseConfigured) {
     return (
       <div
-        className="ad-container rounded-lg border p-3"
+        className="ad-container u-panel rounded-lg border p-3"
         style={{
           ...style,
           borderColor: "var(--border-color)",

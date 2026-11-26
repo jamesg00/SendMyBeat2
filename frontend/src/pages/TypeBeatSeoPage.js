@@ -48,7 +48,7 @@ const TypeBeatSeoPage = () => {
             ))}
           </section>
 
-          <section className="ftg-cta policy-feature-card">
+          <section className="ftg-cta policy-feature-card u-cta">
             <h2 className="policy-title">Try it on your next beat</h2>
             <p>Run the tag generator once for free, no account. Sign up for 3 free generations and 3 uploads, no card needed.</p>
             <div className="flex flex-wrap gap-3">

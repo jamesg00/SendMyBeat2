@@ -164,7 +164,7 @@ const FreeTagGenerator = () => {
           ) : null}
 
           {used ? (
-            <section className="ftg-cta policy-feature-card">
+            <section className="ftg-cta policy-feature-card u-cta">
               <h2 className="policy-title">{result ? "Want more runs?" : "You've used your free run."}</h2>
               <p>
                 Sign up free to get 3 more AI generations and 3 YouTube uploads, no card needed. After that, Plus is $5 a month for 50 of

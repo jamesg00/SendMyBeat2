@@ -1,0 +1,296 @@
+/* The landing look on the other signed-in sections and public pages. Builds on ultra.css.
+   Looks only: colors come from var(--c-*) and var(--u-*), so every palette keeps working.
+   Public page specifics live in pages/PolicyPages.css and pages/FreeTagGenerator.css. */
+
+/* ============================== traveling edge: make it travel ============================== */
+
+/* --u-edge is declared on html, so its var(--u-ang) is resolved there (always 0deg) and the
+   edge never moves. Declaring it again on the animated element resolves the angle per element. */
+.u-edge,
+.smb-opt.is-active,
+.producer-card--featured,
+.usx-featured > .sp-card--featured:first-child {
+  --u-edge: conic-gradient(from var(--u-ang), var(--u-a), var(--u-b), color-mix(in srgb, var(--c-text) 6%, transparent) 40%, color-mix(in srgb, var(--c-text) 6%, transparent) 60%, var(--u-a));
+}
+
+/* .u-edge on a card: the card rules in ultra.css come later and would paint over the edge. */
+.u-edge:is(.smb-card, .dashboard-card, .pro-card, .sp-card) {
+  border: 1px solid transparent !important;
+  background: linear-gradient(var(--c-card), var(--c-card)) padding-box, var(--u-edge) border-box !important;
+  animation: u-spin 7s linear infinite;
+}
+.u-edge:is(.smb-card, .dashboard-card, .pro-card, .sp-card):hover { border-color: transparent !important; }
+.u-edge.u-edge--glow:is(.smb-card, .dashboard-card, .pro-card, .sp-card) { box-shadow: 0 30px 80px -30px var(--u-shadow-b) !important; }
+
+/* ============================== signed-in shell ============================== */
+
+/* Sidebar: its edge catches a little of the mint-to-blue light. */
+.smb-side {
+  border-right-color: transparent;
+  background:
+    linear-gradient(180deg, var(--c-line), color-mix(in srgb, var(--u-a) 32%, var(--c-line)) 34%, color-mix(in srgb, var(--u-b) 32%, var(--c-line)) 66%, var(--c-line)) right top / 1px 100% no-repeat,
+    color-mix(in srgb, var(--c-bg) 88%, transparent);
+}
+.smb-nav-heading::before { content: "// "; opacity: 0.7; }
+.smb-nav-link:hover .smb-ico { color: var(--c-acc); }
+.smb-nav-tag { font-size: 10.5px; letter-spacing: 0.04em; border-color: var(--c-accline); color: var(--c-acc); }
+
+/* You: a thin gradient ring round your initials, plan as a mono tag. */
+.smb-me .smb-avatar,
+.smb-topbar .smb-avatar-btn {
+  border-color: transparent;
+  background: linear-gradient(var(--c-card2), var(--c-card2)) padding-box, var(--u-grad) border-box;
+}
+.smb-me .smb-badge,
+.smb-topbar-right > .smb-badge:not(.smb-admin-chip) {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+  border-radius: var(--u-r-pill);
+}
+
+/* Credits: meters fill mint to blue (low ones stay amber). */
+.smb-credits .smb-bar-fill:not(.smb-bar-fill--warn),
+.usx-credits .smb-bar-fill:not(.smb-bar-fill--warn) { background: var(--u-grad-x); }
+.smb-credits-title { letter-spacing: -0.01em; }
+.smb-side-credits { border-top-color: transparent; background: var(--u-hair) top center / 100% 1px no-repeat; }
+
+@media (max-width: 860px) {
+  /* Phone top bar: the light along its lower edge. */
+  .smb-topbar { border-bottom-color: transparent; }
+  .smb-topbar::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -1px;
+    height: 1px;
+    pointer-events: none;
+    background: var(--u-hair);
+  }
+  .smb-ph-only .smb-credits {
+    border-radius: var(--u-r);
+    background: var(--u-hair) top center / 100% 1px no-repeat, var(--c-card);
+  }
+
+  /* Floating tab bar: a light along the top, and the active tab marked with a short accent bar. */
+  .smb-tabbar {
+    background:
+      var(--u-hair) top center / 70% 1px no-repeat,
+      color-mix(in srgb, var(--c-card) 92%, transparent);
+  }
+  .smb-tab { position: relative; }
+  .smb-tab.is-active .smb-ico { color: var(--c-acc); }
+  .smb-tab.is-active::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: 3px;
+    width: 14px;
+    height: 3px;
+    margin-left: -7px;
+    border-radius: 2px;
+    background: var(--u-grad-x);
+  }
+}
+
+/* Footer: the light along the top in place of the grey rule. */
+.app-footer {
+  border-top-color: transparent !important;
+  background: var(--u-hair) top center / 100% 1px no-repeat, var(--c-bg) !important;
+}
+
+/* Boot loader (and the Google return screen): a soft glow, and the bar runs mint to blue. */
+.app-boot { position: relative; isolation: isolate; overflow: hidden; }
+.app-boot::before {
+  content: "";
+  position: absolute;
+  left: calc(50% - min(280px, 45vw));
+  top: calc(50% - 160px);
+  width: min(560px, 90vw);
+  height: 320px;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(40% 50% at 40% 45%, var(--u-glow-a), transparent 70%),
+    radial-gradient(45% 55% at 62% 58%, var(--u-glow-b), transparent 70%);
+  filter: blur(30px);
+  animation: u-drift 16s ease-in-out infinite alternate;
+}
+.app-boot-bar i { background: var(--u-grad-x); }
+
+/* ============================== dialogs: upgrade sheet, tour, house ad ============================== */
+
+.smb-sheet-title { letter-spacing: -0.03em; }
+.smb-opt .smb-badge--sm { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.03em; border-radius: var(--u-r-pill); }
+.smb-opt .usx-badge-acc { color: var(--c-acc); border-color: var(--c-accline); background: var(--c-accsoft); }
+
+/* Product tour: a flat panel with the light along the top; the spotlight ring and dots take the accent. */
+.smb-tour-card {
+  border-radius: var(--u-r);
+  background: var(--u-hair) top center / 100% 1px no-repeat, var(--c-card);
+}
+.smb-tour-spot {
+  border-radius: var(--u-r);
+  box-shadow:
+    0 0 0 1.5px var(--u-a),
+    0 0 0 6px color-mix(in srgb, var(--u-b) 22%, transparent),
+    0 0 0 200vmax rgba(0, 0, 0, 0.62);
+}
+.smb-tour-dots span.is-on { background: var(--u-grad-x); }
+.smb-tour-kicker::before { content: "// "; color: var(--c-t3); opacity: 0.7; }
+
+/* House ad (shown when AdSense isn't set up): the panel look. */
+.ad-container.u-panel { padding: 14px 16px; }
+
+/* ============================== settings ============================== */
+
+/* Theme picker: the picked palette gets a mint-to-blue border. */
+.smb-theme-option { border-radius: 10px; }
+.smb-theme-option.is-active {
+  border-color: transparent;
+  background: linear-gradient(var(--c-card), var(--c-card)) padding-box, var(--u-grad) border-box;
+}
+
+/* Chips and checks: squarer, and ticked ones fill mint to blue. */
+.pf-chip { border-radius: var(--u-r-pill); font-size: 13px; }
+.pf-row > .smb-ico { transition: color 0.2s var(--ease); }
+.pf-row:hover > .smb-ico { color: var(--c-acc); }
+.pro-plan-step.is-done .pro-check,
+.pro-check.is-on,
+.an-actions button.is-done .pro-check {
+  border-color: transparent;
+  background: var(--u-grad);
+  color: var(--u-ink);
+}
+
+/* Style plan: the panel look with a faint accent wash, in place of the green-tinted box. */
+.pro-plan {
+  border-radius: var(--u-r);
+  border-color: var(--c-line);
+  background:
+    var(--u-hair) top center / 100% 1px no-repeat,
+    linear-gradient(135deg, color-mix(in srgb, var(--u-a) 9%, transparent), transparent 70%),
+    var(--c-card);
+}
+
+/* ============================== analytics ============================== */
+
+.an-health {
+  background:
+    radial-gradient(closest-side, var(--c-card) 80%, transparent 81% 100%),
+    conic-gradient(var(--u-a), var(--u-b) calc(var(--p) * 1%), var(--c-line-soft) 0);
+}
+.an-health b { font-family: var(--font-mono); font-weight: 500; letter-spacing: -0.02em; }
+.an-channel { letter-spacing: -0.03em; }
+.an-better { border-radius: 10px; }
+.usx-an-card > :first-child > :first-child > svg {
+  box-sizing: content-box;
+  width: 18px;
+  height: 18px;
+  padding: 9px;
+  border: 1px solid var(--c-line);
+  border-radius: 8px;
+  background: var(--c-card2);
+  color: var(--c-acc);
+}
+
+/* ============================== spotlight ============================== */
+
+/* The hero glow becomes the landing's aurora (the rainbow title and buttons stay). */
+.spotlight-hero-glow {
+  background:
+    radial-gradient(closest-side at 35% 50%, var(--u-glow-a), transparent),
+    radial-gradient(closest-side at 70% 40%, var(--u-glow-b), transparent);
+}
+
+/* Producer cards: flat panels with the light along the top. */
+.sp-card {
+  border-radius: var(--u-r);
+  background: var(--u-hair) top center / 100% 1px no-repeat, var(--c-card);
+}
+.sp-card-score { letter-spacing: -0.02em; }
+
+/* The first featured producer gets the traveling edge; the others keep the accent border. */
+.usx-featured > .sp-card--featured:first-child {
+  border-color: transparent;
+  background: linear-gradient(var(--c-card), var(--c-card)) padding-box, var(--u-edge) border-box;
+  box-shadow: 0 30px 80px -30px var(--u-shadow-b);
+  animation: u-spin 7s linear infinite;
+}
+.usx-featured > .sp-card--featured:first-child:hover { border-color: transparent; }
+/* With the Pro paywall on screen, that is the one edge; the featured card's border stands still. */
+.smb-main:has(.pro-paywall) .usx-featured > .sp-card--featured:first-child {
+  animation: none;
+  background: linear-gradient(var(--c-card), var(--c-card)) padding-box, var(--u-grad) border-box;
+  box-shadow: none;
+}
+
+/* Section heads: the icon sits in a tile, in the accent, like the landing feature icons. */
+.usx-sec-head > svg {
+  box-sizing: content-box;
+  width: 18px;
+  height: 18px;
+  padding: 9px;
+  border: 1px solid var(--c-line);
+  border-radius: 8px;
+  background: var(--c-card2);
+  color: var(--c-acc);
+}
+.usx-sec-head { gap: 12px !important; }
+.usx-sec-head h2 { font-weight: 600 !important; letter-spacing: -0.03em; }
+
+/* ============================== pros ============================== */
+
+.pro-card { border-radius: var(--u-r); }
+.pro-card--hero { border-radius: 14px; }
+.pro-hero-chips span { border-radius: var(--u-r-pill); }
+.pro-card-actions { background: var(--u-hair) top center / 100% 1px no-repeat, var(--c-card); border-top-color: transparent; }
+
+/* Why they blew up: a panel marked with the 3px accent bar. */
+.pro-quote {
+  border-radius: var(--u-r);
+  border-color: var(--c-line);
+  background:
+    var(--u-hair) top center / 100% 1px no-repeat,
+    linear-gradient(135deg, color-mix(in srgb, var(--u-a) 9%, transparent), transparent 75%),
+    var(--c-card);
+  box-shadow: inset 3px 0 0 var(--c-acc);
+}
+.pro-move { border-radius: 10px; }
+.pro-move:hover { border-color: color-mix(in srgb, var(--c-text) 22%, transparent); }
+
+.pro-paywall-icon { border-radius: 8px; border-color: var(--c-line); background: var(--c-card2); }
+.pro-views span.is-breakout { background: linear-gradient(180deg, var(--u-a), var(--u-b)); }
+.pro-day.is-up { background: var(--u-grad); color: var(--u-ink); }
+.pro-timeline li.is-last::before { border-color: transparent; background: var(--u-grad); }
+.pro-dot--them { background: var(--u-b); }
+
+/* Picking moves for a plan: several can be picked, so the picked ones get a still gradient
+   border instead of one traveling edge each. */
+.usx-moves .smb-opt.is-active {
+  animation: none;
+  background: linear-gradient(var(--c-card), var(--c-card)) padding-box, var(--u-grad) border-box !important;
+}
+
+/* ============================== admin (light touch) ============================== */
+
+.adm-toggle.is-on { background: var(--u-grad); }
+.adm-toggle.is-on i { background: var(--u-ink); }
+.adm-progress i { background: var(--u-grad-x); }
+.adm-switch,
+.adm-inbox-item { border-radius: 10px; }
+
+/* ============================== reduced motion ============================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .u-edge:is(.smb-card, .dashboard-card, .pro-card, .sp-card),
+  .usx-featured > .sp-card--featured:first-child,
+  .app-boot::before { animation: none !important; }
+}
+
+/* The gradient call-to-action card's dark button: on palettes whose ink is white (Light,
+   Graphite, Paper) white text on it would vanish, so the label takes the accent. */
+html:is([data-palette="light"], [data-palette="graphite"], [data-palette="paper"]) .u-cta :is(.smb-btn--pri, button.bg-primary, a.bg-primary) {
+  color: var(--c-acc) !important;
+}

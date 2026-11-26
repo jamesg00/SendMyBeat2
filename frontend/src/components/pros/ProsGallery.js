@@ -39,7 +39,7 @@ const PRO_PERKS = [
 
 /** What free accounts see instead of Pro screens. */
 export const ProPaywall = ({ status, title = "Pros is part of Pro", lead }) => (
-  <section className="smb-card pro-paywall">
+  <section className="smb-card pro-paywall u-edge u-edge--glow">
     <span className="pro-paywall-icon" aria-hidden="true">
       <Lock className="h-5 w-5" />
     </span>

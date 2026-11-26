@@ -7,7 +7,8 @@ import Svg, { Circle, Path } from 'react-native-svg';
 
 import { useAuth } from '@/api/auth';
 import type { PickedFile, Producer, TopBeat as TopBeatData } from '@/api/endpoints';
-import { PlayPauseIcon } from '@/components/ui';
+import { GradientFill, PlayPauseIcon } from '@/components/ui';
+import { UltraFill, gradGlow } from '@/components/ultra';
 import { followersOf, likesOf, toggleFollow, toggleLike, useSocial } from '@/state/social';
 import { F, font, makeStyles, useColors } from '@/theme';
 
@@ -89,10 +90,11 @@ export function FollowButton({ producer }: { producer: Producer }) {
       accessibilityLabel={following ? `Unfollow ${producer.username}` : `Follow ${producer.username}`}
       style={({ pressed }) => [
         s.follow,
-        following ? { backgroundColor: C.card2, borderWidth: 1, borderColor: C.line } : { backgroundColor: C.primary },
+        following ? { backgroundColor: C.card2, borderWidth: 1, borderColor: C.line } : [{ backgroundColor: C.gradB }, gradGlow(C, 0.6)],
         pressed && { transform: [{ scale: 0.96 }] },
       ]}>
-      <Text style={[s.followText, { color: following ? C.text : C.onPrimary }]}>{following ? 'Following' : 'Follow'}</Text>
+      {following ? null : <UltraFill radius={9} />}
+      <Text style={[s.followText, { color: following ? C.text : C.onGrad }]}>{following ? 'Following' : 'Follow'}</Text>
     </Pressable>
   );
 }
@@ -211,17 +213,20 @@ function PlayableBeat({ url, title }: { url: string; title: string }) {
     <View style={s.beat}>
       <Pressable
         onPress={toggle}
-        style={[s.play, { backgroundColor: C.primary }]}
+        style={[s.play, { backgroundColor: C.gradB }]}
         accessibilityRole="button"
         accessibilityLabel={status.playing ? `Pause ${title}` : `Play ${title}`}>
-        <PlayPauseIcon playing={status.playing} />
+        <UltraFill radius={17} sheen={false} />
+        <PlayPauseIcon playing={status.playing} color={C.onGrad} />
       </Pressable>
       <View style={{ flex: 1, gap: 5 }}>
         <Text style={s.beatTitle} numberOfLines={1}>
           {title}
         </Text>
         <View style={s.track}>
-          <View style={[s.trackFill, { width: `${played * 100}%` }]} />
+          <View style={[s.trackFill, { width: `${played * 100}%` }]}>
+            <GradientFill angle="horizontal" />
+          </View>
         </View>
       </View>
       <Text style={s.beatMeta}>{duration > 0 ? `${clock(status.currentTime)} / ${clock(duration)}` : status.isBuffering ? 'Loading…' : ''}</Text>
@@ -259,7 +264,7 @@ const useStyles = makeStyles((C) => ({
   play: { width: 34, height: 34, borderRadius: 17, backgroundColor: C.card2, alignItems: 'center', justifyContent: 'center' },
   thumb: { width: 72, height: 40, borderRadius: 6, backgroundColor: C.card2 },
   track: { height: 2, backgroundColor: C.line, overflow: 'hidden' },
-  trackFill: { height: 2, backgroundColor: C.text },
+  trackFill: { height: 2, overflow: 'hidden', backgroundColor: C.acc },
   playIcon: { color: C.text, fontSize: 12, ...font('700') },
   beatTitle: { color: C.text, fontSize: 13, ...font('500') },
   beatMeta: { color: C.t3, fontSize: 11.5, fontFamily: F.mono },

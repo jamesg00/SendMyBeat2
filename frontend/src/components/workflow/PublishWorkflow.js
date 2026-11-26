@@ -22,7 +22,7 @@ const PublishWorkflow = ({
   return (
     <div className="space-y-5">
       <div className="workflow-toolbar-strip">
-        <div className="workflow-step-strip">
+        <div className="workflow-step-strip ucr-rise">
           <span className="workflow-step-pill workflow-step-pill--done">1. Build Metadata</span>
           <span className="workflow-step-pill">2. Review Outputs</span>
           <span className="workflow-step-pill">3. Connect + Upload</span>
@@ -48,7 +48,7 @@ const PublishWorkflow = ({
       </div>
 
       <div className="space-y-4 sm:space-y-6">
-        <div className="terminal-workflow-grid">
+        <div className="terminal-workflow-grid ucr-rise">
           <div className="terminal-workflow-column" data-tour="tags">
             <TagsSection {...tagsSectionProps} mode="editor" showInlineOutput={false} />
           </div>
