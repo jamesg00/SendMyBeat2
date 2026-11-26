@@ -80,6 +80,11 @@ html[data-palette="console"] {
 }
 
 /* The traveling gradient edge, for the one thing on a screen that matters most. */
+/* --u-edge on html resolves var(--u-ang) there, where it never moves, so every element
+   that animates --u-ang declares the gradient again for itself. */
+.u-edge, .smb-opt.is-active, .producer-card--featured {
+  --u-edge: conic-gradient(from var(--u-ang), var(--u-a), var(--u-b), color-mix(in srgb, var(--c-text) 6%, transparent) 40%, color-mix(in srgb, var(--c-text) 6%, transparent) 60%, var(--u-a));
+}
 .u-edge.u-edge {
   border: 1px solid transparent !important;
   background: linear-gradient(var(--c-card), var(--c-card)) padding-box, var(--u-edge) border-box !important;

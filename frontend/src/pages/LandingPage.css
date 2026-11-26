@@ -329,6 +329,7 @@
 .lp-lab,
 .lp-features > .lp-feature:first-child,
 .lp-plan.is-pick {
+  --lp-edge: conic-gradient(from var(--lp-ang), var(--lp-mint), var(--lp-blue), rgba(255, 255, 255, 0.06) 40%, rgba(255, 255, 255, 0.06) 60%, var(--lp-mint));
   border: 1px solid transparent;
   background: linear-gradient(var(--c-card), var(--c-card)) padding-box, var(--lp-edge) border-box;
   animation: lp-spin 7s linear infinite;
