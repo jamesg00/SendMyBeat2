@@ -1,12 +1,92 @@
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import axios from "axios";
 import { toast } from "sonner";
 import { Copy, Sparkles } from "lucide-react";
+import { API } from "@/App";
 import { Button } from "@/components/ui/button";
 import { TAG_HUB_PATH, TAG_SETS, freeTagLink, tagSetPage, tagSetPath, tagsFor, withYear, youtubeTagChars } from "@/lib/seoModel";
 import "@/pages/PolicyPages.css";
 import "@/pages/FreeTagGenerator.css";
 
 const YEAR = new Date().getFullYear();
+const SKELETON_WIDTHS = [148, 196, 124, 172, 210, 136];
+
+const copyText = async (text, done) => {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast.success(done);
+  } catch {
+    toast.error("Couldn't copy. Select the tags and copy them yourself.");
+  }
+};
+
+// What people type into YouTube search for this artist or style right now, from the backend's
+// weekly autocomplete cache. Hidden while there's nothing to show (empty list or failed request).
+const BuyerSearches = ({ query }) => {
+  const [searches, setSearches] = useState(null); // null while loading
+
+  useEffect(() => {
+    let cancelled = false;
+    setSearches(null);
+    axios
+      .get(`${API}/seo/searches`, { params: { q: query } })
+      .then((res) => {
+        if (cancelled) return;
+        const list = Array.isArray(res.data?.suggestions) ? res.data.suggestions : [];
+        setSearches(list.filter((s) => typeof s === "string" && s.trim()).slice(0, 10));
+      })
+      .catch(() => {
+        if (!cancelled) setSearches([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [query]);
+
+  if (searches && searches.length === 0) return null;
+  const loading = searches === null;
+
+  return (
+    <section className="ftg-result" aria-label={`What buyers search for ${query}`} aria-busy={loading}>
+      <div className="ftg-result-head">
+        <h2 className="policy-title">What buyers search this week</h2>
+        <span className="smb-mono smb-t3 text-xs">Live from YouTube search suggestions, updated weekly.</span>
+      </div>
+      {loading ? (
+        <ul className="ftg-tags" aria-hidden="true">
+          {SKELETON_WIDTHS.map((w) => (
+            <li key={w} className="motion-safe:animate-pulse" style={{ width: w, opacity: 0.45 }}>&nbsp;</li>
+          ))}
+        </ul>
+      ) : (
+        <>
+          <ul className="ftg-tags">
+            {searches.map((s) => (
+              <li key={s} className="inline-flex items-center gap-2">
+                <Link to={freeTagLink(s)} title={`Generate tags for "${s}"`}>{s}</Link>
+                <button
+                  type="button"
+                  onClick={() => copyText(s, "Tag copied")}
+                  aria-label={`Copy "${s}"`}
+                  title="Copy tag"
+                  className="inline-flex items-center opacity-60 hover:opacity-100"
+                >
+                  <Copy className="h-3 w-3" aria-hidden="true" />
+                </button>
+              </li>
+            ))}
+          </ul>
+          <div className="flex flex-wrap gap-3">
+            <Button type="button" onClick={() => copyText(searches.join(", "), "Searches copied as tags")} className="smb-btn smb-btn--sec">
+              <Copy className="h-4 w-4" aria-hidden="true" /> Copy these
+            </Button>
+          </div>
+        </>
+      )}
+    </section>
+  );
+};
 
 // One page per artist or style: a ready tag set to copy, what buyers expect from the sound,
 // and a one-tap route into the free generator with the search already filled in.
@@ -31,14 +111,8 @@ const TagSetPage = () => {
   }
 
   const tags = tagsFor(slug, YEAR);
-  const copyAll = async () => {
-    try {
-      await navigator.clipboard.writeText(tags.join(", "));
-      toast.success("Tags copied");
-    } catch {
-      toast.error("Couldn't copy. Select the tags and copy them yourself.");
-    }
-  };
+  const copyAll = () => copyText(tags.join(", "), "Tags copied");
+  // TODO(merge): use moreTagSets(slug, 24)
   const others = Object.entries(TAG_SETS).filter(([s, set]) => s !== slug && set.kind === page.kind && !page.related.includes(s));
 
   return (
@@ -72,6 +146,8 @@ const TagSetPage = () => {
               </Link>
             </div>
           </section>
+
+          <BuyerSearches query={page.query} />
 
           <section className="ftg-copy">
             <h2 className="policy-title">What buyers expect from a {page.query}</h2>

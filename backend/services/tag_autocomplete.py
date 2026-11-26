@@ -180,3 +180,92 @@ async def autocomplete_demand(
         "skipped": max(0, len(needed) - cache_hits - len(to_fetch)),
     }
     return demand, stats
+
+
+# Public "what buyers search" lists on the SEO tag pages. Only short, plain phrases are looked up.
+SEARCH_PHRASE_RE = re.compile(r"^[a-z0-9&'.\- ]{2,60}$")
+SEARCH_SUGGESTION_LIMIT = 10
+
+
+def normalize_search_phrase(text: Any) -> Optional[str]:
+    """The phrase lowercased with spaces collapsed, or None when it isn't a short plain phrase."""
+    if not isinstance(text, str) or len(text) > 200:
+        return None
+    phrase = normalize_phrase(text)
+    if not SEARCH_PHRASE_RE.fullmatch(phrase) or not re.search(r"[a-z0-9]", phrase):
+        return None
+    return phrase
+
+
+async def cached_suggestions(
+    db: Any,
+    prefix: str,
+    *,
+    fetcher: Callable[[str], Optional[list[str]]] = fetch_suggestions,
+    may_fetch: Optional[Callable[[], Any]] = None,
+    ttl_seconds: int = AUTOCOMPLETE_CACHE_TTL_SECONDS,
+    limit: int = SEARCH_SUGGESTION_LIMIT,
+) -> dict[str, Any]:
+    """YouTube's suggestions for one prefix, from the shared cache when it's fresh.
+
+    At most one upstream request, and only when the cache is missing or stale and ``may_fetch``
+    (an async budget check) allows it. When the request fails, a stale cached list is returned
+    if there is one, otherwise an empty list. Never raises.
+    """
+    key = normalize_phrase(prefix)
+    collection = db[AUTOCOMPLETE_CACHE_COLLECTION] if db is not None else None
+    doc: Optional[dict[str, Any]] = None
+    if collection is not None:
+        try:
+            doc = await collection.find_one({"prefix": key}, {"_id": 0})
+        except Exception as exc:
+            logger.warning("Autocomplete cache read failed: %s", exc)
+            doc = None
+
+    def _result(items: Any, updated_at: Any, cached: bool) -> dict[str, Any]:
+        seen: list[str] = []
+        for item in items if isinstance(items, list) else []:
+            phrase = normalize_phrase(item)
+            if phrase and phrase not in seen:
+                seen.append(phrase)
+        return {
+            "query": key,
+            "suggestions": seen[: max(0, limit)],
+            "updated_at": updated_at if isinstance(updated_at, str) else None,
+            "cached": cached,
+        }
+
+    has_cached_list = isinstance((doc or {}).get("suggestions"), list)
+    if has_cached_list and _is_fresh(doc, ttl_seconds):
+        return _result(doc["suggestions"], doc.get("fetched_at"), True)
+
+    allowed = True
+    if may_fetch is not None:
+        try:
+            allowed = bool(await may_fetch())
+        except Exception as exc:
+            logger.warning("Autocomplete fetch budget check failed: %s", exc)
+            allowed = False
+    fresh = None
+    if allowed:
+        try:
+            fresh = await asyncio.to_thread(fetcher, key)
+        except Exception as exc:
+            logger.warning("Autocomplete fetch failed for %r: %s", key, exc)
+            fresh = None
+    if fresh is None:
+        if has_cached_list:
+            return _result(doc["suggestions"], doc.get("fetched_at"), True)
+        return _result([], None, False)
+
+    now = datetime.now(timezone.utc).isoformat()
+    if collection is not None:
+        try:
+            await collection.update_one(
+                {"prefix": key},
+                {"$set": {"prefix": key, "suggestions": fresh, "fetched_at": now}},
+                upsert=True,
+            )
+        except Exception as exc:
+            logger.warning("Autocomplete cache write failed: %s", exc)
+    return _result(fresh, now, False)

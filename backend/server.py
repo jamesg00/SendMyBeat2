@@ -8249,6 +8249,40 @@ async def free_tag_generate(body: FreeTagRequest, request: Request):
     return {"query": result.query, "tags": result.tags, "scored_tags": result.scored_tags}
 
 
+SEO_SEARCHES_IP_LIMIT_PER_HOUR = int(os.environ.get("SEO_SEARCHES_IP_LIMIT_PER_HOUR", "60"))
+# Uncached YouTube autocomplete lookups the public endpoint may make per day, for everyone.
+SEO_SEARCHES_DAILY_FETCH_CAP = int(os.environ.get("SEO_SEARCHES_DAILY_FETCH_CAP", "500"))
+
+
+async def _seo_searches_may_fetch() -> bool:
+    try:
+        await _check_rate_limit_persistent("seo-searches:upstream", SEO_SEARCHES_DAILY_FETCH_CAP, 86400)
+    except HTTPException:
+        return False
+    return True
+
+
+@api_router.get("/seo/searches")
+async def seo_searches(request: Request, response: Response, q: str = ""):
+    """Public: what YouTube suggests for a phrase (e.g. "drake type beat"), for the SEO tag pages.
+
+    Served from the shared autocomplete cache (refreshed weekly). Upstream failures return an
+    empty list, never an error, so the page just hides the section.
+    """
+    phrase = tag_autocomplete_service.normalize_search_phrase(q)
+    if phrase is None:
+        raise HTTPException(status_code=400, detail="Use 2-60 letters, numbers, spaces or & ' . -")
+    await _check_rate_limit_persistent(f"seo-searches:{_client_ip(request)}", SEO_SEARCHES_IP_LIMIT_PER_HOUR, 3600)
+    try:
+        result = await tag_autocomplete_service.cached_suggestions(db, phrase, may_fetch=_seo_searches_may_fetch)
+    except Exception as exc:
+        logging.warning(f"SEO searches lookup failed for {phrase!r}: {exc}")
+        result = {"query": phrase, "suggestions": [], "updated_at": None}
+    if result.get("suggestions"):
+        response.headers["Cache-Control"] = "public, max-age=3600"
+    return {"query": result["query"], "suggestions": result["suggestions"], "updated_at": result.get("updated_at")}
+
+
 @api_router.get("/tags/history", response_model=List[TagGenerationResponse])
 async def get_tag_history(current_user: dict = Depends(get_current_user)):
     tag_docs = await db.tag_generations.find(
