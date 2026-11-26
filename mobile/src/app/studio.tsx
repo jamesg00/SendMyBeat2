@@ -7,6 +7,8 @@ import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
+  Easing,
   Keyboard,
   Linking,
   PanResponder,
@@ -259,6 +261,54 @@ function Editor() {
 
 // ---------------------------------------------------------------- Preview
 
+const WATERMARK_TEXT = 'Upload your beats online: https://sendmybeat.com';
+
+/**
+ * The server's watermark, drawn to scale: bold white text in a dark box at the top left, with
+ * the line scrolling on a loop inside the box. Sizes follow the server (20px on a 1280-wide
+ * frame, 8px padding, 20px from the corner; 16:9 renders at 1920 wide, the rest at 1080).
+ */
+function WatermarkBox({ width, height }: { width: number; height: number }) {
+  const s = useStyles();
+  const targetW = width > height * 1.2 ? 1920 : 1080;
+  const k = Math.max(1, targetW / 1280) * (width / targetW);
+  const fontSize = 20 * k;
+  const pad = 8 * k;
+  const gap = 60 * k;
+  const speed = 70 * k;
+  const [textW, setTextW] = useState(0);
+  const offset = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!textW) return;
+    const cycle = textW + gap;
+    offset.setValue(0);
+    const loop = Animated.loop(
+      Animated.timing(offset, { toValue: -cycle, duration: (cycle / speed) * 1000, easing: Easing.linear, useNativeDriver: true }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [textW, gap, speed, offset]);
+
+  // Until the text is measured, size the box from the server's measured width (about 28.7em).
+  const boxW = Math.min((textW || fontSize * 28.7) + pad * 2, width - (20 * k - pad) * 2);
+  return (
+    <View
+      pointerEvents="none"
+      style={[s.watermarkBox, { left: 20 * k - pad, top: 20 * k - pad, width: boxW, height: fontSize * 1.17 + pad * 2 }]}
+    >
+      <Animated.View style={[s.watermarkRow, { left: pad, top: pad, transform: [{ translateX: offset }] }]}>
+        <Text style={[s.watermarkText, { fontSize, lineHeight: fontSize * 1.17 }]} numberOfLines={1} onLayout={(e) => setTextW(e.nativeEvent.layout.width)}>
+          {WATERMARK_TEXT}
+        </Text>
+        <Text style={[s.watermarkText, { fontSize, lineHeight: fontSize * 1.17, marginLeft: gap }]} numberOfLines={1}>
+          {WATERMARK_TEXT}
+        </Text>
+      </Animated.View>
+    </View>
+  );
+}
+
 /**
  * The video frame: the website's visualizer when it's on, otherwise the artwork laid out the way
  * the server renders it (fit to the frame, then scaled, moved in half-frames, rotated, flipped).
@@ -375,11 +425,7 @@ function Stage({ width, height, editing, onArt, begin }: { width: number; height
         </Pressable>
       )}
 
-      {watermark && image ? (
-        <Text style={[s.watermark, { color: bg === 'white' && !withViz ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.55)' }]} numberOfLines={1}>
-          Upload your beats online: https://sendmybeat.com
-        </Text>
-      ) : null}
+      {watermark && image ? <WatermarkBox width={width} height={height} /> : null}
 
       {editing && image ? <View style={[StyleSheet.absoluteFill, s.editRing]} {...responder.panHandlers} accessibilityLabel="Drag to move the artwork, pinch to size it" /> : null}
 
@@ -688,7 +734,9 @@ const useStyles = makeStyles((C) => ({
   editRing: { borderWidth: 1, borderColor: 'rgba(139,255,208,0.55)', borderStyle: 'dashed' },
   emptyArt: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderColor: '#262626', borderStyle: 'dashed' },
   emptyText: { color: '#A1A1A1', fontSize: 13, fontFamily: F.mono },
-  watermark: { position: 'absolute', top: 8, left: 8, right: 8, textAlign: 'center', fontSize: 9.5, fontFamily: F.mono },
+  watermarkBox: { position: 'absolute', overflow: 'hidden', backgroundColor: 'rgba(0,0,0,0.6)' },
+  watermarkRow: { position: 'absolute', flexDirection: 'row', width: 4000 },
+  watermarkText: { color: '#FFFFFF', ...font('700') },
   premiumChip: { position: 'absolute', left: 8, bottom: 8, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: 'rgba(0,0,0,0.72)', borderWidth: 1, borderColor: 'rgba(139,255,208,0.5)' },
   premiumText: { color: MINT, fontSize: 11, ...font('500') },
 

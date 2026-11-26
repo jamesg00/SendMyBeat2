@@ -1993,9 +1993,25 @@ const UploadStudio = ({
                   </button>
                ) : null}
 
-               {!subscriptionStatus?.is_subscribed && !removeWatermark && (
-                  <div className="absolute top-2 left-0 right-0 text-center pointer-events-none">
-                     <div className="upload-watermark-marquee">
+               {!subscriptionStatus?.is_subscribed && !removeWatermark && (() => {
+                  // Same size and place as the server draws it: 20px text on a 1280-wide frame,
+                  // 8px padding, 20px from the corner; 16:9 renders at 1920 wide, the rest at 1080.
+                  const targetW = previewDims.width > previewDims.height * 1.2 ? 1920 : 1080;
+                  const k = Math.max(1, targetW / 1280) * (previewDims.width / targetW);
+                  const fontSize = 20 * k;
+                  const pad = 8 * k;
+                  return (
+                  <div
+                     className="upload-watermark-marquee pointer-events-none"
+                     style={{
+                        left: 20 * k - pad,
+                        top: 20 * k - pad,
+                        width: Math.min(fontSize * 28.7 + pad * 2, previewDims.width - (20 * k - pad) * 2),
+                        padding: pad,
+                        fontSize,
+                        '--wm-gap': `${60 * k}px`,
+                     }}
+                  >
                         <div className="upload-watermark-track">
                            <span className="upload-watermark-text">
                               Upload your beats online: https://sendmybeat.com
@@ -2004,9 +2020,9 @@ const UploadStudio = ({
                               Upload your beats online: https://sendmybeat.com
                            </span>
                         </div>
-                     </div>
                   </div>
-               )}
+                  );
+               })()}
             </div>
                {imageSettingsOpen && imagePreviewUrl ? (
                   <FreeTransform

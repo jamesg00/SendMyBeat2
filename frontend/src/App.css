@@ -1186,33 +1186,29 @@ h1, h2, h3, h4, h5, h6 {
   --slider-accent: var(--c-warn);
 }
 
-/* Upload preview watermark marquee */
+/* Upload preview watermark: the server's dark box at the top left, with the line scrolling
+   on a loop inside it. Size and place are set inline to match the render. */
 .upload-watermark-marquee {
-  width: min(86%, 460px);
-  margin: 0 auto;
+  position: absolute;
   overflow: hidden;
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.56);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+  box-sizing: border-box;
+  background: rgba(0, 0, 0, 0.6);
+  line-height: 1.17;
+  white-space: nowrap;
 }
 
 .upload-watermark-track {
   display: inline-flex;
-  min-width: 200%;
-  animation: uploadWatermarkScroll 12s linear infinite;
+  animation: uploadWatermarkScroll 9s linear infinite;
   white-space: nowrap;
 }
 
 .upload-watermark-text {
   display: inline-block;
-  min-width: 50%;
-  padding: 6px 16px;
-  text-align: center;
-  font-size: 11px;
+  padding-right: var(--wm-gap, 24px);
+  font-family: "DejaVu Sans", Verdana, sans-serif;
   font-weight: 700;
-  letter-spacing: 0.02em;
-  color: rgba(255, 255, 255, 0.88);
+  color: #ffffff;
 }
 
 @keyframes uploadWatermarkScroll {

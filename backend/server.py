@@ -3423,22 +3423,73 @@ def _escape_ffmpeg_text(value: str) -> str:
     return text
 
 
-def _build_youtube_watermark_filter(*, target_w: int, target_h: int, background_color: str) -> str:
-    text = _escape_ffmpeg_text("Made with SendMyBeat.com")
-    font_color = "black@0.78" if background_color == "white" else "white@0.78"
-    border_color = "white@0.38" if background_color == "white" else "black@0.45"
-    font_size = max(22, min(34, int(target_w * 0.022)))
-    margin_x = max(24, int(target_w * 0.025))
-    margin_y = max(20, int(target_h * 0.03))
+YOUTUBE_WATERMARK_TEXT = "Upload your beats online: https://sendmybeat.com"
+YOUTUBE_WATERMARK_FONT_FILE = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+# The watermark line scrolls inside its box, so watermarked still covers encode at least
+# this many fps (instead of 2) to keep the scroll smooth.
+YOUTUBE_WATERMARK_SCROLL_FPS = max(2, min(60, int(os.environ.get("YOUTUBE_WATERMARK_SCROLL_FPS", "15") or "15")))
+
+
+def _measure_watermark_text(text: str, font_size: int) -> tuple[int, int]:
+    """Width and line height of the watermark text in pixels, in the font FFmpeg draws it with."""
+    try:
+        from PIL import ImageFont
+
+        font = ImageFont.truetype(YOUTUBE_WATERMARK_FONT_FILE, font_size)
+        left, _top, right, _bottom = font.getbbox(text)
+        ascent, descent = font.getmetrics()
+        return int(right - left), int(ascent + descent)
+    except Exception:
+        return int(len(text) * font_size * 0.66), int(font_size * 1.2)
+
+
+def _build_youtube_watermark_graph(
+    *,
+    input_label: str,
+    output_label: str,
+    target_w: int,
+    target_h: int,
+    fps: int,
+) -> str:
+    """The watermark from the first Upload Studio: bold white "Upload your beats online:
+    https://sendmybeat.com" in a dark box at the top left. The box stays put and the line
+    scrolls on a loop inside it (clipped to the box)."""
+    # The original was drawn at 20px on a 1280x720 frame; keep the same proportions.
+    scale = max(1.0, target_w / 1280.0)
+    font_size = int(round(20 * scale))
+    pad = int(round(8 * scale))
+    margin = int(round(20 * scale))
+    gap = int(round(60 * scale))
+    speed = int(round(70 * scale))  # pixels per second
+
+    text_w, line_h = _measure_watermark_text(YOUTUBE_WATERMARK_TEXT, font_size)
+    box_x = max(0, margin - pad)
+    box_y = max(0, margin - pad)
+    box_w = min(text_w + 2 * pad, max(2, target_w - 2 * box_x))
+    box_w += box_w % 2
+    box_h = line_h + 2 * pad
+    box_h += box_h % 2
+
+    text = _escape_ffmpeg_text(YOUTUBE_WATERMARK_TEXT)
+    font = f"fontfile={YOUTUBE_WATERMARK_FONT_FILE}:" if Path(YOUTUBE_WATERMARK_FONT_FILE).exists() else ""
+    scroll_x = f"{pad}-mod(t*{speed},tw+{gap})"
+    copy_a = f"drawtext={font}text='{text}':fontcolor=white:fontsize={font_size}:x='{scroll_x}':y={pad}"
+    copy_b = f"drawtext={font}text='{text}':fontcolor=white:fontsize={font_size}:x='{scroll_x}+tw+{gap}':y={pad}"
     return (
-        f"drawtext=text='{text}':"
-        f"fontcolor={font_color}:"
-        f"fontsize={font_size}:"
-        f"x=w-text_w-{margin_x}:"
-        f"y=h-text_h-{margin_y}:"
-        f"borderw=2:"
-        f"bordercolor={border_color}"
+        f"color=c=black@0.6:s={box_w}x{box_h}:r={fps},format=rgba,{copy_a},{copy_b}[wmbox];"
+        f"[{input_label}][wmbox]overlay=x={box_x}:y={box_y}:shortest=1[{output_label}]"
     )
+
+
+def _apply_watermark_scroll_fps(render_payload: dict[str, Any]) -> bool:
+    """Raise the encode fps for watermarked renders so the scrolling line moves smoothly.
+    Returns True if the fps was raised."""
+    if render_payload.get("remove_watermark"):
+        return False
+    if _resolve_ffmpeg_mux_fps(render_payload) >= YOUTUBE_WATERMARK_SCROLL_FPS:
+        return False
+    render_payload["mux_fps"] = YOUTUBE_WATERMARK_SCROLL_FPS
+    return True
 
 
 def _probe_image_dimensions(image_path: Path) -> tuple[int | None, int | None]:
@@ -3551,12 +3602,13 @@ def _build_render_filter(payload: dict[str, Any]) -> str:
     composite_label = "composite"
 
     if not payload.get("remove_watermark"):
-        watermark_filter = _build_youtube_watermark_filter(
+        filter_chain += ";" + _build_youtube_watermark_graph(
+            input_label=composite_label,
+            output_label="vout",
             target_w=target_w,
             target_h=target_h,
-            background_color=background_color,
+            fps=render_fps,
         )
-        filter_chain += f";[{composite_label}]{watermark_filter}[vout]"
     else:
         filter_chain += f";[{composite_label}]null[vout]"
     return filter_chain
@@ -3717,6 +3769,8 @@ async def _render_youtube_video(
                     is_gif_visual=is_gif_visual and not visualizer_enabled,
                     gif_mux_fps=gif_mux_fps if not visualizer_enabled else None,
                 )
+                if _apply_watermark_scroll_fps(render_payload):
+                    static_encode_capped = False
                 mux_fps = _resolve_ffmpeg_mux_fps(render_payload)
                 render_fps_value = str(mux_fps)
                 render_timeout_seconds = _youtube_render_timeout_seconds(
