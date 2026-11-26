@@ -1,11 +1,11 @@
 import { Link, useLocation } from "react-router-dom";
 import { SEO_PAGES } from "@/lib/seoPages";
-import { ARTISTS, STYLES, TAG_HUB_PATH, tagSetPath } from "@/lib/seoModel";
+import { STYLES, TAG_HUB_PATH, TOOL_PAGES, artistsByLetter, tagSetPath } from "@/lib/seoModel";
 import "@/pages/PolicyPages.css";
 import "@/pages/FreeTagGenerator.css";
 
 // One template for the guide pages in lib/seoModel.js. The type beat tags guide also
-// lists every artist and style tag set.
+// lists every artist (grouped by letter) and style tag set.
 const TypeBeatSeoPage = () => {
   const { pathname } = useLocation();
   const path = pathname.replace(/\/+$/, "");
@@ -25,11 +25,16 @@ const TypeBeatSeoPage = () => {
           {isHub ? (
             <nav className="ftg-copy" aria-label="Tag sets">
               <h2 className="policy-title">Tags by artist</h2>
-              <p className="ftg-links">
-                {Object.entries(ARTISTS).map(([slug, a]) => (
-                  <Link key={slug} to={tagSetPath(slug)}>{a.name}</Link>
-                ))}
-              </p>
+              {artistsByLetter().map(([letter, list]) => (
+                <div key={letter}>
+                  <h3 className="policy-title ftg-q">{letter}</h3>
+                  <p className="ftg-links">
+                    {list.map(([slug, name]) => (
+                      <Link key={slug} to={tagSetPath(slug)}>{name}</Link>
+                    ))}
+                  </p>
+                </div>
+              ))}
               <h2 className="policy-title">Tags by style</h2>
               <p className="ftg-links">
                 {Object.entries(STYLES).map(([slug, s]) => (
@@ -58,6 +63,13 @@ const TypeBeatSeoPage = () => {
           </section>
 
           <nav className="ftg-copy" aria-label="More guides">
+            <h2 className="policy-title">Free tools, no sign-up</h2>
+            <p className="ftg-links">
+              <Link to="/free-tag-generator">Free tag generator</Link>
+              {Object.entries(TOOL_PAGES).map(([p, t]) => (
+                <Link key={p} to={p}>{t.nav}</Link>
+              ))}
+            </p>
             <h2 className="policy-title">More guides</h2>
             <ul>
               {others.map(([p, other]) => (

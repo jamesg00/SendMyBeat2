@@ -5,6 +5,9 @@
 // build/<path>/index.html, with that page's title, description, canonical, structured
 // data and its main copy and links already in the HTML. React replaces the copy with the
 // live page as soon as it loads. It also writes sitemap.xml from the same page list.
+// The homepage is written into build/index.html itself (last, since that file is the
+// template), the untouched template is kept as build/app.html for every non-public path,
+// and build/serve.json tells `serve` which file answers which path.
 //
 //   node scripts/prerender-seo.js                 sitemap + prerendered pages (needs build/)
 //   node scripts/prerender-seo.js --sitemap-only  only public/sitemap.xml
@@ -16,7 +19,8 @@ const path = require("path");
 const { pathToFileURL } = require("url");
 
 const ROOT = path.resolve(__dirname, "..");
-const BUILD = path.join(ROOT, "build");
+// PRERENDER_BUILD_DIR lets you run this against a scratch copy of the build.
+const BUILD = process.env.PRERENDER_BUILD_DIR ? path.resolve(process.env.PRERENDER_BUILD_DIR) : path.join(ROOT, "build");
 const PUBLIC = path.join(ROOT, "public");
 
 async function loadModel() {
@@ -63,6 +67,7 @@ function footer(m) {
   const links = [
     ["/", "Home"],
     ["/free-tag-generator", "Free tag generator"],
+    ...toolLinks(m),
     [m.TAG_HUB_PATH, "Type beat tags"],
     ...Object.entries(m.GUIDES)
       .filter(([p]) => p !== m.TAG_HUB_PATH)
@@ -85,6 +90,7 @@ function freeTagBody(m, year) {
         .join("")}</ul><h2 class="policy-title">Tags by style</h2>${linkRow(
         Object.entries(m.STYLES).map(([s, st]) => [m.tagSetPath(s), st.name])
       )}</section>` +
+      toolNav(m, "More free tools, no sign-up", (t) => t.tool !== "tags") +
       faqHtml(m, p.faq, year) +
       footer(m)
   );
@@ -94,9 +100,10 @@ function guideBody(m, pagePath) {
   const g = m.GUIDES[pagePath];
   const hub =
     pagePath === m.TAG_HUB_PATH
-      ? `<nav class="ftg-copy" aria-label="Tag sets"><h2 class="policy-title">Tags by artist</h2>${linkRow(
-          Object.entries(m.ARTISTS).map(([s, x]) => [m.tagSetPath(s), x.name])
-        )}<h2 class="policy-title">Tags by style</h2>${linkRow(
+      ? `<nav class="ftg-copy" aria-label="Tag sets"><h2 class="policy-title">Tags by artist</h2>${m
+          .artistsByLetter()
+          .map(([letter, list]) => `<h3 class="policy-title ftg-q">${esc(letter)}</h3>${linkRow(list.map(([s, name]) => [m.tagSetPath(s), name]))}`)
+          .join("")}<h2 class="policy-title">Tags by style</h2>${linkRow(
           Object.entries(m.STYLES).map(([s, x]) => [m.tagSetPath(s), x.name])
         )}</nav>`
       : "";
@@ -109,6 +116,7 @@ function guideBody(m, pagePath) {
         "Free tag generator",
         "smb-btn smb-btn--pri smb-btn--lg"
       )}</p></section>` +
+      toolNav(m, "Free tools, no sign-up") +
       footer(m)
   );
 }
@@ -116,7 +124,7 @@ function guideBody(m, pagePath) {
 function tagSetBody(m, slug, year) {
   const p = m.tagSetPage(slug);
   const tags = m.tagsFor(slug, year);
-  const others = Object.entries(m.TAG_SETS).filter(([s, x]) => s !== slug && x.kind === p.kind && !p.related.includes(s));
+  const others = m.moreTagSets(slug, 24);
   return shell(
     `<p class="smb-eyebrow">${a(m.TAG_HUB_PATH, "Type beat tags")} / ${esc(p.name)}</p>` +
       `<h1 class="policy-title ftg-h1">${esc(p.h1)}</h1><p class="policy-muted ftg-lede">${esc(p.lede)}</p>` +
@@ -136,12 +144,167 @@ function tagSetBody(m, slug, year) {
   );
 }
 
+// ---- Free tool pages (TOOL_PAGES in seoModel.js) ------------------------------------
+// The tools run in the browser; the static page carries the copy, a button down to the
+// tool and the tool's output for the page's example, built with the same seoTools.js.
+async function loadTools() {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "smb-tools-"));
+  const file = path.join(tmp, "seoTools.mjs");
+  fs.copyFileSync(path.join(ROOT, "src/lib/seoTools.js"), file);
+  try {
+    return await import(pathToFileURL(file).href);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+const toolLinks = (m) => Object.entries(m.TOOL_PAGES || {}).map(([p, t]) => [p, t.nav]);
+
+const toolNav = (m, heading, keep = () => true) =>
+  `<nav class="ftg-copy" aria-label="Free tools"><h2 class="policy-title">${esc(heading)}</h2>${linkRow(
+    Object.entries(m.TOOL_PAGES || {})
+      .filter(([, t]) => keep(t))
+      .map(([p, t]) => [p, t.nav])
+  )}</nav>`;
+
+function toolExample(m, t, tools, year) {
+  const ex = t.example || {};
+  const head = (h, note) =>
+    `<div class="ftg-result-head"><h2 class="policy-title">${esc(h)}</h2>${note ? `<span class="smb-mono smb-t3 text-xs">${esc(note)}</span>` : ""}</div>`;
+  if (t.tool === "tags") {
+    return `<section class="ftg-result" id="tool">${head("Or start from a ready-made tag set")}${linkRow(
+      m.FREE_TAG_PAGE.featured.map((s) => [m.tagSetPath(s), `${m.TAG_SETS[s].name} type beat tags`])
+    )}</section>`;
+  }
+  if (!tools) return "";
+  if (t.tool === "title") {
+    const titles = tools.typeBeatTitles({ ...ex, year });
+    return `<section class="ftg-result" id="tool">${head(`Example titles for ${ex.artists}`, `YouTube allows ${tools.YOUTUBE_TITLE_LIMIT} characters`)}<ul class="ftl-rows">${titles
+      .map(
+        (x) =>
+          `<li class="ftl-row"><div class="ftl-row-main"><span class="ftl-row-text">${esc(x.title)}</span><span class="ftl-row-meta smb-mono">${x.length} of ${tools.YOUTUBE_TITLE_LIMIT} characters</span></div></li>`
+      )
+      .join("")}</ul></section>`;
+  }
+  if (t.tool === "description") {
+    const d = tools.beatDescription({ ...ex, year });
+    return `<section class="ftg-result" id="tool">${head(`Example description for a ${ex.artist} type beat`, `${d.bytes} of ${tools.DESCRIPTION_MAX_BYTES} bytes`)}<pre class="ftl-pre">${esc(d.content)}</pre></section>`;
+  }
+  if (t.tool === "hashtags") {
+    const h = tools.beatHashtags(ex);
+    return `<section class="ftg-result" id="tool">${head(`Example hashtags for a ${ex.artists} type beat`)}${tagList(h.hashtags)}</section>`;
+  }
+  if (t.tool === "counter") {
+    const r = tools.analyzeTags(m.withYear(ex.tags || "", year));
+    return `<section class="ftg-result" id="tool">${head("Example count", `${r.count} tags, ${r.chars} of ${r.limit} characters`)}<ul class="ftl-rows ftl-rows--tight">${r.rows
+      .map(
+        (row) =>
+          `<li class="ftl-row"><span class="ftl-row-text">${esc(row.tag)}</span><span class="ftl-row-meta smb-mono">${row.duplicate ? "repeat · " : ""}${row.cost} chars</span></li>`
+      )
+      .join("")}</ul></section>`;
+  }
+  return "";
+}
+
+function toolBody(m, pagePath, year, tools) {
+  const t = m.TOOL_PAGES[pagePath];
+  const others = Object.entries(m.TOOL_PAGES).filter(([p]) => p !== pagePath);
+  const cta =
+    t.tool === "tags"
+      ? ""
+      : `<section class="ftg-cta policy-feature-card u-cta"><h2 class="policy-title">Need tags for this beat too?</h2><p>The tag generator pulls YouTube tags from live searches for your artist. One run is free with no account, and signing up free adds 3 more AI generations and 3 YouTube uploads, no card needed.</p><p>${a(
+          "/free-tag-generator",
+          "Free tag generator",
+          "smb-btn smb-btn--pri smb-btn--lg"
+        )} ${a("/?signup=1", "Sign up free", "smb-btn smb-btn--sec smb-btn--lg")}</p></section>`;
+  return shell(
+    `<p class="smb-eyebrow">${esc(t.eyebrow)}</p><h1 class="policy-title ftg-h1">${esc(m.withYear(t.h1, year))}</h1>` +
+      `<p class="policy-muted ftg-lede">${esc(m.withYear(t.lede, year))}</p>` +
+      `<p>${a("#tool", t.cta, "smb-btn smb-btn--pri smb-btn--lg")}</p>` +
+      toolExample(m, t, tools, year) +
+      `<section class="ftg-copy">${sections([...t.how, ...(t.extra || [])].map(([h, b]) => [h, m.withYear(b, year)]))}</section>` +
+      cta +
+      faqHtml(m, t.faq, year) +
+      `<nav class="ftg-copy" aria-label="Free tools"><h2 class="policy-title">More free tools</h2>${linkRow([
+        ["/free-tag-generator", "Free tag generator"],
+        ...others.map(([p, x]) => [p, x.nav]),
+        [m.TAG_HUB_PATH, "Type beat tags"],
+      ])}</nav>` +
+      footer(m)
+  );
+}
+// ---- end free tool pages --------------------------------------------------------------
+
+// ---- homepage
+// build/index.html is the homepage and also the template every other page starts from, so
+// main() renders the other pages from the untouched template first and writes this last.
+function homeBody(m, year) {
+  const h = m.HOME;
+  const tools = Object.entries(m.TOOL_PAGES || {}).map(([p, t]) => [p, t.nav]);
+  const guides = Object.entries(m.GUIDES)
+    .filter(([p]) => p !== m.TAG_HUB_PATH)
+    .map(([p, g]) => [p, g.h1]);
+  return shell(
+    `<p class="smb-eyebrow">${esc(h.eyebrow)}</p><h1 class="policy-title ftg-h1">${esc(h.h1)}</h1>` +
+      `<p class="policy-muted ftg-lede">${esc(h.lede)}</p>` +
+      `<p class="ftg-links">${a("/?signup=1", "Start free", "smb-btn smb-btn--pri smb-btn--lg")} ${a(
+        "/free-tag-generator",
+        "Try one free tag run",
+        "smb-btn smb-btn--sec smb-btn--lg"
+      )}</p>` +
+      `<section class="ftg-copy"><ul>${h.ticks.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></section>` +
+      `<section class="ftg-copy"><h2 class="policy-title">How it works</h2>${h.steps
+        .map((s, i) => `<h3 class="policy-title ftg-q">${i + 1}. ${esc(s.title)}</h3><p>${esc(s.body)}</p>`)
+        .join("")}</section>` +
+      `<section class="ftg-copy"><h2 class="policy-title">What's inside</h2>${h.features
+        .map((f) => `<h3 class="policy-title ftg-q">${esc(f.title)}${f.pro ? " (Pro)" : ""}</h3><p>${esc(f.body)}</p>`)
+        .join("")}</section>` +
+      `<section class="ftg-copy"><h2 class="policy-title">Pricing</h2><p>Try it free, no card needed.</p><ul>${h.plans
+        .map((p) => `<li><strong>${esc(p.name)}, ${esc(p.price)}${p.per.startsWith("/") ? esc(p.per) : ` (${esc(p.per)})`}:</strong> ${esc(p.lines.join(". "))}.</li>`)
+        .join("")}</ul></section>` +
+      `<section class="ftg-copy"><h2 class="policy-title">Free tools and guides</h2>${linkRow([
+        ["/free-tag-generator", "Free tag generator"],
+        [m.TAG_HUB_PATH, "Type beat tags"],
+        ...tools,
+        ...guides,
+      ])}<h2 class="policy-title">Popular type beat tags</h2>${linkRow(
+        m.FREE_TAG_PAGE.featured.map((s) => [m.tagSetPath(s), `${m.TAG_SETS[s].name} type beat tags`])
+      )}</section>` +
+      faqHtml(m, h.faq, year) +
+      footer(m)
+  );
+}
+
+function renderHome(m, template, year) {
+  const html = renderPage(m, template, "/", year);
+  if (!/<div id="root"><\/div>/.test(html)) throw new Error('build/index.html has no empty <div id="root"></div> to fill');
+  // Signed in, "/" is the app, not the landing page: drop the landing copy before it paints.
+  const clear = `<script>try{if(sessionStorage.getItem("token")||localStorage.getItem("token"))document.getElementById("root").innerHTML=""}catch(e){}</script>`;
+  return html.replace(/<div id="root"><\/div>/, `<div id="root">${homeBody(m, year)}</div>${clear}`);
+}
+
+// `serve -s` rewrites every path without a file extension to /index.html, so it never serves
+// build/<path>/index.html. This config (build/serve.json, read by `serve build`) sends each
+// prerendered path to its own file and every other path to app.html, the untouched app shell
+// (no homepage copy or canonical, so /dashboard doesn't show the landing page first). The
+// catch-all skips .html paths because serve applies the remaining rules to a rewritten path too.
+const APP_SHELL = "app.html";
+function serveConfig(m) {
+  return {
+    rewrites: [
+      { source: "/", destination: "/index.html" },
+      ...m.PUBLIC_PATHS.filter((p) => p !== "/").map((p) => ({ source: p, destination: `${p}/index.html` })),
+      { source: "!**/*.html", destination: `/${APP_SHELL}` },
+    ],
+  };
+}
+
 function setTag(html, re, replacement) {
   if (re.test(html)) return html.replace(re, replacement);
   return html.replace("</head>", `${replacement}</head>`);
 }
 
-function renderPage(m, template, pagePath, year) {
+function renderPage(m, template, pagePath, year, tools) {
   const page = m.publicPage(pagePath, year);
   const url = `${m.SITE}${pagePath === "/" ? "/" : pagePath}`;
   let html = template;
@@ -168,6 +331,7 @@ function renderPage(m, template, pagePath, year) {
   let body = "";
   if (pagePath === m.FREE_TAG_PAGE.path) body = freeTagBody(m, year);
   else if (m.GUIDES[pagePath]) body = guideBody(m, pagePath);
+  else if (m.TOOL_PAGES && m.TOOL_PAGES[pagePath]) body = toolBody(m, pagePath, year, tools);
   else if (pagePath.startsWith(`${m.TAG_HUB_PATH}/`)) body = tagSetBody(m, pagePath.slice(m.TAG_HUB_PATH.length + 1), year);
   if (body) {
     if (!/<div id="root"><\/div>/.test(html)) throw new Error('build/index.html has no empty <div id="root"></div> to fill');
@@ -178,6 +342,7 @@ function renderPage(m, template, pagePath, year) {
 
 async function main() {
   const m = await loadModel();
+  const tools = await loadTools();
   const year = new Date().getFullYear();
   const xml = sitemap(m, year);
   fs.writeFileSync(path.join(PUBLIC, "sitemap.xml"), xml);
@@ -189,17 +354,24 @@ async function main() {
   const indexFile = path.join(BUILD, "index.html");
   if (!fs.existsSync(indexFile)) throw new Error("build/index.html not found. Run the build first.");
   const template = fs.readFileSync(indexFile, "utf8");
+  if (!template.includes('<div id="root"></div>')) {
+    throw new Error("build/index.html is already prerendered (its #root isn't empty). Run the build again first.");
+  }
   fs.writeFileSync(path.join(BUILD, "sitemap.xml"), xml);
 
   let count = 0;
   m.PUBLIC_PATHS.forEach((p) => {
-    if (p === "/") return; // index.html already carries the homepage's tags
+    if (p === "/") return; // the homepage overwrites the template, so it's written last
     const out = path.join(BUILD, p.slice(1), "index.html");
     fs.mkdirSync(path.dirname(out), { recursive: true });
-    fs.writeFileSync(out, renderPage(m, template, p, year));
+    fs.writeFileSync(out, renderPage(m, template, p, year, tools));
     count += 1;
   });
-  console.log(`prerendered ${count} pages, sitemap.xml: ${m.PUBLIC_PATHS.length} pages`);
+  fs.writeFileSync(path.join(BUILD, APP_SHELL), template);
+  fs.writeFileSync(indexFile, renderHome(m, template, year));
+  count += 1;
+  fs.writeFileSync(path.join(BUILD, "serve.json"), `${JSON.stringify(serveConfig(m), null, 2)}\n`);
+  console.log(`prerendered ${count} pages (homepage included), sitemap.xml: ${m.PUBLIC_PATHS.length} pages, serve.json written`);
 }
 
 if (require.main === module) {
@@ -209,4 +381,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { renderPage, sitemap, loadModel };
+module.exports = { renderPage, renderHome, serveConfig, sitemap, loadModel, loadTools };

@@ -23,6 +23,8 @@ import FreeTagGenerator from "@/pages/FreeTagGenerator";
 import TypeBeatSeoPage from "@/pages/TypeBeatSeoPage";
 import TagSetPage from "@/pages/TagSetPage";
 import { SEO_PATHS } from "@/lib/seoPages";
+import ToolPage from "@/pages/tools/ToolPage";
+import { TOOL_PATHS } from "@/lib/seoModel";
 import VizEmbed from "@/pages/VizEmbed";
 import Footer from "@/components/Footer";
 import RouteMeta from "@/lib/RouteMeta";
@@ -216,6 +218,10 @@ function MainApp() {
               <Route key={path} path={path} element={<TypeBeatSeoPage />} />
             ))}
             <Route path="/type-beat-tags/:slug" element={<TagSetPage />} />
+            {/* Free tool pages (lib/seoModel.js TOOL_PAGES) */}
+            {TOOL_PATHS.map((path) => (
+              <Route key={path} path={path} element={<ToolPage />} />
+            ))}
           </Routes>
         </div>
           <Footer />

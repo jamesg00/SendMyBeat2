@@ -322,7 +322,7 @@ const TagsSection = ({
             <Sparkles className="h-5 w-5 flex-shrink-0" />
             <CardTitle className="text-lg sm:text-xl">Generate YouTube Tags</CardTitle>
           </div>
-          <span className="smb-mono smb-t3 text-xs whitespace-nowrap">60–80 tags · 1 credit</span>
+          <span className="smb-mono smb-t3 text-xs whitespace-nowrap">Up to 50 tags · 1 credit</span>
         </div>
       </CardHeader>
       <CardContent className="px-4 sm:px-6 pb-5">

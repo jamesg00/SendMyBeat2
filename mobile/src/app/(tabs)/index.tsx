@@ -328,7 +328,7 @@ function BuildStep({
         <EdgeCard glow>
           <View style={s.cardHead}>
             <Text style={s.cardTitle}>Generate tags</Text>
-            <Text style={s.mono}>60–80 tags · 1 credit</Text>
+            <Text style={s.mono}>Up to 50 tags · 1 credit</Text>
           </View>
           <View style={s.inputRow}>
             <TextInput
