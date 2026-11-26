@@ -7,7 +7,7 @@ import { useAuth } from '@/api/auth';
 import * as api from '@/api/endpoints';
 import { FEEDBACK_STATUS_LABEL, type FeedbackItem, type FeedbackStatus } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
-import { Button, Segmented } from '@/components/ui';
+import { Button, Segmented, TopLight } from '@/components/ui';
 import { F, R, display, font, makeStyles, useColors } from '@/theme';
 
 // Admins only: bug reports and feature ideas from producers, newest first.
@@ -103,6 +103,7 @@ function Report({ item, onStatus }: { item: FeedbackItem; onStatus: (s: Feedback
   const meta = [item.screen, item.device, item.app_version && `v${item.app_version}`].filter(Boolean).join(' · ');
   return (
     <View style={s.card}>
+      <TopLight />
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
         <Text style={[s.kind, item.kind === 'bug' ? { color: C.danger, borderColor: C.danger } : { color: C.acc, borderColor: C.accLine }]}>
           {item.kind === 'bug' ? 'BUG' : 'IDEA'}
@@ -134,7 +135,7 @@ const useStyles = makeStyles((C) => ({
   topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 12 },
   topAction: { color: C.t2, fontSize: 16, width: 60, ...font() },
   topTitle: { color: C.text, fontSize: 16, ...font('600') },
-  card: { padding: 14, gap: 10, borderRadius: 14, borderWidth: 1, borderColor: C.line, backgroundColor: C.card },
+  card: { padding: 14, gap: 10, borderRadius: R.card, borderWidth: 1, borderColor: C.line, backgroundColor: C.card },
   kind: { fontSize: 10.5, letterSpacing: 0.4, fontFamily: F.monoMedium, paddingHorizontal: 6, paddingVertical: 2, borderRadius: R.chip, borderWidth: 1, overflow: 'hidden' },
   name: { color: C.text, fontSize: 15, ...display },
   message: { color: C.text, fontSize: 14.5, lineHeight: 21, ...font() },

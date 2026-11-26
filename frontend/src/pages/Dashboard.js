@@ -15,11 +15,14 @@ import UpgradeModal from "@/components/UpgradeModal";
 import AdBanner from "@/components/AdBanner";
 import ProgressBar from "@/components/ProgressBar";
 import PublishWorkflow from "@/components/workflow/PublishWorkflow";
+import TrendingArtistsBox from "@/components/seo/TrendingArtistsBox";
 import ChannelReport from "@/components/analytics/ChannelReport";
 import StylePlanCard from "@/components/pros/StylePlanCard";
 import { useStylePlan } from "@/components/pros/prosData";
 import { AccountLinksCard, CreditsCard, FeedbackCard, StylePlanSection, SupportCard, VerificationCard } from "@/components/profile/ProfileExtras";
 import { clearAuthToken } from "@/lib/auth";
+import ProductTour from "@/components/tour/ProductTour";
+import { markTourSeen, shouldAutoStartTour } from "@/components/tour/tourStorage";
 
 const TAG_LIMIT = 120;
 const TAG_HISTORY_LIMIT = 100;
@@ -288,6 +291,11 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [analyticsData, setAnalyticsData] = useState(null);
   const [previousUtilityTab, setPreviousUtilityTab] = useState("workflow");
 
+  // Guided tour: opens by itself once for new accounts, from ?tour=1, or from Settings.
+  const [tourOpen, setTourOpen] = useState(false);
+  const tourAutoChecked = useRef(false);
+  const tourTimerRef = useRef(null);
+
 
   const [joiningTagsLoading, setJoiningTagsLoading] = useState(false);
   const [joiningTagsProgress, setJoiningTagsProgress] = useState(0);
@@ -349,6 +357,43 @@ const Dashboard = ({ setIsAuthenticated }) => {
         window.history.replaceState({}, "", nextUrl);
       });
   }, []);
+
+  useEffect(() => {
+    if (tourAutoChecked.current || !userLoaded || !user || !subscriptionStatus || showUpgradeModal) return undefined;
+    tourAutoChecked.current = true;
+    const params = new URLSearchParams(window.location.search);
+    const asked = params.get("tour") === "1";
+    if (asked) {
+      params.delete("tour");
+      const nextQuery = params.toString();
+      window.history.replaceState({}, "", `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}${window.location.hash || ""}`);
+    }
+    if (!asked && !shouldAutoStartTour(user)) return undefined;
+    // A short pause so the page has settled before it dims.
+    tourTimerRef.current = window.setTimeout(() => {
+      setActiveTab("workflow");
+      setTourOpen(true);
+    }, 700);
+    return undefined;
+  }, [userLoaded, user, subscriptionStatus, showUpgradeModal]);
+
+  useEffect(() => () => window.clearTimeout(tourTimerRef.current), []);
+
+  const startTour = () => {
+    setActiveTab("workflow");
+    window.scrollTo({ top: 0 });
+    setTourOpen(true);
+  };
+
+  const handleTourStep = (step) => {
+    if (step?.tab) setActiveTab((current) => (current === step.tab ? current : step.tab));
+  };
+
+  const handleTourClose = () => {
+    markTourSeen(user?.id);
+    setTourOpen(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   useEffect(() => () => {
     if (joinProgressIntervalRef.current) {
@@ -1143,9 +1188,10 @@ const Dashboard = ({ setIsAuthenticated }) => {
         onAdmin={(path) => navigate(path)}
         onLogout={handleLogout}
         credits={creditsPanel}
+        onTour={startTour}
       >
         {/* Credits sit in the sidebar on desktop; phones see them here. */}
-        {creditsPanel ? <div className="smb-ph-only">{creditsPanel}</div> : null}
+        {creditsPanel ? <div className="smb-ph-only" data-tour="credits">{creditsPanel}</div> : null}
 
         {!youtubeConnected && (
           <div className="smb-notice">
@@ -1175,7 +1221,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
             />
           )}
 
-          <TabsContent value="workflow" className="space-y-4 sm:space-y-6 dashboard-section">
+          <TabsContent value="workflow" className="space-y-4 sm:space-y-6 dashboard-section ucr-create">
             {stylePlan ? <StylePlanCard plan={stylePlan} onChange={setStylePlan} /> : null}
             <PublishWorkflow
               subscriptionStatus={subscriptionStatus}
@@ -1222,6 +1268,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                 setShowTagDebug,
                 tagQuery,
                 setTagQuery,
+                tagSuggestions: <TrendingArtistsBox onPick={setTagQuery} limit={6} />,
                 minPublishScore:
                   tagDebug?.source_counts?.min_publish_score
                   ?? tagDebug?.tag_metrics?.effective_min_score
@@ -1270,7 +1317,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
               <CreditsCard subscription={subscriptionStatus} onPlans={() => setShowUpgradeModal(true)} />
               <VerificationCard onOpenSpotlight={() => navigate("/spotlight")} />
               <StylePlanSection />
-              <section className="smb-card">
+              <section className="smb-card u-edge u-edge--glow">
                 <div className="smb-card-head">
                   <h2 className="smb-card-title">Plan</h2>
                   <span className="smb-badge">{planLabelFor(subscriptionStatus) || "Free"}</span>
@@ -1324,6 +1371,19 @@ const Dashboard = ({ setIsAuthenticated }) => {
                 )}
               </section>
 
+              <section className="smb-card smb-span-2" data-testid="tour-settings-card">
+                <div className="smb-card-head">
+                  <h2 className="smb-card-title">Tour</h2>
+                  <span className="smb-mono smb-t3">About a minute</span>
+                </div>
+                <div className="smb-tour-cta">
+                  <p className="smb-t2">A quick walk through tags, descriptions, uploads, credits and Spotlight.</p>
+                  <Button onClick={startTour} className="smb-btn smb-btn--sec" data-testid="take-tour-settings">
+                    Take the tour
+                  </Button>
+                </div>
+              </section>
+
               <section className="smb-card smb-span-2">
                 <div className="smb-card-head">
                   <h2 className="smb-card-title">Theme</h2>
@@ -1340,7 +1400,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
 
           {/* YouTube Analytics Tab */}
           <TabsContent value="analytics" className="space-y-6 dashboard-section">
-            <Card className="dashboard-card">
+            <Card className="dashboard-card usx-an-card">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <BarChart3 className="h-5 w-5" />
@@ -1395,6 +1455,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
           </TabsContent>
         </Tabs>
       </AppShell>
+
+      <ProductTour open={tourOpen} onStep={handleTourStep} onClose={handleTourClose} />
 
       <UpgradeModal
         open={showUpgradeModal}

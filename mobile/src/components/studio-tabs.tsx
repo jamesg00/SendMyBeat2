@@ -9,7 +9,7 @@ import type { TagRun, YouTubeUploadOptions } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
 import { DescriptionEditor, TagEditor } from '@/components/editors';
 import { usePlan } from '@/components/pros';
-import { Button, ListGroup, ListRow, Segmented } from '@/components/ui';
+import { Button, ListGroup, ListRow, SectionLabel, Segmented, TopLight } from '@/components/ui';
 import { openPaywall, requirePro, useSubscription } from '@/state/billing';
 import { useDraft } from '@/state/draft';
 import { FIT, clampTransform, scheduleProblem, useStudio, type FileSlot, type Transform } from '@/state/studio';
@@ -119,6 +119,7 @@ export function DetailsTab() {
   return (
     <>
       <View style={s.panel}>
+        <TopLight />
         {/* Short hints: longer lists were cut off next to the Choose button on phones. */}
         <FileRow label="Beat" hint="mp3 · wav · flac" slot={studio.audio} onPick={studio.pickAudio} />
         <FileRow label="Artwork" hint="jpg · png · gif" slot={studio.image} onPick={studio.pickImage} last />
@@ -141,6 +142,7 @@ export function DetailsTab() {
       {run ? <TitleIdeas runId={run.id} beatName={beatNameOf(studio.audio?.name)} onPick={(title) => studio.set({ title })} /> : null}
 
       <View style={s.panel}>
+        <TopLight />
         <PickRow label="Description" value={description.title} onPress={() => toggle('desc')} open={open === 'desc'} />
         <PickRow
           label="Tags"
@@ -337,8 +339,9 @@ function PublishOptions({ hasRun }: { hasRun: boolean }) {
 
   return (
     <View style={{ gap: 8 }}>
-      <Text style={s.label}>Publishing</Text>
+      <SectionLabel>Publishing</SectionLabel>
       <View style={s.panel}>
+        <TopLight />
         <View style={[s.optRow, s.divider]}>
           <View style={{ flex: 1, gap: 2 }}>
             <Text style={s.optTitle}>Schedule it</Text>
@@ -477,13 +480,14 @@ function TitleIdeas({ runId, beatName, onPick }: { runId: string; beatName: stri
   if (error || !ideas?.length) return null;
   return (
     <View style={{ gap: 8 }}>
-      <Text style={s.label}>Title ideas · tap to use</Text>
+      <SectionLabel>Title ideas · tap to use</SectionLabel>
       {titleStep ? (
         <Text style={s.planHint}>
           {plan!.pro_name}’s move: {titleStep.text} · {titleStep.count ?? 0}/{titleStep.target}
         </Text>
       ) : null}
       <View style={s.panel}>
+        <TopLight />
         {ideas.map((idea, i) => (
           <Pressable
             key={idea.title}
@@ -531,6 +535,7 @@ function TitleChecks({ title, runId }: { title: string; runId?: string }) {
   const misses = result.checks.filter((c) => !c.ok);
   return (
     <View style={[s.panel, s.checks]} accessibilityLabel={`Title score ${result.score}`}>
+      <TopLight />
       <Text style={s.checkScore}>
         Title score <Text style={s.checkScoreNum}>{result.score}</Text>
         {misses.length ? '' : ' · looks good'}
@@ -637,7 +642,7 @@ export function VideoTab() {
 
   return (
     <>
-      <Text style={s.label}>Shape</Text>
+      <SectionLabel>Shape</SectionLabel>
       <View style={s.grid4}>
         {SHAPES.map((sh) => {
           const on = studio.format === sh.value;
@@ -659,7 +664,7 @@ export function VideoTab() {
         })}
       </View>
 
-      <Text style={s.label}>Background</Text>
+      <SectionLabel>Background</SectionLabel>
       <View style={s.grid3}>
         {(['black', 'white', 'blurred'] as const).map((bg) => {
           const on = studio.bg === bg;
@@ -898,6 +903,7 @@ export function AiTab({ results, setResults }: { results: AiResults; setResults:
   return (
     <>
       <View style={s.panelPad}>
+        <TopLight />
         <View style={s.headRow}>
           <View style={{ flex: 1, gap: 2 }}>
             <Text style={s.cardTitle}>Title and tags</Text>
@@ -929,6 +935,7 @@ export function AiTab({ results, setResults }: { results: AiResults; setResults:
       </View>
 
       <View style={s.panelPad}>
+        <TopLight />
         <View style={s.headRow}>
           <View style={{ flex: 1, gap: 2 }}>
             <Text style={s.cardTitle}>Thumbnail</Text>
@@ -1148,7 +1155,7 @@ function SliderField(props: {
         step={props.step}
         onSlidingStart={props.onStart}
         onValueChange={props.onChange}
-        minimumTrackTintColor={C.text}
+        minimumTrackTintColor={C.acc}
         maximumTrackTintColor={C.card2}
         thumbTintColor="#FFFFFF"
         accessibilityLabel={props.label}
@@ -1198,10 +1205,10 @@ const useStyles = makeStyles((C) => ({
   chipRow: { gap: 8, paddingHorizontal: 14 },
   // Chip rows scroll edge to edge of the panel instead of stopping at its padding.
   chipScroll: { marginHorizontal: -14 },
-  optChip: { height: 34, paddingHorizontal: 13, borderRadius: 999, borderWidth: 1, borderColor: C.line, justifyContent: 'center' },
-  optChipOn: { borderColor: C.text, backgroundColor: C.text },
+  optChip: { height: 34, paddingHorizontal: 13, borderRadius: R.chip, borderWidth: 1, borderColor: C.line, justifyContent: 'center' },
+  optChipOn: { borderColor: C.accLine, backgroundColor: C.accSoft },
   optChipText: { color: C.t2, fontSize: 13.5, ...font('500') },
-  optChipTextOn: { color: C.bg },
+  optChipTextOn: { color: C.acc, ...font('600') },
   checkScore: { color: C.t2, fontSize: 13, ...font() },
   checkScoreNum: { color: C.text, fontSize: 13, fontFamily: F.mono },
   checkRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },

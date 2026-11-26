@@ -1,11 +1,12 @@
 import * as Clipboard from 'expo-clipboard';
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import Svg, { Circle, Line, Polyline, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, Defs, Line, LinearGradient, Path, Polyline, Stop, Text as SvgText } from 'react-native-svg';
 
 import * as api from '@/api/endpoints';
 import type { ChannelAnalytics, ChannelVideo, VideoReview } from '@/api/endpoints';
-import { Button, Card, JobProgress, Screen, useUiStyles } from '@/components/ui';
+import { Button, EdgeCard, JobProgress, Screen, SectionLabel, TopLight } from '@/components/ui';
+import { gradAt } from '@/components/ultra';
 import { openPaywall, useSubscription } from '@/state/billing';
 import { F, R, display, font, makeStyles, useColors } from '@/theme';
 
@@ -27,13 +28,13 @@ function AnalyticsLocked({ trialAvailable }: { trialAvailable: boolean }) {
   const s = useStyles();
   return (
     <Screen title="Analytics">
-      <View style={{ gap: 12, paddingTop: 12 }}>
+      <EdgeCard glow style={{ gap: 12 }}>
         <Text style={s.lockTitle}>See what’s working on your channel</Text>
         <Text style={s.lockBody}>
           Pro reads your latest uploads: views against your average, which titles hold you back, and what to fix next.
         </Text>
         <Button title={trialAvailable ? 'Start with the free trial' : 'See Pro'} onPress={() => openPaywall(trialAvailable ? 'needs_plan' : 'needs_pro')} />
-      </View>
+      </EdgeCard>
     </Screen>
   );
 }
@@ -41,7 +42,6 @@ function AnalyticsLocked({ trialAvailable }: { trialAvailable: boolean }) {
 function Analytics() {
   const C = useColors();
   const s = useStyles();
-  const ui = useUiStyles();
   const [data, setData] = useState<ChannelAnalytics | null>(null);
   const [job, setJob] = useState<{ startedAt: number; progress: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -97,16 +97,16 @@ function Analytics() {
           {current ? (
             <View style={{ gap: 14 }}>
               <View style={{ gap: 6 }}>
-                <View style={s.rowBetween}>
-                  <Text style={ui.sectionLabel}>
-                    {sel === uploads.length - 1 ? 'Latest upload' : `Upload ${uploads.length - sel} of ${uploads.length}`} · {day(current.published_at)}
-                  </Text>
-                  {trend !== null ? (
-                    <Text style={[s.trend, { color: trend >= 0 ? C.acc : C.danger }]}>
-                      {trend >= 0 ? '↗' : '↘'} {pct(trend)} recent
-                    </Text>
-                  ) : null}
-                </View>
+                <SectionLabel
+                  right={
+                    trend !== null ? (
+                      <Text style={[s.trend, { color: trend >= 0 ? C.acc : C.danger }]}>
+                        {trend >= 0 ? '↗' : '↘'} {pct(trend)} recent
+                      </Text>
+                    ) : undefined
+                  }>
+                  {`${sel === uploads.length - 1 ? 'Latest upload' : `Upload ${uploads.length - sel} of ${uploads.length}`} · ${day(current.published_at)}`}
+                </SectionLabel>
                 <View style={s.heroRow}>
                   <Text style={s.hero}>{compact.format(current.views)}</Text>
                   <Text style={s.heroUnit}>views</Text>
@@ -134,6 +134,7 @@ function Analytics() {
 
           {patterns?.winning || patterns?.losing ? (
             <View style={s.panel}>
+              <TopLight />
               {patterns.winning ? <Pattern color={C.acc} label="Titles that win" text={patterns.winning} /> : null}
               {patterns.losing ? <Pattern color={C.danger} label="Titles that lose" text={patterns.losing} last /> : null}
             </View>
@@ -141,7 +142,9 @@ function Analytics() {
 
           {newestFirst.length > 0 ? (
             <View>
-              <Text style={[ui.sectionLabel, { paddingBottom: 8 }]}>Latest {newestFirst.length} uploads</Text>
+              <View style={{ paddingBottom: 8 }}>
+                <SectionLabel>{`Latest ${newestFirst.length} uploads`}</SectionLabel>
+              </View>
               {newestFirst.map((v, i) => (
                 <UploadRow
                   key={v.id ?? v.n}
@@ -162,14 +165,14 @@ function Analytics() {
           <Bullets title="Working well" color={C.acc} items={list(data.insights?.what_works)} />
         </>
       ) : job ? null : (
-        <Card>
+        <EdgeCard glow>
           <Text style={s.cardTitle}>Channel analytics</Text>
           <Text style={s.body}>
             Looks at your latest 10 uploads and their titles, shows which ones win attention, and gives a fix and a better
             title for the ones that don&apos;t. Uses 1 AI credit and needs YouTube connected.
           </Text>
           <Button title="Analyze my channel" onPress={analyze} />
-        </Card>
+        </EdgeCard>
       )}
 
       {job ? (
@@ -245,6 +248,17 @@ function ViewsChart({
       style={{ height: h }}>
       {w > 0 ? (
         <Svg width={w} height={h} pointerEvents="none">
+          <Defs>
+            <LinearGradient id="anLine" x1={left} y1="0" x2={right} y2="0" gradientUnits="userSpaceOnUse">
+              <Stop offset="0" stopColor={C.gradA} />
+              <Stop offset="1" stopColor={C.gradB} />
+            </LinearGradient>
+            <LinearGradient id="anArea" x1="0" y1={top} x2="0" y2={bottom} gradientUnits="userSpaceOnUse">
+              <Stop offset="0" stopColor={C.gradB} stopOpacity={0.2} />
+              <Stop offset="1" stopColor={C.gradB} stopOpacity={0} />
+            </LinearGradient>
+          </Defs>
+          {uploads.length > 1 ? <Path d={`M${x(0)},${bottom} L${pts.split(' ').join(' L')} L${x(uploads.length - 1)},${bottom} Z`} fill="url(#anArea)" /> : null}
           {[max, max / 2, 0].map((t) => (
             <Line key={t} x1={left} y1={y(t)} x2={w} y2={y(t)} stroke={t === 0 ? C.line : C.card2} strokeWidth={1} />
           ))}
@@ -262,18 +276,21 @@ function ViewsChart({
             </>
           ) : null}
           <Line x1={x(selected)} y1={top} x2={x(selected)} y2={bottom} stroke={C.line} strokeWidth={1} />
-          <Polyline points={pts} fill="none" stroke={C.text} strokeWidth={1.75} strokeLinejoin="round" strokeLinecap="round" />
-          {uploads.map((u, i) => (
-            <Circle
-              key={u.id ?? i}
-              cx={x(i)}
-              cy={y(u.views)}
-              r={i === selected ? 5.5 : 3.5}
-              fill={i === selected ? C.bg : u.views >= avg ? C.text : C.danger}
-              stroke={u.views >= avg ? C.text : C.danger}
-              strokeWidth={i === selected ? 2.5 : 0}
-            />
-          ))}
+          <Polyline points={pts} fill="none" stroke="url(#anLine)" strokeWidth={1.75} strokeLinejoin="round" strokeLinecap="round" />
+          {uploads.map((u, i) => {
+            const good = gradAt(C, uploads.length > 1 ? i / (uploads.length - 1) : 1);
+            return (
+              <Circle
+                key={u.id ?? i}
+                cx={x(i)}
+                cy={y(u.views)}
+                r={i === selected ? 5.5 : 3.5}
+                fill={i === selected ? C.bg : u.views >= avg ? good : C.danger}
+                stroke={u.views >= avg ? good : C.danger}
+                strokeWidth={i === selected ? 2.5 : 0}
+              />
+            );
+          })}
           <SvgText x={left} y={h - 4} fill={C.t3} fontSize={10} fontFamily={F.mono}>
             {day(uploads[0]?.published_at)}
           </SvgText>
@@ -353,11 +370,10 @@ function UploadRow({ upload, avg, open, last, onPress }: { upload: Upload; avg: 
 
 function Bullets({ title, color, items, numbered }: { title: string; color: string; items: string[]; numbered?: boolean }) {
   const s = useStyles();
-  const ui = useUiStyles();
   if (items.length === 0) return null;
   return (
     <View style={{ gap: 12 }}>
-      <Text style={ui.sectionLabel}>{title}</Text>
+      <SectionLabel>{title}</SectionLabel>
       {items.slice(0, 6).map((item, i) => (
         <View key={i} style={{ flexDirection: 'row', gap: 12 }}>
           {numbered ? <Text style={[s.mono, { color, width: 16 }]}>{i + 1}</Text> : <View style={[s.bar, { backgroundColor: color }]} />}
@@ -372,7 +388,6 @@ const useStyles = makeStyles((C) => ({
   lockTitle: { color: C.text, fontSize: 22, lineHeight: 27, ...display },
   lockBody: { color: C.t2, fontSize: 14.5, lineHeight: 21, ...font() },
   channel: { color: C.t2, fontSize: 13, marginTop: -14, ...font() },
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 },
   trend: { fontSize: 12, fontFamily: F.monoMedium },
   heroRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
   hero: { color: C.text, fontSize: 40, lineHeight: 44, letterSpacing: -1.4, ...font('600') },

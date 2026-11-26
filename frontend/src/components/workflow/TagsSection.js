@@ -71,6 +71,7 @@ const TagsSection = ({
   tagQuery,
   setTagQuery,
   minPublishScore = 58,
+  tagSuggestions = null,
 }) => {
   const [resultsCollapsed, setResultsCollapsed] = useState(mode === "results");
   const hasGeneratedTags = generatedTags.length > 0;
@@ -315,14 +316,14 @@ const TagsSection = ({
   const visibleRuns = tagHistory;
 
   const renderEditorCard = () => (
-    <Card className="dashboard-card tags-studio-card h-full">
+    <Card className="dashboard-card tags-studio-card ucr-feature h-full">
       <CardHeader className="px-4 sm:px-6 pt-5 pb-3">
         <div className="wf-head">
           <div className="flex items-center gap-2 min-w-0">
             <Sparkles className="h-5 w-5 flex-shrink-0" />
             <CardTitle className="text-lg sm:text-xl">Generate YouTube Tags</CardTitle>
           </div>
-          <span className="smb-mono smb-t3 text-xs whitespace-nowrap">60–80 tags · 1 credit</span>
+          <span className="smb-mono smb-t3 text-xs whitespace-nowrap">Up to 50 tags · 1 credit</span>
         </div>
       </CardHeader>
       <CardContent className="px-4 sm:px-6 pb-5">
@@ -344,6 +345,8 @@ const TagsSection = ({
             </div>
             <p className="smb-t3 text-xs">Tip: include the artist’s name to get “type beat” variations people search for.</p>
           </div>
+
+          {tagSuggestions}
 
           <div className="space-y-2">
             <div className="wf-head">

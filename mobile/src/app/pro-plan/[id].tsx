@@ -5,7 +5,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import * as api from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
-import { Button } from '@/components/ui';
+import { Button, EdgeCard, GradientFill, TopLight } from '@/components/ui';
+import { GradientSpan } from '@/components/ultra';
 import { F, display, font, makeStyles, useColors } from '@/theme';
 
 // Copy their style: pick the moves that fit you and see your next 14 days; they become your plan
@@ -78,7 +79,7 @@ export default function CopyStyleScreen() {
         <View style={{ gap: 4 }}>
           <Text style={s.title}>
             Your 14 days,{'\n'}
-            {p.name}’s way
+            <GradientSpan>{`${p.name}’s way`}</GradientSpan>
           </Text>
           <Text style={s.sub}>Pick the moves. We fill your calendar.</Text>
         </View>
@@ -90,7 +91,7 @@ export default function CopyStyleScreen() {
               <Pressable
                 key={m.id}
                 onPress={() => toggle(m.id)}
-                style={[s.chip, on && { borderColor: C.acc, backgroundColor: C.accSoft }]}
+                style={[s.chip, on && { borderColor: C.accLine, backgroundColor: C.accSoft }]}
                 accessibilityRole="checkbox"
                 accessibilityState={{ checked: on }}
                 accessibilityHint={m.body}>
@@ -100,7 +101,7 @@ export default function CopyStyleScreen() {
           })}
         </View>
 
-        <View style={s.panel}>
+        <EdgeCard glow style={s.panel}>
           <View style={s.rowBetween}>
             <Text style={s.label}>Your next 14 days</Text>
             <Text style={s.mono}>{uploads ? `${uploads} uploads` : 'no upload target'}</Text>
@@ -122,18 +123,20 @@ export default function CopyStyleScreen() {
                 return (
                   <View
                     key={d}
-                    style={[s.day, !inRange && { opacity: 0.25 }, on && { backgroundColor: day < 7 ? C.acc : C.accLine }]}
+                    style={[s.day, !inRange && { opacity: 0.25 }, on && { backgroundColor: day < 7 ? C.gradB : C.accLine }]}
                     accessibilityLabel={on ? `Upload on ${date.toDateString()}` : undefined}>
-                    <Text style={[s.dayNum, on && { color: day < 7 ? C.onAcc : C.text }]}>{on ? '↑' : date.getDate()}</Text>
+                    {on && day < 7 ? <GradientFill radius={8} /> : null}
+                    <Text style={[s.dayNum, on && { color: day < 7 ? C.onGrad : C.text }]}>{on ? '↑' : date.getDate()}</Text>
                   </View>
                 );
               })}
             </View>
           ))}
-        </View>
+        </EdgeCard>
 
         {steps.length ? (
           <View style={s.first}>
+            <TopLight />
             <Text style={s.kicker}>YOUR PLAN · {steps.length} STEPS</Text>
             {steps.map((step, i) => (
               <Text key={step} style={s.step}>
@@ -165,11 +168,12 @@ const useStyles = makeStyles((C) => ({
   fine: { color: C.t3, fontSize: 12, ...font() },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { minHeight: 38, paddingHorizontal: 14, borderRadius: 19, justifyContent: 'center', borderWidth: 1, borderColor: C.line },
+  chip: { minHeight: 38, paddingHorizontal: 14, borderRadius: 9, justifyContent: 'center', borderWidth: 1, borderColor: C.line },
   chipText: { color: C.text, fontSize: 13.5, ...font('500') },
-  panel: { padding: 14, gap: 8, borderRadius: 16, borderWidth: 1, borderColor: C.line, backgroundColor: C.card },
+  // Inside the edge card: its 1px edge plus 13 keeps the old 14 padding.
+  panel: { padding: 13, gap: 8 },
   week: { flexDirection: 'row', gap: 6 },
-  day: { flex: 1, aspectRatio: 1, borderRadius: 8, backgroundColor: C.card2, alignItems: 'center', justifyContent: 'center' },
+  day: { flex: 1, aspectRatio: 1, borderRadius: 8, overflow: 'hidden', backgroundColor: C.card2, alignItems: 'center', justifyContent: 'center' },
   dayNum: { color: C.t3, fontSize: 11.5, fontFamily: F.mono },
   first: { padding: 16, gap: 8, borderRadius: 16, borderWidth: 1, borderColor: C.accLine, backgroundColor: C.accSoft },
   kicker: { color: C.acc, fontSize: 11, letterSpacing: 0.4, fontFamily: F.monoMedium },

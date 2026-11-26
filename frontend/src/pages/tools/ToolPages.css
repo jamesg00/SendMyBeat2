@@ -1,0 +1,224 @@
+/* The free tool pages (title, description, hashtag and tag counter tools). They sit in the
+   same shell as the free tag generator (policy-card ftg, ftg-form, ftg-result in
+   FreeTagGenerator.css); this only lays out their fields and output rows. Tokens only. */
+.ftl-form { gap: 14px; }
+.ftl-grid { display: grid; gap: 12px 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ftl-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ftl-field--wide { grid-column: 1 / -1; }
+.ftl-field label { color: var(--c-text); font-size: 13px; }
+.ftl-form input { height: 44px; font-size: 15px; }
+.ftl-form textarea { font-size: 15px; font-family: var(--font-mono); }
+.ftl-toggle { display: flex; align-items: center; gap: 10px; }
+.ftl-hint { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--c-t3); }
+
+.ftl-rows { display: flex; flex-direction: column; gap: 8px; list-style: none; padding: 0; margin: 0; }
+.ftl-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--c-line);
+  border-radius: 8px;
+  background: var(--c-card2);
+}
+.ftl-row-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ftl-row-text { color: var(--c-text); font-size: 14.5px; line-height: 1.4; overflow-wrap: anywhere; }
+.ftl-row-meta { color: var(--c-t3); font-size: 11.5px; white-space: nowrap; }
+.ftl-row-main .ftl-row-meta { white-space: normal; }
+.ftl-row .smb-btn { flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; }
+.ftl-rows--tight { gap: 4px; max-height: 360px; overflow-y: auto; }
+.ftl-rows--tight .ftl-row { padding: 6px 10px; }
+.ftl-rows--tight .ftl-row-text { font-family: var(--font-mono); font-size: 12.5px; }
+
+.ftl-pre {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--c-line);
+  border-radius: 8px;
+  background: var(--c-card2);
+  color: var(--c-text);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Hashtags YouTube shows above the title. */
+.ftg-tags li.ftl-lead { border-color: var(--c-accline); }
+
+@media (max-width: 640px) {
+  .ftl-grid { grid-template-columns: minmax(0, 1fr); }
+  .ftl-row { align-items: flex-start; }
+}
+
+/* ---- The free MP3 to YouTube uploader (Mp3UploadTool.js, and the prerendered steps) ---- */
+.mup { gap: 14px; }
+.mup a:not(.smb-btn) { color: var(--c-text); text-decoration: underline; text-underline-offset: 3px; }
+.mup-text { margin: 0; font-size: 15px; line-height: 1.55; color: var(--c-t2); }
+.mup-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 0; }
+.mup-actions .smb-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+
+.mup-steps { counter-reset: mup; display: grid; gap: 10px; list-style: none; padding: 0; margin: 0; }
+.mup-steps li {
+  counter-increment: mup;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  column-gap: 12px;
+  row-gap: 2px;
+  align-items: start;
+}
+.mup-steps li::before {
+  content: counter(mup);
+  grid-row: span 2;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid var(--c-accline);
+  color: var(--c-text);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+.mup-steps strong { color: var(--c-text); font-size: 15px; font-weight: 600; }
+.mup-steps span { color: var(--c-t2); font-size: 14px; line-height: 1.5; }
+
+.mup-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+
+/* File pickers: a big tappable box around the hidden file input. */
+.mup-drop {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 64px;
+  padding: 12px 14px;
+  border: 1px dashed var(--c-line);
+  border-radius: 10px;
+  background: var(--c-card2);
+  color: var(--c-t2);
+  cursor: pointer;
+  transition: border-color 0.2s var(--ease), color 0.2s var(--ease);
+}
+.mup-drop:hover,
+.mup-drop:has(+ input:focus-visible) { border-color: var(--c-accline); color: var(--c-text); }
+.mup-drop:has(+ input:focus-visible) { outline: 2px solid var(--c-accline); outline-offset: 2px; }
+.mup-drop.is-set { border-style: solid; color: var(--c-text); }
+.mup-drop svg { flex-shrink: 0; }
+.mup-drop-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 14px; overflow-wrap: anywhere; }
+.mup-drop-text small { color: var(--c-t3); font-size: 12px; }
+.mup-audio { width: 100%; height: 36px; }
+.mup-preview { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.mup-preview img {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
+  border: 1px solid var(--c-line);
+  border-radius: 8px;
+  background: #000;
+}
+
+/* Tag set search. */
+.mup-picker { position: relative; display: flex; flex-direction: column; gap: 8px; }
+.mup-search { position: relative; }
+.mup-search svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--c-t3); pointer-events: none; }
+.mup-search input { padding-left: 36px; }
+.mup-options {
+  position: absolute;
+  z-index: 20;
+  top: 48px;
+  left: 0;
+  right: 0;
+  max-height: 300px;
+  overflow-y: auto;
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  border: 1px solid var(--c-line);
+  border-radius: 10px;
+  background: var(--c-card);
+  box-shadow: 0 20px 50px -20px rgba(0, 0, 0, 0.5);
+}
+.mup-options button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 40px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  color: var(--c-text);
+  font-size: 14.5px;
+  text-align: left;
+}
+.mup-options button:hover,
+.mup-options button:focus-visible { background: var(--c-card2); outline: none; }
+.mup-options .smb-mono { font-size: 11.5px; }
+.mup-empty { padding: 10px; color: var(--c-t3); font-size: 13.5px; }
+.mup-quick { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; font-size: 13px; }
+.mup-quick button {
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--c-line);
+  border-radius: var(--u-r-pill, 999px);
+  color: var(--c-t2);
+  font-size: 13px;
+}
+.mup-quick button:hover { color: var(--c-text); border-color: var(--c-accline); }
+.mup-quick button.is-on { color: var(--c-text); border-color: var(--c-accline); background: var(--c-accsoft); }
+
+/* Editable tag chips. */
+.mup-chips li { display: inline-flex; align-items: center; gap: 4px; padding-right: 4px; }
+.mup-chips button {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  color: var(--c-t3);
+}
+.mup-chips button:hover,
+.mup-chips button:focus-visible { color: var(--c-text); background: var(--c-line); outline: none; }
+.mup-addtag { display: flex; gap: 8px; }
+.mup-addtag input { flex: 1; min-width: 0; }
+.mup-select { height: 44px; font-size: 15px; }
+.mup-submit { align-self: flex-start; }
+.mup-link { align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; }
+
+.mup-upsell {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid var(--c-accline);
+  border-radius: 10px;
+  background: var(--c-card2);
+}
+.mup-upsell h3 { margin: 0; font-size: 17px; font-weight: 600; }
+.mup-upsell p { margin: 0; color: var(--c-t2); font-size: 14.5px; line-height: 1.55; }
+
+/* The SendMyBeat pitch under the tool. */
+.mup-pitch ul { display: grid; gap: 10px; width: 100%; list-style: none; padding: 0; margin: 0; }
+.mup-features { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.mup-plans { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.mup-pitch li {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--c-line);
+  border-radius: 10px;
+  background: var(--c-card);
+}
+.mup-pitch li strong { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; color: var(--c-text); font-size: 15px; }
+.mup-pitch li span:not(.smb-pill):not(.smb-mono) { color: var(--c-t2); font-size: 13.5px; line-height: 1.5; }
+
+@media (max-width: 640px) {
+  .mup-features,
+  .mup-plans { grid-template-columns: minmax(0, 1fr); }
+  .mup-actions .smb-btn,
+  .mup-submit,
+  .mup-link { width: 100%; }
+}

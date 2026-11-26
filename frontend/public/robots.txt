@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /admin/
+Disallow: /youtube-callback
+Disallow: /viz-embed
+Disallow: /pros/
+
+Sitemap: https://www.sendmybeat.com/sitemap.xml

@@ -8,12 +8,14 @@ import { useCallback, useEffect } from 'react';
 import { AuthProvider, useAuth } from '@/api/auth';
 import { setPaywallHandler } from '@/api/client';
 import { LaunchIntro } from '@/components/launch-intro';
+import { AppTour } from '@/components/tour';
 import { ThemeTransition } from '@/components/theme-transition';
 import { useAppIconSync } from '@/state/app-icon';
 import { openPaywall, useFreePlanPrompt, useKnownSubscription, type PaywallReason } from '@/state/billing';
 import { DraftProvider } from '@/state/draft';
 import { useJobNotifications } from '@/state/notifications';
 import { StudioProvider } from '@/state/studio';
+import { useTourOpen, wantsAutoTour } from '@/state/tour';
 import { F, useColors } from '@/theme';
 
 SplashScreen.preventAutoHideAsync();
@@ -43,8 +45,11 @@ function Session() {
 }
 
 // Signed in: the plans for free accounts, and job notifications for this phone.
+// A new account's tour comes first; the plans wait until it's closed.
 function SignedIn() {
-  useFreePlanPrompt();
+  const { user } = useAuth();
+  const touring = useTourOpen();
+  useFreePlanPrompt(!touring && !wantsAutoTour(user));
   useJobNotifications();
   return null;
 }
@@ -117,6 +122,7 @@ function RootStack() {
           <Stack.Screen name="auth" options={{ presentation: 'modal' }} />
         </Stack.Protected>
       </Stack>
+      {user ? <AppTour /> : null}
       <LaunchIntro onShown={hideSplash} />
     </ThemeProvider>
   );

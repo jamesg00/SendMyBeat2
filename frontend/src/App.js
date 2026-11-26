@@ -2,6 +2,9 @@ import { useState, useEffect } from "react";
 import "@/App.css";
 import "@/styles/console.css";
 import "@/styles/pros.css";
+import "@/styles/ultra.css";
+import "@/styles/ultra-create.css";
+import "@/styles/ultra-sections.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import axios from "axios";
 import LandingPage from "@/pages/LandingPage";
@@ -9,6 +12,7 @@ import Dashboard from "@/pages/Dashboard";
 import AdminCosts from "@/pages/AdminCosts";
 import AdminUsers from "@/pages/AdminUsers";
 import AdminInbox from "@/pages/AdminInbox";
+import AdminSecurity from "@/pages/AdminSecurity";
 import ProducerSpotlight from "@/pages/ProducerSpotlight";
 import ProPage from "@/pages/ProPage";
 import ProPlanPage from "@/pages/ProPlanPage";
@@ -16,8 +20,17 @@ import YouTubeCallback from "@/pages/YouTubeCallback";
 import PrivacyPolicy from "@/pages/PrivacyPolicy";
 import TermsAndConditions from "@/pages/TermsAndConditions";
 import About from "@/pages/About";
+import FreeTagGenerator from "@/pages/FreeTagGenerator";
+import TypeBeatSeoPage from "@/pages/TypeBeatSeoPage";
+import TagSetPage from "@/pages/TagSetPage";
+import BlogIndex from "@/pages/BlogIndex";
+import TrendingTypeBeats from "@/pages/TrendingTypeBeats";
+import { SEO_PATHS } from "@/lib/seoPages";
+import ToolPage from "@/pages/tools/ToolPage";
+import { BLOG, TOOL_PATHS, TRENDING_PAGE } from "@/lib/seoModel";
 import VizEmbed from "@/pages/VizEmbed";
 import Footer from "@/components/Footer";
+import RouteMeta from "@/lib/RouteMeta";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/lib/ThemeContext";
 import { clearAuthToken, getAuthToken } from "@/lib/auth";
@@ -155,6 +168,7 @@ function MainApp() {
       <div className="App flex flex-col min-h-screen">
         <Toaster position="top-right" richColors />
         <BrowserRouter>
+        <RouteMeta />
         <div className="flex-grow">
           <Routes>
             <Route
@@ -184,6 +198,10 @@ function MainApp() {
               element={adminRoute(<AdminInbox />)}
             />
             <Route
+              path="/admin/security"
+              element={adminRoute(<AdminSecurity />)}
+            />
+            <Route
               path="/dashboard"
               element={
                 isAuthenticated ? (
@@ -195,19 +213,25 @@ function MainApp() {
             />
             <Route
               path="/youtube-callback"
-              element={
-                isAuthenticated ? (
-                  <YouTubeCallback />
-                ) : (
-                  <Navigate to="/" replace />
-                )
-              }
+              element={<YouTubeCallback isAuthenticated={isAuthenticated} setIsAuthenticated={setIsAuthenticated} />}
             />
             <Route path="/pros/:id" element={isAuthenticated ? <ProPage /> : <Navigate to="/" replace />} />
             <Route path="/pros/:id/plan" element={isAuthenticated ? <ProPlanPage /> : <Navigate to="/" replace />} />
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
             <Route path="/terms" element={<TermsAndConditions />} />
             <Route path="/about" element={<About />} />
+            <Route path="/free-tag-generator" element={<FreeTagGenerator />} />
+            {/* Guides and blog posts (lib/seoModel.js GUIDES, BLOG_POSTS) */}
+            {SEO_PATHS.map((path) => (
+              <Route key={path} path={path} element={<TypeBeatSeoPage />} />
+            ))}
+            <Route path="/type-beat-tags/:slug" element={<TagSetPage />} />
+            <Route path={BLOG.path} element={<BlogIndex />} />
+            <Route path={TRENDING_PAGE.path} element={<TrendingTypeBeats />} />
+            {/* Free tool pages (lib/seoModel.js TOOL_PAGES) */}
+            {TOOL_PATHS.map((path) => (
+              <Route key={path} path={path} element={<ToolPage />} />
+            ))}
           </Routes>
         </div>
           <Footer />

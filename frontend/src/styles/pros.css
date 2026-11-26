@@ -502,6 +502,23 @@ button.adm-btn-danger.adm-btn-danger:hover { background: color-mix(in srgb, var(
   .adm-inbox-fields { grid-template-columns: 1fr; gap: 2px; }
   .adm-inbox-fields dd { margin-bottom: 6px; }
 }
+/* Admin watchdog: flagged attacks and blocked addresses. Attacker text wraps anywhere so it never widens the page. */
+.adm-tiles.adm-wd-tiles { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+.adm-wd-notice { display: flex !important; align-items: center; gap: 10px; color: var(--c-warn); border-color: color-mix(in srgb, var(--c-warn) 45%, transparent) !important; font-size: 14px; }
+.adm-wd-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px 14px; flex-wrap: wrap; min-width: 0; }
+.adm-wd-you { overflow-wrap: anywhere; }
+.adm-wd-ip { font: 600 14px var(--font-mono); word-break: break-all; min-width: 0; }
+.adm-wd-label { font-size: 14.5px; font-weight: 600; overflow-wrap: anywhere; min-width: 0; }
+.adm-wd-pills { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.adm-wd-pills .smb-pill { white-space: normal; overflow-wrap: anywhere; }
+.adm-wd-line { margin: 0; min-width: 0; }
+.adm-wd-code { font: 12.5px/1.5 var(--font-mono); white-space: pre-wrap; word-break: break-all; }
+.adm .adm-wd-more { all: unset; margin-left: 8px; font: 500 12px var(--font-sans, inherit); color: var(--c-t2); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; white-space: nowrap !important; min-width: 0 !important; }
+.adm .adm-wd-more:hover { color: var(--c-text); }
+.adm .adm-wd-more:focus-visible { outline: 2px solid var(--c-accline); outline-offset: 2px; }
+.adm-wd-filter { display: flex; align-items: center; gap: 8px 10px; flex-wrap: wrap; min-width: 0; }
+.adm .adm-inbox-foot .adm-actions { flex-wrap: wrap; }
+.smb-nav-tag.smb-nav-tag--alert { color: var(--c-danger); background: var(--c-dangersoft); border-color: color-mix(in srgb, var(--c-danger) 45%, transparent); }
 
 /* Recent runs: about six rows tall, the rest scrolls; a fade at the bottom hints there's more. */
 .wf-runs--scroll { max-height: 296px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--c-line) transparent; -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(180deg, #000 calc(100% - 28px), transparent); padding-bottom: 20px; }

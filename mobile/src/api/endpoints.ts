@@ -3,7 +3,7 @@ import { File } from 'expo-file-system';
 import { api, runJob, type JobProgress } from './client';
 
 // Shapes follow the Pydantic models in backend/server.py and backend/models_spotlight.py.
-export type User = { id: string; username: string; is_admin?: boolean; email?: string | null };
+export type User = { id: string; username: string; is_admin?: boolean; email?: string | null; created_at?: string | null };
 export type TokenResponse = { access_token: string; token_type: string; user: User };
 
 export type SubscriptionStatus = {
@@ -18,6 +18,8 @@ export type SubscriptionStatus = {
   /** In the free trial: credits are per day until trial_ends_at. */
   trial?: boolean;
   trial_available?: boolean;
+  /** "starter" = a free account's one-time credits, "daily" = the trial, "monthly" = a paid plan. */
+  counter?: string;
   trial_ends_at?: string | null;
   /** Copying a pro's style, pro breakdowns, channel analytics and the job queue. */
   pro_access?: boolean;

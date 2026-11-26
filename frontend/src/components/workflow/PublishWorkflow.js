@@ -22,7 +22,7 @@ const PublishWorkflow = ({
   return (
     <div className="space-y-5">
       <div className="workflow-toolbar-strip">
-        <div className="workflow-step-strip">
+        <div className="workflow-step-strip ucr-rise">
           <span className="workflow-step-pill workflow-step-pill--done">1. Build Metadata</span>
           <span className="workflow-step-pill">2. Review Outputs</span>
           <span className="workflow-step-pill">3. Connect + Upload</span>
@@ -48,16 +48,16 @@ const PublishWorkflow = ({
       </div>
 
       <div className="space-y-4 sm:space-y-6">
-        <div className="terminal-workflow-grid">
-          <div className="terminal-workflow-column">
+        <div className="terminal-workflow-grid ucr-rise">
+          <div className="terminal-workflow-column" data-tour="tags">
             <TagsSection {...tagsSectionProps} mode="editor" showInlineOutput={false} />
           </div>
-          <div className="terminal-workflow-column">
+          <div className="terminal-workflow-column" data-tour="descriptions">
             <DescriptionsSection {...descriptionsSectionProps} mode="editor" showInlineOutput={false} />
           </div>
         </div>
 
-        <div className="workflow-results-shell">
+        <div className="workflow-results-shell" data-tour="review">
           <div className="workflow-results-shell__header">
             <p className="workflow-section-kicker">Review Outputs</p>
           </div>
@@ -71,7 +71,7 @@ const PublishWorkflow = ({
           </div>
         </div>
 
-        <section className="workflow-results-shell up-shell">
+        <section className="workflow-results-shell up-shell" data-tour="upload">
         <div className="workflow-results-shell__header up-head">
           <div className="min-w-0">
             <p className="workflow-section-kicker">Upload</p>

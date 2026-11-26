@@ -8,7 +8,7 @@ import * as api from '@/api/endpoints';
 import type { VerificationApplication } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
 import { Avatar, openWebLink } from '@/components/producer';
-import { Button, confirmAction, Segmented } from '@/components/ui';
+import { Button, confirmAction, Segmented, TopLight } from '@/components/ui';
 import { F, display, font, makeStyles, useColors } from '@/theme';
 
 // Admins only: verification requests, waiting or already decided. Approving a claim from the
@@ -92,6 +92,7 @@ function Request({ app, onDone }: { app: VerificationApplication; onDone: (statu
 
   return (
     <View style={s.card}>
+      <TopLight />
       <Pressable
         onPress={() => router.push({ pathname: '/producer/[id]', params: { id: app.user_id } })}
         style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}

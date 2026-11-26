@@ -800,11 +800,11 @@ export default function ProducerSpotlight() {
       {/* Featured Producers */}
       {spotlightData?.featured_producers.length > 0 && (
         <section>
-          <div className="flex items-center gap-2 mb-6">
+          <div className="usx-sec-head flex items-center gap-2 mb-6">
             <Trophy className="h-5 w-5" />
             <h2 className="text-2xl font-bold">Featured Producers</h2>
           </div>
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <div className="usx-featured grid grid-cols-1 xl:grid-cols-2 gap-4">
             {spotlightData.featured_producers.map(p => (
               <ProducerCard key={p.user_id} producer={p} badge="featured" />
             ))}
@@ -826,7 +826,7 @@ export default function ProducerSpotlight() {
 
       {activeView === "trending" && (
         <section>
-          <div className="flex items-center gap-2 mb-6">
+          <div className="usx-sec-head flex items-center gap-2 mb-6">
             <TrendingUp className="h-6 w-6 text-blue-500" />
             <h2 className="text-2xl font-bold">Trending Now</h2>
           </div>
@@ -846,7 +846,7 @@ export default function ProducerSpotlight() {
 
       {activeView === "new" && (
         <section>
-          <div className="flex items-center gap-2 mb-6">
+          <div className="usx-sec-head flex items-center gap-2 mb-6">
             <Sparkles className="h-6 w-6 text-purple-500" />
             <h2 className="text-2xl font-bold">New Users</h2>
           </div>
@@ -860,7 +860,7 @@ export default function ProducerSpotlight() {
 
       {activeView === "streaks" && (
         <section>
-          <div className="flex items-center gap-2 mb-6">
+          <div className="usx-sec-head flex items-center gap-2 mb-6">
             <Flame className="h-6 w-6 text-orange-500" />
             <h2 className="text-2xl font-bold">Streak Leaders (Ranked by Days)</h2>
           </div>
@@ -875,7 +875,7 @@ export default function ProducerSpotlight() {
       {activeView === "network" && (
         <section>
           <div className="flex items-center justify-between gap-2 mb-6">
-            <div className="flex items-center gap-2">
+            <div className="usx-sec-head flex items-center gap-2">
               <Globe className="h-5 w-5" />
               <h2 className="text-2xl font-bold">Producer Network</h2>
             </div>

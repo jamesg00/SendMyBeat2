@@ -1,6 +1,10 @@
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Music, Zap, Youtube, Target, TrendingUp, Shield } from "lucide-react";
+import {
+  ArrowLeft, Music, Zap, Youtube, Target, TrendingUp, Shield, Wrench, Search,
+  Lightbulb, Users, Sparkles, MousePointerClick, Rocket, Heart,
+} from "lucide-react";
+import PolicyIcon from "@/components/PolicyIcon";
 import "@/pages/PolicyPages.css";
 
 const About = () => {
@@ -22,7 +26,7 @@ const About = () => {
 
         <div className="policy-card p-4 sm:p-6 md:p-8 lg:p-12">
           <h1 className="policy-title text-center text-2xl font-bold mb-3 sm:mb-4 sm:text-3xl md:text-4xl lg:text-5xl">
-            About SendMyBeat
+            About <span className="u-grad-text">SendMyBeat</span>
           </h1>
           <p className="policy-muted mb-8 px-2 text-center text-sm sm:mb-12 sm:text-base md:text-lg lg:text-xl">
             Empowering Music Producers to Maximize Beat Discoverability
@@ -31,7 +35,7 @@ const About = () => {
           <div className="policy-copy space-y-6 sm:space-y-8">
             <section>
               <h2 className="policy-title mb-3 flex items-center gap-2 text-xl font-semibold sm:mb-4 sm:gap-3 sm:text-2xl md:text-3xl">
-                <Target className="policy-muted w-5 h-5 flex-shrink-0 sm:w-6 sm:h-6 md:w-8 md:h-8" />
+                <PolicyIcon icon={Target} />
                 <span>Our Mission</span>
               </h2>
               <p className="text-sm sm:text-base md:text-lg leading-relaxed">
@@ -41,7 +45,7 @@ const About = () => {
 
             <section>
               <h2 className="policy-title mb-3 flex items-center gap-2 text-xl font-semibold sm:mb-4 sm:gap-3 sm:text-2xl md:text-3xl">
-                <Zap className="policy-muted w-5 h-5 flex-shrink-0 sm:w-6 sm:h-6 md:w-8 md:h-8" />
+                <PolicyIcon icon={Zap} />
                 <span>What We Do</span>
               </h2>
               <p className="text-sm sm:text-base md:text-lg leading-relaxed mb-3 sm:mb-4">
@@ -50,11 +54,11 @@ const About = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mt-4 sm:mt-6">
                 <div className="policy-feature-card p-4 sm:p-5 md:p-6">
                   <div className="flex items-start gap-2 sm:gap-3">
-                    <Music className="policy-muted mt-1 w-5 h-5 flex-shrink-0 sm:w-6 sm:h-6" />
+                    <PolicyIcon icon={Music} />
                     <div>
                       <h3 className="policy-title mb-1.5 text-sm font-semibold sm:mb-2 sm:text-base md:text-lg">AI Tag Generation</h3>
                       <p className="text-xs sm:text-sm">
-                        Generate high-intent, YouTube search–optimized tags from your queries. We score each tag using YouTube result volume and top-video view proxies so your upload pack favors real search demand—not low-volume song-only long-tail.
+                        Turn one search like "Drake type beat" into up to 50 tags. Every tag is scored for search demand, competition and how well it fits your beat, then the best ones are packed into YouTube's 500-character tag box.
                       </p>
                     </div>
                   </div>
@@ -62,7 +66,7 @@ const About = () => {
 
                 <div className="policy-feature-card p-4 sm:p-5 md:p-6">
                   <div className="flex items-start gap-2 sm:gap-3">
-                    <TrendingUp className="policy-muted mt-1 w-5 h-5 flex-shrink-0 sm:w-6 sm:h-6" />
+                    <PolicyIcon icon={TrendingUp} />
                     <div>
                       <h3 className="policy-title mb-1.5 text-sm font-semibold sm:mb-2 sm:text-base md:text-lg">Smart Description Management</h3>
                       <p className="text-xs sm:text-sm">
@@ -74,7 +78,7 @@ const About = () => {
 
                 <div className="policy-feature-card p-4 sm:p-5 md:p-6">
                   <div className="flex items-start gap-2 sm:gap-3">
-                    <Youtube className="policy-muted mt-1 w-5 h-5 flex-shrink-0 sm:w-6 sm:h-6" />
+                    <PolicyIcon icon={Youtube} />
                     <div>
                       <h3 className="policy-title mb-1.5 text-sm font-semibold sm:mb-2 sm:text-base md:text-lg">YouTube Integration</h3>
                       <p className="text-xs sm:text-sm">
@@ -86,11 +90,35 @@ const About = () => {
 
                 <div className="policy-feature-card p-4 sm:p-5 md:p-6">
                   <div className="flex items-start gap-2 sm:gap-3">
-                    <Shield className="policy-muted mt-1 w-5 h-5 flex-shrink-0 sm:w-6 sm:h-6" />
+                    <PolicyIcon icon={Shield} />
                     <div>
                       <h3 className="policy-title mb-1.5 text-sm font-semibold sm:mb-2 sm:text-base md:text-lg">Flexible Plans</h3>
                       <p className="text-xs sm:text-sm">
-                        Start free with 2 daily AI generations and 2 YouTube uploads, or upgrade to Pro for unlimited access. No commitments, cancel anytime.
+                        Start free with 3 AI generations and 3 YouTube uploads, no card needed. They're one-time credits. After that, Plus is $5 a month for 50 of each and Pro is $10 a month for 100 of each. Cancel anytime.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="policy-feature-card p-4 sm:p-5 md:p-6">
+                  <div className="flex items-start gap-2 sm:gap-3">
+                    <PolicyIcon icon={Wrench} />
+                    <div>
+                      <h3 className="policy-title mb-1.5 text-sm font-semibold sm:mb-2 sm:text-base md:text-lg">Free Tools, No Sign-Up</h3>
+                      <p className="text-xs sm:text-sm">
+                        Try the tag generator once without an account, and use the <Link to="/type-beat-title-generator" className="policy-link">title generator</Link>, <Link to="/beat-description-generator" className="policy-link">description generator</Link>, <Link to="/youtube-hashtag-generator" className="policy-link">hashtag generator</Link> and <Link to="/youtube-tag-counter" className="policy-link">tag counter</Link> as often as you like. With a free account, the <Link to="/upload-mp3-to-youtube" className="policy-link">MP3 to YouTube uploader</Link> puts your beat and a picture or GIF on your channel, 3 times a day.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="policy-feature-card p-4 sm:p-5 md:p-6">
+                  <div className="flex items-start gap-2 sm:gap-3">
+                    <PolicyIcon icon={Search} />
+                    <div>
+                      <h3 className="policy-title mb-1.5 text-sm font-semibold sm:mb-2 sm:text-base md:text-lg">Tag Sets for 150 Artists</h3>
+                      <p className="text-xs sm:text-sm">
+                        Ready-made <Link to="/type-beat-tags" className="policy-link">type beat tag sets</Link> for 150 artists and 21 styles, each with what buyers are searching on YouTube this week.
                       </p>
                     </div>
                   </div>
@@ -99,8 +127,9 @@ const About = () => {
             </section>
 
             <section>
-              <h2 className="policy-title mb-3 text-xl font-semibold sm:mb-4 sm:text-2xl md:text-3xl">
-                Why We Built This
+              <h2 className="policy-title mb-3 flex items-center gap-2 text-xl font-semibold sm:mb-4 sm:gap-3 sm:text-2xl md:text-3xl">
+                <PolicyIcon icon={Lightbulb} />
+                <span>Why We Built This</span>
               </h2>
               <p className="text-sm sm:text-base md:text-lg leading-relaxed mb-3 sm:mb-4">
                 As fellow creators in the music industry, we understand the challenges producers face. Creating amazing beats is only half the battle—the other half is getting them in front of potential buyers and collaborators. Traditional methods of tagging and describing content are time-consuming and often ineffective.
@@ -111,54 +140,59 @@ const About = () => {
             </section>
 
             <section>
-              <h2 className="policy-title mb-3 text-xl font-semibold sm:mb-4 sm:text-2xl md:text-3xl">
-                Who We Are
+              <h2 className="policy-title mb-3 flex items-center gap-2 text-xl font-semibold sm:mb-4 sm:gap-3 sm:text-2xl md:text-3xl">
+                <PolicyIcon icon={Users} />
+                <span>Who We Are</span>
               </h2>
               <p className="text-sm sm:text-base md:text-lg leading-relaxed">
-                We're a team passionate about music technology and empowering independent creators. We believe that great music deserves to be heard, and we're committed to providing tools that level the playing field for producers of all sizes. Whether you're just starting out or you're an established producer, SendMyBeat.com is designed to help you grow your audience and increase your reach.
+                SendMyBeat is built by a producer who cares about music technology and independent creators. We believe that great music deserves to be heard, and we're committed to providing tools that level the playing field for producers of all sizes. Whether you're just starting out or you're an established producer, SendMyBeat.com is designed to help you grow your audience and increase your reach.
               </p>
             </section>
 
             <section className="policy-feature-card p-4 sm:p-6 md:p-8">
-              <h2 className="policy-title mb-3 text-center text-xl font-semibold sm:mb-4 sm:text-2xl md:text-3xl">
-                Our Commitment
+              <h2 className="policy-title mb-3 flex items-center justify-center gap-2 text-xl font-semibold sm:mb-4 sm:gap-3 sm:text-2xl md:text-3xl">
+                <PolicyIcon icon={Heart} />
+                <span>Our Commitment</span>
               </h2>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 text-center">
                 <div>
+                  <PolicyIcon icon={Sparkles} className="policy-icon--lg mb-3" />
                   <div className="policy-title mb-2 text-3xl font-bold sm:text-4xl">Quality</div>
                   <p className="text-sm">
                     We use state-of-the-art AI technology to deliver the best results for your content optimization needs.
                   </p>
                 </div>
                 <div>
+                  <PolicyIcon icon={MousePointerClick} className="policy-icon--lg mb-3" />
                   <div className="policy-title mb-2 text-3xl font-bold sm:text-4xl">Simplicity</div>
                   <p className="text-sm">
                     Our platform is designed to be intuitive and easy to use, saving you time and effort.
                   </p>
                 </div>
                 <div>
-                  <div className="policy-title mb-1.5 text-2xl font-bold sm:mb-2 sm:text-3xl md:text-4xl">Growth</div>
-                  <p className="text-xs sm:text-sm">
+                  <PolicyIcon icon={Rocket} className="policy-icon--lg mb-3" />
+                  <div className="policy-title mb-2 text-3xl font-bold sm:text-4xl">Growth</div>
+                  <p className="text-sm">
                     We're constantly improving our tools and adding new features based on user feedback.
                   </p>
                 </div>
               </div>
             </section>
 
-            <section>
+            <section className="u-cta usx-cta">
               <h2 className="policy-title mb-3 text-xl font-semibold sm:mb-4 sm:text-2xl md:text-3xl">
                 Get Started Today
               </h2>
               <p className="mb-4 text-sm leading-relaxed sm:mb-6 sm:text-base md:text-lg">
-                Join thousands of music producers who are already maximizing their beat discoverability with SendMyBeat.com. Start with our free plan and experience the power of AI-optimized content management. Upgrade to Pro whenever you're ready for unlimited access.
+                Try the tag generator free without an account, 3 runs a day, or sign up and get 3 free generations and 3 free uploads. When you need more, pick Plus or Pro.
               </p>
               <div className="flex justify-center px-2">
                 <Button
-                  onClick={() => navigate('/dashboard')}
+                  onClick={() => navigate('/free-tag-generator')}
                   size="lg"
                   className="matrix-btn w-full sm:w-auto text-sm sm:text-base md:text-lg px-6 sm:px-8 py-5 sm:py-6"
                 >
-                  Go to Dashboard
+                  Try the free tag generator
                 </Button>
               </div>
             </section>

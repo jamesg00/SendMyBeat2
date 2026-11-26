@@ -505,6 +505,34 @@ class TestYouTubeUpload(unittest.IsolatedAsyncioTestCase):
         self.assertIn("(0.5000*W*0.5)", chain)
         self.assertIn("(-0.2500*H*0.5)", chain)
 
+    def test_watermark_is_the_old_top_left_box_with_scrolling_text(self):
+        payload = {
+            "target_w": 1920,
+            "target_h": 1080,
+            "image_scale_x": 1.0,
+            "image_scale_y": 1.0,
+            "image_pos_x": 0.0,
+            "image_pos_y": 0.0,
+            "image_rotation": 0.0,
+            "background_color": "black",
+            "remove_watermark": False,
+            "mux_fps": 15,
+        }
+        chain = server._build_render_filter(payload)
+        self.assertIn("Upload your beats online", chain)
+        self.assertIn("color=c=black@0.6", chain)
+        self.assertIn("mod(t*", chain)
+        self.assertIn("[wmbox]overlay=x=18:y=18", chain)
+        self.assertTrue(chain.endswith("[vout]"))
+
+    def test_watermark_scroll_raises_still_fps_only_when_watermarked(self):
+        payload = {"render_fps": 2, "remove_watermark": False}
+        self.assertTrue(server._apply_watermark_scroll_fps(payload))
+        self.assertEqual(server._resolve_ffmpeg_mux_fps(payload), server.YOUTUBE_WATERMARK_SCROLL_FPS)
+        clean = {"render_fps": 2, "remove_watermark": True}
+        self.assertFalse(server._apply_watermark_scroll_fps(clean))
+        self.assertNotIn("mux_fps", clean)
+
     def test_render_settings_accept_free_transform_ranges(self):
         settings = server._normalize_upload_render_settings(
             aspect_ratio="16:9", image_scale=1.0, image_scale_x=3.5, image_scale_y=0.2,

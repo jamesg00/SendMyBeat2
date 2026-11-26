@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as api from '@/api/endpoints';
 import { FEEDBACK_STATUS_LABEL, type FeedbackKind } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
-import { AppIcon, Button, Segmented } from '@/components/ui';
+import { AppIcon, Button, Segmented, TopLight } from '@/components/ui';
 import { F, R, display, font, makeStyles, useColors } from '@/theme';
 
 // Report a bug or suggest a feature. The app adds its version and the phone model, so a report
@@ -89,6 +89,7 @@ export default function FeedbackScreen() {
 
         {sent ? (
           <View style={s.thanks} accessibilityLiveRegion="polite">
+            <TopLight />
             <Text style={s.thanksTitle}>✓ Sent</Text>
             <Text style={s.sub}>{copy.thanks}</Text>
             <Button title="Send another" variant="secondary" size="md" onPress={() => setSent(false)} />
@@ -105,7 +106,10 @@ export default function FeedbackScreen() {
             />
 
             <View style={{ gap: 8 }}>
-              <Text style={s.label}>{kind === 'bug' ? 'WHERE DID IT HAPPEN?' : 'WHERE WOULD IT GO?'} (OPTIONAL)</Text>
+              <Text style={s.label}>
+                <Text style={s.slash}>{'// '}</Text>
+                {kind === 'bug' ? 'WHERE DID IT HAPPEN?' : 'WHERE WOULD IT GO?'} (OPTIONAL)
+              </Text>
               <View style={s.chips}>
                 {SCREENS.map((name) => {
                   const on = screen === name;
@@ -113,7 +117,7 @@ export default function FeedbackScreen() {
                     <Pressable
                       key={name}
                       onPress={() => setScreen(on ? null : name)}
-                      style={[s.chip, on && { borderColor: C.acc, backgroundColor: C.accSoft }]}
+                      style={[s.chip, on && { borderColor: C.accLine, backgroundColor: C.accSoft }]}
                       accessibilityRole="radio"
                       accessibilityState={{ checked: on }}>
                       <Text style={[s.chipText, on && { color: C.acc }]}>{name}</Text>
@@ -124,7 +128,10 @@ export default function FeedbackScreen() {
             </View>
 
             <View style={{ gap: 8 }}>
-              <Text style={s.label}>{copy.prompt.toUpperCase()}</Text>
+              <Text style={s.label}>
+                <Text style={s.slash}>{'// '}</Text>
+                {copy.prompt.toUpperCase()}
+              </Text>
               <TextInput
                 value={message}
                 onChangeText={setMessage}
@@ -146,8 +153,12 @@ export default function FeedbackScreen() {
 
         {mine.data?.items.length ? (
           <View style={{ gap: 8 }}>
-            <Text style={s.label}>WHAT YOU’VE SENT</Text>
+            <Text style={s.label}>
+              <Text style={s.slash}>{'// '}</Text>
+              WHAT YOU’VE SENT
+            </Text>
             <View style={s.list}>
+              <TopLight />
               {mine.data.items.map((item, i) => (
                 <View key={item.id} style={[s.row, i === 0 && { borderTopWidth: 0 }]}>
                   <View style={{ flex: 1, gap: 2 }}>
@@ -175,9 +186,10 @@ const useStyles = makeStyles((C) => ({
   head: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   title: { color: C.text, fontSize: 22, lineHeight: 26, ...display },
   sub: { color: C.t2, fontSize: 14, lineHeight: 20, ...font() },
-  label: { color: C.t3, fontSize: 11, letterSpacing: 0.6, fontFamily: F.monoMedium },
+  label: { color: C.t2, fontSize: 11, letterSpacing: 0.6, fontFamily: F.monoMedium },
+  slash: { color: C.t3 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, borderWidth: 1, borderColor: C.line, backgroundColor: C.card },
+  chip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: R.chip, borderWidth: 1, borderColor: C.line, backgroundColor: C.card },
   chipText: { color: C.t2, fontSize: 13, ...font('500') },
   input: {
     minHeight: 140,

@@ -32,10 +32,10 @@ export const CreditsCard = ({ subscription, onPlans }) => {
   if (!subscription) return null;
   const s = subscription;
   return (
-    <section className="smb-card">
+    <section className="smb-card usx-credits">
       <div className="smb-card-head">
         <h2 className="smb-card-title">Credits</h2>
-        <span className="smb-mono smb-t3 text-xs">{s.trial ? "resets every day" : s.is_subscribed ? "resets every month" : "no plan yet"}</span>
+        <span className="smb-mono smb-t3 text-xs">{s.trial ? "resets every day" : s.is_subscribed ? "resets every month" : "free, one time"}</span>
       </div>
       {s.is_subscribed ? (
         <>
@@ -46,9 +46,19 @@ export const CreditsCard = ({ subscription, onPlans }) => {
           ) : null}
         </>
       ) : (
-        <p className="smb-t2 text-sm">
-          {s.trial_available ? "Try everything free for 3 days: 3 generations and 3 uploads a day." : "Plus is 50 generations and 50 uploads a month for $5. Pro is 100 of each for $10."}
-        </p>
+        <>
+          {s.counter === "starter" ? (
+            <>
+              <Usage label="Free AI generations" left={s.daily_credits_remaining} total={s.daily_credits_total} />
+              <Usage label="Free uploads" left={s.upload_credits_remaining} total={s.upload_credits_total} />
+            </>
+          ) : null}
+          <p className="smb-t2 text-sm">
+            {s.trial_available
+              ? "Try everything free for 3 days: 3 generations and 3 uploads a day."
+              : `${s.counter === "starter" ? "Free credits don't renew. " : ""}Plus is 50 generations and 50 uploads a month for $5. Pro is 100 of each for $10.`}
+          </p>
+        </>
       )}
       {!s.pro_access ? (
         <Button onClick={onPlans} className="smb-btn smb-btn--pri smb-btn--full">

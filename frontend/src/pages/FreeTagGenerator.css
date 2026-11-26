@@ -1,0 +1,158 @@
+.ftg { display: flex; flex-direction: column; gap: 20px; max-width: 760px; margin: 0 auto; }
+.ftg-h1 { font-size: clamp(26px, 4vw, 40px); font-weight: 700; line-height: 1.15; margin: 0; }
+.ftg-lede { font-size: 16px; line-height: 1.6; margin: 0; }
+.ftg-form { display: flex; flex-direction: column; gap: 12px; }
+.ftg-form input { height: 48px; font-size: 16px; }
+.ftg-form button, .ftg-result button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.ftg-result { display: flex; flex-direction: column; gap: 12px; }
+.ftg-result-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; }
+.ftg-result-head h2 { font-size: 20px; font-weight: 600; margin: 0; }
+.ftg-tags { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0; margin: 0; }
+.ftg-tags li { padding: 6px 10px; border-radius: 999px; border: 1px solid var(--c-line, rgba(127, 127, 127, 0.3)); font-size: 14px; }
+.ftg-cta { display: flex; flex-direction: column; gap: 10px; padding: 20px; align-items: flex-start; }
+.ftg-cta h2 { font-size: 20px; font-weight: 600; margin: 0; }
+.ftg-cta p { margin: 0; line-height: 1.6; }
+.ftg-copy h2 { font-size: 18px; font-weight: 600; margin: 16px 0 6px; }
+.ftg-copy p { line-height: 1.65; margin: 0; }
+.ftg-copy a { text-decoration: underline; }
+.ftg-copy ul { padding-left: 18px; list-style: disc; line-height: 1.8; }
+.ftg-copy h3.ftg-q { font-size: 16px; font-weight: 600; margin: 14px 0 4px; }
+.ftg-links { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.ftg-copy .ftg-examples { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); list-style: none; padding: 0; margin: 0; }
+.ftg-examples li { padding: 12px 14px; border-radius: 12px; border: 1px solid var(--c-line, rgba(127, 127, 127, 0.3)); }
+.ftg-examples a { font-weight: 600; }
+.ftg-examples p { margin: 4px 0 0; font-size: 13px; line-height: 1.5; opacity: 0.8; }
+
+/* ======================================================================
+   Console Ultra look (the landing page's) for the free tag generator, the
+   guides and the tag set pages: the page sits on the background with an
+   aurora behind the title, the tool gets the traveling edge, the sign-up
+   box is the gradient call-to-action card, questions read like the
+   landing FAQ. Tokens only (var(--c-*), var(--u-*)). Looks only.
+   ====================================================================== */
+
+/* No outer box: the copy sits on the page like the landing. Sides follow the page gutter. */
+.policy-card.ftg {
+  overflow: visible;
+  border: 0;
+  background: transparent;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  gap: 24px;
+}
+.policy-card.ftg::before { inset: -120px -10% auto; height: 460px; }
+
+/* Hero: a staggered rise-in, a bigger headline whose end runs into the accent. */
+.policy-card.ftg > :not(.smb-progress) { animation: u-rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.policy-card.ftg > :nth-child(2) { animation-delay: 0.06s; }
+.policy-card.ftg > :nth-child(3) { animation-delay: 0.12s; }
+.policy-card.ftg > :nth-child(4) { animation-delay: 0.18s; }
+.policy-card.ftg > :nth-child(n + 5) { animation-delay: 0.24s; }
+
+.ftg-h1 {
+  align-self: flex-start;
+  width: fit-content;
+  max-width: 100%;
+  font-size: clamp(32px, 5vw, 52px);
+  line-height: 1.04;
+  letter-spacing: -0.035em;
+  background: linear-gradient(100deg, var(--c-text) 0 42%, var(--u-a) 78%, var(--u-b));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent !important;
+  -webkit-text-fill-color: transparent;
+}
+.ftg-lede { max-width: 620px; font-size: 17px; line-height: 1.55; color: var(--c-t2) !important; }
+.ftg .smb-eyebrow a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
+.ftg .smb-eyebrow a:hover { color: var(--c-text); }
+
+/* The tool (the search box, then the result): the traveling edge, like the landing tag lab. */
+.policy-card.ftg > .ftg-form,
+.policy-card.ftg > .ftg-result,
+.ftg-form,
+.ftg-result {
+  --u-edge: conic-gradient(from var(--u-ang), var(--u-a), var(--u-b), color-mix(in srgb, var(--c-text) 6%, transparent) 40%, color-mix(in srgb, var(--c-text) 6%, transparent) 60%, var(--u-a));
+  padding: 16px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: linear-gradient(var(--c-card), var(--c-card)) padding-box, var(--u-edge) border-box;
+  box-shadow: 0 40px 110px -45px var(--u-shadow-b);
+  animation: u-rise 0.7s 0.18s cubic-bezier(0.2, 0.7, 0.2, 1) both, u-spin 7s linear infinite;
+}
+.ftg-result-head h2 { font-size: 16px; }
+
+/* Tags: mono chips with the landing's squarer corners. */
+.ftg-tags { gap: 6px; }
+.ftg-tags li {
+  padding: 5px 9px;
+  border-radius: 6px;
+  border-color: var(--c-line);
+  background: var(--c-card2);
+  color: var(--c-text);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.3;
+}
+
+/* The sign-up box is the gradient call-to-action card (u-cta in the markup). */
+.ftg-cta.u-cta { padding: 28px 24px; gap: 12px; }
+.ftg-cta.u-cta h2 { font-size: 24px; letter-spacing: -0.03em; }
+
+/* Copy: headings in the text color, body one step down, like the landing. */
+.ftg-copy h2 { font-size: 20px; letter-spacing: -0.02em; }
+.ftg-copy p,
+.ftg-copy li { color: var(--c-t2); }
+.ftg-copy a { color: var(--c-text); text-underline-offset: 3px; }
+.ftg-copy a:hover { color: var(--c-acc); }
+
+/* Ready-made sets: small panels with the light along the top. */
+.ftg-examples li {
+  border-color: var(--c-line);
+  background: var(--u-hair) top center / 100% 1px no-repeat, var(--c-card);
+  transition: transform 0.35s var(--ease), border-color 0.3s var(--ease);
+}
+.ftg-examples li:hover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--c-text) 22%, transparent); }
+.ftg-examples a { text-decoration: none; }
+.ftg-examples p { opacity: 1; color: var(--c-t2); }
+
+/* Artist and style links: squarer pills. */
+.ftg-links { gap: 6px; }
+.ftg-copy .ftg-links a {
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--c-line);
+  border-radius: var(--u-r-pill);
+  color: var(--c-t2);
+  font-size: 13.5px;
+  text-decoration: none;
+  transition: border-color 0.2s var(--ease), color 0.2s var(--ease);
+}
+.ftg-copy .ftg-links a:hover { color: var(--c-text); border-color: var(--c-accline); }
+
+/* Questions: rows split by thin rules, like the landing FAQ. */
+.ftg-copy h3.ftg-q {
+  margin: 0;
+  padding: 16px 0 6px;
+  border-top: 1px solid var(--c-line-soft);
+  font-size: 16px;
+  font-weight: 500;
+}
+.ftg-copy h2 + div > h3.ftg-q { margin-top: 6px; }
+.ftg-copy .ftg-q + p { padding-bottom: 14px; font-size: 15px; line-height: 1.55; }
+.ftg-copy > div:last-child:has(> .ftg-q) { border-bottom: 1px solid var(--c-line-soft); }
+
+@media (max-width: 640px) {
+  .ftg-form,
+  .ftg-result { padding: 14px; }
+  .ftg-cta.u-cta { padding: 24px 18px; }
+  .ftg-cta.u-cta .smb-btn { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .policy-card.ftg > *,
+  .ftg-form,
+  .ftg-result { animation: none !important; opacity: 1; transform: none; }
+  .ftg-examples li:hover { transform: none; }
+}

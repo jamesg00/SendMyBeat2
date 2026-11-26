@@ -4,7 +4,7 @@ import { Platform, Pressable, ScrollView, Switch, Text, View } from 'react-nativ
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 
-import { useUiStyles } from '@/components/ui';
+import { Aurora, EdgeCard, useUiStyles } from '@/components/ui';
 import { APP_ICONS, DEFAULT_ICON_PREVIEW, iconInfo, type AppIconId } from '@/data/app-icons';
 import { eventIconFor, upcomingEvents } from '@/data/icon-calendar';
 import { canChangeIcon, iconFor, setHolidayIcons, setIconChoice, useIconPrefs } from '@/state/app-icon';
@@ -38,6 +38,7 @@ export default function AppIconScreen() {
 
   return (
     <ScrollView style={s.root} contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 32 }]}>
+      <Aurora style={{ top: 10, right: -90 }} />
       <View style={s.topBar}>
         <Pressable onPress={() => router.back()} hitSlop={10} style={s.done} accessibilityRole="button">
           <Text style={s.doneText}>Done</Text>
@@ -55,7 +56,7 @@ export default function AppIconScreen() {
         </Text>
       </View>
 
-      <View style={s.card}>
+      <EdgeCard glow style={s.card}>
         <View style={s.nowRow}>
           <Image source={iconInfo(showing)?.preview ?? DEFAULT_ICON_PREVIEW} style={s.nowIcon} accessibilityIgnoresInvertColors />
           <View style={{ flex: 1, gap: 3 }}>
@@ -79,7 +80,7 @@ export default function AppIconScreen() {
         ) : Platform.OS === 'android' ? (
           <Text style={[s.hint, s.divider, { paddingTop: 12 }]}>A new icon shows on your home screen after you leave the app.</Text>
         ) : null}
-      </View>
+      </EdgeCard>
 
       <View style={s.grid} accessibilityRole="radiogroup">
         <IconCell name="SendMyBeat" preview={DEFAULT_ICON_PREVIEW} selected={!paying || prefs.choice === null} locked={false} onPress={() => pick(null)} />
@@ -137,7 +138,8 @@ const useStyles = makeStyles((C) => ({
   done: { minHeight: 44, minWidth: 44, alignItems: 'flex-end', justifyContent: 'center' },
   doneText: { color: C.text, fontSize: 16, ...font('600') },
   sub: { color: C.t2, fontSize: 15, lineHeight: 21, ...font() },
-  card: { padding: 14, gap: 12, borderRadius: R.card + 6, borderWidth: 1, borderColor: C.line, backgroundColor: C.card },
+  // Inside the edge card: its 1px edge plus 13 keeps the old 14 padding.
+  card: { padding: 13, gap: 12 },
   nowRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   nowIcon: { width: 48, height: 48, borderRadius: 11 },
   nowTitle: { color: C.text, fontSize: 15, ...font('600') },

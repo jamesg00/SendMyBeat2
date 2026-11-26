@@ -1132,38 +1132,50 @@ const UploadStudio = ({
 
     const drawingOptions = buildVisualizerOptions(visualizerSettings, { imagePreviewUrl, centerVisualizerImageUrl, spectrumRecordImageUrl });
 
+    let fastRenderError = null;
     if (canExportOffline() && audioFile) {
-      let result;
-      try {
-        setVizBakeStatus("rendering");
-        setVizBakeProgress(0);
-        const source = beatSpectrum || new OfflineAnalyser(await decodeBeat(audioFile));
-        // The new styles need the beat-engine track; build it now if the preview hadn't yet.
-        let track = beatTrack;
-        if (!track && isV2Mode(visualizerSettings.mode)) {
-          track = await buildBeatTrack({ samples: source.samples, sampleRate: source.sampleRate, duration: source.duration }, { signal });
+      let source = null;
+      let track = beatTrack;
+      let rendered = null;
+      // Try the chosen frame rate first. If the phone's encoder gives up (60 fps at full size is
+      // too much for some phones, or memory runs out on a long beat), try again at 30 fps before
+      // falling back to the slow real-time recording.
+      const attempts = exportFps > 30 ? [exportFps, 30] : [exportFps];
+      for (const fps of attempts) {
+        try {
+          setVizBakeStatus("rendering");
+          setVizBakeProgress(0);
+          if (!source) source = beatSpectrum || new OfflineAnalyser(await decodeBeat(audioFile));
+          // The new styles need the beat-engine track; build it now if the preview hadn't yet.
+          if (!track && isV2Mode(visualizerSettings.mode)) {
+            track = await buildBeatTrack({ samples: source.samples, sampleRate: source.sampleRate, duration: source.duration }, { signal });
+          }
+          const result = await exportVisualizerVideo({
+            analyser: source.clone(),
+            beatTrack: track,
+            options: drawingOptions,
+            size: [targetW, targetH],
+            designSize: designSizeFor(videoAspectRatio),
+            fps,
+            duration: source.duration,
+            drawBackdrop: paintBackdrop,
+            onProgress: setVizBakeProgress,
+            signal,
+          });
+          console.info(`Visualizer export: ${result.frames} frames at ${result.fps} fps, ${result.width}x${result.height}, ${result.codec}, ${(result.blob.size / 1048576).toFixed(1)} MB in ${result.seconds.toFixed(1)}s`);
+          if (fps !== exportFps) toast.info(`Rendered the visualizer at ${fps} fps; this browser couldn't encode ${exportFps} fps.`);
+          rendered = { blob: result.blob, fps };
+          break;
+        } catch (error) {
+          if (signal?.aborted) return null; // cancelled: don't fall back to recording
+          fastRenderError = error;
+          console.error(`Offline visualizer export at ${fps} fps failed`, error);
         }
-        result = await exportVisualizerVideo({
-          analyser: source.clone(),
-          beatTrack: track,
-          options: drawingOptions,
-          size: [targetW, targetH],
-          designSize: designSizeFor(videoAspectRatio),
-          fps: exportFps,
-          duration: source.duration,
-          drawBackdrop: paintBackdrop,
-          onProgress: setVizBakeProgress,
-          signal,
-        });
-        console.info(`Visualizer export: ${result.frames} frames at ${result.fps} fps, ${result.width}x${result.height}, ${result.codec}, ${(result.blob.size / 1048576).toFixed(1)} MB in ${result.seconds.toFixed(1)}s`);
-      } catch (error) {
-        if (signal?.aborted) return null; // cancelled: don't fall back to recording
-        console.error("Offline visualizer export failed; falling back to recording", error);
       }
       // Upload failures must not trigger a second, real-time render.
-      if (result) {
-        const fileId = await uploadVisual(result.blob, "visualizer.mp4", "video/mp4");
-        return { fileId, fps: exportFps };
+      if (rendered) {
+        const fileId = await uploadVisual(rendered.blob, "visualizer.mp4", "video/mp4");
+        return { fileId, fps: rendered.fps };
       }
     }
     if (signal?.aborted) return null;
@@ -1171,7 +1183,10 @@ const UploadStudio = ({
     // ---- Fallback: record the canvas in real time for the whole beat.
     setVizBakeStatus("recording");
     setVizBakeProgress(0);
-    toast.info("Direct video encoding is unavailable or failed, so the visualizer is recorded in real time. Keep this tab open and in front until it finishes.", { duration: 12000 });
+    const fallbackReason = fastRenderError
+      ? `The fast render failed (${String(fastRenderError?.message || fastRenderError).slice(0, 120)}),`
+      : "This browser can't encode video directly,";
+    toast.info(`${fallbackReason} so the visualizer is recorded in real time. Keep this tab open and in front until it finishes.`, { duration: 15000 });
 
     // Create a full-res hidden canvas for the dedicated baking visualizer.
     // It must be in the DOM so clientWidth/clientHeight return valid values.
@@ -2001,9 +2016,27 @@ const UploadStudio = ({
                   </button>
                ) : null}
 
-               {!subscriptionStatus?.is_subscribed && !removeWatermark && (
-                  <div className="absolute top-2 left-0 right-0 text-center pointer-events-none">
-                     <div className="upload-watermark-marquee">
+               {/* Shown whenever the render will have it: everyone, unless a paid plan turns it off. */}
+               {(!removeWatermark || !subscriptionStatus?.is_subscribed) && (() => {
+                  // Same size and place as the server draws it: 20px text on a 1280-wide frame,
+                  // 8px padding, 20px from the corner; 16:9 renders at 1920 wide, the rest at 1080.
+                  const targetW = previewDims.width > previewDims.height * 1.2 ? 1920 : 1080;
+                  const k = Math.max(1, targetW / 1280) * (previewDims.width / targetW);
+                  const fontSize = 20 * k;
+                  const pad = 8 * k;
+                  return (
+                  <div
+                     className="upload-watermark-marquee pointer-events-none"
+                     style={{
+                        left: 20 * k - pad,
+                        top: 20 * k - pad,
+                        width: Math.min(fontSize * 28.7 + pad * 2, previewDims.width - (20 * k - pad) * 2),
+                        padding: pad,
+                        fontSize,
+                        zIndex: 5,
+                        '--wm-gap': `${60 * k}px`,
+                     }}
+                  >
                         <div className="upload-watermark-track">
                            <span className="upload-watermark-text">
                               Upload your beats online: https://sendmybeat.com
@@ -2012,9 +2045,9 @@ const UploadStudio = ({
                               Upload your beats online: https://sendmybeat.com
                            </span>
                         </div>
-                     </div>
                   </div>
-               )}
+                  );
+               })()}
             </div>
                {imageSettingsOpen && imagePreviewUrl ? (
                   <FreeTransform

@@ -7,6 +7,8 @@ import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
+  Easing,
   Keyboard,
   Linking,
   PanResponder,
@@ -21,13 +23,14 @@ import {
   type NativeTouchEvent,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Defs, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
+import Svg, { Path } from 'react-native-svg';
 
 import * as api from '@/api/endpoints';
 import type { YouTubeUploadOptions } from '@/api/endpoints';
 import { useRequest } from '@/api/use-request';
 import { AiTab, DetailsTab, ImageTab, TABS, TabIcon, VideoTab, VizTab, type AiResults, type Tab } from '@/components/studio-tabs';
-import { Button, Meter, PlayPauseIcon } from '@/components/ui';
+import { Button, Meter, PlayPauseIcon, TopLight } from '@/components/ui';
+import { UltraFill, gradGlow } from '@/components/ultra';
 import { VisualizerPreview } from '@/components/visualizer-preview';
 import { openPaywall, useSubscription } from '@/state/billing';
 import { useDraft } from '@/state/draft';
@@ -43,9 +46,8 @@ import { F, R, display, font, makeStyles, useColors } from '@/theme';
 type Aspect = YouTubeUploadOptions['aspectRatio'];
 const ASPECT: Record<Aspect, number> = { '16:9': 16 / 9, '1:1': 1, '9:16': 9 / 16, '4:5': 4 / 5 };
 const SHAPE: Record<Aspect, string> = { '16:9': 'YouTube', '9:16': 'Shorts', '1:1': 'Square', '4:5': 'Portrait' };
-// icon 87: mint to blue on black.
+// icon 87: mint on black.
 const MINT = '#8BFFD0';
-const BLUE = '#4C8DFF';
 const SHEET_OVERLAP = 20;
 
 function clock(sec: number) {
@@ -215,6 +217,7 @@ function Editor() {
 
       {landscape ? null : (
         <View style={[s.sheet, { marginTop: keyboard ? insets.top : -SHEET_OVERLAP }]}>
+          <TopLight />
           {!keyboard ? <View style={s.handle} /> : null}
           <View style={s.tabs} accessibilityRole="tablist">
             {TABS.map((t) => {
@@ -258,6 +261,54 @@ function Editor() {
 }
 
 // ---------------------------------------------------------------- Preview
+
+const WATERMARK_TEXT = 'Upload your beats online: https://sendmybeat.com';
+
+/**
+ * The server's watermark, drawn to scale: bold white text in a dark box at the top left, with
+ * the line scrolling on a loop inside the box. Sizes follow the server (20px on a 1280-wide
+ * frame, 8px padding, 20px from the corner; 16:9 renders at 1920 wide, the rest at 1080).
+ */
+function WatermarkBox({ width, height }: { width: number; height: number }) {
+  const s = useStyles();
+  const targetW = width > height * 1.2 ? 1920 : 1080;
+  const k = Math.max(1, targetW / 1280) * (width / targetW);
+  const fontSize = 20 * k;
+  const pad = 8 * k;
+  const gap = 60 * k;
+  const speed = 70 * k;
+  const [textW, setTextW] = useState(0);
+  const offset = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!textW) return;
+    const cycle = textW + gap;
+    offset.setValue(0);
+    const loop = Animated.loop(
+      Animated.timing(offset, { toValue: -cycle, duration: (cycle / speed) * 1000, easing: Easing.linear, useNativeDriver: true }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [textW, gap, speed, offset]);
+
+  // Until the text is measured, size the box from the server's measured width (about 28.7em).
+  const boxW = Math.min((textW || fontSize * 28.7) + pad * 2, width - (20 * k - pad) * 2);
+  return (
+    <View
+      pointerEvents="none"
+      style={[s.watermarkBox, { left: 20 * k - pad, top: 20 * k - pad, width: boxW, height: fontSize * 1.17 + pad * 2 }]}
+    >
+      <Animated.View style={[s.watermarkRow, { left: pad, top: pad, transform: [{ translateX: offset }] }]}>
+        <Text style={[s.watermarkText, { fontSize, lineHeight: fontSize * 1.17 }]} numberOfLines={1} onLayout={(e) => setTextW(e.nativeEvent.layout.width)}>
+          {WATERMARK_TEXT}
+        </Text>
+        <Text style={[s.watermarkText, { fontSize, lineHeight: fontSize * 1.17, marginLeft: gap }]} numberOfLines={1}>
+          {WATERMARK_TEXT}
+        </Text>
+      </Animated.View>
+    </View>
+  );
+}
 
 /**
  * The video frame: the website's visualizer when it's on, otherwise the artwork laid out the way
@@ -375,11 +426,7 @@ function Stage({ width, height, editing, onArt, begin }: { width: number; height
         </Pressable>
       )}
 
-      {watermark && image ? (
-        <Text style={[s.watermark, { color: bg === 'white' && !withViz ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.55)' }]} numberOfLines={1}>
-          Upload your beats online: https://sendmybeat.com
-        </Text>
-      ) : null}
+      {watermark && image ? <WatermarkBox width={width} height={height} /> : null}
 
       {editing && image ? <View style={[StyleSheet.absoluteFill, s.editRing]} {...responder.panHandlers} accessibilityLabel="Drag to move the artwork, pinch to size it" /> : null}
 
@@ -434,11 +481,13 @@ function Scrubber({ player, status, light }: { player: AudioPlayer; status: Audi
 }
 
 function PlayerPill({ player, status, toggle }: { player: AudioPlayer; status: AudioStatus; toggle: () => void }) {
+  const C = useColors();
   const s = useStyles();
   return (
     <View style={s.pill}>
       <Pressable onPress={toggle} style={s.pillPlay} accessibilityRole="button" accessibilityLabel={status.playing ? 'Pause preview' : 'Play preview'}>
-        <PlayPauseIcon playing={status.playing} color="#0A0A0A" />
+        <UltraFill radius={18} sheen={false} />
+        <PlayPauseIcon playing={status.playing} color={C.onGrad} />
       </Pressable>
       <View style={{ flex: 1 }}>
         <Scrubber player={player} status={status} light />
@@ -526,7 +575,7 @@ function UploadBar({ goTo }: { goTo: (t: Tab) => void }) {
 
   return (
     <View style={[s.bar, { paddingBottom: insets.bottom + 10 }]}>
-      {bake ? <Meter value={bake.value} height={3} color={MINT} /> : null}
+      {bake ? <Meter value={bake.value} height={3} gradient /> : null}
       {phase.kind === 'error' ? <Text style={s.barError}>{phase.message}</Text> : null}
       {notConnected && !missing ? <Text style={s.barNote}>Connect your YouTube channel on sendmybeat.com, then come back to upload.</Text> : null}
       {bake ? <Text style={s.barNote}>Keep the app open while the video renders.</Text> : null}
@@ -537,22 +586,18 @@ function UploadBar({ goTo }: { goTo: (t: Tab) => void }) {
             {run ? `${run.tags.length} tags` : 'Tags optional'}
           </Text>
         </View>
-        <Pressable onPress={onPress} style={({ pressed }) => [s.uploadBtn, pressed && enabled && { transform: [{ scale: 0.98 }] }]} accessibilityRole="button" accessibilityState={{ disabled: !enabled }}>
+        <Pressable
+          onPress={onPress}
+          style={({ pressed }) => [s.uploadBtn, enabled && [{ backgroundColor: C.gradB }, gradGlow(C)], pressed && enabled && { transform: [{ scale: 0.98 }] }]}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: !enabled }}>
           {enabled ? (
-            <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
-              <Defs>
-                <LinearGradient id="up" x1="0" y1="0" x2="1" y2="0">
-                  <Stop offset="0" stopColor={MINT} />
-                  <Stop offset="1" stopColor={BLUE} />
-                </LinearGradient>
-              </Defs>
-              <Rect width="100%" height="100%" fill="url(#up)" />
-            </Svg>
+            <UltraFill radius={14} angle="horizontal" />
           ) : (
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: C.card2 }]} />
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: C.card2, borderRadius: 14 }]} />
           )}
           {bake ? <ActivityIndicator color={C.t2} size="small" style={{ marginRight: 8 }} /> : null}
-          <Text style={[s.uploadText, !enabled && { color: C.t2 }]} numberOfLines={1}>
+          <Text style={[s.uploadText, { color: enabled ? C.onGrad : C.t2 }]} numberOfLines={1}>
             {label}
           </Text>
         </Pressable>
@@ -610,7 +655,7 @@ function RenderView({ phase, title }: { phase: Extract<Phase, { kind: 'sending' 
           <Text style={s.monoSub}>{Math.round(pct)}%</Text>
           {stage === 2 && typeof encode === 'number' ? <Text style={s.monoSub}>Encode {Math.round(encode)}%</Text> : null}
         </View>
-        <Meter value={pct / 100} height={4} />
+        <Meter value={pct / 100} height={4} gradient />
       </View>
 
       <View style={s.stages}>
@@ -623,6 +668,7 @@ function RenderView({ phase, title }: { phase: Extract<Phase, { kind: 'sending' 
       </View>
 
       <View style={s.logPanel}>
+        <TopLight />
         <View style={s.logHead}>
           <Text style={[s.sub, { color: C.text, ...font('500') }]}>Log</Text>
           {job ? <Text style={s.monoSub}>job {job.job.id.slice(0, 6)}…</Text> : null}
@@ -688,7 +734,9 @@ const useStyles = makeStyles((C) => ({
   editRing: { borderWidth: 1, borderColor: 'rgba(139,255,208,0.55)', borderStyle: 'dashed' },
   emptyArt: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderColor: '#262626', borderStyle: 'dashed' },
   emptyText: { color: '#A1A1A1', fontSize: 13, fontFamily: F.mono },
-  watermark: { position: 'absolute', top: 8, left: 8, right: 8, textAlign: 'center', fontSize: 9.5, fontFamily: F.mono },
+  watermarkBox: { position: 'absolute', overflow: 'hidden', backgroundColor: 'rgba(0,0,0,0.6)' },
+  watermarkRow: { position: 'absolute', flexDirection: 'row', width: 4000 },
+  watermarkText: { color: '#FFFFFF', ...font('700') },
   premiumChip: { position: 'absolute', left: 8, bottom: 8, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: 'rgba(0,0,0,0.72)', borderWidth: 1, borderColor: 'rgba(139,255,208,0.5)' },
   premiumText: { color: MINT, fontSize: 11, ...font('500') },
 
@@ -701,7 +749,7 @@ const useStyles = makeStyles((C) => ({
 
   pillWrap: { position: 'absolute', left: 16, right: 16 },
   pill: { height: 52, borderRadius: 26, backgroundColor: 'rgba(0,0,0,0.62)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)', flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: 8, paddingRight: 16 },
-  pillPlay: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#EDEDED', alignItems: 'center', justifyContent: 'center' },
+  pillPlay: { width: 36, height: 36, borderRadius: 18, backgroundColor: C.gradB, alignItems: 'center', justifyContent: 'center' },
   pillTime: { color: '#EDEDED', fontSize: 11, fontFamily: F.mono },
   scrub: { height: 22, justifyContent: 'center' },
   scrubTrack: { height: 4, borderRadius: 2, backgroundColor: C.line, overflow: 'hidden' },
@@ -732,8 +780,9 @@ const useStyles = makeStyles((C) => ({
   barSub: { color: C.t3, fontSize: 11, ...font() },
   barError: { color: C.danger, fontSize: 12, lineHeight: 16, textAlign: 'center', ...font() },
   barNote: { color: C.t3, fontSize: 12, lineHeight: 16, textAlign: 'center', ...font() },
-  uploadBtn: { flex: 1, height: 52, borderRadius: 14, overflow: 'hidden', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
-  uploadText: { color: '#03140C', fontSize: 16, ...font('700') },
+  // No overflow clip here, so the glow shows; the fill clips itself to the corners.
+  uploadBtn: { flex: 1, height: 52, borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
+  uploadText: { fontSize: 16, ...font('700') },
 
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   statusDot: { width: 8, height: 8, borderRadius: 4 },

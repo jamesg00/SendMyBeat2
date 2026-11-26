@@ -1,0 +1,125 @@
+/* Trending type beat artists: the compact chip box in the tag generators (.tab) and the
+   ranked list on /trending-type-beats (.trd). Tokens only, so it follows every theme. */
+
+/* ---- the box ---- */
+.tab {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--c-line);
+  border-radius: 12px;
+  background: var(--u-hair, transparent) top center / 100% 1px no-repeat, var(--c-card);
+  min-width: 0;
+}
+.tab-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.tab-title { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: -0.01em; color: var(--c-text); }
+.tab-all {
+  flex-shrink: 0;
+  font-size: 12.5px;
+  color: var(--c-t2);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.tab-all:hover { color: var(--c-acc); }
+.tab-sub { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--c-t3, var(--c-t2)); }
+.tab-chips { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; padding: 0; margin: 0; }
+.tab-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 10px;
+  border: 1px solid var(--c-line);
+  border-radius: var(--u-r-pill, 999px);
+  background: var(--c-card2);
+  color: var(--c-text);
+  font-size: 13px;
+  line-height: 1.2;
+  text-decoration: none;
+  cursor: pointer;
+  transition: border-color 0.2s var(--ease, ease), background 0.2s var(--ease, ease);
+}
+.tab-chip:hover { border-color: var(--c-accline, var(--c-acc)); }
+.tab-chip:focus-visible { outline: 2px solid var(--c-acc); outline-offset: 2px; }
+
+.tab-change {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: var(--c-t2);
+  background: color-mix(in srgb, var(--c-text) 7%, transparent);
+}
+.tab-change--up { color: var(--c-acc); background: var(--c-accsoft); }
+.tab-change--down { color: var(--c-danger); background: var(--c-dangersoft); }
+
+/* Inside the free tag tool the box sits between the search and the result. */
+.ftg .tab { margin: 0; }
+
+/* ---- the trending page ---- */
+.trd-note { margin: 0; font-size: 13px; line-height: 1.5; color: var(--c-t2); }
+.trd-list { display: flex; flex-direction: column; list-style: none; padding: 0; margin: 0; }
+.trd-row {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--c-line-soft, var(--c-line));
+}
+.trd-row:first-child { border-top: 0; }
+.trd-rank { font-size: 13px; color: var(--c-t3, var(--c-t2)); text-align: right; }
+.trd-main { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.trd-line { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 10px; }
+.trd-name {
+  font-weight: 600;
+  color: var(--c-text);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.trd-name:hover { color: var(--c-acc); text-decoration: underline; text-underline-offset: 3px; }
+.trd-meta { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 12px; color: var(--c-t2); }
+.trd-delta { display: inline-flex; align-items: center; gap: 5px; }
+.trd-bar {
+  display: block;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--c-line);
+  overflow: hidden;
+}
+.trd-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--c-acc), var(--c-acc2, var(--c-acc)));
+}
+.trd-gen {
+  font-size: 12.5px;
+  color: var(--c-t2);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.trd-gen:hover { color: var(--c-acc); }
+.trd-row--skeleton .trd-bar i { background: color-mix(in srgb, var(--c-text) 10%, transparent); }
+.trd-skel { display: block; height: 12px; border-radius: 4px; background: color-mix(in srgb, var(--c-text) 10%, transparent); }
+.trd--empty p { margin: 0; line-height: 1.6; }
+.trd--empty a { text-decoration: underline; text-underline-offset: 3px; }
+.trd--empty .ftg-links a {
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--c-line);
+  border-radius: var(--u-r-pill, 999px);
+  color: var(--c-t2);
+  font-size: 13.5px;
+  text-decoration: none;
+}
+
+@media (max-width: 640px) {
+  .tab { padding: 12px; }
+  .trd-row { grid-template-columns: 22px minmax(0, 1fr) auto; gap: 10px; }
+  .trd-line { flex-direction: column; align-items: flex-start; }
+}
