@@ -73,7 +73,7 @@ const ProPage = () => {
           ) : (
             <>
               <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] items-start">
-                <div className="pro-card pro-card--hero">
+                <div className="pro-card pro-card--hero u-edge u-edge--glow">
                   <ProHero pro={p} tall>
                     <div className="flex items-center gap-2 min-w-0">
                       <h2 className="pro-hero-name truncate">{p.name}</h2>

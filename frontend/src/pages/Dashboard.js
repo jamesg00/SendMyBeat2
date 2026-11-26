@@ -1315,7 +1315,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
               <CreditsCard subscription={subscriptionStatus} onPlans={() => setShowUpgradeModal(true)} />
               <VerificationCard onOpenSpotlight={() => navigate("/spotlight")} />
               <StylePlanSection />
-              <section className="smb-card">
+              <section className="smb-card u-edge u-edge--glow">
                 <div className="smb-card-head">
                   <h2 className="smb-card-title">Plan</h2>
                   <span className="smb-badge">{planLabelFor(subscriptionStatus) || "Free"}</span>
@@ -1398,7 +1398,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
 
           {/* YouTube Analytics Tab */}
           <TabsContent value="analytics" className="space-y-6 dashboard-section">
-            <Card className="dashboard-card">
+            <Card className="dashboard-card usx-an-card">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <BarChart3 className="h-5 w-5" />

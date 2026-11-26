@@ -32,7 +32,7 @@ export const CreditsCard = ({ subscription, onPlans }) => {
   if (!subscription) return null;
   const s = subscription;
   return (
-    <section className="smb-card">
+    <section className="smb-card usx-credits">
       <div className="smb-card-head">
         <h2 className="smb-card-title">Credits</h2>
         <span className="smb-mono smb-t3 text-xs">{s.trial ? "resets every day" : s.is_subscribed ? "resets every month" : "free, one time"}</span>
