@@ -2018,7 +2018,8 @@ const UploadStudio = ({
                   </button>
                ) : null}
 
-               {!subscriptionStatus?.is_subscribed && !removeWatermark && (() => {
+               {/* Shown whenever the render will have it: everyone, unless a paid plan turns it off. */}
+               {(!removeWatermark || !subscriptionStatus?.is_subscribed) && (() => {
                   // Same size and place as the server draws it: 20px text on a 1280-wide frame,
                   // 8px padding, 20px from the corner; 16:9 renders at 1920 wide, the rest at 1080.
                   const targetW = previewDims.width > previewDims.height * 1.2 ? 1920 : 1080;
@@ -2034,6 +2035,7 @@ const UploadStudio = ({
                         width: Math.min(fontSize * 28.7 + pad * 2, previewDims.width - (20 * k - pad) * 2),
                         padding: pad,
                         fontSize,
+                        zIndex: 5,
                         '--wm-gap': `${60 * k}px`,
                      }}
                   >
