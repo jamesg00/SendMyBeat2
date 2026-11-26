@@ -1,0 +1,197 @@
+/*
+ * Guided tour (components/tour). Uses the palette tokens from tokens.css, so it follows every
+ * theme. The dimming is a plain black scrim; the lit part is a hole cut by a big box-shadow.
+ */
+
+.smb-tour {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  pointer-events: none;
+}
+
+.smb-tour-scrim {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+  background: rgba(0, 0, 0, 0.62);
+  animation: smb-tour-fade 0.3s var(--ease) both;
+  transition: background-color 0.3s var(--ease);
+}
+.smb-tour-scrim.has-spot { background: transparent; }
+
+.smb-tour-spot {
+  position: fixed;
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 1.5px var(--c-text),
+    0 0 0 6px color-mix(in srgb, var(--c-text) 14%, transparent),
+    0 0 0 200vmax rgba(0, 0, 0, 0.62);
+  pointer-events: none;
+  transition:
+    top 0.45s var(--ease),
+    left 0.45s var(--ease),
+    width 0.45s var(--ease),
+    height 0.45s var(--ease);
+  animation: smb-tour-fade 0.3s var(--ease) both;
+}
+
+/* ------------------------------ card ------------------------------ */
+
+.smb-tour-card {
+  position: fixed;
+  width: min(380px, calc(100vw - 24px));
+  display: grid;
+  gap: 14px;
+  padding: 18px 18px 16px;
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-card);
+  background: linear-gradient(180deg, var(--c-sheen), transparent 120px), var(--c-card);
+  color: var(--c-text);
+  box-shadow: 0 24px 60px -24px rgba(0, 0, 0, 0.75), 0 2px 10px -4px rgba(0, 0, 0, 0.4);
+  pointer-events: auto;
+  font-family: var(--font-sans);
+  transition: top 0.45s var(--ease), left 0.45s var(--ease);
+  animation: smb-rise 0.4s var(--ease) both;
+}
+
+.smb-tour-card--center {
+  top: 50%;
+  left: 50%;
+  width: min(440px, calc(100vw - 32px));
+  transform: translate(-50%, -50%);
+  padding: 24px 24px 18px;
+  animation: smb-tour-pop 0.45s var(--ease) both;
+}
+
+.smb-tour-card--dock-bottom,
+.smb-tour-card--dock-top {
+  left: 12px;
+  right: 12px;
+  width: auto;
+  max-width: 520px;
+  margin: 0 auto;
+}
+.smb-tour-card--dock-bottom { bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
+.smb-tour-card--dock-top { top: calc(12px + env(safe-area-inset-top, 0px)); }
+
+.smb-tour-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.smb-tour-kicker {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: var(--c-t2);
+}
+.smb-tour-count { color: var(--c-text); }
+.smb-tour-count i { font-style: normal; color: var(--c-t3); }
+
+.smb-tour-skip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  margin: -4px -6px -4px 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--c-t3);
+  font-size: 13px;
+  cursor: pointer;
+  transition: color 0.2s var(--ease), background-color 0.2s var(--ease);
+}
+.smb-tour-skip svg { width: 14px; height: 14px; }
+.smb-tour-skip:hover { color: var(--c-text); background: var(--c-card2); }
+
+.smb-tour-copy {
+  display: grid;
+  gap: 6px;
+  animation: smb-tour-copy 0.35s var(--ease) both;
+}
+.smb-tour-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 19px;
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--c-text);
+}
+.smb-tour-card--center .smb-tour-title { font-size: 24px; }
+.smb-tour-body {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--c-t2);
+}
+
+.smb-tour-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 2px;
+}
+.smb-tour-dots { display: flex; align-items: center; gap: 4px; }
+.smb-tour-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--c-line);
+  transition: width 0.35s var(--ease), background-color 0.35s var(--ease);
+}
+.smb-tour-dots span.is-past { background: var(--c-t3); }
+.smb-tour-dots span.is-on { width: 18px; background: var(--c-text); }
+
+.smb-tour-actions { display: flex; align-items: center; gap: 8px; }
+.smb-tour-actions .smb-btn--sec { padding: 0 10px; }
+
+.smb-tour-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@keyframes smb-tour-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes smb-tour-pop {
+  from { opacity: 0; transform: translate(-50%, calc(-50% + 12px)) scale(0.98); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+@keyframes smb-tour-copy {
+  from { opacity: 0; transform: translateX(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .smb-tour-scrim,
+  .smb-tour-spot,
+  .smb-tour-card,
+  .smb-tour-copy { animation: none !important; transition: none !important; }
+}
+
+/* ------------------------------ Settings card ------------------------------ */
+
+.smb-tour-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.smb-tour-cta p { flex: 1 1 220px; margin: 0; }
+
+/* Scrolling a step's target into view keeps it clear of the sticky top bar and tab bar. */
+[data-tour] {
+  scroll-margin-top: 84px;
+  scroll-margin-bottom: 96px;
+}

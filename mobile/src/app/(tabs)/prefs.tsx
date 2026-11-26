@@ -14,6 +14,7 @@ import { PlanCard, usePlan } from '@/components/pros';
 import { manageBilling, openPaywall, planName, refreshSubscription, useSubscription } from '@/state/billing';
 import { iconInfo } from '@/data/app-icons';
 import { iconFor, useIconPrefs } from '@/state/app-icon';
+import { openTour } from '@/state/tour';
 import { AppIcon, Button, ListGroup, ListRow, Meter, Screen } from '@/components/ui';
 import { F, R, font, makeStyles, THEMES, useColors, useThemeId } from '@/theme';
 
@@ -114,6 +115,7 @@ export default function ProfileScreen() {
             value={VERIFICATION[me.data?.verification_status ?? 'none'] ?? 'Get verified'}
             onPress={() => router.push('/verify')}
           />
+          <ListRow left={<Tile icon="compass" />} title="Take the tour" onPress={openTour} />
           <ListRow left={<Tile icon="chat" />} title="Report a bug or idea" onPress={() => router.push('/feedback')} />
           <ListRow
             left={<Tile icon="theme" />}
@@ -217,6 +219,12 @@ const TILE_ICONS: Record<string, (color: string) => ReactNode> = {
     <>
       <Circle cx={12} cy={12} r={8} stroke={c} strokeWidth={2} fill="none" />
       <Path d="M12 4a8 8 0 0 0 0 16z" fill={c} />
+    </>
+  ),
+  compass: (c) => (
+    <>
+      <Circle cx={12} cy={12} r={8.5} stroke={c} strokeWidth={2} fill="none" />
+      <Path d="M15.2 8.8l-1.9 4.5-4.5 1.9 1.9-4.5z" fill={c} />
     </>
   ),
   heart: (c) => <Path d="M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.5-7 10-7 10z" stroke={c} strokeWidth={2} fill="none" strokeLinejoin="round" />,

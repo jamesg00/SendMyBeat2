@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
-import { BarChart3, DollarSign, Inbox, Layers, LogOut, Settings, Shield, Star, Users } from "lucide-react";
+import { BarChart3, Compass, DollarSign, Inbox, Layers, LogOut, Settings, Shield, Star, Users } from "lucide-react";
 import { API } from "@/App";
 import { getAuthToken } from "@/lib/auth";
 
@@ -71,6 +71,7 @@ const AppShell = ({
   onLogout,
   onAdmin,
   credits = null,
+  onTour = null,
   children,
 }) => {
   const [me, setMe] = useState(null);
@@ -103,7 +104,7 @@ const AppShell = ({
           SENDMYBEAT
         </a>
 
-        <nav className="smb-nav">
+        <nav className="smb-nav" data-tour="nav">
           {NAV_ITEMS.map(({ id, label, Icon }) => (
             <a
               key={id}
@@ -112,6 +113,7 @@ const AppShell = ({
               aria-current={active === id ? "page" : undefined}
               onClick={select(id)}
               data-testid={`nav-${id}`}
+              data-tour={`nav-${id}`}
             >
               <Icon className="smb-ico" aria-hidden="true" />
               <span>{label}</span>
@@ -140,7 +142,14 @@ const AppShell = ({
 
         <div className="smb-side-grow" />
 
-        {credits ? <div className="smb-side-credits">{credits}</div> : null}
+        {onTour ? (
+          <button type="button" className="smb-nav-link smb-tour-link" onClick={onTour} data-testid="take-tour-side">
+            <Compass className="smb-ico" aria-hidden="true" />
+            <span>Take the tour</span>
+          </button>
+        ) : null}
+
+        {credits ? <div className="smb-side-credits" data-tour="credits">{credits}</div> : null}
 
         <div className="smb-me">
           <span className="smb-avatar" aria-hidden="true">{initials(name)}</span>
@@ -190,7 +199,7 @@ const AppShell = ({
         </main>
       </div>
 
-      <nav className="smb-tabbar" aria-label="Main">
+      <nav className="smb-tabbar" aria-label="Main" data-tour="tabbar">
         {NAV_ITEMS.map(({ id, short, Icon }) => (
           <a
             key={id}
@@ -198,6 +207,7 @@ const AppShell = ({
             className={`smb-tab ${active === id ? "is-active" : ""}`}
             aria-current={active === id ? "page" : undefined}
             onClick={select(id)}
+            data-tour={`tab-${id}`}
           >
             <Icon className="smb-ico" aria-hidden="true" />
             <span>{short}</span>
