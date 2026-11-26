@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
-import { BarChart3, Compass, DollarSign, Inbox, Layers, LogOut, Settings, Shield, Star, Users } from "lucide-react";
+import { BarChart3, Compass, DollarSign, Inbox, Layers, LogOut, Settings, Shield, ShieldAlert, Star, Users } from "lucide-react";
 import { API } from "@/App";
 import { getAuthToken } from "@/lib/auth";
 
@@ -49,7 +49,12 @@ const ADMIN_LINKS = [
   { id: "admin-costs", path: "/admin/costs", label: "Ops and costs", Icon: DollarSign },
   { id: "admin-users", path: "/admin/users", label: "Users", Icon: Users },
   { id: "admin-inbox", path: "/admin/inbox", label: "Inbox", Icon: Inbox },
+  { id: "admin-security", path: "/admin/security", label: "Watchdog", Icon: ShieldAlert },
 ];
+
+// The Watchdog page fires this after marking its events seen, so the badge clears right away.
+export const WATCHDOG_SEEN_EVENT = "smb:watchdog-seen";
+const WATCHDOG_CHECK_MS = 60000;
 
 export const planLabelFor = (subscription) => {
   if (!subscription) return null;
@@ -84,6 +89,31 @@ const AppShell = ({
   }, []);
   const name = username || me?.username;
   const admin = isAdmin || Boolean(me?.is_admin);
+
+  // Admins only: how many watchdog flags nobody has looked at yet. Checked once, then every
+  // minute while the tab is visible. Errors are ignored; the badge just stays as it was.
+  const [watchdogUnseen, setWatchdogUnseen] = useState(0);
+  useEffect(() => {
+    if (!admin) return undefined;
+    let alive = true;
+    const check = () => {
+      if (document.hidden) return;
+      axios.get(`${API}/admin/watchdog/summary`).then(
+        (r) => alive && setWatchdogUnseen(Number(r.data?.unseen) || 0),
+        () => {},
+      );
+    };
+    const onSeen = () => setWatchdogUnseen(0);
+    check();
+    const timer = setInterval(check, WATCHDOG_CHECK_MS);
+    window.addEventListener(WATCHDOG_SEEN_EVENT, onSeen);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+      window.removeEventListener(WATCHDOG_SEEN_EVENT, onSeen);
+    };
+  }, [admin]);
+  const watchdogBadge = watchdogUnseen > 99 ? "99+" : String(watchdogUnseen);
   const openAdmin = (path) => (event) => {
     event.preventDefault();
     if (onAdmin) onAdmin(path);
@@ -135,6 +165,9 @@ const AppShell = ({
               >
                 <Icon className="smb-ico" aria-hidden="true" />
                 <span>{label}</span>
+                {id === "admin-security" && watchdogUnseen > 0 ? (
+                  <span className="smb-nav-tag smb-nav-tag--alert" aria-label={`${watchdogUnseen} new`}>{watchdogBadge}</span>
+                ) : null}
               </a>
             ))}
           </nav>
@@ -169,9 +202,17 @@ const AppShell = ({
           <a href="/dashboard" className="smb-wordmark smb-wordmark--icon" onClick={select("workflow")}><img src="/icon-192.png" className="smb-wordmark-icon" alt="" aria-hidden="true" width="22" height="22" />SENDMYBEAT</a>
           <div className="smb-topbar-right">
             {admin ? (
-              <a href="/admin/costs" className={`smb-badge smb-admin-chip ${onAdminPage ? "is-active" : ""}`} onClick={openAdmin("/admin/costs")} aria-label="Admin">
-                <Shield className="h-3.5 w-3.5" aria-hidden="true" /> Admin
-              </a>
+              watchdogUnseen > 0 ? (
+                // Phones have no sidebar, so new watchdog flags show on the Admin chip and it opens the Watchdog page.
+                <a href="/admin/security" className={`smb-badge smb-admin-chip ${onAdminPage ? "is-active" : ""}`} onClick={openAdmin("/admin/security")} aria-label={`Admin, ${watchdogUnseen} new watchdog flags`}>
+                  <ShieldAlert className="h-3.5 w-3.5" aria-hidden="true" /> Admin
+                  <span className="smb-nav-tag smb-nav-tag--alert" aria-hidden="true">{watchdogBadge}</span>
+                </a>
+              ) : (
+                <a href="/admin/costs" className={`smb-badge smb-admin-chip ${onAdminPage ? "is-active" : ""}`} onClick={openAdmin("/admin/costs")} aria-label="Admin">
+                  <Shield className="h-3.5 w-3.5" aria-hidden="true" /> Admin
+                </a>
+              )
             ) : null}
             {planLabel ? <span className="smb-badge">{planLabel}</span> : null}
             <button

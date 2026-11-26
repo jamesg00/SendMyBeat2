@@ -61,6 +61,7 @@ try:
     from backend.services import publish_extras as publish_extras_service  # noqa: F401
     from backend.services import thumbnail_legibility as thumbnail_legibility_service  # noqa: F401
     from backend.services import pros as pros_service  # noqa: F401
+    from backend.services import watchdog as watchdog_service  # noqa: F401
     from backend.models_spotlight import (
         ProducerProfile,
         ProducerProfileUpdate,
@@ -84,6 +85,7 @@ except ImportError:
     from services import publish_extras as publish_extras_service
     from services import thumbnail_legibility as thumbnail_legibility_service
     from services import pros as pros_service
+    from services import watchdog as watchdog_service
     from models_spotlight import (
         ProducerProfile,
         ProducerProfileUpdate,
@@ -408,6 +410,33 @@ def _build_google_credentials_from_connection(connection: dict, scopes: Optional
 
 # Create the main app without a prefix
 app = FastAPI()
+
+
+def _watchdog_token_payload(token: str) -> Optional[dict]:
+    try:
+        return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except Exception:
+        return None
+
+
+def _watchdog_is_admin_token(token: str) -> bool:
+    # Signature check only, no database call: this runs only for requests from blocked addresses.
+    payload = _watchdog_token_payload(token)
+    return bool(payload) and _is_admin_user({"id": payload.get("sub")})
+
+
+def _watchdog_identify_token(token: str) -> Optional[tuple[str, str]]:
+    payload = _watchdog_token_payload(token)
+    if not payload or not payload.get("sub"):
+        return None
+    return str(payload.get("sub")), str(payload.get("username") or "")
+
+
+# Flags attack-looking requests and enforces the admin's blocklist (services/watchdog.py).
+watchdog = watchdog_service.Watchdog(
+    is_admin_token=_watchdog_is_admin_token,
+    identify_token=_watchdog_identify_token,
+)
 
 
 @app.middleware("http")
@@ -11752,8 +11781,100 @@ async def clear_admin_ops_job(job_id: str, current_user: dict = Depends(get_curr
     }
 
 
+# ============ Security watchdog (admin only) ============
+
+
+class WatchdogBlockRequest(BaseModel):
+    ip: str = Field(..., max_length=64)
+    reason: str = Field("", max_length=200)
+    hours: Optional[float] = None
+
+
+class WatchdogUnblockRequest(BaseModel):
+    ip: str = Field(..., max_length=64)
+
+
+async def _watchdog_admin(request: Request, current_user: dict) -> str:
+    if not _is_admin_user(current_user):
+        raise HTTPException(status_code=403, detail="Admin access only")
+    admin_ip = _client_ip(request)
+    try:
+        await watchdog_service.note_admin_ip(db, admin_ip)
+    except Exception as exc:
+        logging.warning(f"Watchdog: could not note admin address: {exc}")
+    return admin_ip
+
+
+@api_router.get("/admin/watchdog/summary")
+async def get_watchdog_summary(request: Request, current_user: dict = Depends(get_current_user)):
+    admin_ip = await _watchdog_admin(request, current_user)
+    return await watchdog_service.summary(db, watchdog, your_ip=admin_ip)
+
+
+@api_router.get("/admin/watchdog/events")
+async def get_watchdog_events(
+    request: Request,
+    ip: Optional[str] = None,
+    severity: Optional[str] = None,
+    limit: int = 200,
+    current_user: dict = Depends(get_current_user),
+):
+    await _watchdog_admin(request, current_user)
+    events = await watchdog_service.list_events(db, watchdog, ip=ip or "", severity=severity or "", limit=limit)
+    return {"events": events}
+
+
+@api_router.get("/admin/watchdog/ips")
+async def get_watchdog_ips(request: Request, days: int = 7, current_user: dict = Depends(get_current_user)):
+    await _watchdog_admin(request, current_user)
+    return {"ips": await watchdog_service.list_ips(db, watchdog, days=days)}
+
+
+@api_router.get("/admin/watchdog/blocklist")
+async def get_watchdog_blocklist(request: Request, current_user: dict = Depends(get_current_user)):
+    await _watchdog_admin(request, current_user)
+    return {"blocked": await watchdog_service.list_blocklist(db)}
+
+
+@api_router.post("/admin/watchdog/block")
+async def watchdog_block(body: WatchdogBlockRequest, request: Request, current_user: dict = Depends(get_current_user)):
+    admin_ip = await _watchdog_admin(request, current_user)
+    try:
+        entry = await watchdog_service.block(
+            db,
+            watchdog,
+            target=body.ip,
+            reason=body.reason,
+            hours=body.hours,
+            admin_ip=admin_ip,
+            admin_name=current_user.get("username") or "",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    logging.warning(f"Watchdog: {current_user.get('username')} blocked {entry.get('ip')}")
+    return {"success": True, "entry": entry}
+
+
+@api_router.post("/admin/watchdog/unblock")
+async def watchdog_unblock(body: WatchdogUnblockRequest, request: Request, current_user: dict = Depends(get_current_user)):
+    await _watchdog_admin(request, current_user)
+    removed = await watchdog_service.unblock(db, watchdog, target=body.ip)
+    logging.warning(f"Watchdog: {current_user.get('username')} unblocked {body.ip}")
+    return {"success": True, "removed": removed}
+
+
+@api_router.post("/admin/watchdog/seen")
+async def watchdog_mark_seen(request: Request, current_user: dict = Depends(get_current_user)):
+    await _watchdog_admin(request, current_user)
+    await watchdog_service.mark_seen(db)
+    return {"success": True}
+
+
 # Include the router in the main app
 app.include_router(api_router)
+
+# Inside CORS, so a blocked answer still carries CORS headers and the site can read it.
+app.add_middleware(watchdog_service.WatchdogMiddleware, watchdog=watchdog)
 
 app.add_middleware(
     CORSMiddleware,
@@ -11918,6 +12039,10 @@ async def startup_background_tasks():
     _validate_security_configuration()
     _configure_thread_pool()
     await _ensure_indexes()
+    try:
+        await watchdog.start(db)
+    except Exception as exc:
+        logging.error(f"Watchdog failed to start (requests still flow; events stay in memory): {exc}")
     await _log_admin_id_hint()
     _log_youtube_render_timeout_configuration()
     await _requeue_stale_background_jobs()
@@ -11950,6 +12075,7 @@ async def shutdown_db_client():
         task.cancel()
     _job_worker_tasks = []
     _upload_job_worker_task = None
+    await watchdog.stop()
     if _job_watchdog_task:
         _job_watchdog_task.cancel()
         _job_watchdog_task = None
