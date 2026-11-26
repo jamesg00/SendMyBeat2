@@ -41,7 +41,7 @@ html {
 }
 
 /* Two fonts, as on the landing page: Space Grotesk for words, Plex Mono for tags and numbers. */
-html {
+html:root {
   --font-sans: var(--font-display);
 }
 /* Console body text one step brighter, like the landing page. Captions keep --c-t3. */
@@ -69,9 +69,10 @@ html[data-palette="console"] {
 
 /* ============================== utilities ============================== */
 
-/* A flat panel with the mint-to-blue light along its top. Drawn as a background layer,
+/* Utilities repeat their class so they beat the app's card rules further down.
+   A flat panel with the mint-to-blue light along its top. Drawn as a background layer,
    not a pseudo-element, so it never clashes with a component's own ::before / ::after. */
-.u-panel {
+.u-panel.u-panel {
   background: var(--u-hair) top center / 100% 1px no-repeat, var(--c-card) !important;
   border: 1px solid var(--c-line) !important;
   border-radius: var(--u-r) !important;
@@ -79,12 +80,12 @@ html[data-palette="console"] {
 }
 
 /* The traveling gradient edge, for the one thing on a screen that matters most. */
-.u-edge {
+.u-edge.u-edge {
   border: 1px solid transparent !important;
   background: linear-gradient(var(--c-card), var(--c-card)) padding-box, var(--u-edge) border-box !important;
   animation: u-spin 7s linear infinite;
 }
-.u-edge--glow { box-shadow: 0 30px 80px -30px var(--u-shadow-b) !important; }
+.u-edge--glow.u-edge--glow { box-shadow: 0 30px 80px -30px var(--u-shadow-b) !important; }
 
 /* A slow aurora behind a header or hero. Put it on an element with position: relative. */
 .u-aurora { isolation: isolate; }
@@ -113,7 +114,7 @@ html[data-palette="console"] {
 }
 
 /* A glowing mint-to-blue card for a call to action. */
-.u-cta {
+.u-cta.u-cta {
   border: 0 !important;
   border-radius: 20px !important;
   background: linear-gradient(165deg, var(--u-a), var(--u-b)) 0 0 / 200% 200% !important;
