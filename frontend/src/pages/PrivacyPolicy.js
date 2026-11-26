@@ -48,7 +48,7 @@ const PrivacyPolicy = () => {
                 <li>AI-generated and scored YouTube tags, titles and descriptions</li>
                 <li>Visualizer videos and direct uploads to your YouTube channel</li>
                 <li>Channel analytics, beat analysis and thumbnail checks</li>
-                <li>Free tools you can use without an account: one free tag run, plus the title, description and hashtag generators and the tag counter</li>
+                <li>Free tools you can use without an account: 3 free tag runs a day, plus the title, description and hashtag generators and the tag counter</li>
                 <li>A public Producer Spotlight where producers share their profile and top beat</li>
               </ul>
             </PolicySection>
@@ -75,7 +75,7 @@ const PrivacyPolicy = () => {
               </ul>
               <h3 className="policy-title mb-2 text-base font-semibold sm:text-lg">Technical information</h3>
               <ul className="ml-6 list-disc space-y-1">
-                <li>IP addresses, used for rate limits and to stop abuse. For the free tag run we keep a one-way hash of your IP and a random ID saved in your browser.</li>
+                <li>IP addresses, used for rate limits and to stop abuse. For the free tag runs we keep a one-way hash of your IP and a random ID saved in your browser.</li>
                 <li>Push notification tokens if you allow notifications in the mobile app</li>
                 <li>Usage records such as how many AI generations you used</li>
               </ul>

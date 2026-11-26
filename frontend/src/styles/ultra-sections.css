@@ -142,6 +142,7 @@
 
 /* House ad (shown when AdSense isn't set up): the panel look. */
 .ad-container.u-panel { padding: 14px 16px; }
+.ad-container .ad-label { margin: 0 0 4px; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--c-t3, var(--text-secondary)); }
 
 /* ============================== settings ============================== */
 

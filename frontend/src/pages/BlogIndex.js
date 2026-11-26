@@ -36,7 +36,7 @@ const BlogIndex = () => (
           </p>
           <div className="flex flex-wrap gap-3">
             <Link to="/?signup=1" className="smb-btn smb-btn--pri smb-btn--lg">Sign up free</Link>
-            <Link to="/free-tag-generator" className="smb-btn smb-btn--sec smb-btn--lg">Try one free tag run</Link>
+            <Link to="/free-tag-generator" className="smb-btn smb-btn--sec smb-btn--lg">Try the free tag generator</Link>
           </div>
         </section>
 

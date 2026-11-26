@@ -184,7 +184,7 @@ const About = () => {
                 Get Started Today
               </h2>
               <p className="mb-4 text-sm leading-relaxed sm:mb-6 sm:text-base md:text-lg">
-                Try one free tag run without an account, or sign up and get 3 free generations and 3 free uploads. When you need more, pick Plus or Pro.
+                Try the tag generator free without an account, 3 runs a day, or sign up and get 3 free generations and 3 free uploads. When you need more, pick Plus or Pro.
               </p>
               <div className="flex justify-center px-2">
                 <Button

@@ -91,7 +91,7 @@ export const FREE_TAG_PAGE = {
     "Free YouTube tag generator for type beats, no sign-up. Type an artist and get tags from live YouTube searches, sized for the 500-character limit. Copy and paste.",
   h1: "Free YouTube tag generator for type beats",
   lede:
-    'Type an artist or a vibe, like "future type beat" or "dark trap". You get YouTube tags pulled from what people search and the tags on videos that already rank, sized for YouTube\'s 500-character limit. One free run, no sign-up.',
+    'Type an artist or a vibe, like "future type beat" or "dark trap". You get YouTube tags pulled from what people search and the tags on videos that already rank, sized for YouTube\'s 500-character limit. 3 free runs a day, no sign-up.',
   how: [
     [
       "How the tags are picked",
@@ -106,7 +106,7 @@ export const FREE_TAG_PAGE = {
   faq: [
     [
       "Is the tag generator really free?",
-      "Yes. You get one full run without an account. Sign up free for 3 more AI generations and 3 YouTube uploads, no card needed. After that, Plus is $5 a month for 50 of each.",
+      "Yes. You get 3 full runs a day without an account. Sign up free for 3 more AI generations and 3 YouTube uploads, no card needed. After that, Plus is $5 a month for 50 of each.",
     ],
     [
       "How many tags should a type beat have?",
@@ -133,7 +133,7 @@ export const FREE_TAG_PAGE = {
 
 // ---- Free tool pages ----------------------------------------------------------------
 // One page per tool producers search for. "tool" picks the widget (pages/tools/). "tags"
-// is the AI tag generator (one free run, shared with /free-tag-generator); the rest run in
+// is the AI tag generator (3 free runs a day, shared with /free-tag-generator); the rest run in
 // the browser from lib/seoTools.js, with no sign-up and no limit. "example" fills the tool
 // before a visitor types and is what the prerendered page shows as sample output; "cta" is
 // the prerendered button that leads to the tool.
@@ -148,7 +148,7 @@ export const TOOL_PAGES = {
     description:
       "Tag your beat for YouTube free, no sign-up: type the artist it sounds like and get scored search tags that fit the 500-character limit. Not a voice tag maker.",
     h1: "Tag my beat: free YouTube tags in one click",
-    lede: 'Type the artist or sound your beat goes for, like "travis scott type beat". You get YouTube tags from live searches, each with a score so you can see which ones pull their weight. One free run, no sign-up.',
+    lede: 'Type the artist or sound your beat goes for, like "travis scott type beat". You get YouTube tags from live searches, each with a score so you can see which ones pull their weight. 3 free runs a day, no sign-up.',
     how: [
       [
         "How to tag a beat for YouTube",
@@ -168,7 +168,7 @@ export const TOOL_PAGES = {
     faq: [
       [
         "Is it free to tag my beat here?",
-        "Yes. You get one full tag run without an account. Sign up free for 3 more AI generations and 3 YouTube uploads, no card needed. The title, description, hashtag and tag counter tools on this site run in your browser and are free with no limit.",
+        "Yes. You get 3 full tag runs a day without an account. Sign up free for 3 more AI generations and 3 YouTube uploads, no card needed. The title, description, hashtag and tag counter tools on this site run in your browser and are free with no limit.",
       ],
       [
         "Does this make a producer tag or voice tag?",
@@ -611,7 +611,7 @@ export const TOOL_PAGES = {
     description:
       "A Rapidtags alternative made for type beats: tags from live YouTube searches for your artist, scored and sized to 500 characters, plus titles and upload.",
     h1: "A Rapidtags alternative built for type beats",
-    lede: 'Rapidtags is a quick YouTube tag generator for any kind of video. SendMyBeat\'s tag generator is made for type beat producers: type the artist your beat is for, like "drake type beat", and get tags from live YouTube searches, each scored and sized to fit the 500-character tag box. One free run, no sign-up.',
+    lede: 'Rapidtags is a quick YouTube tag generator for any kind of video. SendMyBeat\'s tag generator is made for type beat producers: type the artist your beat is for, like "drake type beat", and get tags from live YouTube searches, each scored and sized to fit the 500-character tag box. 3 free runs a day, no sign-up.',
     how: [
       [
         "What Rapidtags does",
@@ -665,7 +665,7 @@ export const TOOL_PAGES = {
     faq: [
       [
         "Is SendMyBeat's tag generator free?",
-        "You get one full run without an account. Sign up free for 3 more AI generations and 3 YouTube uploads, no card needed. After that, Plus is $5 a month for 50 generations and Pro is $10 a month for 100.",
+        "You get 3 full runs a day without an account. Sign up free for 3 more AI generations and 3 YouTube uploads, no card needed. After that, Plus is $5 a month for 50 generations and Pro is $10 a month for 100.",
       ],
       [
         "Why use a type beat tag generator instead of a general one?",
@@ -695,7 +695,7 @@ export const TOOL_PAGES = {
     description:
       "vidIQ is a YouTube growth suite for every kind of channel. SendMyBeat is made for type beat channels: scored artist tags, titles, descriptions and upload.",
     h1: "vidIQ for beat producers: what fits a type beat channel",
-    lede: "vidIQ is one of the best-known YouTube growth tools, made for every kind of channel. If your channel is type beats, here's an honest look at where it fits and where SendMyBeat, which is built only for beat producers, does the job more directly. Try the type beat tag generator below, one free run, no sign-up.",
+    lede: "vidIQ is one of the best-known YouTube growth tools, made for every kind of channel. If your channel is type beats, here's an honest look at where it fits and where SendMyBeat, which is built only for beat producers, does the job more directly. Try the type beat tag generator below, 3 free runs a day, no sign-up.",
     how: [
       [
         "What vidIQ does",
@@ -1256,6 +1256,64 @@ export const tagSetPage = (slug) => {
   };
 };
 
+// ---- Trending type beats ------------------------------------------------------------
+// /trending-type-beats ranks artists by how strongly YouTube's search suggestions push
+// "<artist> type beat" (GET /api/seo/trending). The ranking loads in the browser, so this
+// copy, the FAQ and the popular artist links are what the prerendered page carries.
+// "score" is a relative 0-100 signal, never a search count: keep the copy saying so.
+export const TRENDING_PAGE = {
+  path: "/trending-type-beats",
+  nav: "Trending type beats",
+  title: "Trending Type Beats This Week: Most In-Demand Artists | SendMyBeat",
+  description:
+    "Which artists' type beats are most in demand on YouTube this week, ranked from YouTube search suggestions and refreshed twice a day. Free tags for every artist.",
+  h1: "Trending type beats this week",
+  lede: 'Which artists buyers are looking for right now, ranked by how strongly YouTube suggests "[artist] type beat" as people type. Refreshed twice a day, with a free tag set for every artist on the list.',
+  how: [
+    [
+      "How the ranking works",
+      'Twice a day SendMyBeat looks at YouTube\'s search suggestions for "[artist] type beat" across 150 artists. An artist ranks higher when YouTube suggests their type beat search sooner and higher up while it\'s being typed, and when it suggests more longer searches under it.',
+    ],
+    [
+      "What the demand score means",
+      "Each artist gets a demand score from 0 to 100. It compares artists with each other; it isn't a count of searches or views, and YouTube doesn't publish those. Treat it as a guide to which type beats buyers are looking for, then check the artist's searches before you make the beat.",
+    ],
+    [
+      "How to use it",
+      "Pick an artist your style fits, open their tag page for a ready-made set, or run the free tag generator for tags from today's searches. A rising artist is a good bet for your next upload, as long as the beat really sounds like them.",
+    ],
+  ],
+  faq: [
+    [
+      "How often is the trending list updated?",
+      "Twice a day. The suggestion data behind it is never more than a few days old.",
+    ],
+    [
+      "Is the demand score the number of searches?",
+      "No. It's a relative score from 0 to 100 based on how YouTube's search suggestions treat \"[artist] type beat\". It shows which artists buyers look for more than others, not how many people searched.",
+    ],
+    [
+      "What does \"vs last week\" mean?",
+      "Once there's a list from about a week earlier, each artist shows how many points their score moved since then, and the list ranks artists by how much they rose. In the first week the list is ranked by demand alone.",
+    ],
+    [
+      "Why isn't my favourite artist on the list?",
+      "The list follows the 150 artists that have tag pages on SendMyBeat and shows the top 30. An artist can also be missing for a refresh when YouTube's suggestion data for them isn't in yet.",
+    ],
+    [
+      "Should I only make beats for trending artists?",
+      "No. Trending artists bring more buyers but also more producers. Make beats that sound like the artist you tag, and use the list to pick between artists your style already fits.",
+    ],
+  ],
+};
+
+// The artists the trending page links to before (or without) live data: the first 20 tag
+// pages, which are the most-searched artists.
+export const trendingFallbackArtists = (limit = 20) =>
+  Object.entries(ARTISTS)
+    .slice(0, limit)
+    .map(([slug, a]) => [slug, a.name]);
+
 // ---- Producer blog ------------------------------------------------------------------
 // /blog lists the posts; each post renders with the guide template (pages/TypeBeatSeoPage.js),
 // so a post has the same fields as a guide plus "date" (YYYY-MM-DD) and "summary" for the
@@ -1324,7 +1382,7 @@ export const BLOG_POSTS = {
       body: "SendMyBeat gives you scored tags, titles and a description from one search, turns your beat into a video with a visualizer, and uploads it to your channel. Sign up free for 3 generations and 3 uploads, no card needed.",
       links: [
         ["/?signup=1", "Sign up free"],
-        ["/free-tag-generator", "Try one free tag run"],
+        ["/free-tag-generator", "Try the free tag generator"],
       ],
     },
     faq: [
@@ -1399,7 +1457,7 @@ export const BLOG_POSTS = {
     ],
     cta: {
       heading: "Get tags scored on live searches",
-      body: "The tag generator reads today's YouTube searches for your artist and scores every tag on demand and competition. One run is free with no account; sign up free for 3 more and 3 YouTube uploads, no card needed.",
+      body: "The tag generator reads today's YouTube searches for your artist and scores every tag on demand and competition. You get 3 free runs a day with no account; sign up free for 3 more and 3 YouTube uploads, no card needed.",
       links: [
         [freeTagLink("drake type beat"), "Generate Drake tags"],
         ["/?signup=1", "Sign up free"],
@@ -1511,6 +1569,7 @@ export const blogPostList = () =>
 const pageMeta = (path) => {
   if (STATIC_PAGES[path]) return STATIC_PAGES[path];
   if (path === FREE_TAG_PAGE.path) return { ...FREE_TAG_PAGE, priority: "0.9", changefreq: "weekly" };
+  if (path === TRENDING_PAGE.path) return { ...TRENDING_PAGE, priority: "0.7", changefreq: "daily" };
   if (GUIDES[path]) return { ...GUIDES[path], priority: path === TAG_HUB_PATH ? "0.8" : "0.7", changefreq: "monthly" };
   if (TOOL_PAGES[path]) return { ...TOOL_PAGES[path], priority: "0.8", changefreq: "monthly" };
   if (path === BLOG.path) return { ...BLOG, priority: "0.6", changefreq: "weekly" };
@@ -1527,6 +1586,7 @@ export const PUBLIC_PATHS = [
   FREE_TAG_PAGE.path,
   ...TOOL_PATHS,
   ...Object.keys(GUIDES),
+  TRENDING_PAGE.path,
   BLOG.path,
   ...BLOG_PATHS,
   ...TAG_SET_SLUGS.map(tagSetPath),
@@ -1608,6 +1668,9 @@ export const jsonLdFor = (path, year) => {
       breadcrumbs([["SendMyBeat", "/"], [tool.nav, path]]),
       faqPage(tool.faq, year),
     ];
+  }
+  if (path === TRENDING_PAGE.path) {
+    return [breadcrumbs([["SendMyBeat", "/"], [TRENDING_PAGE.nav, path]]), faqPage(TRENDING_PAGE.faq, year)];
   }
   if (GUIDES[path]) {
     const guide = GUIDES[path];

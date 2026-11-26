@@ -1,6 +1,7 @@
 import { Link, useSearchParams } from "react-router-dom";
 import FreeTagTool from "@/components/seo/FreeTagTool";
-import { BLOG, FREE_TAG_PAGE, GUIDES, STYLES, TAG_HUB_PATH, TAG_SETS, TOOL_PAGES, tagSetPath, withYear } from "@/lib/seoModel";
+import { FreeToolAd } from "@/components/AdBanner";
+import { BLOG, FREE_TAG_PAGE, GUIDES, STYLES, TAG_HUB_PATH, TAG_SETS, TOOL_PAGES, TRENDING_PAGE, tagSetPath, withYear } from "@/lib/seoModel";
 import "@/pages/PolicyPages.css";
 import "@/pages/FreeTagGenerator.css";
 
@@ -20,6 +21,8 @@ const FreeTagGenerator = () => {
 
           <FreeTagTool initialQuery={params.get("q") || ""} />
 
+          <FreeToolAd />
+
           <section className="ftg-copy">
             {FREE_TAG_PAGE.how.map(([heading, body]) => (
               <div key={heading}>
@@ -32,7 +35,8 @@ const FreeTagGenerator = () => {
           <section className="ftg-copy">
             <h2 className="policy-title">Ready-made tag sets</h2>
             <p>
-              Want a look first? These sets are free to copy. See all of them in <Link to={TAG_HUB_PATH}>type beat tags</Link>.
+              Want a look first? These sets are free to copy. See all of them in <Link to={TAG_HUB_PATH}>type beat tags</Link>, or see which artists are{" "}
+              <Link to={TRENDING_PAGE.path}>trending this week</Link>.
             </p>
             <ul className="ftg-examples">
               {FREE_TAG_PAGE.featured.map((slug) => (

@@ -1,6 +1,7 @@
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import FreeTagTool from "@/components/seo/FreeTagTool";
-import { BLOG, GUIDES, TAG_HUB_PATH, TOOL_PAGES, UPLOAD_PITCH, relatedBlocks, withYear } from "@/lib/seoModel";
+import { FreeToolAd } from "@/components/AdBanner";
+import { BLOG, GUIDES, TAG_HUB_PATH, TOOL_PAGES, TRENDING_PAGE, UPLOAD_PITCH, relatedBlocks, withYear } from "@/lib/seoModel";
 import TitleTool from "@/pages/tools/TitleTool";
 import DescriptionTool from "@/pages/tools/DescriptionTool";
 import HashtagTool from "@/pages/tools/HashtagTool";
@@ -80,6 +81,8 @@ const ToolPage = () => {
 
           {Tool ? <Tool page={page} /> : null}
 
+          {page.tool === "tags" || page.tool === "upload" ? <FreeToolAd /> : null}
+
           <section className="ftg-copy">
             {[...page.how, ...(page.extra || [])].map(([heading, body]) => (
               <div key={heading}>
@@ -95,7 +98,7 @@ const ToolPage = () => {
             <section className="ftg-cta policy-feature-card u-cta">
               <h2 className="policy-title">Need tags for this beat too?</h2>
               <p>
-                The tag generator pulls YouTube tags from live searches for your artist. One run is free with no account, and signing up
+                The tag generator pulls YouTube tags from live searches for your artist. You get 3 free runs a day with no account, and signing up
                 free adds 3 more AI generations and 3 YouTube uploads, no card needed.
               </p>
               <div className="flex flex-wrap gap-3">
@@ -147,6 +150,7 @@ const ToolPage = () => {
                 <Link key={p} to={p}>{t.nav}</Link>
               ))}
               <Link to={TAG_HUB_PATH}>Type beat tags</Link>
+              <Link to={TRENDING_PAGE.path}>{TRENDING_PAGE.nav}</Link>
             </p>
             <h2 className="policy-title">What else SendMyBeat does</h2>
             <p>

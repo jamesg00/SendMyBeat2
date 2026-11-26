@@ -627,7 +627,7 @@ const LandingPage = ({ setIsAuthenticated }) => {
             <li><Check aria-hidden="true" /> Uploads to your own channel</li>
             <li><Check aria-hidden="true" /> Works on your phone too</li>
           </ul>
-          <p className="smb-t2 lp-free-link">No account yet? <Link to="/free-tag-generator">Try one free tag run</Link>.</p>
+          <p className="smb-t2 lp-free-link">No account yet? <Link to="/free-tag-generator">Try the free tag generator</Link>.</p>
         </div>
         <TagLab />
       </section>

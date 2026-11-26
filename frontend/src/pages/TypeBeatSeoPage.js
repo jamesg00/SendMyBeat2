@@ -11,6 +11,7 @@ import {
   TAG_HUB_PATH,
   TAG_SETS,
   TOOL_PAGES,
+  TRENDING_PAGE,
   artistsByLetter,
   blogPostList,
   freeTagLink,
@@ -29,7 +30,7 @@ const YEAR = new Date().getFullYear();
 // The box near the end of a guide when the page doesn't set its own "cta".
 const DEFAULT_CTA = {
   heading: "Try it on your next beat",
-  body: "Run the tag generator once for free, no account. Sign up for 3 free generations and 3 uploads, no card needed.",
+  body: "Run the tag generator free, 3 times a day with no account. Sign up for 3 free generations and 3 uploads, no card needed.",
   links: [
     ["/free-tag-generator", "Free tag generator"],
     ["/?signup=1", "Sign up free"],
@@ -110,6 +111,9 @@ const TypeBeatSeoPage = () => {
           {isHub ? (
             <nav className="ftg-copy" aria-label="Tag sets">
               <h2 className="policy-title">Tags by artist</h2>
+              <p>
+                Not sure who to make a beat for? See the <Link to={TRENDING_PAGE.path}>type beats trending this week</Link>.
+              </p>
               {artistsByLetter().map(([letter, list]) => (
                 <div key={letter}>
                   <h3 className="policy-title ftg-q">{letter}</h3>

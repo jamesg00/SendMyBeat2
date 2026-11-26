@@ -23,9 +23,10 @@ import FreeTagGenerator from "@/pages/FreeTagGenerator";
 import TypeBeatSeoPage from "@/pages/TypeBeatSeoPage";
 import TagSetPage from "@/pages/TagSetPage";
 import BlogIndex from "@/pages/BlogIndex";
+import TrendingTypeBeats from "@/pages/TrendingTypeBeats";
 import { SEO_PATHS } from "@/lib/seoPages";
 import ToolPage from "@/pages/tools/ToolPage";
-import { BLOG, TOOL_PATHS } from "@/lib/seoModel";
+import { BLOG, TOOL_PATHS, TRENDING_PAGE } from "@/lib/seoModel";
 import VizEmbed from "@/pages/VizEmbed";
 import Footer from "@/components/Footer";
 import RouteMeta from "@/lib/RouteMeta";
@@ -221,6 +222,7 @@ function MainApp() {
             ))}
             <Route path="/type-beat-tags/:slug" element={<TagSetPage />} />
             <Route path={BLOG.path} element={<BlogIndex />} />
+            <Route path={TRENDING_PAGE.path} element={<TrendingTypeBeats />} />
             {/* Free tool pages (lib/seoModel.js TOOL_PAGES) */}
             {TOOL_PATHS.map((path) => (
               <Route key={path} path={path} element={<ToolPage />} />

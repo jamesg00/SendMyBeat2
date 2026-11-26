@@ -171,7 +171,7 @@ const TagSetPage = () => {
             <h2 className="policy-title">Get tags for your exact beat</h2>
             <p>
               This set is a starting point. The free generator checks today's YouTube searches and the tags on {page.query}s that already
-              rank, then scores and trims them for you. One run free, no account.
+              rank, then scores and trims them for you. 3 free runs a day, no account.
             </p>
             <div className="flex flex-wrap gap-3">
               <Link to={freeTagLink(page.query)} className="smb-btn smb-btn--pri smb-btn--lg">Try the free generator</Link>

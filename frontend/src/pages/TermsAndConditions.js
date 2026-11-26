@@ -46,7 +46,7 @@ const TermsAndConditions = () => {
                 <li>Generate and score YouTube tags, titles and descriptions with AI</li>
                 <li>Render visualizer videos and upload them to YouTube</li>
                 <li>Check channel analytics, beats and thumbnails</li>
-                <li>Use free tools without an account: one free tag run, plus the title, description and hashtag generators and the tag counter</li>
+                <li>Use free tools without an account: 3 free tag runs a day, plus the title, description and hashtag generators and the tag counter</li>
                 <li>Share a public producer profile in the Producer Spotlight</li>
               </ul>
             </PolicySection>

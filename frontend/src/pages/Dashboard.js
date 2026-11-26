@@ -15,6 +15,7 @@ import UpgradeModal from "@/components/UpgradeModal";
 import AdBanner from "@/components/AdBanner";
 import ProgressBar from "@/components/ProgressBar";
 import PublishWorkflow from "@/components/workflow/PublishWorkflow";
+import TrendingArtistsBox from "@/components/seo/TrendingArtistsBox";
 import ChannelReport from "@/components/analytics/ChannelReport";
 import StylePlanCard from "@/components/pros/StylePlanCard";
 import { useStylePlan } from "@/components/pros/prosData";
@@ -1267,6 +1268,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                 setShowTagDebug,
                 tagQuery,
                 setTagQuery,
+                tagSuggestions: <TrendingArtistsBox onPick={setTagQuery} limit={6} />,
                 minPublishScore:
                   tagDebug?.source_counts?.min_publish_score
                   ?? tagDebug?.tag_metrics?.effective_min_score

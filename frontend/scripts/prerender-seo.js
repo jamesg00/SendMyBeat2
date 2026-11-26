@@ -69,6 +69,7 @@ function footer(m) {
     ["/free-tag-generator", "Free tag generator"],
     ...toolLinks(m),
     [m.TAG_HUB_PATH, "Type beat tags"],
+    [m.TRENDING_PAGE.path, m.TRENDING_PAGE.nav],
     ...Object.entries(m.GUIDES)
       .filter(([p]) => p !== m.TAG_HUB_PATH)
       .map(([p, g]) => [p, g.h1]),
@@ -112,7 +113,7 @@ const ctaBox = (c) =>
 
 const GUIDE_CTA = {
   heading: "Try it on your next beat",
-  body: "Run the tag generator once for free, no account. Sign up for 3 free generations and 3 uploads, no card needed.",
+  body: "Run the tag generator free, 3 times a day with no account. Sign up for 3 free generations and 3 uploads, no card needed.",
   links: [
     ["/free-tag-generator", "Free tag generator"],
     ["/?signup=1", "Sign up free"],
@@ -141,7 +142,10 @@ function guideBody(m, pagePath, year) {
   const y = (text) => m.withYear(text, year);
   const hub =
     pagePath === m.TAG_HUB_PATH
-      ? `<nav class="ftg-copy" aria-label="Tag sets"><h2 class="policy-title">Tags by artist</h2>${m
+      ? `<nav class="ftg-copy" aria-label="Tag sets"><h2 class="policy-title">Tags by artist</h2><p>Not sure who to make a beat for? See the ${a(
+          m.TRENDING_PAGE.path,
+          "type beats trending this week"
+        )}.</p>${m
           .artistsByLetter()
           .map(([letter, list]) => `<h3 class="policy-title ftg-q">${esc(letter)}</h3>${linkRow(list.map(([s, name]) => [m.tagSetPath(s), name]))}`)
           .join("")}<h2 class="policy-title">Tags by style</h2>${linkRow(
@@ -190,9 +194,41 @@ function blogIndexBody(m, year) {
         body: "SendMyBeat turns one search into scored tags, titles and a description, makes your beat into a video and uploads it to your channel. Sign up free for 3 generations and 3 uploads, no card needed.",
         links: [
           ["/?signup=1", "Sign up free"],
-          ["/free-tag-generator", "Try one free tag run"],
+          ["/free-tag-generator", "Try the free tag generator"],
         ],
       }) +
+      toolNav(m, "Free tools") +
+      footer(m)
+  );
+}
+
+// /trending-type-beats (pages/TrendingTypeBeats.js). The ranking is live data the page fetches
+// in the browser, so the static page carries the explanation, popular artist tag pages, the
+// FAQ and the links, never rows that could go stale.
+function trendingBody(m, year) {
+  const p = m.TRENDING_PAGE;
+  const popular = m.trendingFallbackArtists(20);
+  return shell(
+    `<p class="smb-eyebrow">Refreshed twice a day</p><h1 class="policy-title ftg-h1">${esc(p.h1)}</h1>` +
+      `<p class="policy-muted ftg-lede">${esc(p.lede)}</p>` +
+      `<section class="ftg-result trd"><div class="ftg-result-head"><h2 class="policy-title">This week's list</h2></div><p class="trd-note">The ranked list loads in your browser from the latest refresh. Until then, start from the artists below or ${a(
+        m.TAG_HUB_PATH,
+        "browse type beat tags for every artist"
+      )}.</p></section>` +
+      `<section class="ftg-copy">${sections(p.how)}</section>` +
+      `<nav class="ftg-copy" aria-label="Popular artist tag pages"><h2 class="policy-title">Popular type beat tags</h2><p>Ready-made tag sets for the artists producers make the most type beats for. See every artist on the ${a(
+        m.TAG_HUB_PATH,
+        "type beat tags"
+      )} page.</p>${linkRow(popular.map(([s, name]) => [m.tagSetPath(s), name]))}</nav>` +
+      ctaBox({
+        heading: "Make tags for the artist you picked",
+        body: "The free tag generator reads today's YouTube searches for your artist and scores every tag. 3 free runs a day with no account, and signing up free adds 3 more AI generations and 3 YouTube uploads, no card needed.",
+        links: [
+          [m.FREE_TAG_PAGE.path, "Free tag generator"],
+          ["/?signup=1", "Sign up free"],
+        ],
+      }) +
+      faqHtml(m, p.faq, year) +
       toolNav(m, "Free tools") +
       footer(m)
   );
@@ -320,7 +356,7 @@ function toolBody(m, pagePath, year, tools) {
       ? uploadPitch(m)
       : t.tool === "tags"
       ? ""
-      : `<section class="ftg-cta policy-feature-card u-cta"><h2 class="policy-title">Need tags for this beat too?</h2><p>The tag generator pulls YouTube tags from live searches for your artist. One run is free with no account, and signing up free adds 3 more AI generations and 3 YouTube uploads, no card needed.</p><p>${a(
+      : `<section class="ftg-cta policy-feature-card u-cta"><h2 class="policy-title">Need tags for this beat too?</h2><p>The tag generator pulls YouTube tags from live searches for your artist. You get 3 free runs a day with no account, and signing up free adds 3 more AI generations and 3 YouTube uploads, no card needed.</p><p>${a(
           "/free-tag-generator",
           "Free tag generator",
           "smb-btn smb-btn--pri smb-btn--lg"
@@ -339,6 +375,7 @@ function toolBody(m, pagePath, year, tools) {
         ["/free-tag-generator", "Free tag generator"],
         ...others.map(([p, x]) => [p, x.nav]),
         [m.TAG_HUB_PATH, "Type beat tags"],
+        [m.TRENDING_PAGE.path, m.TRENDING_PAGE.nav],
       ])}</nav>` +
       footer(m)
   );
@@ -359,7 +396,7 @@ function homeBody(m, year) {
       `<p class="policy-muted ftg-lede">${esc(h.lede)}</p>` +
       `<p class="ftg-links">${a("/?signup=1", "Start free", "smb-btn smb-btn--pri smb-btn--lg")} ${a(
         "/free-tag-generator",
-        "Try one free tag run",
+        "Try the free tag generator",
         "smb-btn smb-btn--sec smb-btn--lg"
       )}</p>` +
       `<section class="ftg-copy"><ul>${h.ticks.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></section>` +
@@ -375,6 +412,7 @@ function homeBody(m, year) {
       `<section class="ftg-copy"><h2 class="policy-title">Free tools and guides</h2>${linkRow([
         ["/free-tag-generator", "Free tag generator"],
         [m.TAG_HUB_PATH, "Type beat tags"],
+        [m.TRENDING_PAGE.path, m.TRENDING_PAGE.nav],
         ...tools,
         ...guides,
         [m.BLOG.path, "Producer blog"],
@@ -444,6 +482,7 @@ function renderPage(m, template, pagePath, year, tools) {
   if (pagePath === m.FREE_TAG_PAGE.path) body = freeTagBody(m, year);
   else if (m.GUIDES[pagePath] || m.BLOG_POSTS[pagePath]) body = guideBody(m, pagePath, year);
   else if (pagePath === m.BLOG.path) body = blogIndexBody(m, year);
+  else if (pagePath === m.TRENDING_PAGE.path) body = trendingBody(m, year);
   else if (m.TOOL_PAGES && m.TOOL_PAGES[pagePath]) body = toolBody(m, pagePath, year, tools);
   else if (pagePath.startsWith(`${m.TAG_HUB_PATH}/`)) body = tagSetBody(m, pagePath.slice(m.TAG_HUB_PATH.length + 1), year);
   if (body) {
