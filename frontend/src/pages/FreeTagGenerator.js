@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import axios from "axios";
 import { toast } from "sonner";
 import { Copy, Sparkles } from "lucide-react";
@@ -7,6 +7,7 @@ import { API } from "@/App";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import ProgressBar from "@/components/ProgressBar";
+import { FREE_TAG_PAGE, GUIDES, STYLES, TAG_HUB_PATH, TAG_SETS, tagSetPath, withYear } from "@/lib/seoModel";
 import "@/pages/PolicyPages.css";
 import "@/pages/FreeTagGenerator.css";
 
@@ -50,9 +51,12 @@ const STEPS = [
   { at: 40000, text: "Almost done, finishing your list" },
 ];
 const RUN_MS = 45000;
+const YEAR = new Date().getFullYear();
 
 const FreeTagGenerator = () => {
-  const [query, setQuery] = useState("");
+  // Tag set pages link here with ?q= so the search is already typed in.
+  const [params] = useSearchParams();
+  const [query, setQuery] = useState(() => (params.get("q") || "").slice(0, 120));
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState(0);
   const [result, setResult] = useState(savedResult);
@@ -120,11 +124,8 @@ const FreeTagGenerator = () => {
       <div className="policy-wrap container mx-auto px-4 py-6 md:px-6 md:py-10">
         <div className="policy-card ftg p-5 sm:p-8 md:p-10">
           <p className="smb-eyebrow">Free tool, no account</p>
-          <h1 className="policy-title ftg-h1">Free YouTube tag generator for type beats</h1>
-          <p className="policy-muted ftg-lede">
-            Type an artist or a vibe, like "future type beat" or "dark trap". You get YouTube tags pulled from what people search
-            and the tags on videos that already rank, sized for YouTube's 500-character limit. One free run, no sign-up.
-          </p>
+          <h1 className="policy-title ftg-h1">{FREE_TAG_PAGE.h1}</h1>
+          <p className="policy-muted ftg-lede">{FREE_TAG_PAGE.lede}</p>
 
           {!result && !used ? (
             <form className="ftg-form" onSubmit={generate}>
@@ -176,18 +177,57 @@ const FreeTagGenerator = () => {
           ) : null}
 
           <section className="ftg-copy">
-            <h2 className="policy-title">How the tags are picked</h2>
+            {FREE_TAG_PAGE.how.map(([heading, body]) => (
+              <div key={heading}>
+                <h2 className="policy-title">{heading}</h2>
+                <p>{body}</p>
+              </div>
+            ))}
+          </section>
+
+          <section className="ftg-copy">
+            <h2 className="policy-title">Ready-made tag sets</h2>
             <p>
-              SendMyBeat reads YouTube's own search suggestions and the tags on type beats that already rank for your artist. AI adds
-              close variations, then every tag is scored on search demand and competition, and the weakest are cut so the set fits
-              in YouTube's tag box.
+              Want a look first? These sets are free to copy. See all of them in <Link to={TAG_HUB_PATH}>type beat tags</Link>.
             </p>
+            <ul className="ftg-examples">
+              {FREE_TAG_PAGE.featured.map((slug) => (
+                <li key={slug}>
+                  <Link to={tagSetPath(slug)}>{TAG_SETS[slug].name} type beat tags</Link>
+                  <p>{TAG_SETS[slug].sound}</p>
+                </li>
+              ))}
+            </ul>
+            <h2 className="policy-title">Tags by style</h2>
+            <p className="ftg-links">
+              {Object.entries(STYLES).map(([slug, st]) => (
+                <Link key={slug} to={tagSetPath(slug)}>{st.name}</Link>
+              ))}
+            </p>
+          </section>
+
+          <section className="ftg-copy">
+            <h2 className="policy-title">Questions</h2>
+            {FREE_TAG_PAGE.faq.map(([q, a]) => (
+              <div key={q}>
+                <h3 className="policy-title ftg-q">{withYear(q, YEAR)}</h3>
+                <p>{withYear(a, YEAR)}</p>
+              </div>
+            ))}
+          </section>
+
+          <nav className="ftg-copy" aria-label="Guides">
             <h2 className="policy-title">What else SendMyBeat does</h2>
             <p>
               With an account you can write descriptions, turn your beat and artwork into a video with a visualizer, and upload it
               straight to your YouTube channel. See <Link to="/">how it works</Link> or read <Link to="/about">about SendMyBeat</Link>.
             </p>
-          </section>
+            <ul>
+              {Object.entries(GUIDES).map(([path, g]) => (
+                <li key={path}><Link to={path}>{g.h1}</Link></li>
+              ))}
+            </ul>
+          </nav>
         </div>
       </div>
     </div>

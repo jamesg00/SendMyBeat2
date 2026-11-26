@@ -18,6 +18,7 @@ import TermsAndConditions from "@/pages/TermsAndConditions";
 import About from "@/pages/About";
 import FreeTagGenerator from "@/pages/FreeTagGenerator";
 import TypeBeatSeoPage from "@/pages/TypeBeatSeoPage";
+import TagSetPage from "@/pages/TagSetPage";
 import { SEO_PATHS } from "@/lib/seoPages";
 import VizEmbed from "@/pages/VizEmbed";
 import Footer from "@/components/Footer";
@@ -211,6 +212,7 @@ function MainApp() {
             {SEO_PATHS.map((path) => (
               <Route key={path} path={path} element={<TypeBeatSeoPage />} />
             ))}
+            <Route path="/type-beat-tags/:slug" element={<TagSetPage />} />
           </Routes>
         </div>
           <Footer />
