@@ -112,7 +112,7 @@ const ProductTour = ({ open, steps = TOUR_STEPS, onClose, onStep, startAt = 0 })
   // Let the page get ready for the step (switch tabs) before we look for its target.
   useEffect(() => {
     if (open && step && onStep) onStep(step, index);
-  }, [open, index]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, index]);
 
   // Follow the target as the page scrolls, resizes or re-renders.
   useEffect(() => {
