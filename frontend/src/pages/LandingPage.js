@@ -600,6 +600,7 @@ const LandingPage = ({ setIsAuthenticated }) => {
           <a href="#pricing" onClick={scrollTo("pricing")}>Pricing</a>
           <Link to="/spotlight">Spotlight</Link>
           <Link to="/free-tag-generator">Free tags</Link>
+          <Link to="/tunestotube-alternative">TunesToTube alt</Link>
         </nav>
         <div className="lp-nav-actions">
           <button type="button" className="lp-login" onClick={() => openAuth("login")}>Log in</button>
@@ -628,6 +629,11 @@ const LandingPage = ({ setIsAuthenticated }) => {
             <li><Check aria-hidden="true" /> Works on your phone too</li>
           </ul>
           <p className="smb-t2 lp-free-link">No account yet? <Link to="/free-tag-generator">Try the free tag generator</Link>.</p>
+          <ul className="lp-intent-links">
+            {(HOME.intentLinks || []).map(([path, label]) => (
+              <li key={path}><Link to={path}>{label}</Link></li>
+            ))}
+          </ul>
         </div>
         <TagLab />
       </section>
