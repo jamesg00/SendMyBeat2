@@ -150,6 +150,24 @@ Never expose `27017`, `8000`, or `3000` directly on the internet in front of pro
 
 ## Troubleshooting & Maintenance
 
+### Browser visualizer videos and server encoding
+
+The backend verifies uploaded video streams with ffprobe. When an H.264/yuv420p video already
+matches the output dimensions and frame rate, covers the beat, has neutral transforms, and
+watermark removal is authorized and selected, FFmpeg copies its video stream and adds AAC audio.
+This preserves the browser-rendered frames instead of encoding them again. Upload Studio shows
+"Adding audio to rendered video" for this step. Eligible paid users must enable **Remove watermark**
+to use the copy path; this optimization does not change watermark entitlements or settings.
+
+A required watermark still changes pixels and requires encoding. Matching videos use only the
+watermark filter, without rebuilding the background or scaling/compositing the artwork. Short
+loops, changed layouts/frame rates, incompatible codecs, and unverified video metadata retain
+the normal encoding path. Logs identify `Video processing mode=copy`, `watermark_only`, or
+`full_encode`; job media diagnostics also include `video_stream_copied` and `video_layout_skipped`.
+
+This change requires deploying the backend. It does not remove the configured timeout for videos
+that still need encoding, and does not change nginx's upload size limit.
+
 ### Visualizer upload fails with 413 / a CORS "Network Error"
 
 The browser renders the full visualizer video using the device's encoder, then posts it to
