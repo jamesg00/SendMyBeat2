@@ -7,8 +7,10 @@ const options = () => ({ url: "/api/upload/image", blob: new Blob(["video"]), na
 beforeEach(() => jest.clearAllMocks());
 
 test("two-minute 60 FPS recording fits the upload budget", () => {
+  expect(visualizerBitrate(60, 120)).toBe(12_000_000);
   expect(visualizerBitrate(60, 120) * 120 / 8).toBeLessThan(MAX_VISUAL_BYTES);
   expect(visualizerBitrate(60, 900) * 900 / 8).toBeLessThan(MAX_VISUAL_BYTES);
+  expect(visualizerBitrate(30, 120)).toBe(8_000_000);
 });
 
 test("network failure retries the same video and returns its file ID", async () => {

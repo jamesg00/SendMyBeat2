@@ -3,8 +3,10 @@ import axios from "axios";
 export const MAX_VISUAL_BYTES = 200 * 1024 * 1024;
 
 export function visualizerBitrate(fps, duration) {
-  const target = fps > 30 ? 7_000_000 : 4_500_000;
-  return Math.round(Math.min(target, (170 * 1024 * 1024 * 8) / Math.max(1, duration)));
+  // 1080p60 needs more bits than 7 Mbps or YouTube looks soft/"not HD" after its own re-encode.
+  // Stay under the upload budget with headroom for container overhead.
+  const target = fps > 30 ? 12_000_000 : 8_000_000;
+  return Math.round(Math.min(target, (190 * 1024 * 1024 * 8) / Math.max(1, duration)));
 }
 
 // Retry only the transfer, never the expensive render or the YouTube publish request.
