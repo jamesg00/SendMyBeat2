@@ -13,6 +13,8 @@ How to use it:
 
 | Started | What we tried | Channel | Result (signups, uploads, traffic) | Keep? |
 |---|---|---|---|---|
+| 2026-11-27 | SEO keyword pass: homepage title/description, `/free-beat-uploader`, stronger TunesToTube + upload-beats pages, homepage intent links | SEO | Deploy + check Search Console in 1–2 weeks | ? |
+| 2026-11-27 | Reddit: create account + developer-story post in r/makinghiphop (manual) | Reddit | Pending account + post | ? |
 | 2026-11-11 | Daily drafted posts for the SendMyBeat X account | X | Not measured yet | ? |
 | | | | | |
 
@@ -30,9 +32,9 @@ Search terms that could each get their own landing page, and whether the page ex
 
 | Search term | Why it's worth a page | Page live? |
 |---|---|---|
-| free TunesToTube alternative | People leaving TunesToTube over ads and limits (see GROWTH_PLAN.md) | |
-| upload beats to YouTube free | High-intent search from producers who need the tool now | |
-| free beat uploader | Short, broad version of the above | |
+| free TunesToTube alternative | People leaving TunesToTube over ads and limits (see GROWTH_PLAN.md) | Yes — `/tunestotube-alternative` |
+| upload beats to YouTube free | High-intent search from producers who need the tool now | Yes — `/upload-beats-to-youtube` |
+| free beat uploader | Short, broad version of the above | Yes — `/free-beat-uploader` |
 
 ## Numbers to check each week
 

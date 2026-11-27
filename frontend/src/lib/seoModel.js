@@ -16,9 +16,9 @@ export const freeTagLink = (query) => `/free-tag-generator?q=${encodeURIComponen
 
 export const STATIC_PAGES = {
   "/": {
-    title: "SendMyBeat: tags, video and upload for type-beat producers",
+    title: "SendMyBeat: Upload Beats to YouTube Free | Tags, Visualizer, No Card",
     description:
-      "SendMyBeat turns a finished beat into a YouTube upload: tags that rank, a description, a visualizer video and the upload itself. Try it free, no card needed.",
+      "Free beat uploader for YouTube: generate type beat tags, render a visualizer video, and publish to your own channel. A clean TunesToTube alternative — try it free, no card needed.",
     priority: "1.0",
     changefreq: "weekly",
   },
@@ -56,6 +56,12 @@ export const HOME = {
   h1: "SendMyBeat generates tags, renders your beat video and uploads to YouTube.",
   lede: "Start with your beat and artwork. Generate tags, write a description, pick a layout and add a visualizer. Preview the video, publish to your own YouTube channel, then see what to fix next.",
   ticks: ["No card to start", "Uploads to your own channel", "Works on your phone too"],
+  // High-intent paths producers search for; shown as plain links under the hero CTAs.
+  intentLinks: [
+    ["/tunestotube-alternative", "Free TunesToTube alternative"],
+    ["/upload-beats-to-youtube", "Upload beats to YouTube"],
+    ["/free-beat-uploader", "Free beat uploader"],
+  ],
   steps: [
     { id: "generate", title: "Generate tags", body: "Type an artist or a vibe. Get tag suggestions from YouTube videos, then use the meter to stay under YouTube's 500-character limit." },
     { id: "review", title: "Review the ranking", body: "Every tag gets a score from real search demand and competition. See them best to worst, open one to read why, and cut the weak ones." },
@@ -77,6 +83,7 @@ export const HOME = {
   ],
   faq: [
     ["Do I need a card to try it?", "No. A free account comes with 3 AI generations and 3 YouTube uploads, no card needed. They don't renew, so after that you pick Plus or Pro."],
+    ["Is this a free TunesToTube alternative?", "Yes, for beat producers. The free uploader turns an MP3 and a still image or GIF into a YouTube video on your channel. Upload Studio adds visualizers, layouts and AI-scored tags. Plus removes the watermark."],
     ["Where do the tags come from?", "From YouTube itself: what people type into search, and the tags on videos that already rank for your artist. AI adds variations, then every tag is scored."],
     ["Does it upload to my own channel?", "Yes. You connect your Google account once, and uploads go to that YouTube channel as public, unlisted or private videos."],
     ["What can I do without a plan?", "Use your 3 free generations and 3 free uploads, browse Spotlight and read the Pros stories. After the free credits, generating, uploading and analytics need a plan."],
@@ -527,6 +534,75 @@ export const TOOL_PAGES = {
       ],
     ],
   },
+  "/free-beat-uploader": {
+    tool: "upload",
+    account: true,
+    cta: "Upload a beat free",
+    nav: "Free beat uploader",
+    appName: "SendMyBeat Free Beat Uploader",
+    eyebrow: "Free beat to YouTube uploader",
+    title: "Free Beat Uploader for YouTube | MP3 + Cover to Video | SendMyBeat",
+    description:
+      "Free beat uploader: turn your MP3 and cover art or GIF into a YouTube video on your own channel. Ready-made type beat tags, 3 free uploads a day, no card needed.",
+    h1: "Free beat uploader for YouTube",
+    lede: "YouTube needs a video, not an MP3. This free beat uploader turns your beat and a still image or animated GIF into a video and publishes it to your channel, with a ready-made type beat tag set so you're not starting from a blank tags box.",
+    steps: [
+      ["Sign in with Google", "Creates your free SendMyBeat account and connects your YouTube channel in one step."],
+      ["Add your beat and a picture", "MP3, WAV, M4A, FLAC or OGG, plus a still image or an animated GIF."],
+      ["Pick a tag set", "Choose an artist or style, keep the tags that fit and add your own."],
+      ["Upload", "The video goes to your channel as public, unlisted or private."],
+    ],
+    how: [
+      [
+        "What a free beat uploader does",
+        "It converts your audio and a picture into a 16:9 video long enough for the track, then uploads that video to your YouTube channel with the title, tags and description you chose. You don't need video editing software.",
+      ],
+      [
+        "Built for type beat producers",
+        "Instead of typing tags from scratch every time, pick a ready-made type beat set for an artist or style, edit it, and stay under YouTube's 500-character limit. Free accounts get 3 uploads a day; Plus and Pro remove the small watermark and unlock Upload Studio visualizers.",
+      ],
+      [
+        "Want a visualizer instead of a still?",
+        "Use Upload Studio after you sign in: same beat and artwork, with layouts and audio visualizers rendered into the video before it goes to your channel.",
+      ],
+    ],
+    extra: [
+      [
+        "Related tools",
+        "If you came from TunesToTube, the alternative page compares the two. If you already have tags and just need the upload step, the MP3 to YouTube uploader is the same free tool with a more general title.",
+      ],
+    ],
+    related: [
+      {
+        heading: "More ways to get on YouTube",
+        body: "Compare with TunesToTube, or open Upload Studio for visualizers and full layouts.",
+        links: [
+          ["/tunestotube-alternative", "TunesToTube alternative"],
+          ["/upload-beats-to-youtube", "Upload beats to YouTube"],
+          ["/upload-mp3-to-youtube", "Free MP3 to YouTube uploader"],
+          ["/type-beat-video-maker", "Type beat video maker"],
+        ],
+      },
+    ],
+    faq: [
+      [
+        "Is the beat uploader really free?",
+        "Yes. You get 3 uploads a day with a free SendMyBeat account, no card needed. Plus ($5 a month) and Pro ($10 a month) remove the watermark and add more uploads.",
+      ],
+      [
+        "Can I use a GIF?",
+        "Yes. An animated GIF loops for the length of your beat. Still JPG, PNG and WEBP covers work too.",
+      ],
+      [
+        "Does it include a visualizer?",
+        "Not this free uploader. Visualizers are in Upload Studio after you sign in.",
+      ],
+      [
+        "Where does the video go?",
+        "To your own YouTube channel. You sign in with Google and choose public, unlisted or private.",
+      ],
+    ],
+  },
   "/tunestotube-alternative": {
     tool: "upload",
     account: true,
@@ -534,10 +610,10 @@ export const TOOL_PAGES = {
     nav: "TunesToTube alternative",
     appName: "SendMyBeat Free Uploader, a TunesToTube Alternative",
     eyebrow: "Free MP3 to YouTube uploader, free account",
-    title: "TunesToTube Alternative, Free with Animated GIFs | SendMyBeat",
+    title: "Free TunesToTube Alternative for Beat Producers | SendMyBeat",
     description:
-      "A free TunesToTube alternative: SendMyBeat turns your MP3 and a still image or animated GIF into a video on your YouTube channel, with ready-made type beat tags.",
-    h1: "A TunesToTube alternative for beat producers",
+      "Free TunesToTube alternative for beat producers: SendMyBeat turns your MP3 and a still image or animated GIF into a video on your YouTube channel, with ready-made type beat tags.",
+    h1: "Free TunesToTube alternative for beat producers",
     lede: "TunesToTube made uploading audio to YouTube easy. SendMyBeat's free uploader does the same job, MP3 plus picture to a video on your channel, and adds animated GIFs and ready-made type beat tags so you're not retyping them every upload.",
     steps: [
       ["Sign in with Google", "Creates your free SendMyBeat account and connects your YouTube channel in one step."],
@@ -815,10 +891,10 @@ export const GUIDES = {
     ],
   },
   "/upload-beats-to-youtube": {
-    title: "Upload Beats to YouTube with a Video, Tags and Description | SendMyBeat",
-    description: "Turn a beat and cover art into a YouTube video with a visualizer, then upload it to your channel with tags and a description filled in.",
-    h1: "Upload your beats to YouTube in one step",
-    lede: "YouTube needs a video, not an MP3. SendMyBeat turns your beat and cover art into one and uploads it to your own channel.",
+    title: "Upload Beats to YouTube Free | Video, Tags and Description | SendMyBeat",
+    description: "Upload beats to YouTube free: turn a beat and cover art into a video with a visualizer, then publish to your channel with tags and a description filled in.",
+    h1: "Upload beats to YouTube free",
+    lede: "YouTube needs a video, not an MP3. SendMyBeat turns your beat and cover art into one and uploads it to your own channel — free to try, no card needed.",
     sections: [
       ["Beat plus artwork becomes a video", "Pick a layout, add an audio visualizer and preview it before anything goes live."],
       ["Tags and description filled in", "Generate tags and write a description from a template, and they go into the upload with your title."],
