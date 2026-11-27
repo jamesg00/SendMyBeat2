@@ -526,6 +526,9 @@ YOUTUBE_RENDER_TIMEOUT_MAX_SECONDS = int(os.environ.get("YOUTUBE_RENDER_TIMEOUT_
 STATIC_STILL_ENCODE_FPS = 2
 YOUTUBE_RENDER_PRESET = str(os.environ.get("YOUTUBE_RENDER_PRESET", "veryfast")).strip() or "veryfast"
 YOUTUBE_RENDER_CRF = str(os.environ.get("YOUTUBE_RENDER_CRF", "26")).strip() or "26"
+# Sharper settings when re-encoding an already-finished browser visualizer (watermark-only path).
+YOUTUBE_RENDER_VIDEO_PRESET = str(os.environ.get("YOUTUBE_RENDER_VIDEO_PRESET", "fast")).strip() or "fast"
+YOUTUBE_RENDER_VIDEO_CRF = str(os.environ.get("YOUTUBE_RENDER_VIDEO_CRF", "18")).strip() or "18"
 YOUTUBE_RENDER_MAX_HEIGHT = int(os.environ.get("YOUTUBE_RENDER_MAX_HEIGHT", "1080") or "1080")
 YOUTUBE_RENDER_FPS_ALLOWED = frozenset({2, 30, 60})
 # Legacy env/docs used 24 or 15; map to nearest allowed preset.
@@ -3693,6 +3696,17 @@ def _probe_audio_duration_seconds(audio_path: Path) -> float:
     return duration_seconds
 
 
+def _stream_has_rotation(stream: dict[str, Any]) -> bool:
+    if stream.get("tags", {}).get("rotate"):
+        return True
+    for item in stream.get("side_data_list") or []:
+        if not isinstance(item, dict):
+            continue
+        if item.get("rotation") not in (None, 0, 0.0, "0"):
+            return True
+    return False
+
+
 def _video_matches_output(video_path: Path, payload: dict[str, Any], duration: float) -> bool:
     """Conservatively verify a finished video, rather than trusting a browser flag or filename."""
     neutral = {"image_scale_x": 1, "image_scale_y": 1, "image_pos_x": 0,
@@ -3712,18 +3726,19 @@ def _video_matches_output(video_path: Path, payload: dict[str, Any], duration: f
         stream = json.loads(probe.stdout)["streams"][0]
         width, height = _resolve_youtube_render_dimensions(payload)
         fps = _resolve_ffmpeg_mux_fps(payload)
+        # Browser encoders often omit field_order or report "unknown"; only reject interlaced.
+        field_order = stream.get("field_order")
         return (
             stream.get("codec_name") == "h264"
             and stream.get("pix_fmt") == "yuv420p"
             and (stream.get("width"), stream.get("height")) == (width, height)
             and stream.get("sample_aspect_ratio") in (None, "N/A", "1:1")
-            and stream.get("field_order") == "progressive"
+            and field_order in (None, "progressive", "unknown")
             and Fraction(stream["avg_frame_rate"]) == fps
             and Fraction(stream["r_frame_rate"]) == fps
             and abs(float(stream["start_time"])) < 0.001
             and float(stream["duration"]) >= duration - 1 / fps
-            and not stream.get("tags", {}).get("rotate")
-            and not stream.get("side_data_list")
+            and not _stream_has_rotation(stream)
         )
     except (OSError, subprocess.SubprocessError, ValueError, KeyError, IndexError, TypeError, ZeroDivisionError):
         # Unknown or unsupported metadata takes the existing encode path.
@@ -3902,10 +3917,14 @@ async def _render_youtube_video(
                     audio_input_index = 1
 
                 render_payload["audio_input_index"] = audio_input_index
+                # Finished browser videos keep sharper settings; artwork/GIF paths stay on the
+                # cheaper defaults so long still/GIF jobs do not time out on small hosts.
+                encode_preset = YOUTUBE_RENDER_VIDEO_PRESET if video_matches_output else YOUTUBE_RENDER_PRESET
+                encode_crf = YOUTUBE_RENDER_VIDEO_CRF if video_matches_output else YOUTUBE_RENDER_CRF
                 video_options = ["-map", "0:v:0", "-c:v", "copy"] if copy_video else [
                     "-filter_complex", _build_render_filter(render_payload), "-map", "[vout]",
-                    "-c:v", "libx264", "-preset", YOUTUBE_RENDER_PRESET,
-                    "-crf", YOUTUBE_RENDER_CRF, "-pix_fmt", "yuv420p",
+                    "-c:v", "libx264", "-preset", encode_preset,
+                    "-crf", encode_crf, "-pix_fmt", "yuv420p",
                     "-threads", FFMPEG_THREADS, "-r", render_fps_value,
                 ]
 
@@ -4061,8 +4080,8 @@ async def _render_youtube_video(
                     "video_stream_copied": copy_video,
                     "video_layout_skipped": video_matches_output,
                     "audio_codec": "aac",
-                    "preset": None if copy_video else YOUTUBE_RENDER_PRESET,
-                    "crf": None if copy_video else YOUTUBE_RENDER_CRF,
+                    "preset": None if copy_video else encode_preset,
+                    "crf": None if copy_video else encode_crf,
                     "render_duration_seconds": round(render_duration_seconds, 3),
                     "layout_mode": (
                         "fill_frame"

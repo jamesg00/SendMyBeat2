@@ -34,6 +34,11 @@ class TestVideoEligibility(unittest.TestCase):
             with self.subTest(changed=changed), patch.object(server.subprocess, "run") as probe:
                 probe.return_value = subprocess.CompletedProcess([], 0, json.dumps({"streams": [{**good, **changed}]}))
                 self.assertEqual(server._video_matches_output(Path("video.mp4"), payload(), 2), not changed)
+        for ok in [{"field_order": "unknown"}, {"field_order": None},
+                   {"side_data_list": [{"side_data_type": "Display Matrix"}]}]:
+            with self.subTest(ok=ok), patch.object(server.subprocess, "run") as probe:
+                probe.return_value = subprocess.CompletedProcess([], 0, json.dumps({"streams": [{**good, **ok}]}))
+                self.assertTrue(server._video_matches_output(Path("video.mp4"), payload(), 2))
         for changed in [{"image_scale_x": 0.5}, {"image_pos_y": 0.2}, {"image_rotation": 90},
                         {"image_flip_h": True}, {"blurred_background_input": True}]:
             with self.subTest(changed=changed), patch.object(server.subprocess, "run") as probe:
@@ -105,6 +110,8 @@ class TestRealVideoRender(unittest.IsolatedAsyncioTestCase):
         settings = payload(remove_watermark=False)
         output, command = await self.render(settings)
         self.assertEqual(command[command.index("-c:v") + 1], "libx264")
+        self.assertEqual(command[command.index("-crf") + 1], "18")
+        self.assertEqual(command[command.index("-preset") + 1], "fast")
         graph = command[command.index("-filter_complex") + 1]
         self.assertIn("drawtext", graph)
         self.assertNotIn("[art]", graph)
@@ -112,6 +119,7 @@ class TestRealVideoRender(unittest.IsolatedAsyncioTestCase):
         self.assertNotEqual(self.frame_hashes(self.video), self.frame_hashes(output))
         self.assertEqual(len(self.frame_hashes(output)), 120)
         self.assertFalse(settings["_media_debug"]["video_stream_copied"])
+        self.assertEqual(settings["_media_debug"]["crf"], "18")
 
     async def test_transform_keeps_existing_layout_encode(self):
         output, command = await self.render(payload(image_scale_x=0.5))

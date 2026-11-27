@@ -168,6 +168,22 @@ the normal encoding path. Logs identify `Video processing mode=copy`, `watermark
 This change requires deploying the backend. It does not remove the configured timeout for videos
 that still need encoding, and does not change nginx's upload size limit.
 
+### 1080p Upload Studio output looks soft or like 720p
+
+Confirm the browser bake logged `1920x1080` (or the chosen aspect's full size). Then check the
+backend env:
+
+```bash
+grep YOUTUBE_RENDER_MAX_HEIGHT backend/.env
+```
+
+`YOUTUBE_RENDER_MAX_HEIGHT=720` downscales every 1080p job to 1280x720 while keeping 60 fps. Set
+it to `1080` (or `0` to disable the cap), recreate the backend container, and retry.
+
+Watermarked jobs still re-encode. Matching browser videos use `YOUTUBE_RENDER_VIDEO_CRF` /
+`YOUTUBE_RENDER_VIDEO_PRESET` (defaults `18` / `fast`). With **Remove watermark** enabled on an
+eligible plan, the server copies the browser stream and keeps its full bitrate.
+
 ### Visualizer upload fails with 413 / a CORS "Network Error"
 
 The browser renders the full visualizer video using the device's encoder, then posts it to
