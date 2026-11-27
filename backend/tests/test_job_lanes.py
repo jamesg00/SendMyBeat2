@@ -154,11 +154,15 @@ class TestServerPerfHelpers(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(db.upload_jobs.count_documents.await_count, 2)
 
     def test_ffmpeg_runs_at_lower_priority(self):
-        with patch.object(self.server, "FFMPEG_NICE", 10), patch.object(self.server.shutil, "which", return_value="/usr/bin/nice"):
+        with patch.object(self.server.os, "name", "posix"), patch.object(self.server, "FFMPEG_NICE", 10), patch.object(self.server.shutil, "which", return_value="/usr/bin/nice"):
             cmd = self.server._with_ffmpeg_priority(["ffmpeg", "-y", "out.mp4"])
         self.assertEqual(cmd[:3], ["/usr/bin/nice", "-n", "10"])
         self.assertEqual(cmd[3:], ["ffmpeg", "-y", "out.mp4"])
         with patch.object(self.server, "FFMPEG_NICE", 0):
+            self.assertEqual(self.server._with_ffmpeg_priority(["ffmpeg"]), ["ffmpeg"])
+
+    def test_ffmpeg_skips_posix_priority_on_windows(self):
+        with patch.object(self.server.os, "name", "nt"), patch.object(self.server, "FFMPEG_NICE", 10):
             self.assertEqual(self.server._with_ffmpeg_priority(["ffmpeg"]), ["ffmpeg"])
 
     def test_worker_lanes_split_media_from_light_jobs(self):

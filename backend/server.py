@@ -25,6 +25,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
 import json
+from fractions import Fraction
 import base64
 import shutil
 import stripe
@@ -1358,8 +1359,11 @@ def _append_ffmpeg_visual_input(
     render_fps: str,
     loop_video: bool,
 ) -> None:
-    if loop_video or visual_kind == "video":
+    if loop_video:
         command.extend(["-stream_loop", "-1", "-i", str(visual_path)])
+        return
+    if visual_kind == "video":
+        command.extend(["-i", str(visual_path)])
         return
     command.extend(["-f", "image2", "-loop", "1", "-framerate", render_fps, "-i", str(visual_path)])
 
@@ -3574,6 +3578,12 @@ def _resolve_youtube_render_dimensions(payload: dict[str, Any]) -> tuple[int, in
 def _build_render_filter(payload: dict[str, Any]) -> str:
     target_w, target_h = _resolve_youtube_render_dimensions(payload)
     render_fps = _resolve_ffmpeg_mux_fps(payload)
+    if payload.get("_video_matches_output"):
+        # The video already contains the complete frame; only the watermark changes pixels.
+        return _build_youtube_watermark_graph(
+            input_label="0:v", output_label="vout", target_w=target_w,
+            target_h=target_h, fps=render_fps,
+        )
     scale_x = float(payload["image_scale_x"])
     scale_y = float(payload["image_scale_y"])
     pos_x = float(payload["image_pos_x"])
@@ -3681,6 +3691,43 @@ def _probe_audio_duration_seconds(audio_path: Path) -> float:
     if duration_seconds <= 0:
         raise HTTPException(status_code=400, detail="Audio file appears to be empty or invalid.")
     return duration_seconds
+
+
+def _video_matches_output(video_path: Path, payload: dict[str, Any], duration: float) -> bool:
+    """Conservatively verify a finished video, rather than trusting a browser flag or filename."""
+    neutral = {"image_scale_x": 1, "image_scale_y": 1, "image_pos_x": 0,
+               "image_pos_y": 0, "image_rotation": 0}
+    if any(float(payload.get(key, default)) != default for key, default in neutral.items()):
+        return False
+    if payload.get("image_flip_h") or payload.get("image_flip_v") or payload.get("blurred_background_input"):
+        return False
+    try:
+        probe = subprocess.run(
+            [_resolve_ffprobe_binary(), "-v", "error", "-select_streams", "v:0",
+             "-show_streams", "-of", "json", str(video_path)],
+            capture_output=True, text=True, timeout=10, check=False,
+        )
+        if probe.returncode != 0:
+            return False
+        stream = json.loads(probe.stdout)["streams"][0]
+        width, height = _resolve_youtube_render_dimensions(payload)
+        fps = _resolve_ffmpeg_mux_fps(payload)
+        return (
+            stream.get("codec_name") == "h264"
+            and stream.get("pix_fmt") == "yuv420p"
+            and (stream.get("width"), stream.get("height")) == (width, height)
+            and stream.get("sample_aspect_ratio") in (None, "N/A", "1:1")
+            and stream.get("field_order") == "progressive"
+            and Fraction(stream["avg_frame_rate"]) == fps
+            and Fraction(stream["r_frame_rate"]) == fps
+            and abs(float(stream["start_time"])) < 0.001
+            and float(stream["duration"]) >= duration - 1 / fps
+            and not stream.get("tags", {}).get("rotate")
+            and not stream.get("side_data_list")
+        )
+    except (OSError, subprocess.SubprocessError, ValueError, KeyError, IndexError, TypeError, ZeroDivisionError):
+        # Unknown or unsupported metadata takes the existing encode path.
+        return False
 
 
 async def _render_youtube_video(
@@ -3814,6 +3861,25 @@ async def _render_youtube_video(
                     mux_fps,
                 )
 
+                video_matches_output = False
+                if visual_kind == "video" and not is_gif_visual:
+                    video_matches_output = await asyncio.to_thread(
+                        _video_matches_output, visual_source_path, render_payload, audio_duration_seconds,
+                    )
+                copy_video = video_matches_output and bool(render_payload.get("remove_watermark"))
+                render_payload["_video_matches_output"] = video_matches_output
+                if video_matches_output:
+                    loop_video = False
+                if copy_video and job_id:
+                    encode_progress_cb = _make_job_encode_progress_callback(
+                        job_id, asyncio.get_running_loop(),
+                        progress_min=JOB_PROGRESS_ENCODE_MIN, progress_max=JOB_PROGRESS_ENCODE_MAX,
+                        message_prefix="Adding audio to rendered video...",
+                    )
+                logging.info("Video processing mode=%s audio=%s image=%s",
+                             "copy" if copy_video else "watermark_only" if video_matches_output else "full_encode",
+                             audio_upload.get("id"), image_upload.get("id"))
+
                 command = [ffmpeg_bin, "-nostdin", "-y", "-loglevel", "error"]
                 if blurred_bg_path:
                     command.extend(["-f", "image2", "-loop", "1", "-framerate", render_fps_value, "-i", str(blurred_bg_path)])
@@ -3836,34 +3902,24 @@ async def _render_youtube_video(
                     audio_input_index = 1
 
                 render_payload["audio_input_index"] = audio_input_index
-                filter_complex = _build_render_filter(render_payload)
+                video_options = ["-map", "0:v:0", "-c:v", "copy"] if copy_video else [
+                    "-filter_complex", _build_render_filter(render_payload), "-map", "[vout]",
+                    "-c:v", "libx264", "-preset", YOUTUBE_RENDER_PRESET,
+                    "-crf", YOUTUBE_RENDER_CRF, "-pix_fmt", "yuv420p",
+                    "-threads", FFMPEG_THREADS, "-r", render_fps_value,
+                ]
 
                 command.extend(
                     [
                         "-i",
                         str(audio_path),
-                        "-filter_complex",
-                        filter_complex,
-                        "-map",
-                        "[vout]",
+                        *video_options,
                         "-map",
                         f"{audio_input_index}:a",
-                        "-c:v",
-                        "libx264",
-                        "-preset",
-                        YOUTUBE_RENDER_PRESET,
-                        "-crf",
-                        YOUTUBE_RENDER_CRF,
-                        "-pix_fmt",
-                        "yuv420p",
                         "-c:a",
                         "aac",
                         "-b:a",
                         "192k",
-                        "-threads",
-                        FFMPEG_THREADS,
-                        "-r",
-                        render_fps_value,
                         "-movflags",
                         "+faststart",
                         "-t",
@@ -3877,6 +3933,8 @@ async def _render_youtube_video(
 
                 if job_id:
                     encode_message = "Encoding video... 0%"
+                    if copy_video:
+                        encode_message = "Adding audio to rendered video... 0%"
                     if static_encode_capped:
                         encode_message = (
                             f"Encoding still cover at {mux_fps} fps "
@@ -3999,10 +4057,12 @@ async def _render_youtube_video(
                     "fps": mux_fps,
                     "render_fps": user_render_fps,
                     "mux_fps": mux_fps,
-                    "video_codec": "libx264",
+                    "video_codec": "copy" if copy_video else "libx264",
+                    "video_stream_copied": copy_video,
+                    "video_layout_skipped": video_matches_output,
                     "audio_codec": "aac",
-                    "preset": YOUTUBE_RENDER_PRESET,
-                    "crf": YOUTUBE_RENDER_CRF,
+                    "preset": None if copy_video else YOUTUBE_RENDER_PRESET,
+                    "crf": None if copy_video else YOUTUBE_RENDER_CRF,
                     "render_duration_seconds": round(render_duration_seconds, 3),
                     "layout_mode": (
                         "fill_frame"
